@@ -7,7 +7,7 @@ import {
   chamferBoxPoints, cylinderProfile,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
-  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf,
+  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove,
 } from '../logic.js';
 
 let fail = 0;
@@ -309,5 +309,42 @@ t('PDF: JPEG gömülü, xref ofsetleri doğru', () => {
   assert.ok(Buffer.from(pdf).includes(Buffer.from(jpeg)));
 });
 
+t('köşe pahı: kare köşesi', () => {
+  const sq = [[0, 0], [10, 0], [10, 10], [0, 10]];
+  const r = cornerCut(sq, [2], 2, 0);
+  assert.equal(r.length, 5);
+  assert.deepEqual(r[2], [10, 8]); assert.deepEqual(r[3], [8, 10]);
+  assert.ok(Math.abs(polyArea(r) - (100 - 2)) < 1e-9);
+  // açık çizgide uçlar değişmez
+  const open = cornerCut(sq, [0, 1, 2, 3], 1, 0, 8, false);
+  assert.deepEqual(open[0], [0, 0]); assert.deepEqual(open[open.length - 1], [0, 10]);
+});
+t('köşe yuvarlama: alan ve yarıçap', () => {
+  const sq = [[0, 0], [10, 0], [10, 10], [0, 10]];
+  const r = cornerCut(sq, [0, 1, 2, 3], 0, 2);
+  // 4 köşe de r=2 ile yuvarlandı: alan = 100 - (4 - π) * 4
+  assert.ok(Math.abs(polyArea(r) - (100 - (4 - Math.PI) * 4)) < 0.15, 'alan ' + polyArea(r));
+  assert.ok(r.every(([x, y]) => x >= -1e-9 && x <= 10 + 1e-9 && y >= -1e-9 && y <= 10 + 1e-9));
+  // çok büyük yarıçap kısalır, taşmaz
+  const big = cornerCut(sq, [0, 1, 2, 3], 0, 50);
+  assert.ok(big.every(([x, y]) => x >= -1e-9 && x <= 10 + 1e-9 && y >= -1e-9 && y <= 10 + 1e-9));
+});
+t('koni ve boru profili', () => {
+  const cone = coneProfile(20, 10, 30, 0, 0);
+  assert.equal(cone.length, 4);
+  const cr = coneProfile(20, 10, 30, 0, 3);
+  assert.ok(cr.length > 10 && polyArea(cr) > 0 && polyArea(cr) < polyArea(cone));
+  const ring = ringProfile(15, 10, 20, 1, 0);
+  assert.equal(ring.length, 8);
+  assert.ok(polyArea(ring) > 0 && polyArea(ring) < 5 * 20);
+  // duvardan kalın pah istenirse kısılır
+  const thick = ringProfile(15, 10, 20, 50, 0);
+  assert.ok(thick.every(([x, y]) => x >= 10 - 1e-9 && x <= 15 + 1e-9 && y >= -1e-9 && y <= 20 + 1e-9));
+});
+
+t('keskin köşeleri bul', () => {
+  assert.deepEqual(cornersAbove([[0, 0], [10, 0], [10, 10], [0, 10]]), [0, 1, 2, 3]);
+  assert.equal(cornersAbove(circlePts(0, 0, 10, 48)).length, 0);
+});
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
 process.exit(fail ? 1 : 0);

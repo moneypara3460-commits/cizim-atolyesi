@@ -9,6 +9,7 @@ import {
   sketchFromDraw, sketchToDraw, revolveProfile, chamferBoxPoints, cylinderProfile,
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
+  cornerCut, coneProfile, ringProfile, cornersAbove,
 } from './logic.js';
 import { openSketch } from './sketch.js';
 
@@ -440,24 +441,50 @@ function cylinderGeo(p, d, h) {
   return g;
 }
 
+// Kapalı (r, y) profilini eksen etrafında döndür; keskin köşeler ikilenir, yumuşak eğriler (yuvarlama) pürüzsüz kalır
+function latheGeo(prof) {
+  const lp = [];
+  const n = prof.length;
+  prof.forEach((q, i) => {
+    lp.push(new THREE.Vector2(q[0], q[1]));
+    if (i > 0 && i < n - 1) {
+      const a = prof[i - 1], b = prof[i + 1];
+      const t1 = Math.atan2(q[1] - a[1], q[0] - a[0]), t2 = Math.atan2(b[1] - q[1], b[0] - q[0]);
+      let d = Math.abs(t2 - t1);
+      if (d > Math.PI) d = Math.PI * 2 - d;
+      if (d > 35 * RAD) lp.push(new THREE.Vector2(q[0], q[1]));
+    }
+  });
+  return new THREE.LatheGeometry(lp, 64);
+}
+
+// kroki çokgeninin keskin köşelerini (isteğe bağlı) yuvarla / pahla
+function sketchCornerPts(p) {
+  const rr = Math.max(pos(p.r), 0), cc = Math.max(pos(p.c), 0);
+  if (!(rr > 0.05 || cc > 0.05)) return p.pts;
+  return cornerCut(p.pts, cornersAbove(p.pts, 15), rr > 0.05 ? 0 : cc, rr > 0.05 ? rr : 0);
+}
+
 function sketchGeo(p) {
   const H = Math.max(heightOf(p), 0.01);
   let g;
   if (p.mode === 'revolve') {
-    const prof = revolveProfile(p.pts);
-    const lp = [];
-    // her köşe iki kez: Lathe köşelerde normali yumuşatır, kesin köşeler istiyoruz
-    prof.forEach(([r, y], i) => {
-      lp.push(new THREE.Vector2(r, y));
-      if (i > 0 && i < prof.length - 1) lp.push(new THREE.Vector2(r, y));
-    });
-    g = new THREE.LatheGeometry(lp, 64);
+    let prof = revolveProfile(p.pts);
+    const rr = Math.max(pos(p.r), 0), cc = Math.max(pos(p.c), 0);
+    if (rr > 0.05 || cc > 0.05) {
+      prof.pop();
+      const idx = prof.map((q, i) => (q[0] > 0.06 ? i : -1)).filter((i) => i >= 0);
+      prof = cornerCut(prof, idx, rr > 0.05 ? 0 : cc, rr > 0.05 ? rr : 0);
+      prof.push(prof[0].slice());
+    }
+    g = latheGeo(prof);
   } else if (p.plane === 'top') {
-    const shape = new THREE.Shape(p.pts.map(([u, v]) => new THREE.Vector2(u, -v)));
+    const pts = sketchCornerPts(p);
+    const shape = new THREE.Shape(pts.map(([u, v]) => new THREE.Vector2(u, -v)));
     g = new THREE.ExtrudeGeometry(shape, { depth: clamp(p.h), bevelEnabled: false });
     g.rotateX(-Math.PI / 2);
   } else {
-    const shape = new THREE.Shape(p.pts.map(([u, v]) => new THREE.Vector2(u, v)));
+    const shape = new THREE.Shape(sketchCornerPts(p).map(([u, v]) => new THREE.Vector2(u, v)));
     g = new THREE.ExtrudeGeometry(shape, { depth: clamp(p.h), bevelEnabled: false });
     g.translate(0, 0, -clamp(p.h) / 2);
   }
@@ -472,10 +499,27 @@ function baseGeo(p) {
   switch (p.type) {
     case 'sketch': return sketchGeo(p);
     case 'cylinder': return cylinderGeo(p, d, h);
-    case 'tube': return new THREE.CylinderGeometry(d / 2, d / 2, h, 64);
+    case 'tube': {
+      const rr = Math.max(pos(p.r), 0), cc = Math.max(pos(p.c), 0);
+      if (rr > 0.05 || cc > 0.05) {
+        const di = Math.min(clamp(p.di), d - 0.4);
+        const rp = ringProfile(d / 2, di / 2, h, rr > 0.05 ? 0 : cc, rr > 0.05 ? rr : 0);
+        const g = latheGeo([...rp, rp[0].slice()]);
+        g.translate(0, -h / 2, 0);
+        return g;
+      }
+      return new THREE.CylinderGeometry(d / 2, d / 2, h, 64);
+    }
     case 'sphere': return new THREE.SphereGeometry(d / 2, 48, 32);
     case 'cone': {
       const d2 = Math.max(pos(p.d2), d * 0.004, 0.1); // ucu sivri koni de çalışsın
+      const rr = Math.max(pos(p.r), 0), cc = Math.max(pos(p.c), 0);
+      if (rr > 0.05 || cc > 0.05) {
+        const cp0 = coneProfile(d / 2, d2 / 2, h, rr > 0.05 ? 0 : cc, rr > 0.05 ? rr : 0);
+        const g = latheGeo([...cp0, cp0[0].slice()]);
+        g.translate(0, -h / 2, 0);
+        return g;
+      }
       return new THREE.CylinderGeometry(d2 / 2, d / 2, h, 64);
     }
     default: {
@@ -518,7 +562,7 @@ function partHeight(p) {
 
 function makeBrush(p, material) {
   const hgt = partHeight(p);
-  if (p.type === 'tube') {
+  if (p.type === 'tube' && !(pos(p.r) > 0.05 || pos(p.c) > 0.05)) {
     const d = clamp(p.d);
     const di = Math.min(clamp(p.di), d - 0.4);
     const outer = new Brush(place(baseGeo(p), p, hgt), material);
@@ -817,9 +861,9 @@ function fieldsFor(p) {
     case 'box': return [['Genişlik', 'w'], ['Derinlik', 'l'], ['Yükseklik', 'h'], ['Yuvarlama', 'r'], ['Pah', 'c'], ['Eğim °', 'tp', 'deg']];
     case 'cylinder': return [['Çap', 'd'], ['Yükseklik', 'h'], ['Yuvarlama', 'r'], ['Pah', 'c'], ['Eğim °', 'tp', 'deg']];
     case 'sphere': return [['Çap', 'd']];
-    case 'cone': return [['Alt çap', 'd'], ['Üst çap', 'd2'], ['Yükseklik', 'h']];
-    case 'tube': return [['Dış çap', 'd'], ['İç çap', 'di'], ['Yükseklik', 'h']];
-    case 'sketch': return p.mode === 'revolve' ? [] : [['Kalınlık', 'h']];
+    case 'cone': return [['Alt çap', 'd'], ['Üst çap', 'd2'], ['Yükseklik', 'h'], ['Yuvarlama', 'r'], ['Pah', 'c']];
+    case 'tube': return [['Dış çap', 'd'], ['İç çap', 'di'], ['Yükseklik', 'h'], ['Yuvarlama', 'r'], ['Pah', 'c']];
+    case 'sketch': return p.mode === 'revolve' ? [['Kenar yuvarlama', 'r'], ['Kenar pah', 'c']] : [['Kalınlık', 'h'], ['Köşe yuvarlama', 'r'], ['Köşe pah', 'c']];
     default: return [];
   }
 }
@@ -894,12 +938,14 @@ function renderPanel() {
       hint = 'Delik / çıkıntı dokunduğun noktada oluşur (desende dokunduğun nokta merkezdir). Sonra Konum sekmesinden ince ayar yapabilirsin.';
     }
   } else if (tab === 'edge') {
-    if (!edgeSel) {
-      body = '<div class="lbl" style="flex:1 0 100%">Bir kutunun kenarına dokun.</div>';
+    if (!edgeSels.length) {
+      body = '<div class="lbl" style="flex:1 0 100%">Bir kutunun kenarına dokun (birden çok kenar seçebilirsin).</div>';
       hint = 'Sadece düz kutu parçalarının kenarlarında çalışır (yuvarlama/pahı olmayan). Kenara yakın dokun; sarı çizgi seçileni gösterir.';
     } else {
-      body = cfield('Ölçü (pah boyu / yarıçap)', 'es') + btn('◣ Pah kır', 'edge-chamfer') + btn('◜ Yuvarla', 'edge-fillet');
-      hint = 'Seçili kenar tek başına işlenir. İşlem, kenara bir oyuk parçası ekler (Parça listesinde görünür); silersen geri gelir.';
+      body = '<div class="lbl" style="flex:1 0 100%">' + edgeSels.length + ' kenar seçili (aynı kenara tekrar dokunursan kalkar)</div>' +
+        cfield('Ölçü (pah boyu / yarıçap)', 'es') + btn('◣ Pah kır', 'edge-chamfer') + btn('◜ Yuvarla', 'edge-fillet') +
+        btn('Üst 4 kenar', 'edge-top') + btn('Bu kutunun 12 kenarı', 'edge-all') + btn('Seçimi temizle', 'edge-clear');
+      hint = 'Seçili her kenar işlenir. İşlem, kenarlara oyuk parçaları ekler (Parça listesinde görünür); silersen geri gelir. Yuvarlamada iki kenarın birleştiği köşe tam yumuşak olmaz.';
     }
   } else if (tab === 'shell') {
     const el = shellEligible(p);
@@ -1405,7 +1451,8 @@ function faceSketch(op) {
 }
 
 /* ---- kenar seçimi: tek kenara pah / yuvarlama (düz kutu parçaları) ---- */
-let edgeSel = null; // { id, axis, sa, sb }  axis: serbest eksen; sa, sb: diğer iki eksenin işareti (-1/+1)
+let edgeSels = []; // [{ id, axis, sa, sb }]  axis: serbest eksen; sa, sb: diğer iki eksenin işareti (-1/+1); birden çok kenar seçilebilir
+const edgeKey = (e) => e.id + ':' + e.axis + ':' + e.sa + ':' + e.sb;
 const EDGE_AXES = { x: ['y', 'z'], y: ['x', 'z'], z: ['x', 'y'] };
 const boxEligible = (p) => p.type === 'box' && !p.hidden && !(p.r > 0.05) && !(p.c > 0.05) && !(p.tp > 0.01);
 const partQuat = (p) => new THREE.Quaternion().setFromEuler(new THREE.Euler(pos(p.rx) * RAD, pos(p.ry) * RAD, pos(p.rz) * RAD, 'XYZ'));
@@ -1425,9 +1472,25 @@ function edgeEnds(p, axis, sa, sb) {
 }
 const toWorld = (p, v) => v.clone().applyQuaternion(partQuat(p)).add(new THREE.Vector3(pos(p.x), pos(p.y), pos(p.z)));
 
-function edgeTap(cx, cy) {
+function drawEdgeSelection() {
   disposeOverlay(faceGroup);
-  edgeSel = null;
+  const pts = [];
+  for (const e of edgeSels) {
+    const p = parts.find((q) => q.id === e.id);
+    if (!p) continue;
+    const [e0, e1] = edgeEnds(p, e.axis, e.sa, e.sb).map((v) => toWorld(p, v));
+    pts.push(e0, e1);
+  }
+  if (!pts.length) return;
+  const line = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xfacc15, depthTest: false, transparent: true }));
+  line.userData.own = true; line.layers.set(1); line.renderOrder = 998;
+  faceGroup.add(line);
+  const dots = new THREE.Points(new THREE.BufferGeometry().setFromPoints(pts), new THREE.PointsMaterial({ color: 0xf43f5e, size: 10, sizeAttenuation: false, depthTest: false, transparent: true }));
+  dots.userData.own = true; dots.layers.set(1); dots.renderOrder = 999;
+  faceGroup.add(dots);
+}
+// dokunulan kenar seçilir; aynı kenara tekrar dokunmak seçimi kaldırır (birden çok kenar seçilebilir)
+function edgeTap(cx, cy) {
   if (!modelMesh) { renderPanel(); return; }
   setRay(cx, cy);
   const hits = raycaster.intersectObject(modelMesh, false);
@@ -1455,15 +1518,10 @@ function edgeTap(cx, cy) {
     }
   }
   if (best) {
-    edgeSel = best;
-    const p = parts.find((q) => q.id === best.id);
-    const [e0, e1] = edgeEnds(p, best.axis, best.sa, best.sb).map((v) => toWorld(p, v));
-    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([e0, e1]), new THREE.LineBasicMaterial({ color: 0xfacc15, depthTest: false, transparent: true }));
-    line.userData.own = true; line.layers.set(1); line.renderOrder = 998;
-    faceGroup.add(line);
-    const dots = new THREE.Points(new THREE.BufferGeometry().setFromPoints([e0, e1]), new THREE.PointsMaterial({ color: 0xf43f5e, size: 10, sizeAttenuation: false, depthTest: false, transparent: true }));
-    dots.userData.own = true; dots.layers.set(1); dots.renderOrder = 999;
-    faceGroup.add(dots);
+    const k = edgeKey(best);
+    const i = edgeSels.findIndex((e) => edgeKey(e) === k);
+    if (i >= 0) edgeSels.splice(i, 1); else edgeSels.push(best);
+    drawEdgeSelection();
   } else {
     toast('Yakında uygun bir kutu kenarı yok. Kenara daha yakın dokun.');
   }
@@ -1483,57 +1541,65 @@ function cutterPart(p, op, type, dims, localCenter, extraQ, name) {
 }
 
 function edgeFeature(kind) {
-  if (!edgeSel) return;
-  const p = parts.find((q) => q.id === edgeSel.id);
-  if (!p) return;
-  const { axis, sa, sb } = edgeSel;
-  const w = clamp(p.w), l = clamp(p.l), h = clamp(p.h);
-  const len = { x: w, y: h, z: l }[axis];
-  const perp = EDGE_AXES[axis];
-  const maxSz = Math.min(...perp.map((a) => ({ x: w, y: h, z: l }[a]))) / 2 - 0.05;
-  const sz = Math.min(Math.max(cp.es, 0.1), maxSz);
-  if (!(maxSz > 0.1)) { toast('Kutu bu kenar için çok ince'); return; }
-  if (cp.es > maxSz) toast('Ölçü kutuya göre büyük; ' + fmtNum(toUnit(sz, settings.unit), 2) + ' ' + settings.unit + ' yapıldı');
-  const [e0, e1] = edgeEnds(p, axis, sa, sb);
-  const edgeC = e0.clone().add(e1).multiplyScalar(0.5);           // kenar ortası
-  const sgn = { [perp[0]]: sa, [perp[1]]: sb };
+  if (!edgeSels.length) return;
   const AX = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
   const list = [];
   const label = kind === 'chamfer' ? 'Kenar pahı' : 'Kenar yuvarlama';
-  // kesici boyutlarını kendi (w,h,l) eksenlerine yaz
-  const dimsFor = (freeLen, sq1, sq2) => {
-    const o = { x: 0, y: 0, z: 0 };
-    o[axis] = freeLen; o[perp[0]] = sq1; o[perp[1]] = sq2;
-    return { w: o.x, h: o.y, l: o.z };
-  };
+  let clipped = false, skipped = 0;
+  const prep = [];
+  for (const es of edgeSels) {
+    const p = parts.find((q) => q.id === es.id);
+    if (!p) { skipped++; continue; }
+    const { axis, sa, sb } = es;
+    const w = clamp(p.w), l = clamp(p.l), h = clamp(p.h);
+    const len = { x: w, y: h, z: l }[axis];
+    const perp = EDGE_AXES[axis];
+    const maxSz = Math.min(...perp.map((a) => ({ x: w, y: h, z: l }[a]))) / 2 - 0.05;
+    if (!(maxSz > 0.1)) { skipped++; continue; }
+    const sz = Math.min(Math.max(cp.es, 0.1), maxSz);
+    if (cp.es > maxSz) clipped = true;
+    prep.push({ p, axis, sa, sb, len, perp, sz });
+  }
+  if (!prep.length) { toast('Seçili kenarlar için kutu çok ince'); return; }
   commit();
-  if (kind === 'chamfer') {
-    const sd = sz * Math.SQRT2;
-    const extra = new THREE.Quaternion().setFromAxisAngle(AX[axis], Math.PI / 4);
-    list.push(cutterPart(p, 'sub', 'box', dimsFor(len + 2, sd, sd), edgeC, extra, label));
-  } else {
-    // 1) köşeyi kare olarak oy  2) aynı yere yarıçaplı silindiri geri ekle
-    const sqc = edgeC.clone();
-    const cylc = edgeC.clone();
-    for (const a of perp) {
-      // dışa doğru işaret: y için üst yüz +, alt yüz -; x,z için işaretin kendisi. İçeri yönü tersi.
-      const out = sgn[a];
-      sqc[a] += -out * (sz / 2 - 0.5);   // kare: dışarı 1 mm taşar, içeri sz kadar
-      cylc[a] += -out * sz;              // silindir ekseni: köşeden sz kadar içeride
+  for (const { p, axis, sa, sb, len, perp, sz } of prep) {
+    const [e0, e1] = edgeEnds(p, axis, sa, sb);
+    const edgeC = e0.clone().add(e1).multiplyScalar(0.5);           // kenar ortası
+    const sgn = { [perp[0]]: sa, [perp[1]]: sb };
+    // kesici boyutlarını kendi (w,h,l) eksenlerine yaz
+    const dimsFor = (freeLen, sq1, sq2) => {
+      const o = { x: 0, y: 0, z: 0 };
+      o[axis] = freeLen; o[perp[0]] = sq1; o[perp[1]] = sq2;
+      return { w: o.x, h: o.y, l: o.z };
+    };
+    if (kind === 'chamfer') {
+      const sd = sz * Math.SQRT2;
+      const extra = new THREE.Quaternion().setFromAxisAngle(AX[axis], Math.PI / 4);
+      list.push(cutterPart(p, 'sub', 'box', dimsFor(len + 2, sd, sd), edgeC, extra, label));
+    } else {
+      // 1) köşeyi kare olarak oy  2) aynı yere yarıçaplı silindiri geri ekle
+      const sqc = edgeC.clone();
+      const cylc = edgeC.clone();
+      for (const a of perp) {
+        // dışa doğru işaret: y için üst yüz +, alt yüz -; x,z için işaretin kendisi. İçeri yönü tersi.
+        const out = sgn[a];
+        sqc[a] += -out * (sz / 2 - 0.5);   // kare: dışarı 1 mm taşar, içeri sz kadar
+        cylc[a] += -out * sz;              // silindir ekseni: köşeden sz kadar içeride
+      }
+      list.push(cutterPart(p, 'sub', 'box', dimsFor(len + 2, sz + 1, sz + 1), sqc, new THREE.Quaternion(), label));
+      // silindir: kendi y ekseni serbest eksene hizalanmalı
+      const q = new THREE.Quaternion();
+      if (axis === 'x') q.setFromAxisAngle(AX.z, -Math.PI / 2);
+      else if (axis === 'z') q.setFromAxisAngle(AX.x, Math.PI / 2);
+      list.push(cutterPart(p, 'add', 'cylinder', { d: sz * 2, h: len, w: 10, l: 10 }, cylc, q, label + ' (dolgu)'));
     }
-    list.push(cutterPart(p, 'sub', 'box', dimsFor(len + 2, sz + 1, sz + 1), sqc, new THREE.Quaternion(), label));
-    // silindir: kendi y ekseni serbest eksene hizalanmalı
-    const q = new THREE.Quaternion();
-    if (axis === 'x') q.setFromAxisAngle(AX.z, -Math.PI / 2);
-    else if (axis === 'z') q.setFromAxisAngle(AX.x, Math.PI / 2);
-    list.push(cutterPart(p, 'add', 'cylinder', { d: sz * 2, h: len, w: 10, l: 10 }, cylc, q, label + ' (dolgu)'));
   }
   for (const q of list) parts.push(q);
   sel = list[0].id;
-  edgeSel = null;
+  edgeSels = [];
   disposeOverlay(faceGroup);
   refreshAll();
-  toast(kind === 'chamfer' ? 'Kenar pah kırıldı' : 'Kenar yuvarlandı');
+  toast((kind === 'chamfer' ? 'Pah kırıldı' : 'Yuvarlandı') + ': ' + prep.length + ' kenar' + (clipped ? ' (ölçü kutuya göre kısıldı)' : '') + (skipped ? ', ' + skipped + ' kenar atlandı' : ''));
 }
 
 /* ---- kabuk: parçanın içini boşalt ---- */
@@ -1816,7 +1882,23 @@ document.addEventListener('click', (e) => {
 
   if (act.startsWith('add-')) { addPart(act.slice(4), 'add'); return; }
   if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate') clearFace();
-    if (tab !== 'mate') { mate.a = null; mate.b = null; } renderPanel(); return; }
+    if (tab !== 'mate') { mate.a = null; mate.b = null; }
+    if (tab !== 'edge') edgeSels = []; renderPanel(); return; }
+  if (act === 'edge-clear') { edgeSels = []; disposeOverlay(faceGroup); renderPanel(); return; }
+  if (act === 'edge-all' || act === 'edge-top') {
+    const last = edgeSels[edgeSels.length - 1];
+    const q = last && parts.find((x) => x.id === last.id);
+    if (!q) return;
+    const add = (e) => { if (!edgeSels.some((s) => edgeKey(s) === edgeKey(e))) edgeSels.push(e); };
+    for (const axis of ['x', 'y', 'z']) for (const sa of [-1, 1]) for (const sb of [-1, 1]) {
+      const perp = EDGE_AXES[axis];
+      const yi = perp.indexOf('y');
+      if (act === 'edge-top' && !(axis !== 'y' && (yi === 0 ? sa : sb) === 1)) continue;
+      add({ id: q.id, axis, sa, sb });
+    }
+    drawEdgeSelection(); renderPanel();
+    return;
+  }
   if (act === 'edge-chamfer') { edgeFeature('chamfer'); return; }
   if (act === 'edge-fillet') { edgeFeature('fillet'); return; }
   if (act.startsWith('fshape-')) { cp.shape = act.slice(7); renderPanel(); return; }

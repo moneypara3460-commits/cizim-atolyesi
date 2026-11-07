@@ -609,3 +609,70 @@ export function jpegToPdf(jpeg, wPx, hPx) {
   for (const c of chunks) { out.set(c, o); o += c.length; }
   return out;
 }
+
+/* ---------------- Genel köşe pahı / yuvarlaması (2B çokgen) ---------------- */
+
+// pts: [[x,y],...]; corners: pahlanacak/yuvarlanacak köşe indeksleri; rr > 0 ise yuvarlama (yarıçap), yoksa c kadar pah.
+// closed=false ise uçlar (0 ve son) değişmez. Dönüş: yeni nokta listesi (sıra korunur).
+export function cornerCut(pts, corners, c, rr, seg = 8, closed = true) {
+  const n = pts.length;
+  const set = new Set(corners);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    const edgeEnd = !closed && (i === 0 || i === n - 1);
+    if (!set.has(i) || edgeEnd || (!(rr > 0) && !(c > 0))) { out.push(p.slice()); continue; }
+    const a = pts[(i + n - 1) % n], b = pts[(i + 1) % n];
+    const la = Math.hypot(a[0] - p[0], a[1] - p[1]), lb = Math.hypot(b[0] - p[0], b[1] - p[1]);
+    if (la < 1e-9 || lb < 1e-9) { out.push(p.slice()); continue; }
+    const u = [(a[0] - p[0]) / la, (a[1] - p[1]) / la], v = [(b[0] - p[0]) / lb, (b[1] - p[1]) / lb];
+    const cs = Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1]));
+    const th = Math.acos(cs);                      // iki kenar arasındaki açı (π = düz)
+    if (th > Math.PI - 0.01 || th < 0.01) { out.push(p.slice()); continue; }
+    const half = Math.tan(th / 2);
+    const maxT = 0.45 * Math.min(la, lb);
+    let t = rr > 0 ? rr / half : c;
+    t = Math.min(t, maxT);
+    const A = [p[0] + u[0] * t, p[1] + u[1] * t], B = [p[0] + v[0] * t, p[1] + v[1] * t];
+    if (!(rr > 0)) { out.push(A, B); continue; }
+    const rad = t * half;                          // sıkıştırılmış tangent uzunluğuna göre yarıçap
+    const bx = u[0] + v[0], by = u[1] + v[1], bl = Math.hypot(bx, by);
+    const dc = rad / Math.sin(th / 2);
+    const C = [p[0] + (bx / bl) * dc, p[1] + (by / bl) * dc];
+    const a0 = Math.atan2(A[1] - C[1], A[0] - C[0]);
+    let sw = Math.atan2(B[1] - C[1], B[0] - C[0]) - a0;
+    while (sw > Math.PI) sw -= Math.PI * 2;
+    while (sw < -Math.PI) sw += Math.PI * 2;
+    const k = Math.max(2, Math.ceil(seg * Math.abs(sw) / (Math.PI / 2)));
+    for (let j = 0; j <= k; j++) {
+      const ang = a0 + sw * (j / k);
+      out.push([C[0] + rad * Math.cos(ang), C[1] + rad * Math.sin(ang)]);
+    }
+  }
+  return out;
+}
+
+// Koni / kesik koni profili (yarıçap, y): kapalı, saat yönünün tersi. Alt ve üst dış kenar pahlanır / yuvarlanır.
+export function coneProfile(r1, r2, h, c = 0, rr = 0) {
+  const base = [[0, 0], [r1, 0], [Math.max(r2, 0.001), h], [0, h]];
+  return cornerCut(base, rr > 0 || c > 0 ? [1, 2] : [], c, rr);
+}
+// Boru kesiti (halka): dış r_o, iç r_i; dört köşe de işlenir
+export function ringProfile(ro, ri, h, c = 0, rr = 0) {
+  const base = [[ri, 0], [ro, 0], [ro, h], [ri, h]];
+  const e = Math.min((ro - ri) / 2, h / 2) - 0.01;
+  return cornerCut(base, [0, 1, 2, 3], Math.min(c, Math.max(e, 0)), Math.min(rr, Math.max(e, 0)));
+}
+
+// Dönüş açısı (derece) en az `deg` olan köşelerin indeksleri (kapalı çokgen); dairesel çokgenlerin küçük kırıklarını eler
+export function cornersAbove(pts, deg = 15) {
+  const n = pts.length, out = [];
+  for (let i = 0; i < n; i++) {
+    const a = pts[(i + n - 1) % n], p = pts[i], b = pts[(i + 1) % n];
+    const t1 = Math.atan2(p[1] - a[1], p[0] - a[0]), t2 = Math.atan2(b[1] - p[1], b[0] - p[0]);
+    let d = Math.abs(t2 - t1);
+    if (d > Math.PI) d = Math.PI * 2 - d;
+    if (d * 180 / Math.PI >= deg) out.push(i);
+  }
+  return out;
+}
