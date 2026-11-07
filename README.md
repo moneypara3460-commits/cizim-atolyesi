@@ -1,33 +1,43 @@
 # Çizim Atölyesi
 
-Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları ölçüyle oluşturur, birleştirir ve oyuk açarsın.
+Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları ölçüyle oluşturur, birleştirir, oyuk açar, 3D yazıcı için STL olarak indirirsin.
 
-## Şu an neler var (2. aşama)
+**Güncel sürüm web sürümüdür** (`index.html`): https://moneypara3460-commits.github.io/cizim-atolyesi/
+(GitHub → Settings → Pages → Deploy from branch → `main` / root ile yayınlanır.)
 
-- Kutu ve silindir, ölçüleri mm olarak girme
-- Birden fazla parça: **birleştir** veya **oyuk aç** (boolean / CSG)
+## Özellikler
+
+- Şekiller: kutu (kenar yuvarlamalı), silindir, küre, koni / kesik koni, boru
+- Birden fazla parça: **birleştir** veya **oyuk aç** (boolean / CSG, `three-bvh-csg`)
 - Hazır delik tuşları: yuvarlak delik, kare delik
-- Parçanın konumu (X, Y alt, Z)
-- Parmakla döndürme ve yakınlaştırma
+- Konum (X, Y alt, Z) ve döndürme (X°, Y°, Z°, parçanın alt orta noktası etrafında)
+- Geri al / ileri al
+- Projeleri telefonda kaydetme ve açma (tarayıcı belleği, `localStorage`); son durum otomatik saklanır
+- STL dışa aktarma (mm, Z-yukarı, 3D yazıcı dilimleyicilerine uygun)
+- Sesli komut (Türkçe, Chrome): kural tabanlıdır, yapay zekâ kullanmaz
+
+### Sesli komut örnekleri
+
+- "elli milimetre çapında yirmi milimetre yüksekliğinde silindir ekle"
+- "kutu ekle 80 60 40"
+- "10 milimetre delik aç" / "kare delik 8 milimetre"
+- "küre ekle çap 30", "boru ekle dış çap 40 iç çap 30 yükseklik 20", "koni ekle alt çap 40 üst çap 10 yükseklik 50"
+- "yüksekliği 30 yap", "çapı elli yap", "kenarları 5 milimetre yuvarla"
+- "x ekseninde 45 derece döndür"
+- "geri al", "yinele", "sığdır", "kaydet", "stl indir", "parçayı sil"
+
+## Dosyalar
+
+- `index.html` — uygulama (arayüz + 3D görüntüleyici)
+- `logic.js` — test edilebilir mantık: parça varsayılanları, geri al geçmişi, STL yazıcı, sesli komut çözücü
+- `tests/logic.test.mjs` — testler: `node tests/logic.test.mjs`
+- `App.js`, `viewerHtml.js`, `package.json` — eski React Native / Expo sürümü (2. aşama; güncellenmedi)
 
 ## Yol haritası
 
 1. ~~Kutu / silindir + ölçü girişi~~
 2. ~~Çoklu parça, birleştirme, delik açma~~
-3. Geri al / yinele, STL dışa aktarma (3D yazıcı)
-4. Sesli komut ("50 mm çapında silindir yap, ortasına 10 mm delik aç")
-5. Kroki çizip kalınlık verme (extrude)
-
-## Web sürümü (en kolay deneme yolu)
-
-`index.html` tek sayfalık web sürümüdür, kurulum gerektirmez. GitHub Pages ile yayınlanır:
-https://moneypara3460-commits.github.io/cizim-atolyesi/
-
-Telefonun tarayıcısında açman yeterli. 3D kütüphaneler internetten yüklenir.
-
-## Dosyalar
-
-- `index.html` — web sürümü (arayüz + 3D görüntüleyici, tek dosya)
-- `App.js` — React Native / Expo sürümünün arayüzü
-- `viewerHtml.js` — Expo sürümündeki 3D görüntüleyici (WebView / iframe içinde)
-- `package.json` — Expo sürümünün bağımlılıkları
+3. ~~Geri al, yeni şekiller, döndürme, kaydetme, STL, sesli komut~~
+4. Kroki çizip kalınlık verme (extrude)
+5. Parçaları gruplayıp kopyalama / çoğaltma, ölçü etiketleri
+6. Play Store için sarmalama (Expo WebView ya da Capacitor)
