@@ -9,17 +9,19 @@ export const TYPE_LABEL = {
   sphere: 'Küre',
   cone: 'Koni',
   tube: 'Boru',
+  sketch: 'Kroki',
 };
 
 export const DEFAULTS = {
   w: 30, l: 30, h: 20, d: 30, d2: 0, di: 20, r: 0,
-  x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0,
+  x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, c: 0,
 };
 
 const fin = (v, fallback) => (typeof v === 'number' && isFinite(v) ? v : fallback);
 
 // Parçanın yüksekliği (küre için çap)
 export function heightOf(p) {
+  if (p.type === 'sketch') return sketchHeight(p);
   return p.type === 'sphere' ? fin(p.d, 0) : fin(p.h, 0);
 }
 
@@ -212,12 +214,28 @@ export function parseVoice(text) {
   if (has('kaydet')) return [{ cmd: 'save' }];
   if (has('sil') || has('kaldır')) return [{ cmd: 'delete' }];
 
+  if (has('üstten')) return [{ cmd: 'view', view: 'top' }];
+  if (has('önden')) return [{ cmd: 'view', view: 'front' }];
+  if (has('yandan')) return [{ cmd: 'view', view: 'side' }];
+  if (has('izometrik') || has('iso')) return [{ cmd: 'view', view: 'iso' }];
+  if (has('aynala') || has('ayna') || has('simetri')) {
+    const am = t.match(/(?:^|\s)([xz])(?:'[a-zçğıöşü]*)?(?=\s|$)/);
+    return [{ cmd: 'mirror', axis: am ? am[1] : 'x' }];
+  }
+  if (has('kopyala') || has('çoğalt') || has('kopya')) {
+    const cm = t.match(/(\d+)\s*(?:tane|adet|kez|kere)/);
+    return [{ cmd: 'copy', count: cm ? parseInt(cm[1], 10) : 1 }];
+  }
+
   if (/döndür|çevir/.test(t) && n !== null) {
     const ax = t.match(/(?:^|\s)([xyz])(?:'[a-zçğıöşü]*)?(?=\s|$)/);
     return [{ cmd: 'rotate', axis: ax ? ax[1] : 'y', deg: n }];
   }
   if (/yuvarla/.test(t) && n !== null && !/delik/.test(t)) {
     return [{ cmd: 'set', key: 'r', value: n }];
+  }
+  if (/(?:^|\s)pah/.test(t) && n !== null) {
+    return [{ cmd: 'set', key: 'c', value: n }];
   }
   for (const [stem, key] of SET_STEMS) {
     const m = t.match(new RegExp(`${stem}[${L}]*\\s*${NUM}\\s*${SET_VERB}`));
@@ -234,4 +252,256 @@ export function parseVoice(text) {
     return [{ cmd: 'add', type, op: sub ? 'sub' : 'add', dims: parseDims(t, type, sub) }];
   }
   return [{ cmd: 'unknown' }];
+}
+
+/* ---------------- Birimler, yapışma ---------------- */
+
+export const UNITS = { mm: 1, cm: 10, in: 25.4 };
+export const toUnit = (mm, u) => mm / (UNITS[u] || 1);
+export const fromUnit = (v, u) => v * (UNITS[u] || 1);
+export function fmtNum(v, dec = 2) {
+  if (!isFinite(v)) return '0';
+  const f = 10 ** dec;
+  return String(Math.round(v * f) / f + 0);
+}
+// v değerini step ızgarasına yapıştırır (step<=0 ise dokunmaz)
+export function snap(v, step) {
+  if (!(step > 0)) return v;
+  return Math.round(Math.round(v / step) * step * 1e6) / 1e6 + 0;
+}
+export const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+
+/* ---------------- Kroki ---------------- */
+// Kroki parçası: { type:'sketch', mode:'extrude'|'revolve', plane:'top'|'front', pts:[[u,v],...], h }
+// Saklanan noktalar parça merkezine göredir:
+//   üstten ekstrüzyon : u,v = (x,z) merkezden;  parça x,z = kroki sınır kutusu merkezi, y = 0
+//   önden ekstrüzyon  : u merkezden, v tabandan; kalınlık h (z'de ortalanır); x = merkez, y = taban
+//   döndürme          : u = eksene uzaklık, v tabandan; x = z = 0, y = taban
+
+export function circlePts(cx, cy, r, n = 48) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+  }
+  return out;
+}
+export function rectPts(x1, y1, x2, y2) {
+  return [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
+}
+export function bboxPts(pts) {
+  let a = Infinity, b = -Infinity, c = Infinity, d = -Infinity;
+  for (const [u, v] of pts) {
+    if (u < a) a = u; if (u > b) b = u;
+    if (v < c) c = v; if (v > d) d = v;
+  }
+  return { minU: a, maxU: b, minV: c, maxV: d };
+}
+export function polyArea(pts) {
+  let s = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % pts.length];
+    s += x1 * y2 - x2 * y1;
+  }
+  return s / 2;
+}
+
+// Çizimden (mutlak dünya koordinatları) parça alanları üretir
+export function sketchFromDraw(d) {
+  const bb = bboxPts(d.pts);
+  const cu = (bb.minU + bb.maxU) / 2, cv = (bb.minV + bb.maxV) / 2;
+  const base = { type: 'sketch', mode: d.mode, plane: d.plane, h: d.mode === 'revolve' ? 0 : d.h };
+  const r4 = (n) => Math.round(n * 1e4) / 1e4 + 0;
+  if (d.mode === 'revolve') {
+    return { ...base, plane: 'front', x: 0, y: r4(bb.minV), z: 0, pts: d.pts.map(([u, v]) => [r4(u), r4(v - bb.minV)]) };
+  }
+  if (d.plane === 'top') {
+    return { ...base, x: r4(cu), y: 0, z: r4(cv), pts: d.pts.map(([u, v]) => [r4(u - cu), r4(v - cv)]) };
+  }
+  return { ...base, x: r4(cu), y: r4(bb.minV), z: 0, pts: d.pts.map(([u, v]) => [r4(u - cu), r4(v - bb.minV)]) };
+}
+// Parçadan çizime (düzenlemek için mutlak koordinatlar)
+export function sketchToDraw(p) {
+  const x = fin(p.x, 0), y = fin(p.y, 0), z = fin(p.z, 0);
+  let pts;
+  if (p.mode === 'revolve') pts = p.pts.map(([u, v]) => [u, v + y]);
+  else if (p.plane === 'top') pts = p.pts.map(([u, v]) => [u + x, v + z]);
+  else pts = p.pts.map(([u, v]) => [u + x, v + y]);
+  return { mode: p.mode, plane: p.mode === 'revolve' ? 'front' : p.plane, pts, h: fin(p.h, 20) };
+}
+export function sketchHeight(p) {
+  if (!p.pts || !p.pts.length) return 0;
+  if (p.mode !== 'revolve' && p.plane === 'top') return fin(p.h, 0);
+  return bboxPts(p.pts).maxV;
+}
+// Döndürme profili: (yarıçap, y) noktaları, saat yönünün tersi, kapalı
+export function revolveProfile(pts) {
+  let prof = pts.map(([u, v]) => [Math.max(Math.abs(u), 0.05), v]);
+  if (polyArea(prof) < 0) prof = prof.reverse();
+  prof.push(prof[0].slice());
+  return prof;
+}
+
+/* ---------------- Pah / yuvarlama ---------------- */
+
+// Kutunun 12 kenarına pah: 6 yüzün küçülmüş köşeleri (24 nokta). x,z ortada, y 0..h
+export function chamferBoxPoints(w, l, h, c) {
+  const m = Math.max(0, Math.min(c, Math.min(w, l, h) / 2 - 0.01));
+  const hw = w / 2, hl = l / 2;
+  const P = [];
+  for (const s of [-1, 1]) {
+    for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      P.push([s * hw, h / 2 + a * (h / 2 - m), b * (hl - m)]);   // ±X yüzleri
+      P.push([a * (hw - m), h / 2 + s * (h / 2), b * (hl - m)]); // ±Y yüzleri
+      P.push([a * (hw - m), h / 2 + b * (h / 2 - m), s * hl]);   // ±Z yüzleri
+    }
+  }
+  return P;
+}
+// Silindir kesiti (yarıçap, y): dönel; yuvarlama r varsa yay, yoksa c ile pah. CCW.
+export function cylinderProfile(radius, h, c = 0, rr = 0, seg = 8) {
+  const R = radius, H = h;
+  const e = Math.max(0, Math.min(rr > 0 ? rr : c, R - 0.01, H / 2 - 0.01));
+  const pts = [[0, 0]];
+  if (e <= 0) {
+    pts.push([R, 0], [R, H]);
+  } else if (rr > 0) {
+    for (let i = 0; i <= seg; i++) { // alt kenar: merkez (R-e, e), açı -90 -> 0
+      const a = -Math.PI / 2 + (i / seg) * (Math.PI / 2);
+      pts.push([R - e + e * Math.cos(a), e + e * Math.sin(a)]);
+    }
+    for (let i = 0; i <= seg; i++) { // üst kenar: merkez (R-e, H-e), açı 0 -> 90
+      const a = (i / seg) * (Math.PI / 2);
+      pts.push([R - e + e * Math.cos(a), H - e + e * Math.sin(a)]);
+    }
+  } else {
+    pts.push([R - e, 0], [R, e], [R, H - e], [R - e, H]);
+  }
+  pts.push([0, H]);
+  return pts;
+}
+
+/* ---------------- Dönme (Euler XYZ <-> kuaterniyon) ---------------- */
+
+const D2R = Math.PI / 180;
+const r4 = (n) => Math.round(n * 1e4) / 1e4 + 0;
+export function eulerToQuat(rx, ry, rz) {
+  const c1 = Math.cos(rx * D2R / 2), c2 = Math.cos(ry * D2R / 2), c3 = Math.cos(rz * D2R / 2);
+  const s1 = Math.sin(rx * D2R / 2), s2 = Math.sin(ry * D2R / 2), s3 = Math.sin(rz * D2R / 2);
+  return [
+    s1 * c2 * c3 + c1 * s2 * s3,
+    c1 * s2 * c3 - s1 * c2 * s3,
+    c1 * c2 * s3 + s1 * s2 * c3,
+    c1 * c2 * c3 - s1 * s2 * s3,
+  ];
+}
+export function quatMul(a, b) { // a * b ; [x,y,z,w]
+  return [
+    a[0] * b[3] + a[3] * b[0] + a[1] * b[2] - a[2] * b[1],
+    a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+    a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+    a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+  ];
+}
+export function quatToEulerXYZ(q) { // derece
+  const [x, y, z, w] = q;
+  const m11 = 1 - 2 * (y * y + z * z), m12 = 2 * (x * y - z * w), m13 = 2 * (x * z + y * w);
+  const m22 = 1 - 2 * (x * x + z * z), m23 = 2 * (y * z - x * w);
+  const m32 = 2 * (y * z + x * w), m33 = 1 - 2 * (x * x + y * y);
+  const ey = Math.asin(Math.max(-1, Math.min(1, m13)));
+  let ex, ez;
+  if (Math.abs(m13) < 0.9999999) { ex = Math.atan2(-m23, m33); ez = Math.atan2(-m12, m11); }
+  else { ex = Math.atan2(m32, m22); ez = 0; }
+  let e = [ex / D2R, ey / D2R, ez / D2R];
+  // aynı dönmenin eşdeğer yazımı (x+180, 180-y, z+180) daha sade ise onu seç
+  const wrap = (a) => { while (a > 180 + 1e-9) a -= 360; while (a < -180 - 1e-9) a += 360; return a; };
+  const alt = [wrap(e[0] + 180), wrap((e[1] >= 0 ? 180 : -180) - e[1]), wrap(e[2] + 180)];
+  if (Math.abs(alt[0]) + Math.abs(alt[2]) + 1e-6 < Math.abs(e[0]) + Math.abs(e[2])) e = alt;
+  return e.map(r4);
+}
+
+/* ---------------- Çoğaltma: kopya, ayna, dizi ---------------- */
+
+const clone = (p) => JSON.parse(JSON.stringify(p));
+
+export function duplicatePart(p, id, dx = 10, dz = 10) {
+  const c = clone(p);
+  c.id = id;
+  c.x = fin(p.x, 0) + dx;
+  c.z = fin(p.z, 0) + dz;
+  if (c.name) c.name = c.name + ' kopya';
+  return c;
+}
+
+// Aynalama: axis 'x' -> x = bx düzlemine göre, 'z' -> z = bz düzlemine göre
+export function mirrorPart(p, id, axis, bx = 0, bz = 0) {
+  const c = clone(p);
+  c.id = id;
+  if (axis === 'z') {
+    c.z = 2 * bz - fin(p.z, 0);
+    c.rx = r4(-fin(p.rx, 0)); c.ry = r4(-fin(p.ry, 0));
+  } else {
+    c.x = 2 * bx - fin(p.x, 0);
+    c.ry = r4(-fin(p.ry, 0)); c.rz = r4(-fin(p.rz, 0));
+  }
+  if (p.type === 'sketch' && p.mode !== 'revolve') {
+    if (axis === 'x') c.pts = p.pts.map(([u, v]) => [-u, v]);
+    else if (p.plane === 'top') c.pts = p.pts.map(([u, v]) => [u, -v]);
+  }
+  if (c.name) c.name = c.name + ' ayna';
+  return c;
+}
+
+// Doğrusal dizi: n kopya (orijinal hariç), k. kopya k*(dx,dy,dz) kadar ötede
+export function linearArray(p, startId, n, dx, dy, dz) {
+  const out = [];
+  for (let k = 1; k <= n; k++) {
+    const c = clone(p);
+    c.id = startId + k - 1;
+    c.x = r4(fin(p.x, 0) + k * dx);
+    c.y = r4(fin(p.y, 0) + k * dy);
+    c.z = r4(fin(p.z, 0) + k * dz);
+    if (c.name) c.name = c.name + ' ' + (k + 1);
+    out.push(c);
+  }
+  return out;
+}
+
+// Dairesel dizi: Y ekseni etrafında (cx,cz) merkezli; count = orijinal dahil toplam adet
+export function circularArray(p, startId, count, cx, cz, totalDeg = 360) {
+  const out = [];
+  if (count < 2) return out;
+  const step = totalDeg >= 360 ? totalDeg / count : totalDeg / (count - 1);
+  const q0 = eulerToQuat(fin(p.rx, 0), fin(p.ry, 0), fin(p.rz, 0));
+  for (let k = 1; k < count; k++) {
+    const th = k * step * D2R;
+    const dx = fin(p.x, 0) - cx, dz = fin(p.z, 0) - cz;
+    const c = clone(p);
+    c.id = startId + k - 1;
+    c.x = r4(cx + dx * Math.cos(th) + dz * Math.sin(th));
+    c.z = r4(cz - dx * Math.sin(th) + dz * Math.cos(th));
+    const qy = eulerToQuat(0, k * step, 0);
+    const [rx, ry, rz] = quatToEulerXYZ(quatMul(qy, q0));
+    c.rx = rx; c.ry = ry; c.rz = rz;
+    if (c.name) c.name = c.name + ' ' + (k + 1);
+    out.push(c);
+  }
+  return out;
+}
+
+/* ---------------- Görünüm ---------------- */
+
+export const VIEW_DIRS = {
+  top: [0, 1, 0.0001], front: [0, 0, 1], side: [1, 0, 0], iso: [1, 0.8, 1],
+};
+// Kesit düzlemi (THREE.Plane: normal·p + constant >= 0 olan taraf kalır)
+export function sectionPlane(axis, pos, flip = false) {
+  const e = axis === 'x' ? [1, 0, 0] : axis === 'z' ? [0, 0, 1] : [0, 1, 0];
+  return flip
+    ? { normal: e, constant: -pos }
+    : { normal: e.map((v) => (v === 0 ? 0 : -v)), constant: pos };
+}
+// Ortografik taklidi: fov değişince aynı görüntü boyutu için mesafe çarpanı
+export function fovDistance(dist, fromDeg, toDeg) {
+  return dist * Math.tan(fromDeg * D2R / 2) / Math.tan(toDeg * D2R / 2);
 }

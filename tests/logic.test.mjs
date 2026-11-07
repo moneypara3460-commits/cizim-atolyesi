@@ -1,6 +1,14 @@
 // Çalıştır: node tests/logic.test.mjs
 import assert from 'node:assert/strict';
-import { parseVoice, normalize, History, toSTLBinary, newPart, heightOf } from '../logic.js';
+import {
+  parseVoice, normalize, History, toSTLBinary, newPart, heightOf,
+  UNITS, toUnit, fromUnit, fmtNum, snap, dist3,
+  circlePts, rectPts, bboxPts, polyArea, sketchFromDraw, sketchToDraw, sketchHeight, revolveProfile,
+  chamferBoxPoints, cylinderProfile,
+  eulerToQuat, quatMul, quatToEulerXYZ,
+  duplicatePart, mirrorPart, linearArray, circularArray,
+  VIEW_DIRS, sectionPlane, fovDistance,
+} from '../logic.js';
 
 let fail = 0;
 const t = (name, fn) => {
@@ -109,6 +117,132 @@ t('STL ikili biçim', () => {
   const z = toSTLBinary(tri, true); // Y-yukarı -> Z-yukarı
   const dz = new DataView(z.buffer);
   assert.equal(dz.getFloat32(84 + 4, true), -1); // normal artık -Y
+});
+
+const near = (a, b, e = 1e-3) => assert.ok(Math.abs(a - b) < e, `${a} ≈ ${b}`);
+
+t('sesli: kopyala / ayna / görünüm / pah', () => {
+  assert.deepEqual(one('kopyala'), { cmd: 'copy', count: 1 });
+  assert.deepEqual(one('5 tane kopyala'), { cmd: 'copy', count: 5 });
+  assert.deepEqual(one('aynala'), { cmd: 'mirror', axis: 'x' });
+  assert.deepEqual(one('z ekseninde aynala'), { cmd: 'mirror', axis: 'z' });
+  assert.deepEqual(one('üstten bak'), { cmd: 'view', view: 'top' });
+  assert.deepEqual(one('önden göster'), { cmd: 'view', view: 'front' });
+  assert.deepEqual(one('izometrik'), { cmd: 'view', view: 'iso' });
+  assert.deepEqual(one('kenarlara 2 milimetre pah ver'), { cmd: 'set', key: 'c', value: 2 });
+});
+t('birimler ve yapışma', () => {
+  near(toUnit(25.4, 'in'), 1); near(fromUnit(2, 'cm'), 20); assert.equal(UNITS.mm, 1);
+  assert.equal(fmtNum(12.3456), '12.35'); assert.equal(fmtNum(-0), '0');
+  assert.equal(snap(13, 5), 15); assert.equal(snap(12, 5), 10); assert.equal(snap(7.3, 0), 7.3);
+  assert.equal(snap(-0.4, 5), 0); assert.ok(Object.is(snap(-0.4, 5), 0));
+  near(dist3([0, 0, 0], [3, 4, 12]), 13);
+});
+t('kroki: çizimden parça ve geri', () => {
+  const d = { mode: 'extrude', plane: 'top', pts: rectPts(10, 20, 50, 40), h: 15 };
+  const p = sketchFromDraw(d);
+  assert.equal(p.x, 30); assert.equal(p.z, 30); assert.equal(p.y, 0); assert.equal(p.h, 15);
+  assert.deepEqual(bboxPts(p.pts), { minU: -20, maxU: 20, minV: -10, maxV: 10 });
+  assert.deepEqual(sketchToDraw({ ...p }).pts, d.pts);
+  assert.equal(sketchHeight(p), 15); assert.equal(heightOf(p), 15);
+
+  const f = sketchFromDraw({ mode: 'extrude', plane: 'front', pts: rectPts(0, 5, 20, 25), h: 8 });
+  assert.equal(f.y, 5); assert.equal(f.x, 10); assert.equal(sketchHeight(f), 20);
+  assert.deepEqual(sketchToDraw(f).pts, rectPts(0, 5, 20, 25));
+
+  const r = sketchFromDraw({ mode: 'revolve', plane: 'front', pts: [[0, 2], [10, 2], [10, 12], [0, 12]] });
+  assert.equal(r.x, 0); assert.equal(r.y, 2); assert.equal(sketchHeight(r), 10);
+});
+t('kroki: daire ve döndürme profili', () => {
+  const c = circlePts(0, 0, 10, 16);
+  assert.equal(c.length, 16); near(Math.hypot(...c[3]), 10);
+  const cw = [[0, 0], [0, 10], [10, 10], [10, 0]]; // saat yönü
+  assert.ok(polyArea(cw) < 0);
+  const prof = revolveProfile(cw);
+  assert.ok(polyArea(prof.slice(0, -1)) > 0);
+  assert.deepEqual(prof[0], prof[prof.length - 1]);
+  assert.ok(prof.every(([r]) => r >= 0.01));
+});
+t('pah ve yuvarlama geometrisi', () => {
+  const P = chamferBoxPoints(40, 30, 20, 4);
+  assert.equal(P.length, 24);
+  assert.ok(P.every(([x, y, z]) => Math.abs(x) <= 20 && Math.abs(z) <= 15 && y >= 0 && y <= 20));
+  // sıfır pahta tam kutu köşeleri
+  assert.ok(chamferBoxPoints(40, 30, 20, 0).some(([x, y, z]) => x === 20 && y === 20 && z === 15));
+  // aşırı büyük pah kenarı aşmaz
+  assert.ok(chamferBoxPoints(10, 10, 10, 99).every(([x]) => Math.abs(x) <= 5));
+  const plain = cylinderProfile(10, 20, 0, 0);
+  assert.deepEqual(plain, [[0, 0], [10, 0], [10, 20], [0, 20]]);
+  const ch = cylinderProfile(10, 20, 2, 0);
+  assert.deepEqual(ch, [[0, 0], [8, 0], [10, 2], [10, 18], [8, 20], [0, 20]]);
+  const rd = cylinderProfile(10, 20, 0, 3);
+  assert.deepEqual(rd[0], [0, 0]); assert.deepEqual(rd[rd.length - 1], [0, 20]);
+  assert.ok(polyArea(rd) > 0);
+  assert.ok(rd.every(([r, y]) => r <= 10 + 1e-9 && y >= -1e-9 && y <= 20 + 1e-9));
+});
+t('euler <-> kuaterniyon', () => {
+  for (const [a, b, c] of [[30, 40, 50], [90, 0, 0], [0, 90, 0], [10, -70, 120], [0, 0, 0]]) {
+    const q = eulerToQuat(a, b, c);
+    const q2 = eulerToQuat(...quatToEulerXYZ(q));
+    const dot = q[0] * q2[0] + q[1] * q2[1] + q[2] * q2[2] + q[3] * q2[3];
+    near(Math.abs(dot), 1, 1e-6);
+  }
+  const q = quatMul(eulerToQuat(0, 90, 0), eulerToQuat(0, 0, 0));
+  assert.deepEqual(quatToEulerXYZ(q), [0, 90, 0]);
+});
+t('kopya ve ayna', () => {
+  const p = { id: 2, type: 'box', op: 'add', w: 10, l: 10, h: 10, x: 20, y: 0, z: 5, rx: 0, ry: 30, rz: 10, name: 'Ayak' };
+  const c = duplicatePart(p, 9);
+  assert.equal(c.id, 9); assert.equal(c.x, 30); assert.equal(c.z, 15); assert.equal(c.name, 'Ayak kopya');
+  assert.equal(p.x, 20); // orijinal değişmez
+  const m = mirrorPart(p, 10, 'x', 0);
+  assert.equal(m.x, -20); assert.equal(m.ry, -30); assert.equal(m.rz, -10); assert.equal(m.z, 5);
+  const mz = mirrorPart(p, 11, 'z', 0, 5);
+  assert.equal(mz.z, 5); assert.equal(mz.ry, -30); assert.equal(mz.rz, 10);
+  const sk = sketchFromDraw({ mode: 'extrude', plane: 'top', pts: [[0, 0], [20, 0], [0, 10]], h: 5 });
+  const ms = mirrorPart({ id: 3, op: 'add', ...sk }, 12, 'x', 0);
+  assert.deepEqual(ms.pts.map(([u]) => u), sk.pts.map(([u]) => -u));
+});
+t('doğrusal dizi', () => {
+  const p = { id: 1, type: 'box', x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, name: 'A' };
+  const a = linearArray(p, 5, 3, 25, 0, 10);
+  assert.equal(a.length, 3);
+  assert.deepEqual(a.map((q) => q.x), [25, 50, 75]);
+  assert.deepEqual(a.map((q) => q.z), [10, 20, 30]);
+  assert.deepEqual(a.map((q) => q.id), [5, 6, 7]);
+  assert.equal(a[2].name, 'A 4');
+});
+t('dairesel dizi', () => {
+  const p = { id: 1, type: 'cylinder', x: 10, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
+  const a = circularArray(p, 2, 4, 0, 0, 360);
+  assert.equal(a.length, 3);
+  near(a[0].x, 0); near(a[0].z, -10); assert.equal(a[0].ry, 90);
+  near(a[1].x, -10); near(a[1].z, 0);
+  near(a[2].x, 0); near(a[2].z, 10);
+  // başka merkez
+  const b = circularArray({ ...p, x: 20 }, 9, 2, 10, 0, 360);
+  near(b[0].x, 0); near(b[0].z, 0);
+  // kısmi yay: 3 adet 180°
+  const c = circularArray(p, 2, 3, 0, 0, 180);
+  near(c[1].x, -10); assert.equal(c[1].ry, 180);
+  // dönmüş parçanın yönü birleşir: rx=90 sonra Y'de 90
+  const d = circularArray({ ...p, rx: 90 }, 2, 4, 0, 0, 360)[0];
+  const qa = eulerToQuat(d.rx, d.ry, d.rz);
+  const qb = quatMul(eulerToQuat(0, 90, 0), eulerToQuat(90, 0, 0));
+  near(Math.abs(qa[0] * qb[0] + qa[1] * qb[1] + qa[2] * qb[2] + qa[3] * qb[3]), 1, 1e-6);
+});
+t('görünüm yardımcıları', () => {
+  assert.deepEqual(Object.keys(VIEW_DIRS).sort(), ['front', 'iso', 'side', 'top']);
+  const s = sectionPlane('x', 10);
+  assert.deepEqual(s, { normal: [-1, 0, 0], constant: 10 });
+  // x=5 noktası kalmalı (normal·p+c >= 0), x=15 kesilmeli
+  const keep = (pl, x) => pl.normal[0] * x + pl.constant >= 0;
+  assert.ok(keep(s, 5)); assert.ok(!keep(s, 15));
+  const f = sectionPlane('x', 10, true);
+  assert.ok(!keep(f, 5)); assert.ok(keep(f, 15));
+  assert.deepEqual(sectionPlane('y', 3).normal, [0, -1, 0]);
+  near(fovDistance(100, 45, 45), 100);
+  assert.ok(fovDistance(100, 45, 1.5) > 100 * 20);
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
