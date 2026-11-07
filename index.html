@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<title>Çizim Atölyesi</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0f172a; color: #fff;
+               font-family: system-ui, -apple-system, Roboto, sans-serif; }
+  #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+  #title { text-align: center; font-weight: 700; font-size: 18px; padding: 8px 0 4px; }
+  .row { display: flex; gap: 6px; padding: 0 10px 6px; }
+  #chips { display: flex; gap: 6px; padding: 0 10px 6px; overflow-x: auto; white-space: nowrap; }
+  button { font: inherit; color: #fff; background: #1e293b; border: 0; border-radius: 8px;
+           padding: 9px 6px; font-weight: 600; font-size: 13px; flex: 1; }
+  button.on { background: #0284c7; }
+  button.danger { background: #7f1d1d; }
+  .chip { flex: none; border-radius: 16px; padding: 8px 12px; }
+  .chip.sub { background: #7f1d1d; }
+  .chip.on { outline: 2px solid #38bdf8; }
+  .f { flex: 1; display: block; min-width: 0; }
+  .f span { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 2px; }
+  input { width: 100%; font: inherit; font-size: 15px; color: #fff; background: #1e293b;
+          border: 0; border-radius: 8px; padding: 7px 9px; }
+  #view { position: relative; flex: 1; min-height: 160px; }
+  #view canvas { display: block; touch-action: none; }
+  #msg { position: absolute; top: 40%; left: 0; right: 0; text-align: center; padding: 0 12px;
+         pointer-events: none; color: #94a3b8; font-size: 14px; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+  "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.6.0/build/index.module.js",
+  "three-bvh-csg": "https://unpkg.com/three-bvh-csg@0.0.7/build/index.module.js"
+} }
+</script>
+</head>
+<body>
+<div id="app">
+  <div id="title">Çizim Atölyesi</div>
+  <div id="chips"></div>
+  <div class="row">
+    <button data-act="add-box">+ Kutu</button>
+    <button data-act="add-cyl">+ Silindir</button>
+    <button data-act="hole-round">○ Delik</button>
+    <button data-act="hole-square">□ Delik</button>
+  </div>
+  <div class="row" id="typerow"></div>
+  <div class="row" id="dims"></div>
+  <div class="row" id="pos"></div>
+  <div class="row">
+    <button data-act="fit">Sığdır</button>
+    <button data-act="del" class="danger">Bu parçayı sil</button>
+  </div>
+  <div id="view"><div id="msg">3D yükleniyor... (internet gerekir)</div></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Brush, Evaluator, ADDITION, SUBTRACTION } from 'three-bvh-csg';
+
+const $ = (id) => document.getElementById(id);
+const TYPE_LABEL = { box: 'Kutu', cylinder: 'Silindir' };
+
+/* ---------------- Durum ---------------- */
+let nextId = 2;
+let sel = 1;
+const parts = [
+  { id: 1, type: 'box', op: 'add', w: 80, l: 60, h: 40, d: 50, x: 0, y: 0, z: 0 },
+];
+const cur = () => parts.find((p) => p.id === sel) || parts[0];
+
+/* ---------------- 3D sahne ---------------- */
+const view = $('view');
+const msg = $('msg');
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0f172a);
+const camera = new THREE.PerspectiveCamera(45, 1, 1, 10000);
+camera.position.set(150, 120, 180);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+view.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const light = new THREE.DirectionalLight(0xffffff, 0.9);
+light.position.set(200, 300, 200);
+scene.add(light);
+scene.add(new THREE.GridHelper(400, 40, 0x475569, 0x1e293b));
+
+const mat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.5, metalness: 0.1 });
+const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+const evaluator = new Evaluator();
+evaluator.useGroups = false;
+
+let group = new THREE.Group();
+scene.add(group);
+let first = true;
+
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  if (!w || !h) return;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+}
+new ResizeObserver(resize).observe(view);
+resize();
+
+renderer.setAnimationLoop(() => {
+  controls.update();
+  renderer.render(scene, camera);
+});
+
+const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 1000) : 1);
+const pos = (v) => (isFinite(v) ? v : 0);
+
+function fit(box) {
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+  const m = Math.max(size.x, size.y, size.z, 1);
+  const t = Math.tan((camera.fov * Math.PI / 180) / 2);
+  let asp = isFinite(camera.aspect) && camera.aspect > 0 ? Math.min(camera.aspect, 1) : 1;
+  asp = Math.max(asp, 0.2);
+  const dist = (m / 2) / (t * asp) * 1.8 + 20;
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  controls.target.copy(center);
+  camera.position.copy(center.clone().add(dir.multiplyScalar(dist)));
+  controls.update();
+}
+
+function makeBrush(p) {
+  const w = clamp(p.w), l = clamp(p.l), h = clamp(p.h), d = clamp(p.d);
+  const geo = p.type === 'cylinder'
+    ? new THREE.CylinderGeometry(d / 2, d / 2, h, 64)
+    : new THREE.BoxGeometry(w, h, l);
+  // x,z = merkez; y = parçanın ALT yüzü
+  geo.translate(pos(p.x), pos(p.y) + h / 2, pos(p.z));
+  const b = new Brush(geo, mat);
+  b.updateMatrixWorld();
+  return b;
+}
+
+// CSG sonucu drawRange kullanır; temiz bir geometriye kopyala
+function compact(g) {
+  const P = g.attributes.position, N = g.attributes.normal, idx = g.index;
+  const total = idx ? idx.count : P.count;
+  const start = g.drawRange.start || 0;
+  let count = isFinite(g.drawRange.count) ? g.drawRange.count : total - start;
+  count = Math.max(0, Math.min(count, total - start));
+  const outP = new Float32Array(count * 3);
+  const outN = N ? new Float32Array(count * 3) : null;
+  for (let i = 0; i < count; i++) {
+    const v = idx ? idx.getX(start + i) : start + i;
+    outP[i * 3] = P.getX(v); outP[i * 3 + 1] = P.getY(v); outP[i * 3 + 2] = P.getZ(v);
+    if (N) { outN[i * 3] = N.getX(v); outN[i * 3 + 1] = N.getY(v); outN[i * 3 + 2] = N.getZ(v); }
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(outP, 3));
+  if (outN) out.setAttribute('normal', new THREE.BufferAttribute(outN, 3));
+  else out.computeVertexNormals();
+  return out;
+}
+
+function rebuild(refit) {
+  try {
+    group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+    scene.remove(group);
+    group = new THREE.Group();
+    scene.add(group);
+
+    let result = null;
+    for (const p of parts) {
+      const b = makeBrush(p);
+      if (!result) { result = b; continue; }
+      const next = evaluator.evaluate(result, b, p.op === 'sub' ? SUBTRACTION : ADDITION);
+      next.updateMatrixWorld();
+      result = next;
+    }
+    if (!result) return;
+
+    const clean = compact(result.geometry);
+    clean.computeBoundingBox();
+    group.add(new THREE.Mesh(clean, mat));
+    group.add(new THREE.LineSegments(new THREE.EdgesGeometry(clean, 30), lineMat));
+
+    msg.style.display = 'none';
+    if (first || refit) { fit(clean.boundingBox); first = false; }
+  } catch (err) {
+    msg.style.display = 'block';
+    msg.style.color = '#f87171';
+    msg.textContent = 'Hata: ' + (err && err.message ? err.message : err);
+  }
+}
+
+/* ---------------- Arayüz ---------------- */
+const btn = (label, act, on) =>
+  '<button data-act="' + act + '"' + (on ? ' class="on"' : '') + '>' + label + '</button>';
+
+const field = (label, key, p) =>
+  '<label class="f"><span>' + label + '</span><input type="number" step="any" data-k="' + key +
+  '" value="' + (isFinite(p[key]) ? p[key] : '') + '"></label>';
+
+function renderPanel() {
+  const p = cur();
+  const idx = parts.indexOf(p);
+
+  $('chips').innerHTML = parts.map((q, i) =>
+    '<button class="chip' + (q.op === 'sub' && i > 0 ? ' sub' : '') + (q.id === p.id ? ' on' : '') +
+    '" data-sel="' + q.id + '">' + (i + 1) + '. ' + TYPE_LABEL[q.type] +
+    (i > 0 && q.op === 'sub' ? ' (oyuk)' : '') + '</button>').join('');
+
+  $('typerow').innerHTML =
+    btn('Kutu', 'type-box', p.type === 'box') +
+    btn('Silindir', 'type-cyl', p.type === 'cylinder') +
+    (idx > 0 ? btn('Birleştir', 'op-add', p.op === 'add') + btn('Oyuk aç', 'op-sub', p.op === 'sub') : '');
+
+  $('dims').innerHTML = p.type === 'box'
+    ? field('Genişlik (mm)', 'w', p) + field('Derinlik (mm)', 'l', p) + field('Yükseklik (mm)', 'h', p)
+    : field('Çap (mm)', 'd', p) + field('Yükseklik (mm)', 'h', p);
+
+  $('pos').innerHTML =
+    field('X (sağ-sol)', 'x', p) + field('Y (alt)', 'y', p) + field('Z (ön-arka)', 'z', p);
+}
+
+function addPart(type, op) {
+  const baseH = parts[0] && isFinite(parts[0].h) ? parts[0].h : 40;
+  const id = nextId++;
+  const p = op === 'sub'
+    // delik: taban parçadan iki ucu 1 mm taşsın (yüzey çakışması olmasın)
+    ? { id, type, op, w: 20, l: 20, h: baseH + 2, d: 20, x: 0, y: -1, z: 0 }
+    // ekleme: taban parçanın üstüne otursun
+    : { id, type, op, w: 30, l: 30, h: 20, d: 30, x: 0, y: baseH, z: 0 };
+  parts.push(p);
+  sel = id;
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  if (t.dataset.sel) { sel = Number(t.dataset.sel); renderPanel(); return; }
+  const act = t.dataset.act;
+  if (!act) return;
+  const p = cur();
+  if (act === 'add-box') addPart('box', 'add');
+  else if (act === 'add-cyl') addPart('cylinder', 'add');
+  else if (act === 'hole-round') addPart('cylinder', 'sub');
+  else if (act === 'hole-square') addPart('box', 'sub');
+  else if (act === 'type-box') p.type = 'box';
+  else if (act === 'type-cyl') p.type = 'cylinder';
+  else if (act === 'op-add') p.op = 'add';
+  else if (act === 'op-sub') p.op = 'sub';
+  else if (act === 'fit') { rebuild(true); return; }
+  else if (act === 'del') {
+    if (parts.length < 2) return;
+    parts.splice(parts.indexOf(p), 1);
+    sel = parts[0].id;
+  }
+  renderPanel();
+  rebuild(false);
+});
+
+// yazarken paneli yeniden çizme (klavye kapanmasın), sadece modeli güncelle
+document.addEventListener('input', (e) => {
+  const k = e.target.dataset && e.target.dataset.k;
+  if (!k) return;
+  cur()[k] = e.target.valueAsNumber;
+  rebuild(false);
+});
+
+renderPanel();
+rebuild(false);
+</script>
+</body>
+</html>

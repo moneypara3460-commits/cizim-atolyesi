@@ -18,13 +18,16 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 4. Sesli komut ("50 mm çapında silindir yap, ortasına 10 mm delik aç")
 5. Kroki çizip kalınlık verme (extrude)
 
+## Web sürümü (en kolay deneme yolu)
+
+`index.html` tek sayfalık web sürümüdür, kurulum gerektirmez. GitHub Pages ile yayınlanır:
+https://moneypara3460-commits.github.io/cizim-atolyesi/
+
+Telefonun tarayıcısında açman yeterli. 3D kütüphaneler internetten yüklenir.
+
 ## Dosyalar
 
-- `App.js` — arayüz (parça listesi, ölçü alanları, düğmeler)
-- `viewerHtml.js` — 3D görüntüleyici (Three.js + three-bvh-csg), WebView / iframe içinde çalışır
-- `package.json` — bağımlılıklar
-
-## Snack'te açma
-
-Tarayıcıda `snack.expo.dev` adresine git, GitHub'dan içe aktar seçeneğiyle bu depoyu aç.
-Web önizleme iframe ile, telefonda (Expo Go) WebView ile çalışır. 3D kütüphaneler internetten yüklenir.
+- `index.html` — web sürümü (arayüz + 3D görüntüleyici, tek dosya)
+- `App.js` — React Native / Expo sürümünün arayüzü
+- `viewerHtml.js` — Expo sürümündeki 3D görüntüleyici (WebView / iframe içinde)
+- `package.json` — Expo sürümünün bağımlılıkları
