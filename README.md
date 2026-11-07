@@ -7,6 +7,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 
 ## Özellikler
 
+- Sonsuz zemin ızgarası (yakınlaştırdıkça 10 mm, 100 mm, 1 m, 10 m... ölçeğine geçer); ölçü sınırı 100 m. Kırmızı çizgi X, mavi çizgi Z eksenidir
 - Şekiller: kutu (kenar yuvarlamalı), silindir, küre, koni / kesik koni, boru
 - Birden fazla parça: **birleştir** veya **oyuk aç** (boolean / CSG, `three-bvh-csg`)
 - Hazır delik tuşları: yuvarlak delik, kare delik

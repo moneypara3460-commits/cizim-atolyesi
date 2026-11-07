@@ -23,7 +23,9 @@
   .chip { flex: none; border-radius: 16px; padding: 8px 12px; }
   .chip.sub { background: #7f1d1d; }
   .chip.on { outline: 2px solid #38bdf8; }
-  #panel { max-height: 44vh; overflow-y: auto; }
+  #panel { max-height: 38vh; overflow-y: auto; }
+  .tab { background: transparent; color: #94a3b8; border-bottom: 2px solid #1e293b; border-radius: 0; }
+  .tab.on { background: transparent; color: #fff; border-bottom-color: #38bdf8; }
   .f { flex: 1 1 70px; display: block; min-width: 0; }
   .f span { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 2px; white-space: nowrap; }
   input { width: 100%; font: inherit; font-size: 15px; color: #fff; background: #1e293b;
@@ -83,15 +85,9 @@
         <button data-act="fit">Sığdır</button>
         <button data-act="del" class="danger">Parçayı sil</button>
       </div>
-      <div class="lbl">Seçili parçanın türü</div>
-      <div class="row" id="typerow"></div>
-      <div class="row" id="oprow"></div>
-      <div class="lbl">Ölçüler (mm)</div>
-      <div class="row wrap" id="dims"></div>
-      <div class="lbl">Konum (mm) — Y parçanın alt yüzüdür</div>
-      <div class="row wrap" id="pos"></div>
-      <div class="lbl">Döndür (derece, alt orta noktası etrafında)</div>
-      <div class="row wrap" id="rot"></div>
+      <div class="row" id="tabs"></div>
+      <div class="row wrap" id="tabbody"></div>
+      <div class="lbl" id="tabhint"></div>
     </div>
   </div>
   <div id="view">
@@ -133,7 +129,8 @@ let parts = freshParts();
 let sel = 1;
 let nextId = 2;
 let projName = 'model';
-const cur = () => parts.find((p) => p.id === sel) || parts[0];
+let tab = 'dims';
+const cur =() => parts.find((p) => p.id === sel) || parts[0];
 
 const hist = new History();
 const snapshot = () => JSON.stringify({ parts, sel, nextId });
@@ -164,7 +161,66 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const light = new THREE.DirectionalLight(0xffffff, 0.9);
 light.position.set(200, 300, 200);
 scene.add(light);
-scene.add(new THREE.GridHelper(400, 40, 0x475569, 0x1e293b));
+
+// Sonsuz zemin ızgarası: kameraya göre ölçeği kendiliğinden değişir (10 mm, 100 mm, 1 m, 10 m ...)
+// Kırmızı çizgi X ekseni, mavi çizgi Z eksenidir.
+const gridMat = new THREE.ShaderMaterial({
+  transparent: true,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  uniforms: { uCell: { value: 10 }, uFade: { value: 1 }, uFar: { value: 1000 } },
+  vertexShader: `
+    varying vec3 vPos;
+    void main() {
+      vec4 w = modelMatrix * vec4(position, 1.0);
+      vPos = w.xyz;
+      gl_Position = projectionMatrix * viewMatrix * w;
+    }`,
+  fragmentShader: `
+    varying vec3 vPos;
+    uniform float uCell;
+    uniform float uFade;
+    uniform float uFar;
+    float gridLine(vec2 p, float cell) {
+      vec2 c = p / cell;
+      vec2 g = abs(fract(c - 0.5) - 0.5) / fwidth(c);
+      return 1.0 - min(min(g.x, g.y), 1.0);
+    }
+    void main() {
+      float minor = gridLine(vPos.xz, uCell) * uFade;
+      float major = gridLine(vPos.xz, uCell * 10.0);
+      float d = length(vPos - cameraPosition);
+      float fade = 1.0 - smoothstep(uFar * 0.15, uFar, d);
+      vec2 aw = fwidth(vPos.xz) * 1.5;
+      float axX = 1.0 - min(abs(vPos.z) / max(aw.y, 1e-6), 1.0);
+      float axZ = 1.0 - min(abs(vPos.x) / max(aw.x, 1e-6), 1.0);
+      vec3 col = vec3(0.39, 0.45, 0.55);
+      float a = max(minor * 0.35, major * 0.7);
+      col = mix(col, vec3(0.94, 0.27, 0.27), axX);
+      col = mix(col, vec3(0.23, 0.51, 0.96), axZ);
+      a = max(a, max(axX, axZ) * 0.9);
+      gl_FragColor = vec4(col, a * fade);
+    }`,
+});
+const gridMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), gridMat);
+gridMesh.scale.set(400000, 1, 400000);
+gridMesh.frustumCulled = false;
+gridMesh.renderOrder = -1;
+scene.add(gridMesh);
+
+function updateInfinite() {
+  const dist = Math.max(camera.position.distanceTo(controls.target), 1);
+  const e = Math.log10(dist / 6);
+  const k = Math.floor(e);
+  gridMat.uniforms.uCell.value = Math.pow(10, k);
+  gridMat.uniforms.uFade.value = 1 - (e - k);
+  gridMat.uniforms.uFar.value = dist * 10;
+  gridMesh.position.set(controls.target.x, -dist * 0.0004, controls.target.z);
+  // çok büyük / çok küçük parçalarda da derinlik hassasiyeti bozulmasın
+  camera.near = Math.max(0.05, dist / 400);
+  camera.far = Math.max(20000, dist * 400);
+  camera.updateProjectionMatrix();
+}
 
 const mat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.5, metalness: 0.1 });
 const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
@@ -188,10 +244,11 @@ resize();
 
 renderer.setAnimationLoop(() => {
   controls.update();
+  updateInfinite();
   renderer.render(scene, camera);
 });
 
-const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 1000) : 1);
+const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
 const pos = (v) => (isFinite(v) ? v : 0);
 const RAD = Math.PI / 180;
 
@@ -344,11 +401,25 @@ function renderPanel() {
   $('chips').innerHTML = parts.map((q, i) =>
     `<button class="chip${q.op === 'sub' && i > 0 ? ' sub' : ''}${q.id === p.id ? ' on' : ''}" data-sel="${q.id}">` +
     `${i + 1}. ${TYPE_LABEL[q.type]}${i > 0 && q.op === 'sub' ? ' (oyuk)' : ''}</button>`).join('');
-  $('typerow').innerHTML = TYPES.map((t) => btn(TYPE_LABEL[t], 'type-' + t, p.type === t)).join('');
-  $('oprow').innerHTML = idx > 0 ? btn('Birleştir', 'op-add', p.op === 'add') + btn('Oyuk aç', 'op-sub', p.op === 'sub') : '';
-  $('dims').innerHTML = FIELDS[p.type].map(([l, k]) => field(l, k, p)).join('');
-  $('pos').innerHTML = field('X (sağ-sol)', 'x', p) + field('Y (alt)', 'y', p) + field('Z (ön-arka)', 'z', p);
-  $('rot').innerHTML = field('X°', 'rx', p) + field('Y°', 'ry', p) + field('Z°', 'rz', p);
+  const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür']];
+  $('tabs').innerHTML = TABS.map(([k, l]) => `<button class="tab${tab === k ? ' on' : ''}" data-act="tab-${k}">${l}</button>`).join('');
+  let body = '', hint = '';
+  if (tab === 'type') {
+    body = TYPES.map((t) => btn(TYPE_LABEL[t], 'type-' + t, p.type === t)).join('') +
+      (idx > 0 ? btn('Birleştir', 'op-add', p.op === 'add') + btn('Oyuk aç', 'op-sub', p.op === 'sub') : '');
+    hint = 'Seçili parçanın türü' + (idx > 0 ? ' ve birleştirme / oyuk durumu' : '');
+  } else if (tab === 'pos') {
+    body = field('X (sağ-sol)', 'x', p) + field('Y (alt)', 'y', p) + field('Z (ön-arka)', 'z', p);
+    hint = 'Konum (mm). Y parçanın alt yüzüdür.';
+  } else if (tab === 'rot') {
+    body = field('X°', 'rx', p) + field('Y°', 'ry', p) + field('Z°', 'rz', p);
+    hint = 'Derece; parçanın alt orta noktası etrafında döner.';
+  } else {
+    body = FIELDS[p.type].map(([l, k]) => field(l, k, p)).join('');
+    hint = 'Ölçüler (mm)';
+  }
+  $('tabbody').innerHTML = body;
+  $('tabhint').textContent = hint;
 }
 
 function updateToolbar() {
@@ -465,6 +536,7 @@ document.addEventListener('click', (e) => {
   const p = cur();
 
   if (act.startsWith('add-')) { addPart(act.slice(4), 'add'); return; }
+  if (act.startsWith('tab-')) { tab = act.slice(4); renderPanel(); return; }
   if (act === 'hole-round') { addPart('cylinder', 'sub'); return; }
   if (act === 'hole-square') { addPart('box', 'sub'); return; }
   if (act.startsWith('type-')) { commit(); p.type = act.slice(5); refreshAll(); return; }
