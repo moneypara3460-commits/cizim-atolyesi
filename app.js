@@ -861,9 +861,9 @@ function renderPanel() {
   } else if (tab === 'pos') {
     body = field('X (sağ-sol)', 'x', p) + field('Y (alt)', 'y', p) + field('Z (ön-arka)', 'z', p) +
       btn('✋ Parmakla taşı: ' + (settings.move ? 'AÇIK' : 'kapalı'), 'move', settings.move) +
-      btn('Yer düzlemi', 'drag-floor', settings.drag === 'floor') + btn('Dikey düzlem', 'drag-wall', settings.drag === 'wall') +
+      btn('Yer düzlemi', 'drag-floor', settings.drag === 'floor') + btn('Dikey düzlem', 'drag-wall', settings.drag === 'wall') + btn('⬍ Sadece yukarı-aşağı', 'drag-up', settings.drag === 'up') +
       snapBtns;
-    hint = 'Y parçanın alt yüzüdür. Taşı açıkken seçili parçayı sürükle; kapalıyken sahne döner.';
+    hint = 'Y parçanın alt yüzüdür. Taşı açıkken seçili parçayı sürükle; kapalıyken sahne döner. Yukarı-aşağı çekmek için "Sadece yukarı-aşağı" seç.';
   } else if (tab === 'rot') {
     body = field('X°', 'rx', p, 'deg') + field('Y°', 'ry', p, 'deg') + field('Z°', 'rz', p, 'deg');
     hint = 'Derece; parçanın alt orta noktası etrafında döner.';
@@ -1134,7 +1134,7 @@ let tap = null, drag = null, dragRaf = 0;
 function startDrag(e, hit) {
   controls.enabled = false;
   const plane = new THREE.Plane();
-  if (settings.drag === 'wall') {
+  if (settings.drag === 'wall' || settings.drag === 'up') {
     const n = camera.position.clone().sub(hit.point);
     n.y = 0;
     if (n.lengthSq() < 1e-6) n.set(0, 0, 1);
@@ -1157,6 +1157,12 @@ view.addEventListener('pointerdown', (e) => {
   if (settings.move && !measure.on) {
     const hit = pickAt(e.clientX, e.clientY);
     if (hit && hit.part.id === sel) startDrag(e, hit);
+    else if (cur().op === 'sub') {
+      // oyuk parça modelin içinde kalıp görünmeyebilir; yine de üzerinden tutup sürüklenebilsin
+      setRay(e.clientX, e.clientY);
+      const own = raycaster.intersectObjects(pickMeshes.filter((m) => m.userData.part && m.userData.part.id === sel), false);
+      if (own.length) startDrag(e, { part: own[0].object.userData.part, point: own[0].point });
+    }
   }
 }, true);
 
@@ -1175,9 +1181,11 @@ window.addEventListener('pointermove', (e) => {
   const p = parts.find((q) => q.id === drag.id);
   if (!p) return;
   const d = pt.sub(drag.start);
-  p.x = snap(drag.x0 + d.x, settings.snap);
-  p.z = snap(drag.z0 + d.z, settings.snap);
-  if (settings.drag === 'wall') p.y = snap(drag.y0 + d.y, settings.snap);
+  if (settings.drag !== 'up') {
+    p.x = snap(drag.x0 + d.x, settings.snap);
+    p.z = snap(drag.z0 + d.z, settings.snap);
+  }
+  if (settings.drag === 'wall' || settings.drag === 'up') p.y = snap(drag.y0 + d.y, settings.snap);
   if (!dragRaf) {
     dragRaf = requestAnimationFrame(() => { dragRaf = 0; rebuild(false); syncInputs(); scheduleSave(); });
   }
