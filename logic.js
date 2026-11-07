@@ -550,3 +550,62 @@ export function roundedRectPts(x1, y1, x2, y2, r, seg = 8) {
   corner(minx + rr, maxy - rr, Math.PI / 2);
   return out;
 }
+
+/* ---------------- Teknik resim: ölçek, yerleşim, PDF ---------------- */
+
+// standart ölçekler (kağıt / gerçek): 10:1 ... 1:1000
+export const NICE_SCALES = [10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001];
+export function pickScale(raw) {
+  for (const s of NICE_SCALES) if (s <= raw) return s;
+  return NICE_SCALES[NICE_SCALES.length - 1];
+}
+export function scaleLabel(s) {
+  return s >= 1 ? Math.round(s) + ':1' : '1:' + Math.round(1 / s);
+}
+
+// A4 yatay (297 x 210 mm). W = X boyu, H = Y (yükseklik), D = Z boyu (mm, gerçek ölçü).
+// Üçüncü açı: ön görünüş sol üstte, sağdakini sağ yan, altta üst görünüş, sağ altta izometrik.
+export function sheetLayout(W, H, D) {
+  const SW = 297, SH = 210, M = 10, TB = 22, DM = 14, GAP = 26;
+  const area = { x: M, y: M + 7, w: SW - 2 * M, h: SH - 2 * M - TB - 7 }; // üstte görünüş adları için 7 mm
+  W = Math.max(W, 0.001); H = Math.max(H, 0.001); D = Math.max(D, 0.001);
+  const raw = Math.min((area.w - DM - GAP) / (W + D), (area.h - GAP) / (H + D));
+  const scale = pickScale(raw);
+  const x1 = area.x + DM, y1 = area.y;
+  const front = { x: x1, y: y1, w: W * scale, h: H * scale };
+  const side = { x: x1 + front.w + GAP, y: y1, w: D * scale, h: H * scale };
+  const top = { x: x1, y: y1 + front.h + GAP, w: W * scale, h: D * scale };
+  const ix = side.x, iy = top.y;
+  const iso = { x: ix, y: iy, w: Math.max(area.x + area.w - ix, 10), h: Math.max(area.y + area.h - iy, 10) };
+  return { sheet: { w: SW, h: SH }, area, scale, front, side, top, iso, titleBlock: { x: M, y: SH - M - TB, w: SW - 2 * M, h: TB } };
+}
+
+// Tek bir JPEG'i A4 yatay (842 x 595 pt) sayfaya yerleştiren en küçük PDF.
+export function jpegToPdf(jpeg, wPx, hPx) {
+  const enc = new TextEncoder();
+  const chunks = [];
+  const offsets = [];
+  let len = 0;
+  const push = (b) => { const u = typeof b === 'string' ? enc.encode(b) : b; chunks.push(u); len += u.length; };
+  const obj = (n, body) => { offsets[n] = len; push(`${n} 0 obj\n`); push(body); push('\nendobj\n'); };
+  const PW = 842, PH = 595;
+  push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PW} ${PH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+  offsets[4] = len;
+  push(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${wPx} /Height ${hPx} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`);
+  push(jpeg);
+  push('\nendstream\nendobj\n');
+  const content = `q ${PW} 0 0 ${PH} 0 0 cm /Im0 Do Q`;
+  obj(5, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+  const xref = len;
+  let x = 'xref\n0 6\n0000000000 65535 f \n';
+  for (let i = 1; i <= 5; i++) x += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
+  push(x);
+  push(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  const out = new Uint8Array(len);
+  let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out;
+}

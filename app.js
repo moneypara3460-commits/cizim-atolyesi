@@ -8,7 +8,7 @@ import {
   UNITS, toUnit, fromUnit, fmtNum, snap, dist3,
   sketchFromDraw, sketchToDraw, revolveProfile, chamferBoxPoints, cylinderProfile,
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
-  VIEW_DIRS, sectionPlane, fovDistance,
+  VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
 } from './logic.js';
 import { openSketch } from './sketch.js';
 
@@ -35,7 +35,10 @@ try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* yoksay */ } };
 
 const section = { on: false, axis: 'x', pos: 0, flip: false };
-const cp = { n: 3, dx: 40, dy: 0, dz: 0, cn: 6, ang: 360, touched: false, shape: 'round', fd: 10, fw: 10, fl: 10, depth: 5, es: 3 }; // çoğaltma + yüz ayarları (mm)
+const cp = { n: 3, dx: 40, dy: 0, dz: 0, cn: 6, ang: 360, touched: false, shape: 'round', fd: 10, fw: 10, fl: 10, depth: 5, es: 3,
+  pat: 'single', px: 3, py: 2, sx: 20, sy: 20, pn: 6, pr: 20,            // delik deseni
+  wall: 2, openTop: true, openBot: false,                                 // kabuk
+  mgap: 0, mrot: 0, mcenter: true };                                      // montaj // çoğaltma + yüz ayarları (mm)
 
 const hist = new History();
 const snapshot = () => JSON.stringify({ parts, sel, nextId });
@@ -286,7 +289,7 @@ renderer.setAnimationLoop(() => {
   updateInfinite();
   updateLabelScales();
   renderer.render(scene, camera);
-  if (modelMesh) drawEdges();
+  if (modelMesh && settings.edges !== false) drawEdges();
 });
 
 function fit(box, dirOverride) {
@@ -335,7 +338,14 @@ const ensureUV = (g) => {
 
 function cylinderGeo(p, d, h) {
   const rr = Math.max(pos(p.r), 0), c = Math.max(pos(p.c), 0);
-  if (rr <= 0.05 && c <= 0.05) return new THREE.CylinderGeometry(d / 2, d / 2, h, 64);
+  if (rr <= 0.05 && c <= 0.05) {
+    const tp = Math.min(Math.max(pos(p.tp), 0), 60);
+    if (tp > 0.01) {
+      const d2 = Math.max(d - 2 * h * Math.tan(tp * RAD), 0.1);
+      return new THREE.CylinderGeometry(d2 / 2, d / 2, h, 64);
+    }
+    return new THREE.CylinderGeometry(d / 2, d / 2, h, 64);
+  }
   const round = rr > 0.05;
   const raw = cylinderProfile(d / 2, h, round ? 0 : c, round ? rr : 0);
   const pts = [];
@@ -390,6 +400,15 @@ function baseGeo(p) {
     default: {
       const r = Math.min(Math.max(pos(p.r), 0), Math.min(w, h, l) / 2 - 0.01);
       if (r > 0.05) return new RoundedBoxGeometry(w, h, l, 4, r);
+      const tp = Math.min(Math.max(pos(p.tp), 0), 60);
+      if (tp > 0.01 && !(pos(p.c) > 0.05)) {
+        // eğimli (çekmeli) kutu: alt yüz tam ölçü, üst yüz her yönden h·tan(eğim) kadar küçük
+        const inset = Math.min(h * Math.tan(tp * RAD), Math.max(Math.min(w, l) / 2 - 0.05, 0.01));
+        const a = w / 2, b = l / 2, ta = a - inset, tb = b - inset;
+        const P = [[-a, -h / 2, -b], [a, -h / 2, -b], [a, -h / 2, b], [-a, -h / 2, b],
+          [-ta, h / 2, -tb], [ta, h / 2, -tb], [ta, h / 2, tb], [-ta, h / 2, tb]].map((v) => new THREE.Vector3(...v));
+        return ensureUV(new ConvexGeometry(P));
+      }
       const c = Math.max(pos(p.c), 0);
       if (c > 0.05) {
         const P = chamferBoxPoints(w, l, h, c).map(([x, y, z]) => new THREE.Vector3(x, y - h / 2, z));
@@ -710,12 +729,12 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['part', 'Parça'], ['view', 'Görünüm']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim']];
 
 function fieldsFor(p) {
   switch (p.type) {
-    case 'box': return [['Genişlik', 'w'], ['Derinlik', 'l'], ['Yükseklik', 'h'], ['Yuvarlama', 'r'], ['Pah', 'c']];
-    case 'cylinder': return [['Çap', 'd'], ['Yükseklik', 'h'], ['Yuvarlama', 'r'], ['Pah', 'c']];
+    case 'box': return [['Genişlik', 'w'], ['Derinlik', 'l'], ['Yükseklik', 'h'], ['Yuvarlama', 'r'], ['Pah', 'c'], ['Eğim °', 'tp', 'deg']];
+    case 'cylinder': return [['Çap', 'd'], ['Yükseklik', 'h'], ['Yuvarlama', 'r'], ['Pah', 'c'], ['Eğim °', 'tp', 'deg']];
     case 'sphere': return [['Çap', 'd']];
     case 'cone': return [['Alt çap', 'd'], ['Üst çap', 'd2'], ['Yükseklik', 'h']];
     case 'tube': return [['Dış çap', 'd'], ['İç çap', 'di'], ['Yükseklik', 'h']];
@@ -784,10 +803,14 @@ function renderPanel() {
       body = btn('○ Yuvarlak', 'fshape-round', cp.shape === 'round') + btn('□ Kare', 'fshape-square', cp.shape === 'square') +
         (cp.shape === 'round' ? cfield('Çap', 'fd') : cfield('Genişlik', 'fw') + cfield('Derinlik (yatay)', 'fl')) +
         cfield('Derinlik / yükseklik', 'depth') +
+        '<div class="lbl" style="flex:1 0 100%">Desen (delik / çıkıntı için)</div>' +
+        btn('Tek', 'pat-single', cp.pat === 'single') + btn('Izgara', 'pat-grid', cp.pat === 'grid') + btn('Daire', 'pat-circ', cp.pat === 'circ') +
+        (cp.pat === 'grid' ? cfield('Sütun', 'px', 'num') + cfield('Satır', 'py', 'num') + cfield('Aralık 1', 'sx') + cfield('Aralık 2', 'sy') : '') +
+        (cp.pat === 'circ' ? cfield('Adet', 'pn', 'num') + cfield('Daire yarıçapı', 'pr') : '') +
         btn('⬇ Delik aç', 'face-hole') + btn('⬆ Çıkıntı ekle', 'face-boss') +
         '<div class="lbl" style="flex:1 0 100%">Bu yüze kroki çiz (kalınlık = derinlik / yükseklik)</div>' +
         btn('✎ Kroki → oyuk', 'face-sk-cut') + btn('✎ Kroki → çıkıntı', 'face-sk-boss');
-      hint = 'Delik / çıkıntı dokunduğun noktada oluşur. Sonra Konum sekmesinden ince ayar yapabilirsin.';
+      hint = 'Delik / çıkıntı dokunduğun noktada oluşur (desende dokunduğun nokta merkezdir). Sonra Konum sekmesinden ince ayar yapabilirsin.';
     }
   } else if (tab === 'edge') {
     if (!edgeSel) {
@@ -797,6 +820,24 @@ function renderPanel() {
       body = cfield('Ölçü (pah boyu / yarıçap)', 'es') + btn('◣ Pah kır', 'edge-chamfer') + btn('◜ Yuvarla', 'edge-fillet');
       hint = 'Seçili kenar tek başına işlenir. İşlem, kenara bir oyuk parçası ekler (Parça listesinde görünür); silersen geri gelir.';
     }
+  } else if (tab === 'shell') {
+    const el = shellEligible(p);
+    body = (el ? cfield('Duvar kalınlığı', 'wall') + btn('Üst açık: ' + (cp.openTop ? 'evet' : 'hayır'), 'shell-top', cp.openTop) + btn('Alt açık: ' + (cp.openBot ? 'evet' : 'hayır'), 'shell-bot', cp.openBot) + btn('🥚 Kabuk yap', 'shell-do')
+      : '<div class="lbl" style="flex:1 0 100%">Seçili parça kabuk yapılamaz.</div>');
+    hint = el ? 'Seçili parçanın içini boşaltır (iç hacim oyuk parça olarak eklenir; Parça listesinden silersen geri gelir). Kutu, silindir ve küre için; yuvarlama / pah / eğim olmamalı.'
+      : 'Kabuk: düz kutu, düz silindir ve küre için. Parçayı üstteki listeden seç.';
+  } else if (tab === 'mate') {
+    const nm = (m) => { const q = m && parts.find((x) => x.id === m.id); return q ? partName(q, parts.indexOf(q)) : ''; };
+    body = '<div class="lbl" style="flex:1 0 100%">1) Hareket edecek parçanın yüzüne dokun' + (mate.a ? ' ✓ ' + esc(nm(mate.a)) : '') + '</div>' +
+      '<div class="lbl" style="flex:1 0 100%">2) Yapışacağı yüze dokun (başka parça)' + (mate.b ? ' ✓ ' + esc(nm(mate.b)) : '') + '</div>' +
+      cfield('Boşluk', 'mgap') + cfield('Yüz çevresinde döndür°', 'mrot', 'deg') +
+      btn('Yüz merkezleri: ' + (cp.mcenter ? 'hizala' : 'dokunulan nokta'), 'mate-center', cp.mcenter) +
+      btn('🔗 Yüzü yüze birleştir', 'mate-do') + btn('Sıfırla', 'mate-reset');
+    hint = 'Birinci yüz, ikinci yüze yüzü yüze oturur ve parça döner. Düz olmayan yüzlerde dokunduğun noktanın yüzü kullanılır. Geri al ile döner.';
+  } else if (tab === 'sheet') {
+    body = btn('📐 Teknik resim oluştur', 'sheet-make') +
+      '<div class="lbl" style="flex:1 0 100%">A4 yatay: ön, yan, üst ve izometrik görünüş; ölçek ve genel ölçüler.</div>';
+    hint = 'Resim PNG ya da PDF olarak indirilir. Birim: ' + settings.unit + ' (Görünüm sekmesinden değiştirilir).';
   } else if (tab === 'part') {
     body = `<label class="f w2"><span>Parça adı</span><input type="text" data-k="name" data-t="text" value="${esc(p.name || '')}" placeholder="${esc(partName(p, idx))}"></label>` +
       `<div class="row" style="flex:1 0 100%;padding:0;flex-wrap:wrap">` +
@@ -810,6 +851,7 @@ function renderPanel() {
     body = btn('Üst', 'view-top') + btn('Ön', 'view-front') + btn('Yan', 'view-side') + btn('İzo', 'view-iso') + btn('Sığdır', 'fit') +
       btn('Ortografik: ' + (settings.ortho ? 'açık' : 'kapalı'), 'ortho', settings.ortho) +
       btn('📏 Ölçüm', 'measure', measure.on) +
+      btn('Kenar çizgisi: ' + (settings.edges === false ? 'kapalı' : 'açık'), 'edges', settings.edges !== false) +
       btn('Etiket yok', 'dim-off', settings.dim === 'off') + btn('Model ölçüsü', 'dim-model', settings.dim === 'model') + btn('Parça ölçüsü', 'dim-part', settings.dim === 'part') +
       btn('mm', 'unit-mm', settings.unit === 'mm') + btn('cm', 'unit-cm', settings.unit === 'cm') + btn('inç', 'unit-in', settings.unit === 'in') +
       btn('Kesit: ' + (section.on ? 'açık' : 'kapalı'), 'sec-toggle', section.on) +
@@ -821,8 +863,8 @@ function renderPanel() {
     hint = 'Ölçüm: açıkken iki noktaya dokun (köşelere yapışır). Kesit: modeli ortadan kes.';
   } else {
     const fl = fieldsFor(p);
-    body = fl.map(([l, k]) => field(l, k, p)).join('') + (p.type === 'sketch' ? btn('✎ Krokiyi düzenle', 'sketch-edit') : '');
-    hint = 'Ölçüler (' + settings.unit + ')' + (p.type === 'box' || p.type === 'cylinder' ? '. Yuvarlama ve pah birlikte kullanılırsa yuvarlama geçerli olur.' : '');
+    body = fl.map(([l, k, kd]) => field(l, k, p, kd)).join('') + (p.type === 'sketch' ? btn('✎ Krokiyi düzenle', 'sketch-edit') : '');
+    hint = 'Ölçüler (' + settings.unit + ')' + (p.type === 'box' || p.type === 'cylinder' ? '. Yuvarlama ve pah birlikte kullanılırsa yuvarlama geçerli olur. Eğim: üst yüz, her yönden yükseklik × tan(eğim) kadar daralır (döküm eğimi).' : '');
   }
   $('tabbody').innerHTML = body;
   $('tabhint').textContent = hint;
@@ -1074,6 +1116,7 @@ function onTap(cx, cy) {
   if (measure.on) { measureTap(cx, cy); return; }
   if (tab === 'face') { faceTap(cx, cy); return; }
   if (tab === 'edge') { edgeTap(cx, cy); return; }
+  if (tab === 'mate') { mateTap(cx, cy); return; }
   const hit = pickAt(cx, cy);
   if (hit && hit.part.id !== sel) {
     sel = hit.part.id;
@@ -1151,6 +1194,39 @@ function clearFace() {
   face = null;
   disposeOverlay(faceGroup);
 }
+// modelde, verilen düzlemdeki (nokta + normal) üçgenler; bb verilirse yalnız o kutunun içindekiler
+function faceRegion(n, point, bb) {
+  const P = modelMesh.geometry.attributes.position;
+  const out = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), tn = new THREE.Vector3();
+  const cen = new THREE.Vector3();
+  let area = 0;
+  const lim = bb ? bb.clone().expandByScalar(0.06) : null;
+  for (let i = 0; i + 2 < P.count; i += 3) {
+    a.fromBufferAttribute(P, i); b.fromBufferAttribute(P, i + 1); c.fromBufferAttribute(P, i + 2);
+    tn.crossVectors(e1.subVectors(b, a), e2.subVectors(c, a));
+    const ar = tn.length() / 2;
+    if (ar < 1e-6) continue;
+    tn.normalize();
+    if (tn.dot(n) > 0.999 && Math.abs(a.clone().sub(point).dot(n)) < 0.02) {
+      if (lim && !(lim.containsPoint(a) && lim.containsPoint(b) && lim.containsPoint(c))) continue;
+      out.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+      cen.add(a.clone().add(b).add(c).multiplyScalar(ar / 3));
+      area += ar;
+    }
+  }
+  return { out, center: area > 0 ? cen.multiplyScalar(1 / area) : null };
+}
+function regionMesh(out, color, opacity) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide,
+    polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+  }));
+  m.userData.own = true; m.layers.set(1); m.renderOrder = 6;
+  return m;
+}
 function faceTap(cx, cy) {
   if (!modelMesh) return;
   setRay(cx, cy);
@@ -1161,24 +1237,7 @@ function faceTap(cx, cy) {
   const n = h.face.normal.clone().normalize();
   face = { point: h.point.clone(), normal: n };
   // aynı düzlemdeki üçgenleri sarı göster
-  const P = modelMesh.geometry.attributes.position;
-  const out = [];
-  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), tn = new THREE.Vector3();
-  for (let i = 0; i + 2 < P.count; i += 3) {
-    a.fromBufferAttribute(P, i); b.fromBufferAttribute(P, i + 1); c.fromBufferAttribute(P, i + 2);
-    tn.crossVectors(e1.subVectors(b, a), e2.subVectors(c, a));
-    if (tn.lengthSq() < 1e-12) continue;
-    tn.normalize();
-    if (tn.dot(n) > 0.999 && Math.abs(a.clone().sub(h.point).dot(n)) < 0.02) out.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
-  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
-    color: 0xfacc15, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide,
-    polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
-  }));
-  m.userData.own = true; m.layers.set(1); m.renderOrder = 6;
-  faceGroup.add(m);
+  faceGroup.add(regionMesh(faceRegion(n, h.point, null).out, 0xfacc15, 0.55));
   const dot = new THREE.Points(new THREE.BufferGeometry().setFromPoints([h.point]),
     new THREE.PointsMaterial({ color: 0xf43f5e, size: 11, sizeAttenuation: false, depthTest: false, transparent: true }));
   dot.userData.own = true; dot.layers.set(1); dot.renderOrder = 997;
@@ -1193,6 +1252,20 @@ function faceTransform(localX, localZ, inward) {
   const r4 = (v) => Math.round(v * 1e4) / 1e4 + 0;
   return { x: r4(p.x), y: r4(p.y), z: r4(p.z), rx, ry, rz };
 }
+// desen: dokunulan noktaya göre yüz düzlemindeki (yerel X, Z) kaymalar
+function faceOffsets() {
+  if (cp.pat === 'grid') {
+    const nx = Math.max(1, Math.min(20, Math.round(cp.px))), ny = Math.max(1, Math.min(20, Math.round(cp.py)));
+    const out = [];
+    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) out.push([(i - (nx - 1) / 2) * cp.sx, (j - (ny - 1) / 2) * cp.sy]);
+    return out;
+  }
+  if (cp.pat === 'circ') {
+    const n = Math.max(2, Math.min(60, Math.round(cp.pn)));
+    return Array.from({ length: n }, (_, i) => [cp.pr * Math.cos((i / n) * Math.PI * 2), cp.pr * Math.sin((i / n) * Math.PI * 2)]);
+  }
+  return [[0, 0]];
+}
 function faceFeature(op) {
   if (!face) return;
   const depth = Math.max(cp.depth, 0.1);
@@ -1201,14 +1274,21 @@ function faceFeature(op) {
   // delik: yüzeyin dışına 1 mm taşar; çıkıntı: yüzeyin 0,5 mm içinden başlar (birleşsin)
   const inward = op === 'sub' ? depth : 0.5;
   const h = op === 'sub' ? depth + 1 : depth + 0.5;
+  const offs = faceOffsets();
+  if (offs.length > 64) { toast('Desen en fazla 64 parça olabilir'); return; }
   commit();
-  const p = newPart(nextId++, round ? 'cylinder' : 'box', op, null);
-  Object.assign(p, dims, { h, r: 0, c: 0 }, faceTransform(0, 0, inward));
-  parts.push(p);
-  sel = p.id;
+  let last = null;
+  for (const [ox, oz] of offs) {
+    const p = newPart(nextId++, round ? 'cylinder' : 'box', op, null);
+    Object.assign(p, dims, { h, r: 0, c: 0 }, faceTransform(ox, oz, inward));
+    if (offs.length > 1) p.name = (op === 'sub' ? 'Desen deliği ' : 'Desen çıkıntısı ') + (parts.length + 1);
+    parts.push(p);
+    last = p;
+  }
+  sel = last.id;
   clearFace();
   refreshAll();
-  toast(op === 'sub' ? 'Delik açıldı' : 'Çıkıntı eklendi');
+  toast((op === 'sub' ? 'Delik açıldı' : 'Çıkıntı eklendi') + (offs.length > 1 ? ' (' + offs.length + ' adet)' : ''));
 }
 function faceSketch(op) {
   if (!face) return;
@@ -1238,7 +1318,7 @@ function faceSketch(op) {
 /* ---- kenar seçimi: tek kenara pah / yuvarlama (düz kutu parçaları) ---- */
 let edgeSel = null; // { id, axis, sa, sb }  axis: serbest eksen; sa, sb: diğer iki eksenin işareti (-1/+1)
 const EDGE_AXES = { x: ['y', 'z'], y: ['x', 'z'], z: ['x', 'y'] };
-const boxEligible = (p) => p.type === 'box' && !p.hidden && !(p.r > 0.05) && !(p.c > 0.05);
+const boxEligible = (p) => p.type === 'box' && !p.hidden && !(p.r > 0.05) && !(p.c > 0.05) && !(p.tp > 0.01);
 const partQuat = (p) => new THREE.Quaternion().setFromEuler(new THREE.Euler(pos(p.rx) * RAD, pos(p.ry) * RAD, pos(p.rz) * RAD, 'XYZ'));
 // parça yerel koordinatı: alt-orta nokta orijin; x = genişlik, y = yükseklik (0..h), z = derinlik
 function edgeEnds(p, axis, sa, sb) {
@@ -1367,6 +1447,228 @@ function edgeFeature(kind) {
   toast(kind === 'chamfer' ? 'Kenar pah kırıldı' : 'Kenar yuvarlandı');
 }
 
+/* ---- kabuk: parçanın içini boşalt ---- */
+const shellEligible = (p) => !p.hidden && p.op !== 'sub' &&
+  ((p.type === 'box' && !(p.r > 0.05) && !(p.c > 0.05) && !(p.tp > 0.01)) ||
+   (p.type === 'cylinder' && !(p.r > 0.05) && !(p.c > 0.05) && !(p.tp > 0.01)) ||
+   p.type === 'sphere');
+function shellFeature() {
+  const p = cur();
+  if (!shellEligible(p)) { toast('Bu parça kabuk yapılamaz'); return; }
+  const t = Math.max(cp.wall, 0.1);
+  const id = new THREE.Quaternion();
+  let cut;
+  if (p.type === 'sphere') {
+    const d = clamp(p.d) - 2 * t;
+    if (!(d > 0.2)) { toast('Duvar kalınlığı küre için çok büyük'); return; }
+    cut = cutterPart(p, 'sub', 'sphere', { d, h: d }, new THREE.Vector3(0, clamp(p.d) / 2, 0), id, 'Kabuk (iç boşluk)');
+  } else {
+    const h = clamp(p.h);
+    const yb = cp.openBot ? -1 : t, yt = cp.openTop ? h + 1 : h - t;
+    if (!(yt - yb > 0.2)) { toast('Duvar kalınlığı yüksekliğe göre çok büyük'); return; }
+    const c = new THREE.Vector3(0, (yb + yt) / 2, 0);
+    if (p.type === 'box') {
+      const w = clamp(p.w) - 2 * t, l = clamp(p.l) - 2 * t;
+      if (!(w > 0.2 && l > 0.2)) { toast('Duvar kalınlığı kutu için çok büyük'); return; }
+      cut = cutterPart(p, 'sub', 'box', { w, l, h: yt - yb }, c, id, 'Kabuk (iç boşluk)');
+    } else {
+      const d = clamp(p.d) - 2 * t;
+      if (!(d > 0.2)) { toast('Duvar kalınlığı silindir için çok büyük'); return; }
+      cut = cutterPart(p, 'sub', 'cylinder', { d, h: yt - yb, w: 10, l: 10 }, c, id, 'Kabuk (iç boşluk)');
+    }
+  }
+  commit();
+  parts.push(cut);
+  sel = cut.id;
+  refreshAll();
+  toast('Kabuk yapıldı. Not: iç boşluk, sonraki parçalarla çakışmaz; ondan önceki parçaları da keser.');
+}
+
+/* ---- montaj: iki yüzü yüze oturt ---- */
+const mate = { a: null, b: null };
+function mateTap(cx, cy) {
+  if (!modelMesh) return;
+  const hit = pickAt(cx, cy);
+  setRay(cx, cy);
+  const hits = raycaster.intersectObject(modelMesh, false);
+  if (!hit || !hits.length) { toast('Bir parçanın yüzüne dokun.'); return; }
+  const h = hits[0];
+  const n = h.face.normal.clone().normalize();
+  const reg = faceRegion(n, h.point, partBBox(hit.part.id));
+  const entry = { id: hit.part.id, normal: n, point: h.point.clone(), center: reg.center || h.point.clone(), tris: reg.out };
+  if (mate.a && mate.b) { mate.a = mate.b = null; disposeOverlay(faceGroup); }
+  if (!mate.a) {
+    mate.a = entry;
+    faceGroup.add(regionMesh(entry.tris, 0xfacc15, 0.6));
+  } else {
+    if (entry.id === mate.a.id) { toast('İkinci yüz başka bir parçada olmalı.'); return; }
+    mate.b = entry;
+    faceGroup.add(regionMesh(entry.tris, 0x22c55e, 0.6));
+  }
+  renderPanel();
+}
+function mateApply() {
+  if (!mate.a || !mate.b) { toast('Önce iki yüz seç.'); return; }
+  const A = parts.find((q) => q.id === mate.a.id);
+  if (!A) { toast('Parça bulunamadı'); return; }
+  const nA = mate.a.normal, nB = mate.b.normal;
+  const pA = cp.mcenter ? mate.a.center : mate.a.point;
+  const pB = cp.mcenter ? mate.b.center : mate.b.point;
+  const q1 = new THREE.Quaternion().setFromUnitVectors(nA, nB.clone().negate());
+  const q = new THREE.Quaternion().setFromAxisAngle(nB, pos(cp.mrot) * RAD).multiply(q1);
+  const newQ = q.clone().multiply(partQuat(A));
+  const np = pB.clone().add(new THREE.Vector3(pos(A.x), pos(A.y), pos(A.z)).sub(pA).applyQuaternion(q)).addScaledVector(nB, pos(cp.mgap));
+  commit();
+  const r4 = (v) => Math.round(v * 1e4) / 1e4 + 0;
+  A.x = r4(np.x); A.y = r4(np.y); A.z = r4(np.z);
+  [A.rx, A.ry, A.rz] = quatToEulerXYZ([newQ.x, newQ.y, newQ.z, newQ.w]);
+  sel = A.id;
+  mate.a = mate.b = null;
+  disposeOverlay(faceGroup);
+  refreshAll();
+  toast('Parça yüzü yüze birleştirildi');
+}
+
+/* ---- teknik resim: ön / yan / üst / izometrik, ölçü çizgileri, PNG + PDF ---- */
+function makeSheet() {
+  if (!lastClean || !lastClean.boundingBox) { toast('Önce bir model olmalı'); return; }
+  const bb = lastClean.boundingBox;
+  const size = bb.getSize(new THREE.Vector3()), ctr = bb.getCenter(new THREE.Vector3());
+  const L = sheetLayout(size.x, size.y, size.z);
+  const K = 6; // kağıt mm başına piksel
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(L.sheet.w * K); cv.height = Math.round(L.sheet.h * K);
+  const g = cv.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, cv.width, cv.height);
+
+  const saved = {
+    pos: camera.position.clone(), quat: camera.quaternion.clone(), up: camera.up.clone(),
+    fov: camera.fov, near: camera.near, far: camera.far, aspect: camera.aspect, pr: renderer.getPixelRatio(),
+    color: edgeMat.uniforms.uColor.value.clone(),
+  };
+  const R = size.length() / 2;
+  const shot = (box, dir, up, ppm) => {
+    const pad = 4;
+    const VW = Math.max(16, Math.round(box.w * K + 2 * pad)), VH = Math.max(16, Math.round(box.h * K + 2 * pad));
+    renderer.setPixelRatio(1);
+    renderer.setSize(VW, VH, false);
+    rt.setSize(VW, VH);
+    edgeMat.uniforms.uTexel.value.set(1 / VW, 1 / VH);
+    camera.fov = 1.5; camera.aspect = VW / VH;
+    const dist = (VH / (2 * ppm)) / Math.tan(camera.fov * RAD / 2);
+    camera.position.copy(ctr).addScaledVector(dir.clone().normalize(), dist);
+    camera.up.copy(up);
+    camera.lookAt(ctr);
+    camera.near = Math.max(dist - R - 10, 1); camera.far = dist + R + 10;
+    camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+    renderer.setRenderTarget(null);
+    renderer.setClearColor(0xffffff, 1);
+    renderer.clear();
+    drawEdges();
+    g.drawImage(renderer.domElement, 0, 0, VW, VH, box.x * K - pad, box.y * K - pad, VW, VH);
+  };
+  try {
+    edgeMat.uniforms.uColor.value.set(0x111111);
+    const ppm = L.scale * K;
+    shot(L.front, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0), ppm);
+    shot(L.side, new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), ppm);
+    shot(L.top, new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), ppm);
+    const ippm = Math.min(L.iso.w, L.iso.h) * K / (2 * R * 1.15);
+    shot(L.iso, new THREE.Vector3(1, 0.8, 1), new THREE.Vector3(0, 1, 0), ippm);
+  } finally {
+    edgeMat.uniforms.uColor.value.copy(saved.color);
+    camera.position.copy(saved.pos); camera.up.copy(saved.up); camera.quaternion.copy(saved.quat);
+    camera.fov = saved.fov; camera.near = saved.near; camera.far = saved.far; camera.aspect = saved.aspect;
+    camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+    renderer.setPixelRatio(saved.pr);
+    resize();
+  }
+
+  // --- 2B: çerçeve, ölçü çizgileri, yazılar ---
+  const mm = (v) => v * K;
+  const num = (v) => fmtNum(toUnit(v, settings.unit), 2);
+  g.strokeStyle = '#111'; g.fillStyle = '#111'; g.lineWidth = 2;
+  g.strokeRect(mm(10), mm(10), mm(L.sheet.w - 20), mm(L.sheet.h - 20));
+  const tb = L.titleBlock;
+  g.strokeRect(mm(tb.x), mm(tb.y), mm(tb.w), mm(tb.h));
+  const font = (mmSize, bold) => { g.font = (bold ? 'bold ' : '') + Math.round(mm(mmSize)) + 'px system-ui, Arial, sans-serif'; };
+  font(5, true); g.textBaseline = 'middle';
+  g.textAlign = 'left'; g.fillText(projName || 'model', mm(tb.x + 4), mm(tb.y + 7));
+  font(3.4, false);
+  g.fillText('Ölçek: ' + scaleLabel(L.scale) + '   Birim: ' + settings.unit + '   Üçüncü açı', mm(tb.x + 4), mm(tb.y + 15));
+  g.textAlign = 'right';
+  g.fillText(new Date().toLocaleDateString('tr-TR') + '   Çizim Atölyesi', mm(tb.x + tb.w - 4), mm(tb.y + 15));
+  g.fillText('Genel ölçü: ' + num(size.x) + ' × ' + num(size.z) + ' × ' + num(size.y), mm(tb.x + tb.w - 4), mm(tb.y + 7));
+  g.lineWidth = 1.2;
+  const arrow = (x, y, dx, dy) => {
+    const a = mm(2.2), b = mm(0.8);
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x - dx * a - dy * b, y - dy * a + dx * b); g.lineTo(x - dx * a + dy * b, y - dy * a - dx * b); g.closePath(); g.fill();
+  };
+  const hdim = (x1, x2, yBox, off, v) => {           // yatay ölçü: yBox'tan off kadar aşağıda
+    const y = yBox + off;
+    g.beginPath(); g.moveTo(mm(x1), mm(yBox + 1.5)); g.lineTo(mm(x1), mm(y + 1.5)); g.moveTo(mm(x2), mm(yBox + 1.5)); g.lineTo(mm(x2), mm(y + 1.5));
+    g.moveTo(mm(x1), mm(y)); g.lineTo(mm(x2), mm(y)); g.stroke();
+    arrow(mm(x1), mm(y), -1, 0); arrow(mm(x2), mm(y), 1, 0);
+    font(3.4, false); g.textAlign = 'center'; g.fillText(num(v), mm((x1 + x2) / 2), mm(y - 2.2));
+  };
+  const vdim = (y1, y2, xBox, off, v) => {           // dikey ölçü: xBox'tan off kadar sağda (negatif = solda)
+    const x = xBox + off, sg = off < 0 ? -1 : 1;
+    g.beginPath(); g.moveTo(mm(xBox + sg * 1.5), mm(y1)); g.lineTo(mm(x + sg * 1.5), mm(y1)); g.moveTo(mm(xBox + sg * 1.5), mm(y2)); g.lineTo(mm(x + sg * 1.5), mm(y2));
+    g.moveTo(mm(x), mm(y1)); g.lineTo(mm(x), mm(y2)); g.stroke();
+    arrow(mm(x), mm(y1), 0, -1); arrow(mm(x), mm(y2), 0, 1);
+    g.save(); g.translate(mm(x - 2.2), mm((y1 + y2) / 2)); g.rotate(-Math.PI / 2); font(3.4, false); g.textAlign = 'center'; g.fillText(num(v), 0, 0); g.restore();
+  };
+  const f = L.front, sd = L.side, tp = L.top;
+  hdim(f.x, f.x + f.w, f.y + f.h, 7, size.x);
+  vdim(f.y, f.y + f.h, f.x, -7, size.y);
+  vdim(tp.y, tp.y + tp.h, tp.x + tp.w, 7, size.z);
+  hdim(sd.x, sd.x + sd.w, sd.y + sd.h, 7, size.z);
+  font(3.2, true); g.textAlign = 'left';
+  g.fillText('Önden', mm(f.x), mm(f.y - 1)); g.fillText('Sağdan', mm(sd.x), mm(sd.y - 1));
+  g.fillText('Üstten', mm(tp.x), mm(tp.y - 1)); g.fillText('İzometrik (ölçeksiz)', mm(L.iso.x), mm(L.iso.y - 1));
+
+  showSheet(cv);
+}
+function showSheet(cv) {
+  let o = $('sheetov');
+  if (o) o.remove();
+  o = document.createElement('div');
+  o.id = 'sheetov';
+  o.style.cssText = 'position:fixed;inset:0;z-index:40;background:#0f172a;display:flex;flex-direction:column;font-family:system-ui,sans-serif';
+  o.innerHTML = '<div style="display:flex;gap:6px;padding:8px"><button data-sh="close" style="flex:1;background:#7f1d1d">✕ Kapat</button>' +
+    '<button data-sh="png" style="flex:1">⬇ PNG</button><button data-sh="pdf" style="flex:1">⬇ PDF</button><button data-sh="zoom" style="flex:1">🔍 Büyüt</button></div>' +
+    '<div id="sheetsc" style="flex:1;overflow:auto;background:#1e293b;touch-action:pan-x pan-y pinch-zoom"></div>';
+  o.querySelectorAll('button').forEach((b) => { b.style.cssText += ';font:inherit;font-weight:600;color:#fff;border:0;border-radius:8px;padding:10px 4px;background:' + (b.style.background || '#1e293b') + ';background-color:' + (b.dataset.sh === 'close' ? '#7f1d1d' : '#0369a1'); });
+  const sc = o.querySelector('#sheetsc');
+  cv.style.cssText = 'width:100%;height:auto;display:block;background:#fff';
+  sc.appendChild(cv);
+  document.body.appendChild(o);
+  let big = false;
+  const name = (projName || 'model').replace(/[^\w\-çğıöşüÇĞİÖŞÜ ]+/g, '_') + '-teknik-resim';
+  const save = (blob, ext) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name + '.' + ext;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  };
+  o.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const a = b.dataset.sh;
+    if (a === 'close') o.remove();
+    else if (a === 'zoom') { big = !big; cv.style.width = big ? '250%' : '100%'; b.textContent = big ? '🔍 Küçült' : '🔍 Büyüt'; }
+    else if (a === 'png') cv.toBlob((bl) => { if (bl) { save(bl, 'png'); toast('PNG indirildi'); } }, 'image/png');
+    else if (a === 'pdf') {
+      const b64 = cv.toDataURL('image/jpeg', 0.92).split(',')[1];
+      const bin = atob(b64), u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      save(new Blob([jpegToPdf(u, cv.width, cv.height)], { type: 'application/pdf' }), 'pdf');
+      toast('PDF indirildi');
+    }
+  });
+}
+
 /* ================= Projeler ================= */
 function loadProjects() {
   try { return JSON.parse(localStorage.getItem('cizim:projects') || '{}'); } catch (e) { return {}; }
@@ -1424,10 +1726,20 @@ document.addEventListener('click', (e) => {
   const p = cur();
 
   if (act.startsWith('add-')) { addPart(act.slice(4), 'add'); return; }
-  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'face' && tab !== 'edge') clearFace(); renderPanel(); return; }
+  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate') clearFace();
+    if (tab !== 'mate') { mate.a = null; mate.b = null; } renderPanel(); return; }
   if (act === 'edge-chamfer') { edgeFeature('chamfer'); return; }
   if (act === 'edge-fillet') { edgeFeature('fillet'); return; }
   if (act.startsWith('fshape-')) { cp.shape = act.slice(7); renderPanel(); return; }
+  if (act.startsWith('pat-')) { cp.pat = act.slice(4); renderPanel(); return; }
+  if (act === 'shell-top') { cp.openTop = !cp.openTop; renderPanel(); return; }
+  if (act === 'shell-bot') { cp.openBot = !cp.openBot; renderPanel(); return; }
+  if (act === 'shell-do') { shellFeature(); return; }
+  if (act === 'mate-center') { cp.mcenter = !cp.mcenter; renderPanel(); return; }
+  if (act === 'mate-do') { mateApply(); return; }
+  if (act === 'mate-reset') { mate.a = mate.b = null; disposeOverlay(faceGroup); renderPanel(); return; }
+  if (act === 'sheet-make') { makeSheet(); return; }
+  if (act === 'edges') { settings.edges = settings.edges === false; afterSettings(); return; }
   if (act === 'face-hole') { faceFeature('sub'); return; }
   if (act === 'face-boss') { faceFeature('add'); return; }
   if (act === 'face-sk-cut') { faceSketch('sub'); return; }

@@ -7,7 +7,7 @@ import {
   chamferBoxPoints, cylinderProfile,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
-  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts,
+  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf,
 } from '../logic.js';
 
 let fail = 0;
@@ -269,6 +269,44 @@ t('yuvarlak köşeli dikdörtgen', () => {
   // hap: r büyükse kısa kenarın yarısına kısılır
   const s = roundedRectPts(0, 0, 40, 10, 99);
   assert.ok(s.every(([x, y]) => y >= -1e-9 && y <= 10 + 1e-9));
+});
+
+t('teknik resim: ölçek seçimi', () => {
+  assert.equal(pickScale(1.3), 1);
+  assert.equal(pickScale(0.37), 0.2);
+  assert.equal(pickScale(3), 2);
+  assert.equal(pickScale(1e-9), 0.001);
+  assert.equal(scaleLabel(0.2), '1:5');
+  assert.equal(scaleLabel(2), '2:1');
+  assert.equal(scaleLabel(1), '1:1');
+});
+t('teknik resim: yerleşim sayfaya sığar, görünüşler çakışmaz', () => {
+  for (const [W, H, D] of [[100, 50, 80], [20, 300, 20], [1000, 10, 400], [5, 5, 5]]) {
+    const L = sheetLayout(W, H, D);
+    const { area } = L;
+    for (const k of ['front', 'side', 'top', 'iso']) {
+      const b = L[k];
+      assert.ok(b.x >= area.x - 1e-6 && b.y >= area.y - 1e-6, k + ' sol/üst taşma ' + [W, H, D]);
+      assert.ok(b.x + b.w <= area.x + area.w + 1e-6 && b.y + b.h <= area.y + area.h + 1e-6, k + ' sağ/alt taşma ' + [W, H, D]);
+    }
+    const ov = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    assert.ok(!ov(L.front, L.side) && !ov(L.front, L.top) && !ov(L.side, L.top) && !ov(L.top, L.iso) && !ov(L.side, L.iso));
+    assert.ok(Math.abs(L.front.w - W * L.scale) < 1e-9 && Math.abs(L.side.w - D * L.scale) < 1e-9);
+  }
+});
+t('PDF: JPEG gömülü, xref ofsetleri doğru', () => {
+  const jpeg = new Uint8Array([0xff, 0xd8, 1, 2, 3, 4, 5, 0xff, 0xd9]);
+  const pdf = jpegToPdf(jpeg, 100, 50);
+  const str = Buffer.from(pdf).toString('latin1');
+  assert.ok(str.startsWith('%PDF-1.4'));
+  assert.ok(str.trimEnd().endsWith('%%EOF'));
+  const sx = Number(/startxref\n(\d+)/.exec(str)[1]);
+  assert.equal(str.slice(sx, sx + 4), 'xref');
+  const entries = [...str.slice(sx).matchAll(/(\d{10}) 00000 n /g)].map((m) => Number(m[1]));
+  assert.equal(entries.length, 5);
+  entries.forEach((off, i) => assert.equal(str.slice(off, off + (i + 1 + ' 0 obj').length), (i + 1) + ' 0 obj'));
+  assert.ok(str.includes('/Length 9'));
+  assert.ok(Buffer.from(pdf).includes(Buffer.from(jpeg)));
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
