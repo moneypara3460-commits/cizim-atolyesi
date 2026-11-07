@@ -1157,8 +1157,8 @@ view.addEventListener('pointerdown', (e) => {
   if (settings.move && !measure.on) {
     const hit = pickAt(e.clientX, e.clientY);
     if (hit && hit.part.id === sel) startDrag(e, hit);
-    else if (cur().op === 'sub') {
-      // oyuk parça modelin içinde kalıp görünmeyebilir; yine de üzerinden tutup sürüklenebilsin
+    else {
+      // seçili parça başka bir parçanın içinde kalıp görünmeyebilir (kutu içinde kutu, oyuk); yine de üzerinden tutup sürüklenebilsin
       setRay(e.clientX, e.clientY);
       const own = raycaster.intersectObjects(pickMeshes.filter((m) => m.userData.part && m.userData.part.id === sel), false);
       if (own.length) startDrag(e, { part: own[0].object.userData.part, point: own[0].point });
