@@ -4,7 +4,7 @@
 //   draw = { mode:'extrude'|'revolve', plane:'top'|'front', pts:[[u,v],...] (mm), h }
 //   top  : u = X, v = Z (ekranda aşağı = +Z)     front: u = X, v = Y (ekranda yukarı = +Y)
 //   revolve: her zaman 'front'; dönme ekseni u = 0 çizgisidir, çizim eksenin sağına yapılır.
-import { fmtNum, snap, circlePts, rectPts, bboxPts, polyArea } from './logic.js';
+import { fmtNum, snap, circlePts, rectPts, bboxPts, polyArea, arcPoints, roundedRectPts } from './logic.js';
 
 let cssDone = false;
 const CSS = `
@@ -96,6 +96,8 @@ export function openSketch(opts = {}) {
   let plane = init ? init.plane : 'top';
   if (mode === 'revolve') plane = 'front';
   let tool = 'poly';
+  let ptMarks = [];         // her ekleme öncesi nokta sayısı (geri al için)
+  let arcEnd = null;        // yay aracı: seçilmiş bitiş noktası (orta nokta bekleniyor)
   let shape = init ? { kind: 'poly', pts: init.pts.map((q) => q.slice()), closed: true } : null;
   let step = snaps.includes(10) ? 10 : snaps[0];
   let thick = init && init.mode === 'extrude' && init.h > 0 ? init.h : 20;
@@ -121,6 +123,7 @@ export function openSketch(opts = {}) {
       <button data-a="tool-poly">Çokgen</button>
       <button data-a="tool-rect">Dikdörtgen</button>
       <button data-a="tool-circle">Daire</button>
+      <button data-a="tool-arc">Yay</button>
     </div>
     <div class="r">
       <button data-a="back">↶ Son nokta</button>
@@ -189,7 +192,7 @@ export function openSketch(opts = {}) {
   function shapePts() {
     if (!shape) return null;
     if (shape.kind === 'poly') return shape.pts;
-    if (shape.kind === 'rect') return rectPts(shape.a[0], shape.a[1], shape.b[0], shape.b[1]);
+    if (shape.kind === 'rect') return shape.cr > 0 ? roundedRectPts(shape.a[0], shape.a[1], shape.b[0], shape.b[1], shape.cr) : rectPts(shape.a[0], shape.a[1], shape.b[0], shape.b[1]);
     if (shape.kind === 'circle') return circlePts(shape.c[0], shape.c[1], shape.r, 48);
     return null;
   }
@@ -201,7 +204,14 @@ export function openSketch(opts = {}) {
       if (shape.closed) return 'Şekil kapalı. Köşeleri sürükleyerek düzelt.';
       return shape.pts.length + ' nokta. İlk noktaya dokunarak kapat.';
     }
-    if (tool === 'rect') return 'Parmağını sürükleyerek dikdörtgen çiz; sonra ölçüleri aşağıdan yaz.';
+    if (tool === 'arc') {
+      if (shape && (shape.kind !== 'poly' || shape.closed)) return 'Şekil hazır. Yeni yay için "Temizle" bas.';
+      const open = shape && shape.kind === 'poly' && !shape.closed && shape.pts.length;
+      if (!open) return 'Yay: önce başlangıç noktasına dokun.';
+      if (shape.kind === 'poly' && shape.pts.length && arcEnd) return 'Şimdi yayın ORTASINDAN geçeceği bir noktaya dokun (yayı şişirir).';
+      return 'Yayın BİTİŞ noktasına dokun. İlk noktaya dokunursan şekil kapanır.';
+    }
+    if (tool === 'rect') return 'Parmağını sürükleyerek dikdörtgen çiz; sonra ölçüleri ve köşe yuvarlamayı aşağıdan yaz.';
     return 'Merkezden dışarı sürükleyerek daire çiz; sonra çapı aşağıdan yaz.';
   }
 
@@ -211,7 +221,7 @@ export function openSketch(opts = {}) {
     on('plane-front', plane === 'front' && mode !== 'revolve');
     on('mode-extrude', mode === 'extrude');
     on('mode-revolve', mode === 'revolve');
-    on('tool-poly', tool === 'poly'); on('tool-rect', tool === 'rect'); on('tool-circle', tool === 'circle');
+    on('tool-poly', tool === 'poly'); on('tool-rect', tool === 'rect'); on('tool-circle', tool === 'circle'); on('tool-arc', tool === 'arc');
     root.querySelector('[data-a="plane-top"]').disabled = mode === 'revolve' || lock;
     root.querySelector('[data-a="plane-front"]').disabled = mode === 'revolve' || lock;
     root.querySelector('[data-a="mode-extrude"]').disabled = lock;
@@ -223,7 +233,7 @@ export function openSketch(opts = {}) {
     let h = '';
     const f = (label, id, val) => `<label class="f"><span>${label} (${unit})</span><input type="number" step="any" data-f="${id}" value="${val}"></label>`;
     if (shape && shape.kind === 'rect') {
-      h += f('Genişlik', 'rw', fmt(Math.abs(shape.b[0] - shape.a[0]))) + f('Yükseklik', 'rh', fmt(Math.abs(shape.b[1] - shape.a[1])));
+      h += f('Genişlik', 'rw', fmt(Math.abs(shape.b[0] - shape.a[0]))) + f('Yükseklik', 'rh', fmt(Math.abs(shape.b[1] - shape.a[1]))) + f('Köşe yuv.', 'cr', fmt(shape.cr || 0));
     } else if (shape && shape.kind === 'circle') {
       h += f('Çap', 'cd', fmt(shape.r * 2));
     }
@@ -297,9 +307,15 @@ export function openSketch(opts = {}) {
         label('Ø ' + fmt(shape.r * 2), cx + shape.r * V.s / 2, cy - 12);
         g.fillStyle = '#fbbf24'; g.beginPath(); g.arc(cx, cy, 4, 0, 7); g.fill();
       } else {
-        const n = shape.kind === 'rect' ? 4 : pts.length;
+        if (shape.kind === 'rect') {
+          const w = Math.abs(shape.b[0] - shape.a[0]), hh = Math.abs(shape.b[1] - shape.a[1]);
+          const mnU = Math.min(shape.a[0], shape.b[0]), mnV = Math.min(shape.a[1], shape.b[1]);
+          if (w * V.s >= 28) { const [mx, my] = toScreen(mnU + w / 2, mnV); label(fmt(w), mx, my); }
+          if (hh * V.s >= 28) { const [mx, my] = toScreen(mnU + w, mnV + hh / 2); label(fmt(hh), mx, my); }
+        }
+        const n = pts.length;
         const m = closed ? n : n - 1;
-        const edges = shape.kind === 'rect' ? [0, 1] : [...Array(m).keys()];
+        const edges = shape.kind === 'rect' ? [] : (n > 60 ? [] : [...Array(m).keys()]);
         for (const i of edges) {
           const a = pts[i], b = pts[(i + 1) % pts.length];
           const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -310,11 +326,17 @@ export function openSketch(opts = {}) {
       }
       if (shape.kind === 'poly') {
         sp.forEach(([x, y], i) => {
+          if (tool === 'arc' && i > 0 && i < sp.length - 1 && sp.length > 12) return; // yay noktalarını kalabalık etme
           g.beginPath();
           const big = i === 0 && !shape.closed && sp.length >= 3;
           g.arc(x, y, big ? 9 : 5, 0, 7);
           g.fillStyle = i === 0 ? '#fbbf24' : '#fff'; g.fill();
         });
+        if (arcEnd && !shape.closed && shape.pts.length) {
+          const [lx, ly] = toScreen(...shape.pts[shape.pts.length - 1]), [ex, ey] = toScreen(arcEnd[0], arcEnd[1]);
+          g.beginPath(); g.setLineDash([5, 4]); g.strokeStyle = '#fbbf24'; line(lx, ly, ex, ey); g.stroke(); g.setLineDash([]);
+          g.beginPath(); g.arc(ex, ey, 6, 0, 7); g.fillStyle = '#fbbf24'; g.fill();
+        }
       }
     }
   }
@@ -359,6 +381,7 @@ export function openSketch(opts = {}) {
     }
     if (ptrs.size > 2) return;
     const [sx, sy] = local(e);
+    if (tool === 'arc') { act = { type: 'arctap', sx, sy, moved: false }; return; }
     const vi = hitVertex(sx, sy);
     if (vi >= 0) { act = { type: 'vertex', i: vi, sx, sy, moved: false }; return; }
     if (tool === 'poly') { act = { type: 'tap', sx, sy, moved: false }; return; }
@@ -392,6 +415,32 @@ export function openSketch(opts = {}) {
     }
   });
 
+  // yay aracı: (başlangıç) -> bitiş -> orta nokta
+  function arcTap(sx, sy) {
+    if (shape && shape.kind !== 'poly') { setHint('Önce "Temizle" ya da başka bir araç seç.', false); return; }
+    if (shape && shape.closed) { setHint('Şekil kapalı. Yeni çizim için "Temizle" bas.', false); return; }
+    let p = sn(toWorld(sx, sy));
+    const first = shape && shape.pts.length >= 3 ? shape.pts[0] : null;
+    let closing = false;
+    if (first) { const [fx, fy] = toScreen(first[0], first[1]); if (Math.hypot(fx - sx, fy - sy) <= 20) { p = first.slice(); closing = true; } }
+    if (!shape || !shape.pts.length) { shape = { kind: 'poly', pts: [p], closed: false }; ptMarks = [0]; arcEnd = null; refresh(); return; }
+    const last = shape.pts[shape.pts.length - 1];
+    if (!arcEnd) {
+      if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 1e-6) { setHint('Bitiş noktası başlangıçtan farklı olmalı.', true); return; }
+      arcEnd = p; refresh(false); setHint(defaultHint(), false); draw(); return;
+    }
+    // p = orta nokta
+    const mid = p;
+    const arc = arcPoints(last, mid, arcEnd);
+    const endIsFirst = shape.pts.length >= 3 && Math.hypot(arcEnd[0] - shape.pts[0][0], arcEnd[1] - shape.pts[0][1]) < 1e-6;
+    ptMarks.push(shape.pts.length);
+    shape.pts.push(...arc);
+    arcEnd = null;
+    if (endIsFirst) { shape.pts.pop(); shape.closed = true; }
+    void closing;
+    refresh();
+  }
+
   function up(e) {
     if (!ptrs.has(e.pointerId)) return;
     const [sx, sy] = local(e);
@@ -400,10 +449,12 @@ export function openSketch(opts = {}) {
     const a = act;
     act = null;
     if (!a) return;
+    if (a.type === 'arctap') { if (!a.moved) arcTap(sx, sy); return; }
     if (a.type === 'tap' && !a.moved) {
       if (shape && shape.kind !== 'poly') { setHint('Önce "Temizle" ya da başka bir araç seç.', false); return; }
       if (shape && shape.closed) { setHint('Şekil kapalı. Yeni çizim için "Temizle" bas.', false); return; }
       if (!shape) shape = { kind: 'poly', pts: [], closed: false };
+      ptMarks.push(shape.pts.length);
       shape.pts.push(sn(toWorld(sx, sy)));
       refresh();
     } else if (a.type === 'vertex' && !a.moved) {
@@ -456,16 +507,19 @@ export function openSketch(opts = {}) {
     if (a === 'plane-front') { plane = 'front'; defaultViewKeep(); refresh(); return; }
     if (a === 'mode-extrude') { mode = 'extrude'; refresh(); return; }
     if (a === 'mode-revolve') { mode = 'revolve'; plane = 'front'; if (!shape) defaultView(); else if (shapePts().some(([u]) => u < 0)) setHint('Şekil eksenin solunda; sağına taşı.', true); updateButtons(); renderFields(); draw(); return; }
-    if (a.startsWith('tool-')) { tool = a.slice(5); refresh(); return; }
+    if (a.startsWith('tool-')) { tool = a.slice(5); arcEnd = null; refresh(); return; }
     if (a === 'back') {
+      if (arcEnd) { arcEnd = null; refresh(); return; }
       if (shape && shape.kind === 'poly') {
-        if (shape.closed) shape.closed = false; else shape.pts.pop();
+        if (shape.closed) shape.closed = false;
+        else if (ptMarks.length) shape.pts.length = Math.min(shape.pts.length, ptMarks.pop());
+        else shape.pts.pop();
         if (!shape.pts.length) shape = null;
       } else shape = null;
       refresh(); return;
     }
     if (a === 'close') { if (shape && shape.kind === 'poly' && shape.pts.length >= 3) { shape.closed = true; refresh(); } return; }
-    if (a === 'clear') { shape = null; refresh(); return; }
+    if (a === 'clear') { shape = null; arcEnd = null; ptMarks = []; refresh(); return; }
     if (a === 'zin') { zoomAt(1.4, W / 2, H / 2); draw(); return; }
     if (a === 'zout') { zoomAt(1 / 1.4, W / 2, H / 2); draw(); return; }
     if (a === 'zfit') { fitView(); draw(); return; }
@@ -480,9 +534,10 @@ export function openSketch(opts = {}) {
     const id = e.target.dataset && e.target.dataset.f;
     if (!id) return;
     const v = e.target.valueAsNumber * uf;
+    if (id === 'cr' && shape && shape.kind === 'rect') { shape.cr = v >= 0 ? v : 0; draw(); return; }
     if (!(v > 0)) return;
     if (id === 'th') thick = v;
-    else if (shape && shape.kind === 'rect') {
+    else if (shape && shape.kind === 'rect' && (id === 'rw' || id === 'rh')) {
       const sx = shape.b[0] >= shape.a[0] ? 1 : -1, sy = shape.b[1] >= shape.a[1] ? 1 : -1;
       if (id === 'rw') shape.b = [shape.a[0] + sx * v, shape.b[1]];
       if (id === 'rh') shape.b = [shape.b[0], shape.a[1] + sy * v];

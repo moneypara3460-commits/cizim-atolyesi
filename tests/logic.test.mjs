@@ -7,7 +7,7 @@ import {
   chamferBoxPoints, cylinderProfile,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
-  VIEW_DIRS, sectionPlane, fovDistance,
+  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts,
 } from '../logic.js';
 
 let fail = 0;
@@ -243,6 +243,32 @@ t('görünüm yardımcıları', () => {
   assert.deepEqual(sectionPlane('y', 3).normal, [0, -1, 0]);
   near(fovDistance(100, 45, 45), 100);
   assert.ok(fovDistance(100, 45, 1.5) > 100 * 20);
+});
+
+t('yay: 3 noktadan', () => {
+  // (0,0) -> (20,0), tepe (10,10): merkez (10,0), yarıçap 10 -> yarım daire üstte
+  const a = arcPoints([0, 0], [10, 10], [20, 0]);
+  assert.deepEqual(a[a.length - 1], [20, 0]);
+  assert.ok(a.length >= 25);
+  assert.ok(a.every(([x, y]) => Math.abs(Math.hypot(x - 10, y) - 10) < 1e-6 && y >= -1e-9));
+  // ters yönde (tepe aşağıda)
+  const b = arcPoints([0, 0], [10, -10], [20, 0]);
+  assert.ok(b.every(([x, y]) => y <= 1e-9));
+  // aynı doğru üzerindeki noktalar: düz çizgi
+  assert.deepEqual(arcPoints([0, 0], [5, 0], [10, 0]), [[10, 0]]);
+  // ince yay
+  const c = arcPoints([0, 0], [10, 2], [20, 0]);
+  assert.ok(c.every(([x, y]) => y >= -1e-9) && Math.max(...c.map((p) => p[1])) <= 2.0001);
+});
+t('yuvarlak köşeli dikdörtgen', () => {
+  assert.deepEqual(roundedRectPts(0, 0, 40, 20, 0), rectPts(0, 0, 40, 20));
+  const p = roundedRectPts(0, 0, 40, 20, 5);
+  assert.ok(p.every(([x, y]) => x >= -1e-9 && x <= 40 + 1e-9 && y >= -1e-9 && y <= 20 + 1e-9));
+  assert.ok(polyArea(p) < 40 * 20 && polyArea(p) > 0);
+  assert.ok(Math.abs(polyArea(p) - (40 * 20 - (4 - Math.PI) * 25)) < 1.5);
+  // hap: r büyükse kısa kenarın yarısına kısılır
+  const s = roundedRectPts(0, 0, 40, 10, 99);
+  assert.ok(s.every(([x, y]) => y >= -1e-9 && y <= 10 + 1e-9));
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');

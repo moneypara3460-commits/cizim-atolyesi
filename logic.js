@@ -505,3 +505,48 @@ export function sectionPlane(axis, pos, flip = false) {
 export function fovDistance(dist, fromDeg, toDeg) {
   return dist * Math.tan(fromDeg * D2R / 2) / Math.tan(toDeg * D2R / 2);
 }
+
+/* ---------------- Yay, yuvarlak köşeli dikdörtgen ---------------- */
+
+// A'dan M üzerinden B'ye giden 3 noktalı yay; A hariç, B dahil noktalar döner
+export function arcPoints(a, m, b, segDeg = 6) {
+  const [ax, ay] = a, [bx, by] = m, [cx, cy] = b;
+  const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+  if (Math.abs(d) < 1e-9) return [b.slice()];
+  const a2 = ax * ax + ay * ay, b2 = bx * bx + by * by, c2 = cx * cx + cy * cy;
+  const ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d;
+  const uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d;
+  const a0 = Math.atan2(ay - uy, ax - ux), am = Math.atan2(by - uy, bx - ux), a1 = Math.atan2(cy - uy, cx - ux);
+  const TAU = Math.PI * 2;
+  const norm = (t) => { while (t < 0) t += TAU; while (t >= TAU) t -= TAU; return t; };
+  const ccw = norm(a1 - a0), mid = norm(am - a0);
+  const sweep = mid <= ccw ? ccw : ccw - TAU;
+  const r = Math.hypot(ax - ux, ay - uy);
+  const n = Math.max(2, Math.ceil(Math.abs(sweep) / (segDeg * Math.PI / 180)));
+  const out = [];
+  for (let i = 1; i < n; i++) {
+    const t = a0 + (sweep * i) / n;
+    out.push([ux + r * Math.cos(t), uy + r * Math.sin(t)]);
+  }
+  out.push(b.slice());
+  return out;
+}
+
+// Köşeleri yarıçap r ile yuvarlatılmış dikdörtgen (r = kısa kenarın yarısı ise hap/oval)
+export function roundedRectPts(x1, y1, x2, y2, r, seg = 8) {
+  const minx = Math.min(x1, x2), maxx = Math.max(x1, x2), miny = Math.min(y1, y2), maxy = Math.max(y1, y2);
+  const rr = Math.min(Math.max(r, 0), (maxx - minx) / 2, (maxy - miny) / 2);
+  if (rr < 1e-6) return rectPts(minx, miny, maxx, maxy);
+  const out = [];
+  const corner = (cx, cy, a0) => {
+    for (let i = 0; i <= seg; i++) {
+      const t = a0 + (i / seg) * (Math.PI / 2);
+      out.push([cx + rr * Math.cos(t), cy + rr * Math.sin(t)]);
+    }
+  };
+  corner(minx + rr, miny + rr, Math.PI);
+  corner(maxx - rr, miny + rr, Math.PI * 1.5);
+  corner(maxx - rr, maxy - rr, 0);
+  corner(minx + rr, maxy - rr, Math.PI / 2);
+  return out;
+}
