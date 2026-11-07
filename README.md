@@ -15,6 +15,11 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - Konum (X, Y alt, Z) ve döndürme (X°, Y°, Z°, parçanın alt orta noktası etrafında)
 - Geri al / ileri al
 
+**Hareketli montaj (Bağ sekmesi)**
+- Bir parçayı başka bir parçaya **bağla**: üst parça taşınınca / döndürülünce alt parçalar da onunla gelir (🔗 işareti)
+- **Menteşe** (seçilen eksen etrafında döner) ve **Kayar** eklem; kaydırıcı ile hareket ettir, "Eksen noktasını seç" ile menteşe yerini modelde belirle
+- Yüze açılan delikler / pahlar, bağlı oldukları parçayla birlikte gider
+
 **Kroki (2D çizim → 3D)**
 - ✎ Kroki: çokgen, dikdörtgen (köşe yuvarlamalı), daire ve **yay** (başlangıç → bitiş → orta nokta; ilk noktaya bitirince şekil kapanır) çiz; köşeleri sürükleyerek düzelt; ölçüleri yazarak ayarla; yapışma (1 / 5 / 10 / 25 mm); iki parmakla yakınlaştır / kaydır
 - **Birleşik kroki**: aynı krokide birden çok şekil çiz; başka şeklin içine çizdiğin şekil **delik** olur (iç içe: delik, onun içindeki ada…). "Seç" aracı ile şekle dokunup ölçüsünü değiştir ya da "Şekli sil"

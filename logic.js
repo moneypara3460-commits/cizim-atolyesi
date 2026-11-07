@@ -462,7 +462,26 @@ export function quatToEulerXYZ(q) { // derece
 
 /* ---------------- Çoğaltma: kopya, ayna, dizi ---------------- */
 
-const clone = (p) => JSON.parse(JSON.stringify(p));
+const clone = (p) => { const c = JSON.parse(JSON.stringify(p)); delete c.parent; delete c.joint; return c; };
+
+// ---- bağlantılar (üst / alt parça): parça.parent = üst parçanın id'si ----
+// id'nin bütün alt (torun dahil) parçaları
+export function descendantsOf(parts, id) {
+  const out = [];
+  const walk = (i) => { for (const q of parts) if (q.parent === i && !out.includes(q)) { out.push(q); walk(q.id); } };
+  walk(id);
+  return out;
+}
+// child'ı parent'a bağlamak döngü yapar mı (kendisine ya da kendi altına bağlanamaz)
+export function wouldCycle(parts, childId, parentId) {
+  if (childId === parentId) return true;
+  return descendantsOf(parts, childId).some((q) => q.id === parentId);
+}
+// var olmayan üst parçaya işaret eden bağları temizle
+export function cleanLinks(parts) {
+  const ids = new Set(parts.map((q) => q.id));
+  for (const q of parts) if (q.parent != null && (!ids.has(q.parent) || q.parent === q.id)) { delete q.parent; delete q.joint; }
+}
 
 export function duplicatePart(p, id, dx = 10, dz = 10) {
   const c = clone(p);

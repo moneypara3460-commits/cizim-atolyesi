@@ -9,7 +9,7 @@ import {
   sketchFromDraw, sketchToDraw, revolveProfile, chamferBoxPoints, cylinderProfile,
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
-  cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops,
+  cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
 } from './logic.js';
 import { openSketch } from './sketch.js';
 
@@ -46,6 +46,7 @@ const snapshot = () => JSON.stringify({ parts, sel, nextId });
 function restore(s) {
   const o = JSON.parse(s);
   parts = o.parts; sel = o.sel; nextId = o.nextId;
+  cleanLinks(parts);
   if (!parts.find((p) => p.id === sel)) sel = parts[0].id;
 }
 const commit = () => hist.push(snapshot());
@@ -721,6 +722,7 @@ function rebuild(refit) {
 
     setMsg('', false);
     refreshOverlays();
+    if (tab === 'link') drawJointAxis();
     if (first || refit) { fit(clean.boundingBox); first = false; }
   } catch (err) {
     setMsg('Hata: ' + (err && err.message ? err.message : err), true);
@@ -864,7 +866,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -895,7 +897,7 @@ function renderChips() {
   const p = cur();
   $('chips').innerHTML = parts.map((q, i) =>
     `<button class="chip${q.op === 'sub' && i > 0 ? ' sub' : ''}${q.id === p.id ? ' on' : ''}"${q.hidden ? ' style="opacity:.45"' : ''} data-sel="${q.id}">` +
-    `${esc(partName(q, i))}${i > 0 && q.op === 'sub' ? ' (oyuk)' : ''}${q.hidden ? ' ⊘' : ''}</button>`).join('');
+    `${esc(partName(q, i))}${i > 0 && q.op === 'sub' ? ' (oyuk)' : ''}${q.hidden ? ' ⊘' : ''}${q.parent != null && !q.aux ? ' 🔗' : ''}</button>`).join('');
 }
 
 function renderPanel() {
@@ -971,6 +973,29 @@ function renderPanel() {
       btn('Yüz merkezleri: ' + (cp.mcenter ? 'hizala' : 'dokunulan nokta'), 'mate-center', cp.mcenter) +
       btn('🔗 Yüzü yüze birleştir', 'mate-do') + btn('Sıfırla', 'mate-reset');
     hint = 'Birinci yüz, ikinci yüze yüzü yüze oturur ve parça döner. Düz olmayan yüzlerde dokunduğun noktanın yüzü kullanılır. Geri al ile döner.';
+  } else if (tab === 'link') {
+    const cand = parts.filter((q) => q.id !== p.id && !q.aux && !wouldCycle(parts, p.id, q.id));
+    const J = p.joint || { type: 'fixed' };
+    const kids = parts.filter((q) => q.parent === p.id && !q.aux);
+    body = `<label class="f w2" style="flex:1 0 100%"><span>Bağlı olduğu üst parça</span><select data-link="parent"><option value="">— bağsız —</option>` +
+      cand.map((q) => `<option value="${q.id}"${p.parent === q.id ? ' selected' : ''}>${esc(partName(q, parts.indexOf(q)))}</option>`).join('') + `</select></label>`;
+    if (p.parent != null) {
+      body += btn('Sabit', 'jt-fixed', J.type === 'fixed') + btn('Menteşe (döner)', 'jt-hinge', J.type === 'hinge') + btn('Kayar', 'jt-slide', J.type === 'slide');
+      if (J.type !== 'fixed') {
+        const isH = J.type === 'hinge';
+        const R = isH ? 180 : Math.max(50, lastClean && lastClean.boundingBox ? lastClean.boundingBox.getSize(new THREE.Vector3()).length() : 100);
+        body += '<div class="lbl" style="flex:1 0 100%">Eksen (üst parçanın ekseni)</div>' +
+          btn('X', 'jx-x', J.axis === 'x') + btn('Y', 'jx-y', J.axis === 'y') + btn('Z', 'jx-z', J.axis === 'z') +
+          btn(linkPick ? '📍 Modele dokun…' : '📍 Eksen noktasını seç', 'jpick', linkPick) +
+          `<label class="f w2" style="flex:1 0 100%"><span data-jl>${isH ? 'Açı' : 'Kayma'}: ${isH ? fmtNum(J.val || 0, 1) + '°' : lenText(J.val || 0)}</span>` +
+          `<input type="range" data-j="val" min="${-R}" max="${R}" step="${isH ? 1 : R / 200}" value="${J.val || 0}"></label>` +
+          btn('Başlangıca dön', 'jreset');
+      }
+      body += btn('Bağı kaldır', 'j-unlink');
+    }
+    if (kids.length) body += `<div class="lbl" style="flex:1 0 100%">Bu parçaya bağlı: ${kids.map((q) => esc(partName(q, parts.indexOf(q)))).join(', ')}</div>`;
+    hint = 'Üst parça taşınınca ya da döndürülünce bu parça da onunla birlikte gelir. Menteşe: seçilen eksen etrafında döner; Kayar: eksen boyunca kayar (sarı çizgi eksendir, "Eksen noktasını seç" ile modelde bir noktaya dokunarak menteşe yerini belirle). Delikler, bağlı oldukları parçayla birlikte gider.';
+    drawJointAxis();
   } else if (tab === 'sheet') {
     body = btn('📐 Teknik resim oluştur', 'sheet-make') +
       '<div class="lbl" style="flex:1 0 100%">A4 yatay: ön, yan, üst ve izometrik görünüş; ölçek ve genel ölçüler.</div>';
@@ -1052,6 +1077,7 @@ function removeCur() {
   if (parts.length < 2) { toast('Son parça silinemez'); return false; }
   commit();
   parts.splice(parts.indexOf(cur()), 1);
+  cleanLinks(parts);
   sel = parts[0].id;
   refreshAll();
   return true;
@@ -1237,11 +1263,13 @@ window.addEventListener('pointermove', (e) => {
   const p = parts.find((q) => q.id === drag.id);
   if (!p) return;
   const d = pt.sub(drag.start);
-  if (settings.drag !== 'up') {
-    p.x = snap(drag.x0 + d.x, settings.snap);
-    p.z = snap(drag.z0 + d.z, settings.snap);
-  }
-  if (settings.drag === 'wall' || settings.drag === 'up') p.y = snap(drag.y0 + d.y, settings.snap);
+  carry(p, () => {
+    if (settings.drag !== 'up') {
+      p.x = snap(drag.x0 + d.x, settings.snap);
+      p.z = snap(drag.z0 + d.z, settings.snap);
+    }
+    if (settings.drag === 'wall' || settings.drag === 'up') p.y = snap(drag.y0 + d.y, settings.snap);
+  });
   if (!dragRaf) {
     dragRaf = requestAnimationFrame(() => { dragRaf = 0; rebuild(false); syncInputs(); scheduleSave(); });
   }
@@ -1262,6 +1290,7 @@ function onTap(cx, cy) {
   if (tab === 'face') { faceTap(cx, cy); return; }
   if (tab === 'edge') { edgeTap(cx, cy); return; }
   if (tab === 'mate') { mateTap(cx, cy); return; }
+  if (tab === 'link' && linkPick) { linkTap(cx, cy); return; }
   const hit = pickAt(cx, cy);
   if (hit && hit.part.id !== sel) {
     sel = hit.part.id;
@@ -1547,7 +1576,7 @@ function cutterPart(p, op, type, dims, localCenter, extraQ, name) {
   const [rx, ry, rz] = quatToEulerXYZ([qc.x, qc.y, qc.z, qc.w]);
   const r4 = (v) => Math.round(v * 1e4) / 1e4 + 0;
   const q = newPart(nextId++, type, op, null);
-  return Object.assign(q, dims, { r: 0, c: 0, x: r4(piv.x), y: r4(piv.y), z: r4(piv.z), rx, ry, rz, name, aux: true });
+  return Object.assign(q, dims, { r: 0, c: 0, x: r4(piv.x), y: r4(piv.y), z: r4(piv.z), rx, ry, rz, name, aux: true, parent: p.id, joint: { type: 'fixed', axis: 'y', pv: [0, 0, 0], val: 0 } });
 }
 
 function edgeFeature(kind) {
@@ -1649,6 +1678,112 @@ function shellFeature() {
   toast('Kabuk yapıldı. Not: iç boşluk, sonraki parçalarla çakışmaz; ondan önceki parçaları da keser.');
 }
 
+/* ---- bağlantılar ve hareket: üst parça taşınınca alt parçalar gelir; menteşe / kayar eklem ---- */
+const POSE_KEYS = ['x', 'y', 'z', 'rx', 'ry', 'rz'];
+let linkPick = false;
+const r4m = (v) => Math.round(v * 1e4) / 1e4 + 0;
+const poseM = (p) => new THREE.Matrix4().compose(new THREE.Vector3(pos(p.x), pos(p.y), pos(p.z)), partQuat(p), new THREE.Vector3(1, 1, 1));
+function setPoseM(p, M) {
+  const v = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+  M.decompose(v, q, sc);
+  p.x = r4m(v.x); p.y = r4m(v.y); p.z = r4m(v.z);
+  [p.rx, p.ry, p.rz] = quatToEulerXYZ([q.x, q.y, q.z, q.w]);
+}
+const applyWorldDelta = (list, D) => { for (const c of list) setPoseM(c, D.clone().multiply(poseM(c))); };
+// p'nin duruşunu mutate() ile değiştir; bütün alt parçalar aynı katı hareketle onunla gelsin
+function carry(p, mutate) {
+  const kids = descendantsOf(parts, p.id);
+  if (!kids.length) { mutate(); return; }
+  const before = poseM(p);
+  mutate();
+  applyWorldDelta(kids, poseM(p).multiply(before.invert()));
+}
+const AXV = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
+// eklemin dünyadaki ekseni ve eksen noktası (üst parçanın çerçevesinde saklanır, üstle birlikte hareket eder)
+function jointInfo(c) {
+  const par = c.joint && parts.find((q) => q.id === c.parent);
+  if (!par) return null;
+  const axis = new THREE.Vector3(...AXV[c.joint.axis || 'y']).applyQuaternion(partQuat(par)).normalize();
+  const pivot = new THREE.Vector3(...(c.joint.pv || [0, 0, 0])).applyMatrix4(poseM(par));
+  return { par, axis, pivot };
+}
+function setJointVal(c, nv) {
+  const ji = jointInfo(c);
+  if (!ji || !c.joint) return;
+  const d = nv - (c.joint.val || 0);
+  if (!d) return;
+  let D;
+  if (c.joint.type === 'hinge') {
+    D = new THREE.Matrix4().makeTranslation(ji.pivot.x, ji.pivot.y, ji.pivot.z)
+      .multiply(new THREE.Matrix4().makeRotationAxis(ji.axis, d * RAD))
+      .multiply(new THREE.Matrix4().makeTranslation(-ji.pivot.x, -ji.pivot.y, -ji.pivot.z));
+  } else if (c.joint.type === 'slide') {
+    D = new THREE.Matrix4().makeTranslation(ji.axis.x * d, ji.axis.y * d, ji.axis.z * d);
+  } else return;
+  applyWorldDelta([c, ...descendantsOf(parts, c.id)], D);
+  c.joint.val = nv;
+}
+function drawJointAxis() {
+  disposeOverlay(faceGroup);
+  const c = cur();
+  if (!c.joint || c.joint.type === 'fixed') return;
+  const ji = jointInfo(c);
+  if (!ji) return;
+  const L = Math.max(40, lastClean && lastClean.boundingBox ? lastClean.boundingBox.getSize(new THREE.Vector3()).length() * 0.6 : 80);
+  const a = ji.pivot.clone().addScaledVector(ji.axis, -L / 2), b = ji.pivot.clone().addScaledVector(ji.axis, L / 2);
+  const line = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([a, b]), new THREE.LineBasicMaterial({ color: 0xfacc15, depthTest: false, transparent: true }));
+  line.userData.own = true; line.layers.set(1); line.renderOrder = 998;
+  faceGroup.add(line);
+  const dot = new THREE.Points(new THREE.BufferGeometry().setFromPoints([ji.pivot]), new THREE.PointsMaterial({ color: 0xf43f5e, size: 12, sizeAttenuation: false, depthTest: false, transparent: true }));
+  dot.userData.own = true; dot.layers.set(1); dot.renderOrder = 999;
+  faceGroup.add(dot);
+}
+function setParent(c, pid) {
+  if (pid == null) { if (c.parent == null) return; commit(); delete c.parent; delete c.joint; refreshAll(); return; }
+  const par = parts.find((q) => q.id === pid);
+  if (!par) return;
+  if (wouldCycle(parts, c.id, pid)) { toast('Bir parça kendi altındaki parçaya bağlanamaz.'); renderPanel(); return; }
+  commit();
+  const inv = poseM(par).invert();
+  const pv = new THREE.Vector3(pos(c.x), pos(c.y), pos(c.z)).applyMatrix4(inv);
+  c.parent = pid;
+  c.joint = { type: 'fixed', axis: 'y', pv: [r4m(pv.x), r4m(pv.y), r4m(pv.z)], val: 0 };
+  refreshAll();
+  toast('Bağlandı: üst parça hareket edince bu parça da gelir.');
+}
+function linkAct(act) {
+  const c = cur();
+  if (act === 'j-unlink') { setParent(c, null); return; }
+  if (!c.joint) return;
+  if (act === 'jreset') { commit(); setJointVal(c, 0); refreshAll(); return; }
+  if (act === 'jpick') { linkPick = !linkPick; renderPanel(); if (linkPick) toast('Menteşe / eksen noktası olacak yere modelde dokun.'); return; }
+  commit();
+  if (act.startsWith('jt-')) c.joint.type = act.slice(3);
+  else c.joint.axis = act.slice(3);
+  c.joint.val = 0; // yeni eklem: şu anki duruş başlangıç sayılır
+  renderPanel();
+  scheduleSave();
+}
+function linkTap(cx, cy) {
+  const c = cur();
+  const ji = jointInfo(c);
+  setRay(cx, cy);
+  const hits = modelMesh ? raycaster.intersectObject(modelMesh, false) : [];
+  if (!ji || !hits.length) { toast('Modelin üzerine dokun.'); return; }
+  commit();
+  const pv = hits[0].point.clone().applyMatrix4(poseM(ji.par).invert());
+  c.joint.pv = [r4m(pv.x), r4m(pv.y), r4m(pv.z)];
+  c.joint.val = 0;
+  linkPick = false;
+  renderPanel();
+  scheduleSave();
+  toast('Eksen noktası belirlendi.');
+}
+document.addEventListener('change', (e) => {
+  const el = e.target;
+  if (el.dataset && el.dataset.link === 'parent') setParent(cur(), el.value === '' ? null : Number(el.value));
+});
+
 /* ---- montaj: iki yüzü yüze oturt ---- */
 const mate = { a: null, b: null };
 function mateTap(cx, cy) {
@@ -1685,8 +1820,10 @@ function mateApply() {
   const np = pB.clone().add(new THREE.Vector3(pos(A.x), pos(A.y), pos(A.z)).sub(pA).applyQuaternion(q)).addScaledVector(nB, pos(cp.mgap));
   commit();
   const r4 = (v) => Math.round(v * 1e4) / 1e4 + 0;
-  A.x = r4(np.x); A.y = r4(np.y); A.z = r4(np.z);
-  [A.rx, A.ry, A.rz] = quatToEulerXYZ([newQ.x, newQ.y, newQ.z, newQ.w]);
+  carry(A, () => {
+    A.x = r4(np.x); A.y = r4(np.y); A.z = r4(np.z);
+    [A.rx, A.ry, A.rz] = quatToEulerXYZ([newQ.x, newQ.y, newQ.z, newQ.w]);
+  });
   sel = A.id;
   mate.a = mate.b = null;
   disposeOverlay(faceGroup);
@@ -1891,7 +2028,8 @@ document.addEventListener('click', (e) => {
   const p = cur();
 
   if (act.startsWith('add-')) { addPart(act.slice(4), 'add'); return; }
-  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate') clearFace();
+  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate' && tab !== 'link') clearFace();
+    linkPick = false;
     if (tab !== 'mate') { mate.a = null; mate.b = null; }
     if (tab !== 'edge') edgeSels = []; renderPanel(); return; }
   if (act === 'edge-clear') { edgeSels = []; disposeOverlay(faceGroup); renderPanel(); return; }
@@ -1919,6 +2057,7 @@ document.addEventListener('click', (e) => {
   if (act === 'mate-center') { cp.mcenter = !cp.mcenter; renderPanel(); return; }
   if (act === 'mate-do') { mateApply(); return; }
   if (act === 'mate-reset') { mate.a = mate.b = null; disposeOverlay(faceGroup); renderPanel(); return; }
+  if (act.startsWith('jt-') || act.startsWith('jx-') || act === 'jpick' || act === 'jreset' || act === 'j-unlink') { linkAct(act); return; }
   if (act === 'sheet-make') { makeSheet(); return; }
   if (act === 'edges') { settings.edges = settings.edges === false; afterSettings(); return; }
   if (act === 'face-hole') { faceFeature('sub'); return; }
@@ -2013,13 +2152,28 @@ document.addEventListener('input', (e) => {
     if (['n', 'dx', 'dy', 'dz', 'cn', 'ang'].includes(d.c)) cp.touched = true;
     return;
   }
+  if (d.j === 'val') {
+    const c = cur();
+    if (!c.joint || !isFinite(el.valueAsNumber)) return;
+    const key = c.id + '.jval', now = Date.now();
+    if (key !== lastKey || now - lastAt > 1500) { commit(); updateToolbar(); }
+    lastKey = key; lastAt = now;
+    setJointVal(c, el.valueAsNumber);
+    rebuild(false);
+    const isH = c.joint.type === 'hinge';
+    const jl = document.querySelector('[data-jl]');
+    if (jl) jl.textContent = (isH ? 'Açı: ' + fmtNum(c.joint.val, 1) + '°' : 'Kayma: ' + lenText(c.joint.val));
+    scheduleSave();
+    return;
+  }
   const k = d.k;
   if (!k) return;
   const key = cur().id + '.' + k, now = Date.now();
   if (key !== lastKey || now - lastAt > 1500) { commit(); updateToolbar(); }
   lastKey = key; lastAt = now;
   if (d.t === 'text') { cur()[k] = el.value; renderChips(); scheduleSave(); return; }
-  cur()[k] = d.u === 'deg' ? el.valueAsNumber : fromUnit(el.valueAsNumber, settings.unit);
+  const setv = () => { cur()[k] = d.u === 'deg' ? el.valueAsNumber : fromUnit(el.valueAsNumber, settings.unit); };
+  if (POSE_KEYS.includes(k)) carry(cur(), setv); else setv();
   rebuild(false);
   scheduleSave();
 });
@@ -2046,8 +2200,8 @@ function applyCommands(cmds, heard) {
       case 'save': saveProject(projName || 'model'); return;
       case 'delete': ok = removeCur(); break;
       case 'add': addPart(c.type, c.op, c.dims); break;
-      case 'set': commit(); cur()[c.key] = c.value; refreshAll(); break;
-      case 'rotate': commit(); cur()['r' + c.axis] = c.deg; refreshAll(); break;
+      case 'set': commit(); if (POSE_KEYS.includes(c.key)) carry(cur(), () => { cur()[c.key] = c.value; }); else cur()[c.key] = c.value; refreshAll(); break;
+      case 'rotate': commit(); carry(cur(), () => { cur()['r' + c.axis] = c.deg; }); refreshAll(); break;
       case 'copy': doDup(c.count); break;
       case 'mirror': doMirror(c.axis); break;
       case 'view': setView(c.view); break;

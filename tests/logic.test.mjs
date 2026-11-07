@@ -7,7 +7,7 @@ import {
   chamferBoxPoints, cylinderProfile,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
-  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops,
+  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
 } from '../logic.js';
 
 let fail = 0;
@@ -368,5 +368,26 @@ t('kroki çoklu döngü: dönüşüm gidiş-dönüş', () => {
   const m = mirrorPart({ ...f, id: 9, x: 0, z: 0 }, 10, 'x');
   assert.deepEqual(m.more[0].map((q) => q[0]), f.more[0].map((q) => -q[0]));
 });
+
+t('bağlantılar: alt parçalar, döngü, temizlik', () => {
+  const P = (id, parent) => ({ id, parent });
+  const ps = [P(1), P(2, 1), P(3, 2), P(4, 1), P(5)];
+  assert.deepEqual(descendantsOf(ps, 1).map((q) => q.id).sort(), [2, 3, 4]);
+  assert.deepEqual(descendantsOf(ps, 3), []);
+  assert.equal(wouldCycle(ps, 1, 3), true);   // 3, 1'in torunu
+  assert.equal(wouldCycle(ps, 1, 1), true);
+  assert.equal(wouldCycle(ps, 3, 1), false);
+  assert.equal(wouldCycle(ps, 5, 3), false);
+  const q = [P(1), { id: 2, parent: 9, joint: { type: 'hinge' } }, { id: 3, parent: 1, joint: {} }];
+  cleanLinks(q);
+  assert.equal(q[1].parent, undefined); assert.equal(q[1].joint, undefined);
+  assert.equal(q[2].parent, 1);
+});
+t('kopya bağlantıyı taşımaz', () => {
+  const p = { ...newPart(1, 'box', 'add', null), parent: 7, joint: { type: 'hinge' } };
+  const c = duplicatePart(p, 2);
+  assert.equal(c.parent, undefined); assert.equal(c.joint, undefined);
+});
+
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
 process.exit(fail ? 1 : 0);
