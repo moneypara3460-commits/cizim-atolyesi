@@ -156,6 +156,10 @@ view.insertBefore(renderer.domElement, view.firstChild);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
+controls.dampingFactor = 0.08;  // bırakınca daha yumuşak dursun
+controls.rotateSpeed = 0.4;     // döndürme hızı (1 = varsayılan, düşük = yavaş)
+controls.zoomSpeed = 0.8;
+controls.panSpeed = 0.8;
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const light = new THREE.DirectionalLight(0xffffff, 0.9);
