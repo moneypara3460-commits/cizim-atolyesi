@@ -41,4 +41,3 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 3. ~~Geri al, yeni şekiller, döndürme, kaydetme, STL, sesli komut~~
 4. Kroki çizip kalınlık verme (extrude)
 5. Parçaları gruplayıp kopyalama / çoğaltma, ölçü etiketleri
-6. Play Store için sarmalama (Expo WebView ya da Capacitor)
