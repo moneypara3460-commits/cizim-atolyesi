@@ -140,33 +140,69 @@ function updateInfinite() {
 /* ---- Kenar çizgileri: ekran uzayında (normal + derinlik farkı) ----
    CSG üçgenleri kenarlarda eşleşmediği için geometriden kenar çıkarmak çirkin çizgiler verir;
    bu yüzden model bir kez normal haritası olarak çizilir ve süreksiz yerlere çizgi konur. */
+// Derinlik dokusu KULLANMIYORUZ: telefon GPU'larında 16 bit çıkıp çizgileri bozabiliyor.
+// Bunun yerine tek bir RGBA8 hedefe yazıyoruz: R,G = normal (oktahedral), B,A = 16 bit doğrusal derinlik
+// (modelin kapladığı aralığa sıkıştırılmış). Arka plan = (0,0,0,0).
 const rt = new THREE.WebGLRenderTarget(4, 4, {
   minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
-  depthTexture: new THREE.DepthTexture(4, 4),
 });
-const normalMat = new THREE.MeshNormalMaterial();
+const normalMat = new THREE.ShaderMaterial({
+  clipping: true,
+  uniforms: { uDR: { value: new THREE.Vector2(1, 1000) } },
+  vertexShader: `
+    #include <clipping_planes_pars_vertex>
+    varying vec3 vN; varying float vZ;
+    void main() {
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      vZ = -mvPosition.z;
+      vN = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * mvPosition;
+      #include <clipping_planes_vertex>
+    }`,
+  fragmentShader: `
+    #include <clipping_planes_pars_fragment>
+    uniform vec2 uDR;
+    varying vec3 vN; varying float vZ;
+    void main() {
+      #include <clipping_planes_fragment>
+      vec3 n = normalize(vN);
+      if (!gl_FrontFacing) n = -n;
+      vec2 e = n.xy / (abs(n.x) + abs(n.y) + abs(n.z));
+      if (n.z < 0.0) e = (1.0 - abs(e.yx)) * vec2(e.x >= 0.0 ? 1.0 : -1.0, e.y >= 0.0 ? 1.0 : -1.0);
+      float d = clamp((vZ - uDR.x) / uDR.y, 0.0, 1.0);
+      float code = floor(d * 65534.0 + 0.5) + 1.0;
+      float hi = floor(code / 256.0);
+      float lo = code - hi * 256.0;
+      gl_FragColor = vec4(e * 0.5 + 0.5, hi / 255.0, lo / 255.0);
+    }`,
+});
 const edgeMat = new THREE.ShaderMaterial({
   transparent: true, depthTest: false, depthWrite: false,
   uniforms: {
-    tN: { value: rt.texture }, tD: { value: rt.depthTexture },
+    tN: { value: rt.texture },
     uTexel: { value: new THREE.Vector2(1, 1) }, uTan: { value: new THREE.Vector2(1, 1) },
-    uNear: { value: 1 }, uFar: { value: 1000 },
+    uDR: { value: new THREE.Vector2(1, 1000) },
     uCos: { value: Math.cos(35 * RAD) }, uTol: { value: 0.0008 },
     uColor: { value: new THREE.Color(0xf1f5f9) },
   },
   vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: `
     varying vec2 vUv;
-    uniform sampler2D tN; uniform sampler2D tD;
-    uniform vec2 uTexel; uniform vec2 uTan;
-    uniform float uNear; uniform float uFar; uniform float uCos; uniform float uTol;
+    uniform sampler2D tN;
+    uniform vec2 uTexel; uniform vec2 uTan; uniform vec2 uDR;
+    uniform float uCos; uniform float uTol;
     uniform vec3 uColor;
-    float lin(vec2 uv) {
-      float z = texture2D(tD, uv).x * 2.0 - 1.0;
-      return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear));
+    // piksel çözümü: x = nesne var mı (1/0), yz = normal xy; derinlik ayrı
+    float code(vec4 c) { return floor(c.b * 255.0 + 0.5) * 256.0 + floor(c.a * 255.0 + 0.5); }
+    float depthOf(vec4 c) { return uDR.x + (code(c) - 1.0) / 65534.0 * uDR.y; }
+    vec3 normalOf(vec4 c) {
+      vec2 e = c.rg * 2.0 - 1.0;
+      vec3 n = vec3(e, 1.0 - abs(e.x) - abs(e.y));
+      if (n.z < 0.0) n.xy = (1.0 - abs(n.yx)) * vec2(n.x >= 0.0 ? 1.0 : -1.0, n.y >= 0.0 ? 1.0 : -1.0);
+      return normalize(n);
     }
     vec3 ray(vec2 uv) { vec2 p = uv * 2.0 - 1.0; return vec3(p.x * uTan.x, p.y * uTan.y, -1.0); }
-    float obj(vec2 uv) { return texture2D(tN, uv).a > 0.5 ? 1.0 : 0.0; }
+    float obj(vec2 uv) { return code(texture2D(tN, uv)) > 0.5 ? 1.0 : 0.0; }
     // CSG üçgenleri arasındaki küçük çatlaklar (tek piksellik boşluk) çizgi sayılmasın
     bool hole(vec2 uv) {
       if (obj(uv) > 0.5) return false;
@@ -175,25 +211,26 @@ const edgeMat = new THREE.ShaderMaterial({
     }
     float edgeTo(vec4 c0, vec3 n0, float z0, vec2 uv1) {
       vec4 c1 = texture2D(tN, uv1);
-      if (abs(c0.a - c1.a) > 0.5) return hole(uv1) ? 0.0 : 1.0;
-      if (c1.a < 0.5) return 0.0;
-      vec3 n1 = normalize(c1.rgb * 2.0 - 1.0);
+      float o0 = code(c0) > 0.5 ? 1.0 : 0.0, o1 = code(c1) > 0.5 ? 1.0 : 0.0;
+      if (abs(o0 - o1) > 0.5) return hole(uv1) ? 0.0 : 1.0;
+      if (o1 < 0.5) return 0.0;
+      vec3 n1 = normalOf(c1);
       if (dot(n0, n1) < uCos) return 1.0;
       float den = dot(n0, ray(uv1));
       if (abs(den) < 0.03) return 0.0;
       float zp = dot(n0, ray(vUv) * z0) / den;
-      return abs(lin(uv1) - zp) > uTol * z0 ? 1.0 : 0.0;
+      return abs(depthOf(c1) - zp) > uTol * z0 ? 1.0 : 0.0;
     }
     void main() {
       vec4 c0 = texture2D(tN, vUv);
       vec2 a = vUv + vec2(uTexel.x, 0.0), b = vUv + vec2(0.0, uTexel.y);
       float e = 0.0;
-      if (c0.a < 0.5) {
+      if (code(c0) < 0.5) {
         if (hole(vUv)) discard;
-        e = max(abs(c0.a - texture2D(tN, a).a), abs(c0.a - texture2D(tN, b).a));
+        e = max(abs(0.0 - obj(a)), abs(0.0 - obj(b)));
       } else {
-        vec3 n0 = normalize(c0.rgb * 2.0 - 1.0);
-        float z0 = lin(vUv);
+        vec3 n0 = normalOf(c0);
+        float z0 = depthOf(c0);
         e = max(edgeTo(c0, n0, z0, a), edgeTo(c0, n0, z0, b));
       }
       if (e < 0.5) discard;
@@ -206,15 +243,59 @@ edgeQuad.frustumCulled = false;
 edgeScene.add(edgeQuad);
 const edgeCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
+// Kendini sınama: bilinen bir düzlemi normal geçişiyle çizip geri okur. Cihaz derinliği/normali
+// yanlış kodluyorsa (bazı telefon GPU'ları) kenar çizgileri otomatik kapanır, ekran bozulmaz.
+let edgesBroken = false;
+function selfTestEdges() {
+  try {
+    const t = new THREE.WebGLRenderTarget(4, 4, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+    const sc = new THREE.Scene();
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), normalMat);
+    m.position.z = -5;
+    sc.add(m);
+    const cam = new THREE.PerspectiveCamera(60, 1, 0.5, 50);
+    const keep = normalMat.uniforms.uDR.value.clone(), keepClip = normalMat.clippingPlanes;
+    normalMat.uniforms.uDR.value.set(1, 10);
+    normalMat.clippingPlanes = [];
+    renderer.setRenderTarget(t);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear();
+    renderer.render(sc, cam);
+    renderer.setRenderTarget(null);
+    normalMat.uniforms.uDR.value.copy(keep);
+    normalMat.clippingPlanes = keepClip;
+    const px = new Uint8Array(16);
+    renderer.readRenderTargetPixels(t, 1, 1, 2, 2, px);
+    t.dispose(); m.geometry.dispose();
+    const code = px[2] * 256 + px[3];
+    const want = Math.floor(0.4 * 65534 + 0.5) + 1;
+    return Math.abs(code - want) <= 3 && Math.abs(px[0] - 128) <= 2 && Math.abs(px[1] - 128) <= 2;
+  } catch (e) { return false; }
+}
+
 const lastBg = new THREE.Color(0x0f172a);
+// derinlik aralığı: modelin kamera ekseni boyunca kapladığı kalınlık (16 bit tam bunu paylaşır)
+function setDepthRange() {
+  let lo = camera.near, hi = camera.far;
+  const bb = lastClean && lastClean.boundingBox;
+  if (bb && !bb.isEmpty()) {
+    const c = bb.getCenter(new THREE.Vector3());
+    const R = bb.getSize(new THREE.Vector3()).length() / 2 + 1;
+    const zc = -c.clone().applyMatrix4(camera.matrixWorldInverse).z;
+    lo = Math.max(zc - R, camera.near * 0.5);
+    hi = Math.max(zc + R, lo + 1);
+  }
+  edgeMat.uniforms.uDR.value.set(lo, hi - lo);
+  normalMat.uniforms.uDR.value.set(lo, hi - lo);
+}
 function drawEdges() {
   const t = Math.tan(camera.fov * RAD / 2);
   edgeMat.uniforms.uTan.value.set(t * camera.aspect, t);
-  edgeMat.uniforms.uNear.value = camera.near;
-  edgeMat.uniforms.uFar.value = camera.far;
+  setDepthRange();
   camera.layers.disable(1);
   const bg = scene.background;
   scene.background = null;
+  camera.updateMatrixWorld();
   scene.overrideMaterial = normalMat;
   renderer.setRenderTarget(rt);
   renderer.setClearColor(0x000000, 0);
@@ -289,7 +370,7 @@ renderer.setAnimationLoop(() => {
   updateInfinite();
   updateLabelScales();
   renderer.render(scene, camera);
-  if (modelMesh && settings.edges !== false) drawEdges();
+  if (modelMesh && settings.edges !== false && !edgesBroken) drawEdges();
 });
 
 function fit(box, dirOverride) {
@@ -851,7 +932,7 @@ function renderPanel() {
     body = btn('Üst', 'view-top') + btn('Ön', 'view-front') + btn('Yan', 'view-side') + btn('İzo', 'view-iso') + btn('Sığdır', 'fit') +
       btn('Ortografik: ' + (settings.ortho ? 'açık' : 'kapalı'), 'ortho', settings.ortho) +
       btn('📏 Ölçüm', 'measure', measure.on) +
-      btn('Kenar çizgisi: ' + (settings.edges === false ? 'kapalı' : 'açık'), 'edges', settings.edges !== false) +
+      btn('Kenar çizgisi: ' + (settings.edges === false || edgesBroken ? 'kapalı' : 'açık'), 'edges', settings.edges !== false && !edgesBroken) +
       btn('Etiket yok', 'dim-off', settings.dim === 'off') + btn('Model ölçüsü', 'dim-model', settings.dim === 'model') + btn('Parça ölçüsü', 'dim-part', settings.dim === 'part') +
       btn('mm', 'unit-mm', settings.unit === 'mm') + btn('cm', 'unit-cm', settings.unit === 'cm') + btn('inç', 'unit-in', settings.unit === 'in') +
       btn('Kesit: ' + (section.on ? 'açık' : 'kapalı'), 'sec-toggle', section.on) +
@@ -1907,8 +1988,10 @@ try {
 } catch (e) { /* bozuk kayıt: varsayılanla devam */ }
 
 // test / hata ayıklama için küçük kanca (arayüzü etkilemez)
-window.__app = { edgeMat, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
+window.__app = { edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
 
 renderPanel();
 updateToolbar();
 rebuild(true);
+edgesBroken = !selfTestEdges();
+if (edgesBroken) toast('Bu cihazda kenar çizgisi doğru çizilemiyor; kapatıldı (Görünüm sekmesinden denenebilir).');
