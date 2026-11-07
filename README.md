@@ -24,6 +24,9 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 **Yüze işlem (Yüz sekmesi)**
 - Modelde bir yüze dokun: yüz sarı işaretlenir. O yüze **delik aç** (yuvarlak / kare, çap + derinlik), **çıkıntı ekle** (yükseklik) ya da **kroki çiz** (oyuk / çıkıntı). Yan ve üst yüzlerde, yüze dik olarak çalışır
 
+**Tek kenara pah / yuvarlama (Kenar sekmesi)**
+- Düz bir kutunun kenarına dokun (sarı çizgi seçileni gösterir), ölçüyü yaz, "Pah kır" ya da "Yuvarla". İşlem kenara oyuk parçası(ları) ekler; Parça listesinden silersen geri gelir. Yalnızca düz kutu parçalarında çalışır
+
 **Taşıma, çoğaltma**
 - **✋ Taşı** açıkken seçili parçayı parmakla sürükle (yer düzlemi ya da dikey düzlem), ızgaraya yapışma (1 / 5 / 10 / 50 mm). Kapalıyken sürükleme sahneyi döndürür. Dokununca parça seçilir
 - Çoğalt sekmesi: kopyala, ayna (X / Z), doğrusal dizi, dairesel dizi (1. parçanın ortası etrafında)
