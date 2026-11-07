@@ -7,7 +7,7 @@ import {
   TYPE_LABEL, DEFAULTS, heightOf, newPart, History, toSTLBinary, parseVoice,
   UNITS, toUnit, fromUnit, fmtNum, snap, dist3,
   sketchFromDraw, sketchToDraw, revolveProfile, chamferBoxPoints, cylinderProfile,
-  duplicatePart, mirrorPart, linearArray, circularArray,
+  duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance,
 } from './logic.js';
 import { openSketch } from './sketch.js';
@@ -35,7 +35,7 @@ try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* yoksay */ } };
 
 const section = { on: false, axis: 'x', pos: 0, flip: false };
-const cp = { n: 3, dx: 40, dy: 0, dz: 0, cn: 6, ang: 360, touched: false }; // çoğaltma ayarları (mm)
+const cp = { n: 3, dx: 40, dy: 0, dz: 0, cn: 6, ang: 360, touched: false, shape: 'round', fd: 10, fw: 10, fl: 10, depth: 5 }; // çoğaltma + yüz ayarları (mm)
 
 const hist = new History();
 const snapshot = () => JSON.stringify({ parts, sel, nextId });
@@ -710,7 +710,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['part', 'Parça'], ['view', 'Görünüm']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['part', 'Parça'], ['view', 'Görünüm']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -776,6 +776,19 @@ function renderPanel() {
       '<div class="lbl" style="flex:1 0 100%">Dairesel dizi (1. parçanın ortası etrafında)</div>' +
       cfield('Toplam adet', 'cn', 'num') + cfield('Açı°', 'ang', 'num') + btn('Dairesel dizi yap', 'copy-circ');
     hint = 'Ayna: 1. parçanın orta düzlemine göre. Seçili parçanın kopyaları eklenir.';
+  } else if (tab === 'face') {
+    if (!face) {
+      body = '<div class="lbl" style="flex:1 0 100%">Modelde bir yüze dokun.</div>';
+      hint = 'Dokunduğun yüz sarı renkte işaretlenir; delik, çıkıntı ya da kroki o yüze dik oluşur.';
+    } else {
+      body = btn('○ Yuvarlak', 'fshape-round', cp.shape === 'round') + btn('□ Kare', 'fshape-square', cp.shape === 'square') +
+        (cp.shape === 'round' ? cfield('Çap', 'fd') : cfield('Genişlik', 'fw') + cfield('Derinlik (yatay)', 'fl')) +
+        cfield('Derinlik / yükseklik', 'depth') +
+        btn('⬇ Delik aç', 'face-hole') + btn('⬆ Çıkıntı ekle', 'face-boss') +
+        '<div class="lbl" style="flex:1 0 100%">Bu yüze kroki çiz (kalınlık = derinlik / yükseklik)</div>' +
+        btn('✎ Kroki → oyuk', 'face-sk-cut') + btn('✎ Kroki → çıkıntı', 'face-sk-boss');
+      hint = 'Delik / çıkıntı dokunduğun noktada oluşur. Sonra Konum sekmesinden ince ayar yapabilirsin.';
+    }
   } else if (tab === 'part') {
     body = `<label class="f w2"><span>Parça adı</span><input type="text" data-k="name" data-t="text" value="${esc(p.name || '')}" placeholder="${esc(partName(p, idx))}"></label>` +
       `<div class="row" style="flex:1 0 100%;padding:0;flex-wrap:wrap">` +
@@ -1051,6 +1064,7 @@ window.addEventListener('pointercancel', onPointerEnd);
 
 function onTap(cx, cy) {
   if (measure.on) { measureTap(cx, cy); return; }
+  if (tab === 'face') { faceTap(cx, cy); return; }
   const hit = pickAt(cx, cy);
   if (hit && hit.part.id !== sel) {
     sel = hit.part.id;
@@ -1120,6 +1134,98 @@ function setMeasure(on) {
   if (on) toast('Ölçüm: iki noktaya dokun. Köşelere otomatik yapışır.');
 }
 
+/* ---- yüz seçimi: yüze delik / çıkıntı / kroki ---- */
+let face = null; // { point, normal }
+const faceGroup = new THREE.Group();
+scene.add(faceGroup);
+function clearFace() {
+  face = null;
+  disposeOverlay(faceGroup);
+}
+function faceTap(cx, cy) {
+  if (!modelMesh) return;
+  setRay(cx, cy);
+  const hits = raycaster.intersectObject(modelMesh, false);
+  disposeOverlay(faceGroup);
+  if (!hits.length) { face = null; renderPanel(); return; }
+  const h = hits[0];
+  const n = h.face.normal.clone().normalize();
+  face = { point: h.point.clone(), normal: n };
+  // aynı düzlemdeki üçgenleri sarı göster
+  const P = modelMesh.geometry.attributes.position;
+  const out = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), tn = new THREE.Vector3();
+  for (let i = 0; i + 2 < P.count; i += 3) {
+    a.fromBufferAttribute(P, i); b.fromBufferAttribute(P, i + 1); c.fromBufferAttribute(P, i + 2);
+    tn.crossVectors(e1.subVectors(b, a), e2.subVectors(c, a));
+    if (tn.lengthSq() < 1e-12) continue;
+    tn.normalize();
+    if (tn.dot(n) > 0.999 && Math.abs(a.clone().sub(h.point).dot(n)) < 0.02) out.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
+    color: 0xfacc15, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide,
+    polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+  }));
+  m.userData.own = true; m.layers.set(1); m.renderOrder = 6;
+  faceGroup.add(m);
+  const dot = new THREE.Points(new THREE.BufferGeometry().setFromPoints([h.point]),
+    new THREE.PointsMaterial({ color: 0xf43f5e, size: 11, sizeAttenuation: false, depthTest: false, transparent: true }));
+  dot.userData.own = true; dot.layers.set(1); dot.renderOrder = 997;
+  faceGroup.add(dot);
+  renderPanel();
+}
+// yüze oturan parça: yerel Y ekseni yüzün dışa bakan normali; inward = yüzeyin içine doğru kayma (mm)
+function faceTransform(localX, localZ, inward) {
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), face.normal);
+  const p = face.point.clone().add(new THREE.Vector3(localX, 0, localZ).applyQuaternion(q)).addScaledVector(face.normal, -inward);
+  const [rx, ry, rz] = quatToEulerXYZ([q.x, q.y, q.z, q.w]);
+  const r4 = (v) => Math.round(v * 1e4) / 1e4 + 0;
+  return { x: r4(p.x), y: r4(p.y), z: r4(p.z), rx, ry, rz };
+}
+function faceFeature(op) {
+  if (!face) return;
+  const depth = Math.max(cp.depth, 0.1);
+  const round = cp.shape === 'round';
+  const dims = round ? { d: Math.max(cp.fd, 0.1) } : { w: Math.max(cp.fw, 0.1), l: Math.max(cp.fl, 0.1) };
+  // delik: yüzeyin dışına 1 mm taşar; çıkıntı: yüzeyin 0,5 mm içinden başlar (birleşsin)
+  const inward = op === 'sub' ? depth : 0.5;
+  const h = op === 'sub' ? depth + 1 : depth + 0.5;
+  commit();
+  const p = newPart(nextId++, round ? 'cylinder' : 'box', op, null);
+  Object.assign(p, dims, { h, r: 0, c: 0 }, faceTransform(0, 0, inward));
+  parts.push(p);
+  sel = p.id;
+  clearFace();
+  refreshAll();
+  toast(op === 'sub' ? 'Delik açıldı' : 'Çıkıntı eklendi');
+}
+function faceSketch(op) {
+  if (!face) return;
+  const f = { point: face.point.clone(), normal: face.normal.clone() };
+  openSketch({
+    initial: null, uf: UNITS[settings.unit], unit: settings.unit, snaps: [1, 5, 10, 25], lockPlane: true,
+    onDone(draw) {
+      const sk = sketchFromDraw(draw);
+      const h = sk.h;
+      const saved = face;
+      face = f;
+      const inward = op === 'sub' ? h : 0.5;
+      const t = faceTransform(sk.x, sk.z, inward);
+      face = saved;
+      commit();
+      const p = Object.assign(newPart(nextId++, 'box', op, null), sk, { h: op === 'sub' ? h + 1 : h + 0.5 }, t);
+      parts.push(p);
+      sel = p.id;
+      clearFace();
+      refreshAll();
+      toast(op === 'sub' ? 'Kroki oyuk olarak açıldı' : 'Kroki çıkıntı olarak eklendi');
+    },
+    onCancel() {},
+  });
+}
+
 /* ================= Projeler ================= */
 function loadProjects() {
   try { return JSON.parse(localStorage.getItem('cizim:projects') || '{}'); } catch (e) { return {}; }
@@ -1177,7 +1283,12 @@ document.addEventListener('click', (e) => {
   const p = cur();
 
   if (act.startsWith('add-')) { addPart(act.slice(4), 'add'); return; }
-  if (act.startsWith('tab-')) { tab = act.slice(4); renderPanel(); return; }
+  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'face') clearFace(); renderPanel(); return; }
+  if (act.startsWith('fshape-')) { cp.shape = act.slice(7); renderPanel(); return; }
+  if (act === 'face-hole') { faceFeature('sub'); return; }
+  if (act === 'face-boss') { faceFeature('add'); return; }
+  if (act === 'face-sk-cut') { faceSketch('sub'); return; }
+  if (act === 'face-sk-boss') { faceSketch('add'); return; }
   if (act === 'hole-round') { addPart('cylinder', 'sub'); return; }
   if (act === 'hole-square') { addPart('box', 'sub'); return; }
   if (act === 'sketch-new') { newSketch(); return; }
@@ -1263,7 +1374,7 @@ document.addEventListener('input', (e) => {
   if (d.c) {
     const v = el.valueAsNumber;
     if (isFinite(v)) cp[d.c] = d.u === 'len' ? fromUnit(v, settings.unit) : v;
-    cp.touched = true;
+    if (['n', 'dx', 'dy', 'dz', 'cn', 'ang'].includes(d.c)) cp.touched = true;
     return;
   }
   const k = d.k;

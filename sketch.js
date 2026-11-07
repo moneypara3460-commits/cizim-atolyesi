@@ -91,6 +91,7 @@ export function openSketch(opts = {}) {
 
   // ---- durum ----
   const init = opts.initial || null;
+  const lock = !!opts.lockPlane; // yüz üzerinde kroki: düzlem ve tür sabit (kalınlık ver)
   let mode = init ? init.mode : 'extrude';
   let plane = init ? init.plane : 'top';
   if (mode === 'revolve') plane = 'front';
@@ -107,7 +108,7 @@ export function openSketch(opts = {}) {
   root.innerHTML = `
     <div class="r">
       <button data-a="cancel" class="danger" style="flex:1">✕ İptal</button>
-      <div class="ttl">Kroki</div>
+      <div class="ttl">${lock ? 'Kroki (yüz)' : 'Kroki'}</div>
       <button data-a="done" class="ok" style="flex:1">✓ Tamam</button>
     </div>
     <div class="r">
@@ -211,8 +212,10 @@ export function openSketch(opts = {}) {
     on('mode-extrude', mode === 'extrude');
     on('mode-revolve', mode === 'revolve');
     on('tool-poly', tool === 'poly'); on('tool-rect', tool === 'rect'); on('tool-circle', tool === 'circle');
-    root.querySelector('[data-a="plane-top"]').disabled = mode === 'revolve';
-    root.querySelector('[data-a="plane-front"]').disabled = mode === 'revolve';
+    root.querySelector('[data-a="plane-top"]').disabled = mode === 'revolve' || lock;
+    root.querySelector('[data-a="plane-front"]').disabled = mode === 'revolve' || lock;
+    root.querySelector('[data-a="mode-extrude"]').disabled = lock;
+    root.querySelector('[data-a="mode-revolve"]').disabled = lock;
     root.querySelector('[data-a="close"]').disabled = !(shape && shape.kind === 'poly' && !shape.closed && shape.pts.length >= 3);
   }
 
@@ -267,8 +270,8 @@ export function openSketch(opts = {}) {
     if (mode === 'revolve') g.setLineDash([8, 5]);
     line(ox, 0, ox, H); g.stroke(); g.setLineDash([]);
     g.font = '11px system-ui, sans-serif'; g.fillStyle = '#94a3b8';
-    g.fillText('X', W - 14, oy - 5);
-    g.fillText(mode === 'revolve' ? 'dönme ekseni' : (plane === 'top' ? 'Z' : 'Y'), ox + 5, 12);
+    g.fillText(lock ? 'U' : 'X', W - 14, oy - 5);
+    g.fillText(mode === 'revolve' ? 'dönme ekseni' : (lock ? 'V' : plane === 'top' ? 'Z' : 'Y'), ox + 5, 12);
 
     // şekil
     const pts = shapePts();
