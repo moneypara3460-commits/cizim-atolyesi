@@ -306,33 +306,73 @@ export function polyArea(pts) {
   return s / 2;
 }
 
-// Çizimden (mutlak dünya koordinatları) parça alanları üretir
+// Çizimden (mutlak dünya koordinatları) parça alanları üretir. d.more = ek döngüler (delikler / ek şekiller)
 export function sketchFromDraw(d) {
-  const bb = bboxPts(d.pts);
+  const more = d.mode === 'revolve' ? [] : (d.more || []);
+  const bb = bboxPts([...d.pts, ...more.flat()]);
   const cu = (bb.minU + bb.maxU) / 2, cv = (bb.minV + bb.maxV) / 2;
   const base = { type: 'sketch', mode: d.mode, plane: d.plane, h: d.mode === 'revolve' ? 0 : d.h };
   const r4 = (n) => Math.round(n * 1e4) / 1e4 + 0;
+  const withMore = (o, f) => { if (more.length) o.more = more.map((l) => l.map(f)); return o; };
   if (d.mode === 'revolve') {
     return { ...base, plane: 'front', x: 0, y: r4(bb.minV), z: 0, pts: d.pts.map(([u, v]) => [r4(u), r4(v - bb.minV)]) };
   }
   if (d.plane === 'top') {
-    return { ...base, x: r4(cu), y: 0, z: r4(cv), pts: d.pts.map(([u, v]) => [r4(u - cu), r4(v - cv)]) };
+    const f = ([u, v]) => [r4(u - cu), r4(v - cv)];
+    return withMore({ ...base, x: r4(cu), y: 0, z: r4(cv), pts: d.pts.map(f) }, f);
   }
-  return { ...base, x: r4(cu), y: r4(bb.minV), z: 0, pts: d.pts.map(([u, v]) => [r4(u - cu), r4(v - bb.minV)]) };
+  const f = ([u, v]) => [r4(u - cu), r4(v - bb.minV)];
+  return withMore({ ...base, x: r4(cu), y: r4(bb.minV), z: 0, pts: d.pts.map(f) }, f);
 }
 // Parçadan çizime (düzenlemek için mutlak koordinatlar)
 export function sketchToDraw(p) {
   const x = fin(p.x, 0), y = fin(p.y, 0), z = fin(p.z, 0);
-  let pts;
-  if (p.mode === 'revolve') pts = p.pts.map(([u, v]) => [u, v + y]);
-  else if (p.plane === 'top') pts = p.pts.map(([u, v]) => [u + x, v + z]);
-  else pts = p.pts.map(([u, v]) => [u + x, v + y]);
-  return { mode: p.mode, plane: p.mode === 'revolve' ? 'front' : p.plane, pts, h: fin(p.h, 20) };
+  let f;
+  if (p.mode === 'revolve') f = ([u, v]) => [u, v + y];
+  else if (p.plane === 'top') f = ([u, v]) => [u + x, v + z];
+  else f = ([u, v]) => [u + x, v + y];
+  const d = { mode: p.mode, plane: p.mode === 'revolve' ? 'front' : p.plane, pts: p.pts.map(f), h: fin(p.h, 20) };
+  if (p.mode !== 'revolve' && p.more && p.more.length) d.more = p.more.map((l) => l.map(f));
+  return d;
 }
 export function sketchHeight(p) {
   if (!p.pts || !p.pts.length) return 0;
   if (p.mode !== 'revolve' && p.plane === 'top') return fin(p.h, 0);
-  return bboxPts(p.pts).maxV;
+  const all = p.mode !== 'revolve' && p.more ? [...p.pts, ...p.more.flat()] : p.pts;
+  return bboxPts(all).maxV;
+}
+// Nokta çokgenin içinde mi (çift-tek kuralı)
+export function pointInPoly(pt, poly) {
+  let inside = false;
+  const [x, y] = pt;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+// Döngüleri dış şekil / delik olarak ayır: iç içe derinliği çift olan dış, tek olan en yakın kapsayanın deliği
+export function classifyLoops(loops) {
+  const n = loops.length;
+  const area = loops.map((l) => Math.abs(polyArea(l)));
+  const depth = new Array(n).fill(0), parent = new Array(n).fill(-1);
+  for (let i = 0; i < n; i++) {
+    let best = -1;
+    for (let j = 0; j < n; j++) {
+      if (j === i || !(area[j] > area[i]) || !pointInPoly(loops[i][0], loops[j])) continue;
+      depth[i]++;
+      if (best < 0 || area[j] < area[best]) best = j;
+    }
+    parent[i] = best;
+  }
+  const outers = [];
+  for (let i = 0; i < n; i++) if (depth[i] % 2 === 0) outers.push({ outer: loops[i], holes: [], i });
+  for (let i = 0; i < n; i++) {
+    if (depth[i] % 2 === 0) continue;
+    const o = outers.find((q) => q.i === parent[i]);
+    if (o) o.holes.push(loops[i]);
+  }
+  return outers.map(({ outer, holes }) => ({ outer, holes }));
 }
 // Döndürme profili: (yarıçap, y) noktaları, saat yönünün tersi, kapalı
 export function revolveProfile(pts) {
@@ -445,8 +485,9 @@ export function mirrorPart(p, id, axis, bx = 0, bz = 0) {
     c.ry = r4(-fin(p.ry, 0)); c.rz = r4(-fin(p.rz, 0));
   }
   if (p.type === 'sketch' && p.mode !== 'revolve') {
-    if (axis === 'x') c.pts = p.pts.map(([u, v]) => [-u, v]);
-    else if (p.plane === 'top') c.pts = p.pts.map(([u, v]) => [u, -v]);
+    const fx = ([u, v]) => [-u, v], fz = ([u, v]) => [u, -v];
+    if (axis === 'x') { c.pts = p.pts.map(fx); if (p.more) c.more = p.more.map((l) => l.map(fx)); }
+    else if (p.plane === 'top') { c.pts = p.pts.map(fz); if (p.more) c.more = p.more.map((l) => l.map(fz)); }
   }
   if (c.name) c.name = c.name + ' ayna';
   return c;

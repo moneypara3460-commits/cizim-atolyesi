@@ -32,5 +32,25 @@ t('doğrulama: döndürme', () => {
   assert.equal(r.draw.plane, 'front'); assert.equal(r.draw.mode, 'revolve');
 });
 
+t('çoklu şekil: iç içe delik, en büyük dış olur', () => {
+  const r = validateDraw('extrude', 'top', [rectPts(2, 2, 6, 6), rectPts(0, 0, 10, 10)], 5);
+  assert.ok(r.draw, r.error);
+  assert.equal(r.draw.pts.length, 4);
+  assert.equal(r.draw.more.length, 1);
+  assert.equal(Math.max(...r.draw.pts.map((q) => q[0])), 10);
+});
+t('çoklu şekil: kesişenler reddedilir', () => {
+  const r = validateDraw('extrude', 'top', [rectPts(0, 0, 10, 10), rectPts(5, 5, 15, 15)], 5);
+  assert.match(r.error, /birbirini kesiyor/);
+});
+t('çoklu şekil: döndürmede tek şekil', () => {
+  const r = validateDraw('revolve', 'front', [rectPts(1, 0, 5, 10), rectPts(6, 0, 9, 4)], 0);
+  assert.match(r.error, /tek şekil/);
+});
+t('tek şekil geriye uyumlu (more yok)', () => {
+  const r = validateDraw('extrude', 'top', rectPts(0, 0, 10, 10), 5);
+  assert.equal(r.draw.more, undefined);
+});
+
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
 process.exit(fail ? 1 : 0);

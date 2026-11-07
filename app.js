@@ -9,7 +9,7 @@ import {
   sketchFromDraw, sketchToDraw, revolveProfile, chamferBoxPoints, cylinderProfile,
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
-  cornerCut, coneProfile, ringProfile, cornersAbove,
+  cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops,
 } from './logic.js';
 import { openSketch } from './sketch.js';
 
@@ -458,12 +458,13 @@ function latheGeo(prof) {
   return new THREE.LatheGeometry(lp, 64);
 }
 
-// kroki çokgeninin keskin köşelerini (isteğe bağlı) yuvarla / pahla
-function sketchCornerPts(p) {
+// kroki çokgenlerinin keskin köşelerini (isteğe bağlı) yuvarla / pahla
+function cornerPtsOf(p, pts) {
   const rr = Math.max(pos(p.r), 0), cc = Math.max(pos(p.c), 0);
-  if (!(rr > 0.05 || cc > 0.05)) return p.pts;
-  return cornerCut(p.pts, cornersAbove(p.pts, 15), rr > 0.05 ? 0 : cc, rr > 0.05 ? rr : 0);
+  if (!(rr > 0.05 || cc > 0.05)) return pts;
+  return cornerCut(pts, cornersAbove(pts, 15), rr > 0.05 ? 0 : cc, rr > 0.05 ? rr : 0);
 }
+function sketchCornerPts(p) { return cornerPtsOf(p, p.pts); }
 
 function sketchGeo(p) {
   const H = Math.max(heightOf(p), 0.01);
@@ -478,15 +479,24 @@ function sketchGeo(p) {
       prof.push(prof[0].slice());
     }
     g = latheGeo(prof);
-  } else if (p.plane === 'top') {
-    const pts = sketchCornerPts(p);
-    const shape = new THREE.Shape(pts.map(([u, v]) => new THREE.Vector2(u, -v)));
-    g = new THREE.ExtrudeGeometry(shape, { depth: clamp(p.h), bevelEnabled: false });
-    g.rotateX(-Math.PI / 2);
   } else {
-    const shape = new THREE.Shape(sketchCornerPts(p).map(([u, v]) => new THREE.Vector2(u, v)));
-    g = new THREE.ExtrudeGeometry(shape, { depth: clamp(p.h), bevelEnabled: false });
-    g.translate(0, 0, -clamp(p.h) / 2);
+    // birden çok döngü: iç içe olanlar delik (çift-tek kuralı)
+    const top = p.plane === 'top';
+    const loops = [p.pts, ...(p.more || [])];
+    const v2 = (q) => new THREE.Vector2(q[0], top ? -q[1] : q[1]);
+    // ExtrudeGeometry delik yönünü yalnızca dış kontur ters ise düzeltir: dış saat yönü, delikler ters olacak şekilde kendimiz ayarlıyoruz
+    const orient = (pts, cw) => {
+      const v = pts.map(v2);
+      return THREE.ShapeUtils.isClockWise(v) === cw ? v : v.reverse();
+    };
+    const shapes = classifyLoops(loops).map(({ outer, holes }) => {
+      const sh = new THREE.Shape(orient(cornerPtsOf(p, outer), true));
+      for (const hl of holes) sh.holes.push(new THREE.Path(orient(cornerPtsOf(p, hl), false)));
+      return sh;
+    });
+    g = new THREE.ExtrudeGeometry(shapes, { depth: clamp(p.h), bevelEnabled: false });
+    if (top) g.rotateX(-Math.PI / 2);
+    else g.translate(0, 0, -clamp(p.h) / 2);
   }
   g.clearGroups();
   g.translate(0, -H / 2, 0);

@@ -7,7 +7,7 @@ import {
   chamferBoxPoints, cylinderProfile,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
-  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove,
+  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops,
 } from '../logic.js';
 
 let fail = 0;
@@ -345,6 +345,28 @@ t('koni ve boru profili', () => {
 t('keskin köşeleri bul', () => {
   assert.deepEqual(cornersAbove([[0, 0], [10, 0], [10, 10], [0, 10]]), [0, 1, 2, 3]);
   assert.equal(cornersAbove(circlePts(0, 0, 10, 48)).length, 0);
+});
+t('iç içe döngüler: dış + delik', () => {
+  const big = rectPts(0, 0, 100, 100), hole = rectPts(20, 20, 40, 40), island = rectPts(25, 25, 30, 30), far = rectPts(200, 0, 220, 20);
+  assert.equal(pointInPoly([50, 50], big), true); assert.equal(pointInPoly([150, 50], big), false);
+  const c = classifyLoops([big, hole, island, far]);
+  assert.equal(c.length, 3);                    // dış, ada, uzaktaki
+  const first = c.find((q) => q.outer === big);
+  assert.equal(first.holes.length, 1); assert.equal(first.holes[0], hole);
+  assert.ok(c.some((q) => q.outer === island && q.holes.length === 0));
+  assert.ok(c.some((q) => q.outer === far));
+});
+t('kroki çoklu döngü: dönüşüm gidiş-dönüş', () => {
+  const d = { mode: 'extrude', plane: 'top', h: 10, pts: rectPts(0, 0, 100, 60), more: [rectPts(20, 20, 40, 40)] };
+  const sk = sketchFromDraw(d);
+  assert.equal(sk.more.length, 1);
+  assert.deepEqual(sk.more[0][0], [-30, -10]);      // merkez (50,30)
+  const back = sketchToDraw(sk);
+  assert.deepEqual(back.pts, d.pts); assert.deepEqual(back.more, d.more);
+  const f = sketchFromDraw({ mode: 'extrude', plane: 'front', h: 5, pts: rectPts(0, 0, 40, 40), more: [rectPts(10, 10, 20, 20)] });
+  assert.equal(sketchHeight(f), 40);
+  const m = mirrorPart({ ...f, id: 9, x: 0, z: 0 }, 10, 'x');
+  assert.deepEqual(m.more[0].map((q) => q[0]), f.more[0].map((q) => -q[0]));
 });
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
 process.exit(fail ? 1 : 0);
