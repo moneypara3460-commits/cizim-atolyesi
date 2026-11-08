@@ -13,10 +13,11 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261108d';
-import { openSketch } from './sketch.js?v=20261108d';
+} from './logic.js?v=20261108e';
+import { openSketch } from './sketch.js?v=20261108e';
+import { openCad2D } from './cad2d.js?v=20261108e';
 
-const APP_VER = '20261108d'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261108e'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -1204,6 +1205,19 @@ function newSketch() {
     toast('Kroki parça olarak eklendi');
   });
 }
+function open2D() {
+  openCad2D({
+    onExtrude(draw) {
+      commit();
+      const p = Object.assign(newPart(nextId++, 'box', 'add', null), sketchFromDraw(draw));
+      p.name = '2B çizimden';
+      parts.push(p);
+      sel = p.id;
+      refreshAll(true);
+      toast('2B çizim 3B parçaya çevrildi');
+    },
+  });
+}
 function editSketch() {
   const p = cur();
   if (p.type !== 'sketch') return;
@@ -2388,6 +2402,7 @@ document.addEventListener('click', (e) => {
   if (act === 'hole-round') { addPart('cylinder', 'sub'); return; }
   if (act === 'hole-square') { addPart('box', 'sub'); return; }
   if (act === 'sketch-new') { newSketch(); return; }
+  if (act === 'cad2d') { open2D(); return; }
   if (act === 'sketch-edit') { editSketch(); return; }
   if (act.startsWith('prof-')) { commit(); p.prof = act.slice(5); refreshAll(); return; }
   if (act.startsWith('path-')) { commit(); p.path = act.slice(5); refreshAll(); return; }
