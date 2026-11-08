@@ -1220,19 +1220,85 @@ export function sheetFlatLines(c) {
 /* ---------------- Hesap: hacim, ağırlık, parça listesi, DXF ---------------- */
 
 // Yoğunluklar g/cm³ (yaklaşık, tipik değerler)
+// Yaklaşık, tipik değerler. rho g/cm³, E GPa, sy = akma (metal / plastik) ya da eğilmede kırılma (ahşap, MOR) MPa, A = kopma uzaması %
 export const MATERIALS = [
-  { id: 'pla', name: 'PLA', rho: 1.24 },
-  { id: 'abs', name: 'ABS', rho: 1.04 },
-  { id: 'petg', name: 'PETG', rho: 1.27 },
-  { id: 'naylon', name: 'Naylon', rho: 1.14 },
-  { id: 'ahsap', name: 'Ahşap (meşe)', rho: 0.75 },
-  { id: 'aluminyum', name: 'Alüminyum', rho: 2.70 },
-  { id: 'celik', name: 'Çelik', rho: 7.85 },
-  { id: 'paslanmaz', name: 'Paslanmaz çelik', rho: 8.0 },
-  { id: 'pirinc', name: 'Pirinç', rho: 8.5 },
-  { id: 'bakir', name: 'Bakır', rho: 8.96 },
-  { id: 'titanyum', name: 'Titanyum', rho: 4.51 },
+  { id: 'celik', name: 'Çelik (S235)', rho: 7.85, E: 210, sy: 235, A: 26, kind: 'metal', rb: 1 },
+  { id: 'paslanmaz', name: 'Paslanmaz (304)', rho: 8.0, E: 193, sy: 215, A: 40, kind: 'metal', rb: 1 },
+  { id: 'aluminyum', name: 'Alüminyum (5052)', rho: 2.68, E: 70, sy: 193, A: 12, kind: 'metal', rb: 1.5 },
+  { id: 'al6061', name: 'Alüminyum (6061-T6)', rho: 2.70, E: 69, sy: 276, A: 8, kind: 'metal', rb: 3 },
+  { id: 'pirinc', name: 'Pirinç', rho: 8.5, E: 100, sy: 250, A: 20, kind: 'metal', rb: 1 },
+  { id: 'bakir', name: 'Bakır', rho: 8.96, E: 117, sy: 70, A: 35, kind: 'metal', rb: 0.5 },
+  { id: 'titanyum', name: 'Titanyum (Gr2)', rho: 4.51, E: 105, sy: 275, A: 20, kind: 'metal', rb: 2.5 },
+  { id: 'pla', name: 'PLA', rho: 1.24, E: 3.5, sy: 50, A: 6, kind: 'plastic' },
+  { id: 'abs', name: 'ABS', rho: 1.04, E: 2.2, sy: 40, A: 25, kind: 'plastic' },
+  { id: 'petg', name: 'PETG', rho: 1.27, E: 2.1, sy: 50, A: 30, kind: 'plastic' },
+  { id: 'naylon', name: 'Naylon', rho: 1.14, E: 2.7, sy: 70, A: 50, kind: 'plastic' },
+  { id: 'cam', name: 'Ahşap (çam)', rho: 0.50, E: 10, sy: 75, kind: 'wood' },
+  { id: 'ahsap', name: 'Ahşap (meşe)', rho: 0.75, E: 12, sy: 95, kind: 'wood' },
+  { id: 'kayin', name: 'Ahşap (kayın)', rho: 0.72, E: 14, sy: 110, kind: 'wood' },
+  { id: 'kontrplak', name: 'Kontrplak', rho: 0.60, E: 8, sy: 45, kind: 'wood' },
+  { id: 'mdf', name: 'MDF', rho: 0.75, E: 3.5, sy: 30, kind: 'wood' },
 ];
+export const matById = (id) => MATERIALS.find((m) => m.id === id) || MATERIALS[0];
+
+/* ---------------- Dayanım: büküm sınırı, kiriş hesabı ---------------- */
+// En küçük güvenli iç büküm yarıçapı (mm), T = kalınlık ya da çubuk / boru çapı.
+// Metal / plastik: R = T·(50/A − 1) (sac bükmede yaygın kural, A = kopma uzaması %).
+// Ahşap: dış lifteki uzama kırılma uzamasını (MOR / E) geçmemeli: R = T·(1/(2ε) − 1/2). Buharla ve çelik bantla bükmede ~10 kat daha dar olabilir.
+export function minBendRadius(mat, T) {
+  if (!(T > 0)) return { R: 0, ratio: 0 };
+  if (mat.kind === 'wood') {
+    const eps = mat.sy / (mat.E * 1000);
+    const ratio = 1 / (2 * eps) - 0.5;
+    return { R: T * ratio, ratio, steam: T * Math.max(ratio / 12, 2.5), eps };
+  }
+  const ratio = mat.rb !== undefined ? mat.rb : Math.max(50 / Math.max(mat.A || 1, 1) - 1, 0);
+  return { R: T * ratio, ratio };
+}
+// Boru / çubuk bükme: merkez hattı yarıçapı (CLR) en az; D = dış çap (dikdörtgende büküm düzlemindeki boyut)
+export function minTubeCLR(mat, D) {
+  if (mat.kind === 'wood') { const r = minBendRadius(mat, D); return { R: r.R + D / 2, steam: r.steam + D / 2 }; }
+  const k = Math.max(1.5, mat.rb !== undefined ? mat.rb + 1 : 50 / Math.max(mat.A || 1, 1));
+  return { R: k * D, mandrel: 1.5 * D };
+}
+// Kesit özellikleri: I (mm⁴) eğilme ekseni yatay, c = tarafsız eksenden en uzak lif (mm), A (mm²)
+export function sectionProps(sec) {
+  if (sec.kind === 'round') {
+    const D = sec.d, d = sec.t ? Math.max(D - 2 * sec.t, 0) : 0;
+    return { I: Math.PI * (D ** 4 - d ** 4) / 64, c: D / 2, A: Math.PI * (D * D - d * d) / 4 };
+  }
+  const b = sec.b, h = sec.h, t = sec.t || 0;
+  const bi = t ? Math.max(b - 2 * t, 0) : 0, hi = t ? Math.max(h - 2 * t, 0) : 0;
+  return { I: (b * h ** 3 - bi * hi ** 3) / 12, c: h / 2, A: b * h - bi * hi };
+}
+// Kiriş: L (mm), kesit, malzeme, F = toplam yük (N). support: 'simple' (iki uçtan) | 'cant' (tek uçtan ankastre)
+// load: 'point' (ortada / uçta tekil) | 'udl' (yayılı). Dönüş: σ (MPa), δ (mm), sf, Fmax (güvenlik katsayısı 2 ile N)
+export function beamCheck(L, sec, mat, F, support = 'simple', load = 'point') {
+  const { I, c } = sectionProps(sec);
+  const E = mat.E * 1000;                      // MPa = N/mm²
+  let M, delta;
+  if (support === 'cant') {
+    if (load === 'udl') { M = F * L / 2; delta = F * L ** 3 / (8 * E * I); }
+    else { M = F * L; delta = F * L ** 3 / (3 * E * I); }
+  } else if (load === 'udl') { M = F * L / 8; delta = 5 * F * L ** 3 / (384 * E * I); }
+  else { M = F * L / 4; delta = F * L ** 3 / (48 * E * I); }
+  const sigma = M * c / I;
+  const sf = sigma > 0 ? mat.sy / sigma : Infinity;
+  const Fmax = F > 0 ? F * sf / 2 : 0;
+  return { sigma, delta, sf, Fmax, I, c, ratio: L > 0 ? delta / L : 0 };
+}
+// Euler burkulması (eksenel basınç altındaki dikme), K = 1 (iki ucu mafsallı) — Pcr N
+export function eulerBuckling(L, sec, mat, K = 1) {
+  const { I } = sectionProps(sec);
+  return Math.PI ** 2 * mat.E * 1000 * I / ((K * L) ** 2);
+}
+// Değerlendirme: { level: 'ok' | 'warn' | 'bad', text }
+export function judge(sf, deflRatio) {
+  if (!(sf >= 1)) return { level: 'bad', text: 'Dayanmaz: kalıcı eğilir / kırılır' };
+  if (sf < 2 || deflRatio > 1 / 100) return { level: 'warn', text: sf < 2 ? 'Sınırda: güvenlik payı az' : 'Dayanır ama çok esner' };
+  if (deflRatio > 1 / 250) return { level: 'warn', text: 'Dayanır, gözle görülür esner' };
+  return { level: 'ok', text: 'Güvenli' };
+}
 
 // Kapalı üçgen ağından hacim (mm³), yüzey alanı (mm²) ve ağırlık merkezi. pos: 9 sayı = 1 üçgen.
 // Dönüş: { volume, area, centroid:[x,y,z] | null }

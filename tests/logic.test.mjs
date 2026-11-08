@@ -4,7 +4,7 @@ import {
   parseVoice, normalize, History, toSTLBinary, newPart, heightOf,
   UNITS, toUnit, fromUnit, fmtNum, snap, dist3,
   circlePts, rectPts, bboxPts, polyArea, sketchFromDraw, sketchToDraw, sketchHeight, revolveProfile,
-  chamferBoxPoints, cylinderProfile,
+  chamferBoxPoints, cylinderProfile, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sectionProps,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
   VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, FRAME_DEFAULTS, PROFILES, profileArea, frameCalc, SHEET_DEFAULTS, SHEET_PRESETS, sheetCalc, sheetFlatLines, solveCons, consError, freedom, fixConsAfterRemove, SWEEP_DEFAULTS, LOFT_DEFAULTS, filletPath, arcPath, helixPath, sweepTris, loftTris, signedVolume, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
@@ -634,6 +634,23 @@ t('frameCalc: boru raf, pano çerçeve; dış ölçü korunur', () => {
   const xs = []; for (let i = 0; i < r.pos.length; i += 3) xs.push(r.pos[i]);
   assert.ok(Math.abs(Math.max(...xs) - Math.min(...xs) - 1200) < 1e-3);
   assert.equal(frameCalc({ ...FRAME_DEFAULTS, fr: 'rect' }).members.length, 4);
+});
+t('beamCheck: bilinen kiriş formülleri', () => {
+  const st = matById('celik');
+  const r = beamCheck(1000, { kind: 'rect', b: 20, h: 40 }, st, 1000, 'simple', 'point');   // I = 20·40³/12
+  const I = 20 * 40 ** 3 / 12;
+  assert.ok(Math.abs(r.sigma - (1000 * 1000 / 4) * 20 / I) < 1e-9);
+  assert.ok(Math.abs(r.delta - 1000 * 1000 ** 3 / (48 * 210000 * I)) < 1e-9);
+  const c = beamCheck(500, { kind: 'round', d: 20 }, st, 100, 'cant', 'point');
+  assert.ok(Math.abs(c.sigma - 100 * 500 * 10 / (Math.PI * 20 ** 4 / 64)) < 1e-9);
+  assert.equal(judge(0.8, 0).level, 'bad'); assert.equal(judge(1.5, 0).level, 'warn'); assert.equal(judge(5, 1 / 1000).level, 'ok');
+  assert.ok(Math.abs(sectionProps({ kind: 'rect', b: 40, h: 40, t: 2 }).I - (40 ** 4 - 36 ** 4) / 12) < 1e-9);
+  assert.ok(eulerBuckling(1000, { kind: 'round', d: 20 }, st) > 0);
+});
+t('minBendRadius: çelik sac ~1T, ahşap çok daha büyük; boru en az 1,5D', () => {
+  assert.equal(minBendRadius(matById('celik'), 2).R, 2);
+  assert.ok(minBendRadius(matById('ahsap'), 2).R > 100);
+  assert.ok(minTubeCLR(matById('celik'), 20).R >= 30);
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');

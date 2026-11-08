@@ -108,6 +108,12 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **Loft**: alt şekilden üst şekle geçiş (kare → daire, dikdörtgen → dikdörtgen vb.), üst şekli kaydırma ve burma. Kesik piramit, huni, kare tabandan yuvarlak ağza geçiş
 - Yolu parmakla çizme yok; ölçüler ve noktalar sayıyla girilir. Kendini kesen (çok dar eğri) süpürmeler CSG'de hata verebilir; eğri yarıçapı profilden küçük yapılamaz
 
+**Dayanım ve büküm uyarıları (Dayanım sekmesi)**
+- Malzeme kütüphanesi: çelik S235, paslanmaz 304, alüminyum 5052 / 6061-T6, pirinç, bakır, titanyum, PLA, ABS, PETG, naylon, çam, meşe, kayın, kontrplak, MDF (E, akma / eğilme dayanımı, uzama). Her parçaya ayrı malzeme verilir
+- **Bükme sınırı:** sacda en küçük güvenli iç büküm yarıçapı (metallerde endüstri tablosu R/T, ahşapta dış lif uzaması = eğilme dayanımı / E), abkant için en kısa kenar; boru / çubuk süpürmede en küçük eğri yarıçapı (mandrelli / buharla seçenekleri). Sınırın altında parça listesinde ⚠ ve kırmızı uyarı çıkar
+- **Yük testi:** kutu / plaka, mil, boru, düz sac için kiriş hesabı (iki ucundan dayalı ya da konsol, tekil ya da yayılı yük): gerilme, sehim, güvenlik katsayısı, 2 kat güvenlikle taşıyabileceği en fazla yük. Konstrüksiyonda en uzun kuşak ve dikmelerin burkulması
+- Temel el hesabıdır (FEA değil); ön kontrol içindir
+
 **Hesap ve dışa aktarma (Hesap sekmesi)**
 - Malzeme seç (PLA, ABS, PETG, naylon, ahşap, alüminyum, çelik, paslanmaz, pirinç, bakır, titanyum): hacim, yüzey alanı, **ağırlık**, ağırlık merkezi, genel ölçü. Tam dolu katı varsayılır
 - **Parça listesi (CSV)**: Excel'de açılır (Türkçe, noktalı virgül ayraçlı)

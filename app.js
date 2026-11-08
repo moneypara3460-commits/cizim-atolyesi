@@ -12,12 +12,12 @@ import {
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
-  sweepTris, loftTris, frameCalc, PROFILES, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261108k';
-import { openSketch } from './sketch.js?v=20261108k';
-import { openCad2D } from './cad2d.js?v=20261108k';
+  sweepTris, loftTris, frameCalc, frameMembers, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
+} from './logic.js?v=20261108l';
+import { openSketch } from './sketch.js?v=20261108l';
+import { openCad2D } from './cad2d.js?v=20261108l';
 
-const APP_VER = '20261108k'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261108l'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -921,7 +921,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['calc', 'Hesap']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -966,7 +966,7 @@ function renderChips() {
   const p = cur();
   $('chips').innerHTML = parts.map((q, i) =>
     `<button class="chip${q.op === 'sub' && i > 0 ? ' sub' : ''}${q.id === p.id ? ' on' : ''}"${q.hidden ? ' style="opacity:.45"' : ''} data-sel="${q.id}">` +
-    `${esc(partName(q, i))}${i > 0 && q.op === 'sub' ? ' (oyuk)' : ''}${q.hidden ? ' ⊘' : ''}${q.parent != null && !q.aux ? ' 🔗' : ''}</button>`).join('');
+    `${esc(partName(q, i))}${i > 0 && q.op === 'sub' ? ' (oyuk)' : ''}${q.hidden ? ' ⊘' : ''}${q.parent != null && !q.aux ? ' 🔗' : ''}${bendWarnings(q).length ? ' ⚠' : ''}</button>`).join('');
 }
 
 function renderPanel() {
@@ -1118,6 +1118,9 @@ function renderPanel() {
         btn(anim.rec ? '⏺ Kaydediliyor…' : '🎬 Video kaydet (1 tur)', 'an-rec', !!anim.rec) + btn('↺ Başa al', 'an-reset');
     }
     hint = 'Hareket etüdü: eklemler ve mesafe / açı eşleşmeleri baştan sona yumuşakça oynar; bağlı parçalar eşleşmelerle birlikte gelir. Video, ekrandaki görünümden WebM olarak kaydedilir (kamerayı önce istediğin açıya getir).';
+  } else if (tab === 'str') {
+    body = strengthPanel(p);
+    hint = 'Hesaplar temel kiriş ve büküm formülleridir (el hesabı): ön kontrol içindir, gerçek sonlu eleman analizi (FEA) değildir. Malzeme değerleri tipik değerlerdir; insan güvenliği ya da yük taşıyan önemli parçalarda bir mühendise onaylat.';
   } else if (tab === 'calc') {
     const mat = MATERIALS.find((m) => m.id === settings.mat) || MATERIALS[0];
     body = '<div class="lbl h">Malzeme</div>' + MATERIALS.map((m) => btn(m.name, 'mat-' + m.id, m.id === mat.id)).join('') +
@@ -1175,7 +1178,8 @@ function renderPanel() {
         (i > 0 ? `<label class="f"><span>Büküm açısı ° (+ yukarı, − aşağı)</span><input type="number" step="any" data-seg="${i},a" value="${fmtNum(sg.a, 2)}"></label>` : '') +
         `<label class="f"><span>Dış ölçü (${settings.unit})</span><input type="number" step="any" data-seg="${i},L" value="${lenVal(sg.L)}"></label>`).join('') +
         btn('+ Kenar ekle', 'seg-add') + btn('− Son kenarı sil', 'seg-del') +
-        `<div class="lbl" style="flex:1 0 100%;font-size:13px;color:${c.ok ? '#cbd5e1' : '#f87171'}">${c.ok ? 'Açınım boyu: <b>' + lenText(c.flatL) + '</b> × ' + lenText(c.W) + ' · ' + c.bends.length + ' büküm' : '⚠ ' + c.err}</div>`;
+        `<div class="lbl" style="flex:1 0 100%;font-size:13px;color:${c.ok ? '#cbd5e1' : '#f87171'}">${c.ok ? 'Açınım boyu: <b>' + lenText(c.flatL) + '</b> × ' + lenText(c.W) + ' · ' + c.bends.length + ' büküm' : '⚠ ' + c.err}</div>` +
+        bendWarnings(p).map((w) => `<div class="lbl" style="flex:1 0 100%;font-size:13px;color:#f87171">⚠ ${w}</div>`).join('');
     }
     if (p.type === 'sweep' && p.path === 'poly') {
       body += (p.pts || []).map((q, i) => '<div class="lbl h">Yol noktası ' + (i + 1) + '</div>' +
@@ -2084,6 +2088,94 @@ function mateTap(cx, cy) {
   }
   renderPanel();
 }
+/* ---- dayanım: malzeme, büküm sınırı, yük testi ---- */
+cp.lkg = 100; cp.bsup = 'simple'; cp.bload = 'point'; cp.bax = 'x';
+const partMat = (p) => matById(p.mat || settings.mat || 'celik');
+// büküm sınırı uyarıları (metin listesi)
+function bendWarnings(p) {
+  const m = partMat(p), out = [], f = (v) => fmtNum(v, 1);
+  if (p.type === 'sheet' && !p.flat) {
+    const c = sheetCalc(p), r = minBendRadius(m, c.T);
+    if (c.bends.length && c.R < r.R - 1e-6) {
+      out.push(m.name + ' ' + f(c.T) + ' mm sac en az ' + f(r.R) + ' mm iç yarıçapla bükülür (şu an ' + f(c.R) + ' mm): dış yüzde çatlar' + (m.kind === 'wood' ? '. Buharla ve bantla bükmede en az ~' + f(r.steam) + ' mm' : '') + '.');
+    }
+    if (m.kind === 'wood' && c.bends.length) out.push('Ahşap sac gibi keskin bükülmez; bu parça ancak buharla / laminasyonla (ince katmanlar yapıştırılarak) yapılabilir.');
+    const minFl = 2.5 * c.T + c.R;
+    (p.seg || []).forEach((sg, i) => { if (p.seg.length > 1 && (Number(sg.L) || 0) < minFl - 1e-6) out.push((i + 1) + '. kenar ' + f(sg.L) + ' mm: abkantta tutmaz, en az ~' + f(minFl) + ' mm olmalı.'); });
+  }
+  if (p.type === 'sweep' && p.path !== 'poly') {
+    const D = p.prof === 'rect' ? Math.max(Number(p.w) || 0, Number(p.l) || 0) : Number(p.d) || 0;
+    const R = p.path === 'helix' ? Number(p.hr) || 0 : Number(p.br) || 0;
+    const r = minTubeCLR(m, D);
+    if (D > 0 && R < r.R - 1e-6) out.push(m.name + ' Ø' + f(D) + ' ' + (p.prof === 'tube' ? 'boru' : 'çubuk') + ' en az ' + f(r.R) + ' mm eğri yarıçapıyla bükülür (şu an ' + f(R) + ')' + (r.mandrel ? '; mandrelli büküm makinesiyle ~' + f(r.mandrel) + ' mm' : '') + (r.steam ? '; buharla ~' + f(r.steam) + ' mm' : '') + '. Daha dar bükersen ' + (m.kind === 'wood' ? 'kırılır' : 'ezilir / çatlar') + '.');
+  }
+  if (p.type === 'sweep' && p.path === 'poly') {
+    const D = Number(p.d) || Number(p.w) || 0, r = minTubeCLR(m, D);
+    if (D > 0 && (Number(p.br) || 0) < r.R - 1e-6) out.push('Köşe yarıçapı ' + f(p.br) + ' mm, ' + m.name + ' için en az ' + f(r.R) + ' mm olmalı.');
+  }
+  return out;
+}
+function strengthPanel(p) {
+  const m = partMat(p), f = (v, d = 1) => fmtNum(v, d);
+  let h = `<label class="f w2" style="flex:1 0 100%"><span>Bu parçanın malzemesi</span><select data-pmat="1">${MATERIALS.map((x) => `<option value="${x.id}"${x.id === m.id ? ' selected' : ''}>${x.name}</option>`).join('')}</select></label>` +
+    `<div class="lbl" style="flex:1 0 100%">E = ${f(m.E)} GPa · ${m.kind === 'wood' ? 'eğilme dayanımı' : 'akma dayanımı'} ${f(m.sy, 0)} MPa${m.A ? ' · uzama %' + m.A : ''}</div>`;
+  // büküm
+  const bw = bendWarnings(p);
+  if (p.type === 'sheet' || p.type === 'sweep') {
+    h += '<div class="lbl h">Bükme sınırı</div>';
+    if (p.type === 'sheet') { const c = sheetCalc(p), r = minBendRadius(m, c.T); h += `<div class="lbl" style="flex:1 0 100%">En küçük güvenli iç büküm yarıçapı: <b>${f(r.R)} mm</b> (${f(r.ratio)} × kalınlık)${r.steam ? ' · buharla ~' + f(r.steam) + ' mm' : ''}</div>`; }
+    h += bw.length ? bw.map((w) => `<div class="lbl" style="flex:1 0 100%;color:#f87171;font-size:13px">⛔ ${w}</div>`).join('') : '<div class="lbl" style="flex:1 0 100%;color:#4ade80;font-size:13px">✅ Bükümler bu malzeme için güvenli.</div>';
+  }
+  // yük testi
+  const res = (title, r, extra = '') => {
+    const j = judge(r.sf, r.ratio), col = j.level === 'ok' ? '#4ade80' : j.level === 'warn' ? '#facc15' : '#f87171';
+    return `<div style="flex:1 0 100%;border:1px solid ${col};border-radius:8px;padding:6px 8px;margin-top:4px;font-size:13px">` +
+      `<b>${title}</b> — <span style="color:${col}">${j.level === 'ok' ? '✅' : j.level === 'warn' ? '⚠' : '⛔'} ${j.text}</span><br>` +
+      `Gerilme ${f(r.sigma)} MPa · güvenlik katsayısı <b>${isFinite(r.sf) ? f(r.sf, 2) : '∞'}</b> · esneme (sehim) <b>${f(r.delta, 2)} mm</b><br>` +
+      `Taşıyabileceği en fazla yük (2 kat güvenlikle): <b>${f(r.Fmax / 9.81, 0)} kg</b>${extra}</div>`;
+  };
+  const F = Math.max(Number(cp.lkg) || 0, 0) * 9.81;
+  if (p.type === 'frame') {
+    const c = frameCalc(p), Fm = frameMembers(p), pr = c.pr;
+    const sec = pr.kind === 'round' ? { kind: 'round', d: pr.w, t: pr.t } : { kind: 'rect', b: pr.h, h: pr.w, t: pr.t };
+    const span = Math.max(...Fm.members.filter((x) => x.role !== 'Dikme').map((x) => Math.hypot(x.b[0] - x.a[0], x.b[1] - x.a[1], x.b[2] - x.a[2])), 1);
+    h += '<div class="lbl h">Yük testi</div>' + cfield('Üstteki toplam yük (kg)', 'lkg', 'deg');
+    const rr = beamCheck(span, sec, m, F / 2, 'simple', 'udl');
+    h += res('En uzun kuşak (' + lenText(span) + ', yükün yarısı yayılı)', rr);
+    const legs = Fm.members.filter((x) => x.role === 'Dikme'), legL = legs.length ? Math.hypot(legs[0].b[1] - legs[0].a[1], 0) : 0;
+    if (legs.length) {
+      const Pcr = eulerBuckling(legL, sec, m, 1), per = F / legs.length, A = (sec.kind === 'round' ? Math.PI * (sec.d ** 2 - Math.max(sec.d - 2 * sec.t, 0) ** 2) / 4 : sec.b * sec.h - Math.max(sec.b - 2 * sec.t, 0) * Math.max(sec.h - 2 * sec.t, 0));
+      const sfB = per > 0 ? Pcr / per : Infinity, sfC = per > 0 ? m.sy * A / per : Infinity, sfL = Math.min(sfB, sfC);
+      const col = sfL >= 3 ? '#4ade80' : sfL >= 1.5 ? '#facc15' : '#f87171';
+      h += `<div style="flex:1 0 100%;border:1px solid ${col};border-radius:8px;padding:6px 8px;margin-top:4px;font-size:13px"><b>Dikmeler (${legs.length} adet, ${lenText(legL)})</b> — burkulma güvenliği <b style="color:${col}">${isFinite(sfL) ? f(sfL, 1) : '∞'}</b> · en fazla yaklaşık <b>${f(Math.min(Pcr, m.sy * A) * legs.length / 3 / 9.81, 0)} kg</b> (3 kat güvenlikle)</div>`;
+    }
+    return h;
+  }
+  let sec = null, L = 0, label = '';
+  const ax = cp.bax;
+  if (p.type === 'box') {
+    const w = Number(p.w) || 0, l = Number(p.l) || 0, hh = Number(p.h) || 0;
+    if (ax === 'x') { L = w; sec = { kind: 'rect', b: l, h: hh }; } else if (ax === 'z') { L = l; sec = { kind: 'rect', b: w, h: hh }; } else { L = hh; sec = { kind: 'rect', b: w, h: l }; }
+    label = 'Kutu / plaka / kiriş';
+  } else if (p.type === 'cylinder' || p.type === 'tube') {
+    L = Number(p.h) || 0; const d = Number(p.d) || 0;
+    sec = { kind: 'round', d, t: p.type === 'tube' ? Math.max((d - (Number(p.di) || 0)) / 2, 0.01) : 0 };
+    label = p.type === 'tube' ? 'Boru (boyu boyunca kiriş)' : 'Mil / çubuk (boyu boyunca kiriş)';
+  } else if (p.type === 'sheet' && p.flat) {
+    const c = sheetCalc(p); L = c.flatL; sec = { kind: 'rect', b: c.W, h: c.T }; label = 'Düz sac';
+  }
+  if (!sec) {
+    if (p.type !== 'sheet' && p.type !== 'sweep') h += '<div class="lbl" style="flex:1 0 100%">Yük testi kutu, silindir, boru, konstrüksiyon ve düz sac parçalarında yapılır.</div>';
+    return h;
+  }
+  h += '<div class="lbl h">Yük testi — ' + label + '</div>';
+  if (p.type === 'box') h += btn('Uzunluk X yönünde', 'sp-bax-x', ax === 'x') + btn('Z yönünde', 'sp-bax-z', ax === 'z') + btn('Y yönünde', 'sp-bax-y', ax === 'y');
+  h += btn('İki ucundan dayalı', 'sp-bsup-simple', cp.bsup === 'simple') + btn('Tek ucundan sabit (konsol)', 'sp-bsup-cant', cp.bsup === 'cant') +
+    btn(cp.bsup === 'cant' ? 'Yük uçta' : 'Yük ortada', 'sp-bload-point', cp.bload === 'point') + btn('Yük yayılı', 'sp-bload-udl', cp.bload === 'udl') + cfield('Yük (kg)', 'lkg', 'deg');
+  if (L > 0 && sec) h += res('Açıklık ' + lenText(L), beamCheck(L, sec, m, F, cp.bsup, cp.bload));
+  return h;
+}
+
 /* ---- hareket etüdü (animasyon) ---- */
 const anim = { playing: false, t0: 0, mode: 'pp', cfg: {}, rec: null, startVals: null };
 cp.adur = 3;
@@ -2678,6 +2770,7 @@ document.addEventListener('click', (e) => {
   if (act === 'mate-reset') { mate.a = mate.b = null; disposeOverlay(faceGroup); renderPanel(); return; }
   if (act.startsWith('jt-') || act.startsWith('jx-') || act === 'jpick' || act === 'jreset' || act === 'j-unlink') { linkAct(act); return; }
   if (act.startsWith('an-')) { animAct(act); return; }
+  if (act.startsWith('sp-')) { const [, k, v] = act.split('-'); cp[k] = v; renderPanel(); return; }
   if (act.startsWith('mat-')) { settings.mat = act.slice(4); saveSettings(); renderPanel(); return; }
   if (act === 'bom-csv') { exportBom(); return; }
   if (act === 'dxf-out') { exportDXF(); return; }
@@ -2787,6 +2880,7 @@ document.addEventListener('input', (e) => {
     const v = el.valueAsNumber;
     if (isFinite(v)) cp[d.c] = d.u === 'len' ? fromUnit(v, settings.unit) : v;
     if (['n', 'dx', 'dy', 'dz', 'cn', 'ang'].includes(d.c)) cp.touched = true;
+    if (d.c === 'lkg' && tab === 'str') { clearTimeout(window.__lkgT); window.__lkgT = setTimeout(() => { const ae = document.activeElement; renderPanel(); const ne = document.querySelector('#tabbody input[data-c="lkg"]'); if (ne && ae && ae.dataset && ae.dataset.c === 'lkg') { ne.focus(); const v = ne.value; ne.value = ''; ne.value = v; } }, 600); }
     return;
   }
   if (d.j === 'val') {
@@ -2818,6 +2912,7 @@ document.addEventListener('input', (e) => {
     scheduleSave();
     return;
   }
+  if (d.pmat) { commit(); cur().mat = el.value; refreshAll(); return; }
   if (d.pf) { commit(); cur().pf = el.value; refreshAll(); return; }
   if (d.an) {
     const [key, which] = d.an.split(','), st = anim.cfg[key], dd = animDrivers().find((x) => x.key === key);
