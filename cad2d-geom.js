@@ -468,7 +468,8 @@ export function stretchToLength(ents, line, L, moveB = true) {
   const L0 = dist(line.a, line.b);
   if (!(L0 > 1e-9) || !(L > 0)) return null;
   const u = mul(sub(line.b, line.a), 1 / L0), dir = moveB ? u : mul(u, -1);
-  const anchor = moveB ? line.b : line.a, delta = L - L0, eps = Math.max(L0, 1) * 1e-6;
+  // el çiziminden gelen hafif kaymalar için %0,5 pay (aynı hizadaki köşeler de birlikte kaysın)
+  const anchor = moveB ? line.b : line.a, delta = L - L0, eps = Math.max(L0 * 0.005, 1e-6);
   const inH = (p) => dot(sub(p, anchor), dir) >= -eps;
   const mv = (p) => (inH(p) ? add(p, mul(dir, delta)) : p);
   return ents.map((e) => {
@@ -501,4 +502,63 @@ export function setRadius(ents, target, r) {
     for (const k of ['a', 'b']) for (let i = 0; i < 2; i++) if (dist(e[k], old[i]) <= tol) o[k] = now[i].slice();
     return o;
   });
+}
+
+/* ---------- okunan ölçü rakamlarını çizime uygulama ---------- */
+// texts: [{ value, p:[x,y], h }]. Her yazıyı en yakın çizgiye (uzunluk) ya da daireye / yaya (çap / yarıçap) eşler.
+export function matchDims(ents, texts) {
+  const cands = [];
+  texts.forEach((t, ti) => {
+    ents.forEach((e, ei) => {
+      if (e.t === 'line') {
+        const L = dist(e.a, e.b);
+        if (L < 1e-9) return;
+        const n = nearestOn(e, t.p), d = dist(n.p, t.p);
+        const lim = Math.max(4 * (t.h || 5), 0.18 * L);
+        if (d > lim) return;
+        const mid = Math.abs(n.t - 0.5);                      // yazı çizginin ortasına yakın olmalı
+        cands.push({ ti, ei, kind: 'len', value: t.value, cur: L, score: d / lim + mid * 0.8 });
+      } else if (e.t === 'circle' || e.t === 'arc') {
+        const dc = dist(t.p, e.c), d = Math.max(dc - e.r, 0), lim = Math.max(4 * (t.h || 5), e.r * 0.8);
+        if (d > lim) return;
+        cands.push({ ti, ei, kind: e.t === 'circle' ? 'dia' : 'rad', value: t.value, cur: e.t === 'circle' ? 2 * e.r : e.r, score: d / lim + 0.05 });
+      }
+    });
+  });
+  cands.sort((a, b) => a.score - b.score);
+  const usedT = new Set(), usedE = new Set(), out = [];
+  for (const c of cands) { if (usedT.has(c.ti) || usedE.has(c.ei)) continue; usedT.add(c.ti); usedE.add(c.ei); out.push(c); }
+  return out;
+}
+// Eşleşmeleri uygular: önce en uzun çizgiye göre bütün çizimi ölçekler, sonra kalanları esnetir. Dönüş: yeni varlıklar (sıra korunur)
+export function applyDims(ents0, matches) {
+  let ents = ents0.map(clone);
+  if (!matches.length) return ents;
+  const lines = matches.filter((m) => m.kind === 'len').sort((a, b) => b.value - a.value);
+  const ref = lines[0] || matches[0];
+  const f = ref.value / ref.cur;
+  if (isFinite(f) && f > 0) {
+    const sc = (p) => [p[0] * f, p[1] * f];
+    ents = ents.map((e) => {
+      const o = clone(e);
+      for (const k of ['a', 'b', 'c', 'p']) if (o[k]) o[k] = sc(o[k]);
+      if (o.r) o.r *= f;
+      if (o.t === 'dim') o.off *= f;
+      if (o.t === 'text') o.h = (o.h || 5) * f;
+      return o;
+    });
+  }
+  for (const m of matches) {
+    if (m === ref) continue;
+    const e = ents[m.ei];
+    if (m.kind === 'len' && e.t === 'line') {
+      // sağdaki (yatayda) ya da üstteki (dikeyde) uç hareket eder
+      const dx = Math.abs(e.b[0] - e.a[0]), dy = Math.abs(e.b[1] - e.a[1]);
+      const moveB = dx >= dy ? e.b[0] >= e.a[0] : e.b[1] >= e.a[1];
+      const r = stretchToLength(ents, e, m.value, moveB);
+      if (r) ents = r;
+    } else if (m.kind === 'dia' && e.t === 'circle') { ents[m.ei] = { ...e, r: m.value / 2 }; }
+    else if (m.kind === 'rad' && e.t === 'arc') { const r = setRadius(ents, e, m.value); if (r) ents = r; }
+  }
+  return ents;
 }

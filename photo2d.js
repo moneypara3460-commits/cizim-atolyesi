@@ -2,7 +2,8 @@
 // Adımlar: kağıt köşeleri -> perspektif düzeltme -> uyarlamalı eşikleme (gölge temizliği) -> küçük lekeleri atma
 //          -> inceltme (iskelet) -> yol takibi -> çizgi / yay / daire uydurma -> düzgünleştirme (yatay/dikey, uç birleştirme)
 // Saf fonksiyonlar; DOM gerektirmez (tests/photo2d.test.mjs).
-import { arcFrom3 } from './cad2d-geom.js?v=20261108o';
+import { arcFrom3 } from './cad2d-geom.js?v=20261109a';
+import { DIGIT_NET } from './digits-model.js?v=20261109a';
 
 const TAU = Math.PI * 2;
 const normA = (a) => { a %= TAU; return a < 0 ? a + TAU : a; };
@@ -139,10 +140,10 @@ export function cleanComponents(bin, w, h, minSpan, dropBorder = true) {
     const span = Math.max(maxX - minX, maxY - minY);
     const border = minX <= 1 || minY <= 1 || maxX >= w - 2 || maxY >= h - 2;
     const keep = span >= minSpan && !(dropBorder && border && span > Math.max(w, h) * 0.6);
-    comp.push({ n: px.length, span, keep });
+    comp.push({ n: px.length, span, keep, minX, maxX, minY, maxY, px });
     if (keep) for (const q of px) out[q] = 1;
   }
-  return { bin: out, comps: comp.length, kept: comp.filter((c) => c.keep).length };
+  return { bin: out, comps: comp.length, kept: comp.filter((c) => c.keep).length, list: comp };
 }
 // Zhang-Suen inceltme (yerinde değil, kopya döner)
 export function thin(bin, w, h) {
@@ -404,6 +405,25 @@ export function beautify(ents0, tol, angDeg = 5) {
       }
     }
   }
+  // 4b) son düzleme: yataya / dikeye yakın çizgileri tam düzle; ortak uçlar (çizgi ve yay) birlikte taşınır
+  {
+    const nodes = new Map();
+    const node = (p) => { const k = key(p); let n = nodes.get(k); if (!n) { n = [p[0], p[1]]; nodes.set(k, n); } return n; };
+    const arcInfo = [];
+    for (const e of out) {
+      if (e.t === 'line') { e.a = node(e.a); e.b = node(e.b); }
+      else if (e.t === 'arc') { const [s0, s1] = arcPts(e); arcInfo.push({ e, n0: node(s0), n1: node(s1), mid: arcMid(e) }); }
+    }
+    for (let pass = 0; pass < 2; pass++) for (const e of out) {
+      if (e.t !== 'line') continue;
+      const ang = Math.atan2(e.b[1] - e.a[1], e.b[0] - e.a[0]);
+      const k = Math.abs(Math.sin(ang)) < Math.sin(angTol) ? 1 : Math.abs(Math.cos(ang)) < Math.sin(angTol) ? 0 : -1;
+      if (k < 0) continue;
+      const m = (e.a[k] + e.b[k]) / 2; e.a[k] = m; e.b[k] = m;
+    }
+    for (const ai of arcInfo) { const na = arcFrom3(ai.n0, ai.mid, ai.n1); if (na) Object.assign(ai.e, { c: na.c, r: na.r, a0: na.a0, a1: na.a1 }); }
+    for (const e of out) if (e.t === 'line') { e.a = e.a.slice(); e.b = e.b.slice(); }
+  }
   // 5) yayın devamındaki kısa çizgiyi yaya kat (yay, teğet giden çizgiye dönüşürken bölünmüş olabilir)
   const kp = (p) => Math.round(p[0] * 1e4) + ',' + Math.round(p[1] * 1e4);
   for (let pass = 0; pass < 4; pass++) {
@@ -470,6 +490,86 @@ export function beautify(ents0, tol, angDeg = 5) {
   return out.filter((e) => !usedA.has(e) && (e.t !== 'line' || lenOf(e) > tol * 0.5));
 }
 
+/* ---------- el yazısı rakamlar (ölçü yazıları) ---------- */
+// Bileşenin piksellerini 16x16 girdiye çevirir (eğitimdeki gibi: kutuya kırp, oranı koruyarak 14 px'e sığdır, ortala)
+export function glyphVector(c, w) {
+  const gw = c.maxX - c.minX + 1, gh = c.maxY - c.minY + 1;
+  const g = new Float32Array(gw * gh);
+  for (const q of c.px) { const x = q % w - c.minX, y = ((q / w) | 0) - c.minY; g[y * gw + x] = 1; }
+  const k = 14 / Math.max(gw, gh), nw = Math.max(1, Math.round(gw * k)), nh = Math.max(1, Math.round(gh * k));
+  const out = new Float32Array(256), ox = (16 - nw) >> 1, oy = (16 - nh) >> 1;
+  const kx = gw / nw, ky = gh / nh;   // hedef pikselin kaynakta kapladığı alan (alan ortalaması)
+  for (let y = 0; y < nh; y++) for (let x = 0; x < nw; x++) {
+    const x0 = x * kx, x1 = (x + 1) * kx, y0 = y * ky, y1 = (y + 1) * ky;
+    let sum = 0, area = 0;
+    for (let yy = Math.floor(y0); yy < Math.ceil(y1); yy++) for (let xx = Math.floor(x0); xx < Math.ceil(x1); xx++) {
+      if (xx < 0 || yy < 0 || xx >= gw || yy >= gh) continue;
+      const a = (Math.min(x1, xx + 1) - Math.max(x0, xx)) * (Math.min(y1, yy + 1) - Math.max(y0, yy));
+      if (a > 0) { sum += g[yy * gw + xx] * a; area += a; }
+    }
+    out[(oy + y) * 16 + ox + x] = area ? sum / area : 0;
+  }
+  let m = 0; for (const v of out) m = Math.max(m, v);
+  if (m > 0) for (let i = 0; i < 256; i++) out[i] /= m;
+  return out;
+}
+export function classifyDigit(vec) {
+  const N = DIGIT_NET, H = new Float32Array(N.n_h);
+  for (let j = 0; j < N.n_h; j++) { let z = N.b1[j]; for (let i = 0; i < 256; i++) if (vec[i]) z += vec[i] * N.W1[i * N.n_h + j]; H[j] = z > 0 ? z : 0; }
+  const o = new Float32Array(10);
+  for (let c = 0; c < 10; c++) { let z = N.b2[c]; for (let j = 0; j < N.n_h; j++) z += H[j] * N.W2[j * 10 + c]; o[c] = z; }
+  let mx = -Infinity; for (const v of o) mx = Math.max(mx, v);
+  let sum = 0; for (let c = 0; c < 10; c++) { o[c] = Math.exp(o[c] - mx); sum += o[c]; }
+  let best = 0; for (let c = 1; c < 10; c++) if (o[c] > o[best]) best = c;
+  return { d: best, p: o[best] / sum };
+}
+// Bileşenlerden yatay sayı grupları bulur. Dönüş: { texts: [{ s, value, box, conf }], used: Set(bileşen) }
+export function findNumbers(list, maxDim) {
+  const hMin = maxDim * 0.008, hMax = maxDim * 0.07;
+  const cand = list.filter((c) => {
+    const gh = c.maxY - c.minY + 1, gw = c.maxX - c.minX + 1;
+    return gh >= hMin && gh <= hMax && gw <= gh * 1.3 && c.n >= 6;
+  });
+  const dots = list.filter((c) => Math.max(c.maxX - c.minX, c.maxY - c.minY) + 1 < hMin * 1.2 && c.n >= 2);
+  cand.sort((a, b) => a.minX - b.minX);
+  const used = new Array(cand.length).fill(false), groups = [];
+  for (let i = 0; i < cand.length; i++) {
+    if (used[i]) continue;
+    used[i] = true;
+    const g = [cand[i]];
+    for (let j = i + 1; j < cand.length; j++) {
+      if (used[j]) continue;
+      const last = g[g.length - 1], c = cand[j];
+      const h1 = last.maxY - last.minY + 1, h2 = c.maxY - c.minY + 1, hh = Math.max(h1, h2);
+      const ov = Math.min(last.maxY, c.maxY) - Math.max(last.minY, c.minY);
+      if (c.minX - last.maxX > hh * 0.9) break;
+      if (ov < Math.min(h1, h2) * 0.5 || h1 / h2 > 2 || h2 / h1 > 2) continue;
+      used[j] = true; g.push(c);
+    }
+    groups.push(g);
+  }
+  const texts = [], usedSet = new Set();
+  for (const g of groups) {
+    let s = '', conf = 1;
+    for (let k = 0; k < g.length; k++) {
+      const r = classifyDigit(glyphVector(g[k], g[k].w));
+      s += r.d; conf *= r.p;
+      if (k + 1 < g.length) { // aradaki ondalık nokta / virgül
+        const a = g[k], b = g[k + 1], hh = Math.max(a.maxY - a.minY, b.maxY - b.minY) + 1;
+        if (dots.some((d) => d.minX >= a.maxX - 1 && d.maxX <= b.minX + 1 && d.minY > a.minY + hh * 0.55)) s += ',';
+      }
+    }
+    const box = { minX: Math.min(...g.map((c) => c.minX)), maxX: Math.max(...g.map((c) => c.maxX)), minY: Math.min(...g.map((c) => c.minY)), maxY: Math.max(...g.map((c) => c.maxY)) };
+    if (g.length === 1 && (s === '0' || s === '1')) continue;          // küçük daire / kısa çizgiyle karışır
+    if (conf < Math.pow(0.8, g.length) || /^0\d/.test(s)) continue;
+    const value = parseFloat(s.replace(',', '.'));
+    if (!(value > 0)) continue;
+    texts.push({ s, value, box, conf });
+    for (const c of g) usedSet.add(c);
+  }
+  return { texts, used: usedSet };
+}
+
 /* ---------- tüm akış ---------- */
 // gray: düzeltilmiş kağıt görüntüsü (w × h). mmPerPx: ölçek. Dönüş: { ents (mm, Y yukarı), stats }
 export function vectorize(gray, w, h, opts = {}) {
@@ -477,6 +577,14 @@ export function vectorize(gray, w, h, opts = {}) {
   const maxDim = Math.max(w, h);
   const bin = adaptiveThreshold(gray, w, h, Math.max(15, Math.round(maxDim / 14)) | 1, k);
   const cl = cleanComponents(bin, w, h, Math.max(4, maxDim * (opts.minSpan ?? 0.03)), opts.dropBorder !== false);
+  // ölçü rakamları: küçük ve orta boy bileşenlere bakılır; rakam olanlar çizimden çıkarılır
+  let texts = [];
+  if (opts.readNumbers !== false) {
+    for (const c of cl.list) c.w = w;
+    const fn = findNumbers(cl.list, maxDim);
+    for (const c of fn.used) if (c.keep) for (const q of c.px) cl.bin[q] = 0;
+    texts = fn.texts;
+  }
   const sk = pruneSpurs(thin(cl.bin, w, h), w, h, Math.max(6, maxDim * 0.02));
   const paths = tracePaths(sk, w, h).filter((p) => p.length >= 3);
   const s = opts.mmPerPx || 1;
@@ -487,5 +595,6 @@ export function vectorize(gray, w, h, opts = {}) {
     ents.push(...fitPath(pts, tolPx * s, maxDim * s * 2));
   }
   const clean = opts.beautify === false ? ents : beautify(ents, tolPx * s, opts.angDeg ?? 5);
-  return { ents: clean, stats: { comps: cl.comps, kept: cl.kept, paths: paths.length, raw: ents.length, out: clean.length } };
+  const tx = texts.map((t) => ({ s: t.s, value: t.value, conf: t.conf, p: [((t.box.minX + t.box.maxX) / 2) * s, (h - 1 - (t.box.minY + t.box.maxY) / 2) * s], h: (t.box.maxY - t.box.minY + 1) * s, box: t.box }));
+  return { ents: clean, texts: tx, stats: { comps: cl.comps, kept: cl.kept, paths: paths.length, raw: ents.length, out: clean.length, numbers: tx.length } };
 }

@@ -1,7 +1,7 @@
 // Kağıttan çizim: fotoğraf seç -> kağıt köşeleri -> analiz -> 2B varlıklar.
 // Kullanım: openPhotoImport(file, { onDone(ents, info), onCancel() })
-import { toGray, findPaperQuad, warpGray, vectorize } from './photo2d.js?v=20261108o';
-import { arcSpan } from './cad2d-geom.js?v=20261108o';
+import { toGray, findPaperQuad, warpGray, vectorize } from './photo2d.js?v=20261109a';
+import { arcSpan } from './cad2d-geom.js?v=20261109a';
 
 const CSS = `
 #ph { position: fixed; inset: 0; z-index: 40; background: #0b1220; color: #fff; display: flex; flex-direction: column;
@@ -34,12 +34,13 @@ export function openPhotoImport(file, opts = {}) {
       <label class="s">Düzgünleştirme <span id="ph-v2"></span><input type="range" min="0.003" max="0.025" step="0.001" data-s="tol"></label>
       <label class="s">Küçük işaretleri at (yazı, leke) <span id="ph-v3"></span><input type="range" min="0.005" max="0.08" step="0.005" data-s="minSpan"></label>
       <label class="s" style="display:flex;align-items:flex-end;gap:5px"><button data-a="view" style="flex:1">👁 Fotoğraf / sonuç</button></label>
+      <button data-a="num" style="flex:1 0 100%">🔢 Ölçü rakamlarını oku: açık</button>
       <button data-a="run" class="on" style="flex:1 0 100%;padding:12px">🔍 Analiz et</button>
     </div>`;
   document.body.appendChild(root);
   const $ = (id) => root.querySelector('#' + id);
   const cv = root.querySelector('canvas'), g = cv.getContext('2d'), wrap = root.querySelector('.cv');
-  const S = { sens: 0.15, tol: 0.008, minSpan: 0.025 };
+  const S = { sens: 0.15, tol: 0.008, minSpan: 0.025, readNum: true };
   let paper = 'p', quad = null, img = null, src = null, sw = 0, sh = 0, result = null, warped = null, showResult = false, W = 300, H = 300, dpr = 1;
   const setHint = (m, err) => { $('ph-hint').textContent = m; $('ph-hint').classList.toggle('err', !!err); };
   const syncUI = () => {
@@ -47,6 +48,7 @@ export function openPhotoImport(file, opts = {}) {
     $('ph-v1').textContent = Math.round(S.sens * 100) + '%'; $('ph-v2').textContent = (S.tol * 100).toFixed(1) + '%'; $('ph-v3').textContent = (S.minSpan * 100).toFixed(1) + '%';
     for (const k of ['p', 'l', 'f']) root.querySelector(`[data-a="pa-${k}"]`).classList.toggle('on', paper === k);
     root.querySelector('[data-a="ok"]').disabled = !(result && result.ents.length);
+    const nb = root.querySelector('[data-a="num"]'); nb.textContent = '🔢 Ölçü rakamlarını oku: ' + (S.readNum ? 'açık' : 'kapalı'); nb.classList.toggle('on', S.readNum);
   };
 
   // görüntüyü yükle (en fazla 1600 px)
@@ -114,6 +116,14 @@ export function openPhotoImport(file, opts = {}) {
         else if (e.t === 'arc') { const c = P(e.c); g.arc(c[0], c[1], e.r * k * view.s, -e.a0, -(e.a0 + arcSpan(e)), true); }
         g.stroke();
       }
+      // okunan ölçü rakamları
+      g.font = 'bold 13px system-ui'; g.textAlign = 'left'; g.textBaseline = 'bottom';
+      for (const t of result.texts || []) {
+        const b = t.box, x0 = view.ox + b.minX * view.s, y0 = view.oy + b.minY * view.s, w0 = (b.maxX - b.minX + 1) * view.s, h0 = (b.maxY - b.minY + 1) * view.s;
+        g.strokeStyle = '#fb923c'; g.lineWidth = 2; g.strokeRect(x0 - 2, y0 - 2, w0 + 4, h0 + 4);
+        const lab = t.s; const tw = g.measureText(lab).width + 8;
+        g.fillStyle = '#fb923c'; g.fillRect(x0 - 2, y0 - 20, tw, 17); g.fillStyle = '#111'; g.fillText(lab, x0 + 2, y0 - 5);
+      }
       g.fillStyle = '#fbbf24';
       for (const e of result.ents) for (const p of e.t === 'line' ? [e.a, e.b] : []) { const s = P(p); g.beginPath(); g.arc(s[0], s[1], 3, 0, 7); g.fill(); }
       return;
@@ -173,18 +183,18 @@ export function openPhotoImport(file, opts = {}) {
         const gray = warpGray(src.gray, sw, sh, quad, ow, oh);
         const mmW = paper === 'p' ? 210 : paper === 'l' ? 297 : 200;
         const mmPerPx = mmW / ow;
-        const r = vectorize(gray, ow, oh, { mmPerPx, sens: S.sens, tol: S.tol, minSpan: S.minSpan });
+        const r = vectorize(gray, ow, oh, { mmPerPx, sens: S.sens, tol: S.tol, minSpan: S.minSpan, readNumbers: S.readNum });
         // düzeltilmiş görüntüyü göstermek için tuvale aktar
         const c = document.createElement('canvas'); c.width = ow; c.height = oh;
         const id = c.getContext('2d').createImageData(ow, oh);
         for (let i = 0; i < gray.length; i++) { id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = gray[i]; id.data[i * 4 + 3] = 255; }
         c.getContext('2d').putImageData(id, 0, 0);
         warped = { canvas: c, w: ow, h: oh };
-        result = { ents: r.ents, mmPerPx, stats: r.stats };
+        result = { ents: r.ents, texts: r.texts || [], mmPerPx, stats: r.stats };
         showResult = true;
         const n = (t) => r.ents.filter((e) => e.t === t).length;
         setHint(r.ents.length
-          ? `Bulundu: ${n('line')} çizgi, ${n('arc')} yay, ${n('circle')} daire (${Math.round(performance.now() - t0)} ms). Fazla çizgi varsa hassasiyeti düşür / küçük işaret sınırını artır. ${paper === 'f' ? 'Ölçek tahmini: genişlik 200 mm — aktardıktan sonra Ölçekle ile düzelt.' : 'Ölçek A4 kağıda göre.'}`
+          ? `Bulundu: ${n('line')} çizgi, ${n('arc')} yay, ${n('circle')} daire${result.texts.length ? ', ölçü rakamları: ' + result.texts.map((t) => t.s).join(', ') : ''} (${Math.round(performance.now() - t0)} ms). Fazla çizgi varsa hassasiyeti düşür / küçük işaret sınırını artır. ${paper === 'f' ? 'Ölçek tahmini: genişlik 200 mm — aktardıktan sonra Ölçekle ile düzelt.' : 'Ölçek A4 kağıda göre.'}`
           : 'Çizgi bulunamadı. Hassasiyeti artır ya da köşeleri kontrol et.', !r.ents.length);
       } catch (err) { setHint('Analiz hatası: ' + (err && err.message ? err.message : err), true); }
       syncUI(); draw();
@@ -197,7 +207,8 @@ export function openPhotoImport(file, opts = {}) {
     if (!b || !b.dataset.a) return;
     const a = b.dataset.a;
     if (a === 'cancel') { close(); if (opts.onCancel) opts.onCancel(); return; }
-    if (a === 'ok') { if (result && result.ents.length) { close(); opts.onDone && opts.onDone(result.ents, { paper, stats: result.stats }); } return; }
+    if (a === 'ok') { if (result && result.ents.length) { close(); opts.onDone && opts.onDone(result.ents, { paper, stats: result.stats, texts: result.texts }); } return; }
+    if (a === 'num') { S.readNum = !S.readNum; syncUI(); if (result) run(); return; }
     if (a.startsWith('pa-')) { paper = a.slice(3); result = null; showResult = false; syncUI(); draw(); return; }
     if (a === 'auto') { if (src) autoQuad(); return; }
     if (a === 'run') { run(); return; }

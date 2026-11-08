@@ -77,7 +77,8 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - Kağıdın köşeleri otomatik bulunur (sarı noktalar sürüklenerek düzeltilir, sürüklerken büyüteç), eğik fotoğraf düz kağıda çevrilir (A4 dikey / yatay / serbest)
 - Gölge temizlenir (uyarlamalı eşik), küçük işaretler ve el yazısı rakamlar ayıklanır, kalem izi inceltilir, çizgiler takip edilip **düz çizgi / yay / daire** olarak tanınır; yataya / dikeye yakın çizgiler düzlenir, yakın uçlar birleştirilir, yayın teğet devamı ve kılçıklar temizlenir
 - Sonuç 2B çizime normal varlık olarak gelir (düzenlenebilir). **📏 Ölçekle**: bir çizgiye dokunup gerçek ölçüsünü yazınca bütün çizim ölçeklenir. **🧊 3B** düğmesi kapalı şekilleri kalınlık verip 3B parçaya çevirir (içteki daire delik olur)
-- Sınırlar: el yazısı ölçü rakamları okunmaz (ölçü Ölçekle ile verilir); ölçü okları / taramalar çizgi olarak gelebilir, silinmesi gerekir; kareli / çizgili kağıtta hassasiyet düşürülmeli
+- **🔢 Ölçü rakamlarını oku** (açık gelir): kağıda elle yazılmış ölçü rakamları telefonda çalışan küçük bir yapay zekâ ile okunur (turuncu kutuyla gösterilir), çizgi olarak gelmez. Her rakam en yakın çizgiye (uzunluk), daireye (çap) veya yaya (yarıçap) eşlenir; listeden yanlış olan kapatılır, **Ölçüleri uygula** ile en uzun çizgi ölçeği belirler, diğerleri esnetilir, ölçü yazıları eklenir
+- Sınırlar: rakamlar yatay ve çizgiye değmeden yazılmalı (değen rakam okunmayabilir); Ø / R işaretleri ve harfler okunmaz; eşleşmeleri kontrol et. Ölçü okları / taramalar çizgi olarak gelebilir, silinmesi gerekir; kareli / çizgili kağıtta hassasiyet düşürülmeli
 
 **2B Çizim — AutoCAD tarzı (📝 2B Çizim düğmesi)**
 - Ayrı tam ekran çizim alanı; telefonda otomatik saklanır, geri al / ileri al

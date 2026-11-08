@@ -1,12 +1,12 @@
 // 2B Çizim (AutoCAD tarzı) — tam ekran çizim alanı.
 // Kullanım: openCad2D({ onExtrude(draw), onClose() })  draw: kroki biçimi (sketch.js / validateDraw)
-import { fmtNum } from './logic.js?v=20261108o';
-import { validateDraw } from './sketch.js?v=20261108o';
+import { fmtNum } from './logic.js?v=20261109a';
+import { validateDraw } from './sketch.js?v=20261109a';
 import {
   arcFrom3, trimEntity, extendEntity, offsetEntity, filletLines, transformEntity, moveFn, rotateFn, mirrorFn,
-  stretchToLength, setRadius, snapPoints, nearestOn, closedLoops, toDXF, parseDXF, dimLine, dimParts, dimText, arcSpan, arcEnds, entBBox, dist, normA, ACI,
-} from './cad2d-geom.js?v=20261108o';
-import { openPhotoImport } from './photoimport.js?v=20261108o';
+  stretchToLength, setRadius, matchDims, applyDims, snapPoints, nearestOn, closedLoops, toDXF, parseDXF, dimLine, dimParts, dimText, arcSpan, arcEnds, entBBox, dist, normA, ACI,
+} from './cad2d-geom.js?v=20261109a';
+import { openPhotoImport } from './photoimport.js?v=20261109a';
 
 const KEY = 'cizim:2d';
 const CSS = `
@@ -63,6 +63,7 @@ const HINTS = {
   mirror: ['Ayna ekseninin ilk noktası.', 'Ayna ekseninin ikinci noktası.'],
   erase: ['Silinecek varlığa dokun.'],
   setdim: ['Ölçüsünü vereceğin çizgiye (değişecek ucuna yakın), daireye ya da yaya dokun.', 'Ölçüyü yaz, "Uygula"ya bas. Çizgide, dokunduğun uç tarafındaki her şey birlikte kayar (esnet).'],
+  autodim: ['Okunan ölçüleri kontrol et: turuncu çizgi hangi yazının hangi çizgiye gittiğini gösterir.'],
   scale: ['Ölçüsünü bildiğin bir çizgiye / daireye dokun.', 'Gerçek ölçüsünü yaz ve "Ölçekle"ye bas: bütün çizim o oranda büyür / küçülür.'],
 };
 const LT_DASH = { CONTINUOUS: [], HIDDEN: [6, 4], CENTER: [14, 4, 3, 4] };
@@ -99,6 +100,7 @@ export function openCad2D(opts = {}) {
   let pts = [];               // etkin komutun topladığı noktalar
   let pickA = null;           // ofset / radyus için seçilen varlık
   let sel = new Set();        // seçili id'ler
+  let auto = null;           // fotoğraftan okunan ölçüler: { added, tents, texts, matches }
   let osnap = true, ortho = false, grid = 1, clearArm = false;
   let aim = null;             // { p, k } parmak altındaki (yakalanmış) nokta
   const F = { dv: '', adddim: '1', real: '', kf: '2', len: '', ang: '0', x: '0', y: '0', d: '20', w: '40', h: '20', off: '5', rad: '5', rot: '90', txt: 'Yazı', th: '5', dx: '0', dy: '0', thick: '10', keep: '1', nl: '' };
@@ -269,6 +271,14 @@ export function openCad2D(opts = {}) {
       strokeEnt(e, sel.has(e.id) ? '#fbbf24' : col, sel.has(e.id) ? 2.6 : 1.6, (LT_DASH[L.lt] || []));
     }
     if (pickA) strokeEnt(pickA, '#f97316', 3.5);
+    if (tool === 'autodim' && auto) for (const m of auto.matches) {
+      const e = auto.added[m.ei], t = auto.texts[m.ti];
+      if (!e || !doc.ents.includes(e)) continue;
+      strokeEnt(e, m.on ? '#fb923c' : '#64748b', 3);
+      const tp = toS(t.p), np = toS(nearestOn(e, t.p).p);
+      g.strokeStyle = m.on ? '#fb923c' : '#64748b'; g.lineWidth = 1.5; g.setLineDash([4, 3]);
+      g.beginPath(); g.moveTo(...tp); g.lineTo(...np); g.stroke(); g.setLineDash([]);
+    }
     for (const e of previewEnts()) strokeEnt(e, '#38bdf8', 1.6, [5, 4]);
     // toplanan noktalar
     for (const p of pts) { const s = toS(p); g.fillStyle = '#fbbf24'; g.beginPath(); g.arc(s[0], s[1], 4, 0, 7); g.fill(); }
@@ -477,6 +487,20 @@ export function openCad2D(opts = {}) {
       else if (tool === 'text') h += In('Yazı', 'txt', 'text') + In('Yükseklik', 'th');
       else if (tool === 'offset') h += In('Ofset mesafesi', 'off');
       else if (tool === 'fillet') h += In('Yarıçap (0 = keskin)', 'rad');
+      else if (tool === 'autodim') {
+        if (!auto || !auto.matches.length) h += '<div class="lb">Eşlenecek ölçü yok.</div>';
+        else {
+          h += '<div class="lb">Okunan ölçüler (dokun = aç / kapat). İlk ve en uzun çizgi ölçeği belirler, diğerleri esnetilir.</div>';
+          auto.matches.forEach((m, i) => {
+            const e = auto.added[m.ei];
+            const what = m.kind === 'len' ? 'çizgi' : m.kind === 'dia' ? 'daire (çap)' : 'yay (yarıçap)';
+            h += B((m.on ? '✓ ' : '✕ ') + auto.texts[m.ti].s + ' → ' + what + ' (şu an ' + fmt(m.kind === 'len' ? dist(e.a, e.b) : m.kind === 'dia' ? 2 * e.r : e.r) + ')', 'ad-' + i, m.on);
+          });
+          const un = auto.texts.filter((t, i) => !auto.matches.some((m) => m.ti === i));
+          if (un.length) h += '<div class="lb" style="color:#fca5a5">Eşlenemeyen: ' + un.map((t) => t.s).join(', ') + ' (Ölçü ver ile elle girebilirsin)</div>';
+          h += B('✓ Ölçüleri uygula', 'ad-apply') + B('Vazgeç', 'ad-cancel');
+        }
+      }
       else if (tool === 'setdim') h += pickA ? '<div class="lb">Şu an: ' + fmt(pickA.t === 'line' ? dist(pickA.a, pickA.b) : pickA.t === 'circle' ? 2 * pickA.r : pickA.r) + ' mm (' + (pickA.t === 'line' ? 'uzunluk' : pickA.t === 'circle' ? 'çap' : 'yarıçap') + ')</div>' +
         In(pickA.t === 'line' ? 'Uzunluk (mm)' : pickA.t === 'circle' ? 'Çap (mm)' : 'Yarıçap (mm)', 'dv') + B('✓ Uygula', 'in-setdim') + B('Ölçü yazısı ekle: ' + (F.adddim === '1' ? 'evet' : 'hayır'), 'tg-adddim', F.adddim === '1') : '';
       else if (tool === 'scale') h += pickA ? '<div class="lb">Şu an: ' + fmt(scaleRef(pickA)) + ' mm (' + (pickA.t === 'line' ? 'uzunluk' : 'çap') + ')</div>' + In('Gerçek ölçü (mm)', 'real') + B('📏 Ölçekle', 'in-scale') : In('ya da katsayı (ör. 2 = iki kat)', 'kf') + B('Katsayıyla ölçekle', 'in-scalek');
@@ -651,6 +675,40 @@ export function openCad2D(opts = {}) {
     if (a === 'f-open') { fileIn.click(); return; }
     if (a === 'f-3d') { to3D(); return; }
     if (a === 'f-photo') { photoIn.click(); return; }
+    if (a.startsWith('ad-') && auto) {
+      if (a === 'ad-cancel') { auto = null; tool = 'setdim'; refresh(); return; }
+      if (a === 'ad-apply') {
+        const ms = auto.matches.filter((m) => m.on);
+        if (!ms.length) { setHint('Uygulanacak ölçü seçili değil.', true); return; }
+        commit();
+        // eşleşen varlıkların doc içindeki yerleri
+        const idx = auto.added.map((e) => doc.ents.indexOf(e));
+        const sub = idx.map((i) => doc.ents[i]);
+        const out = applyDims(doc.ents, ms.map((m) => ({ ...m, ei: idx[m.ei] })));
+        doc.ents = out;
+        // ölçü çizgileri: eşlenen çizgilere ölçü ekle; okunan yazıları kaldır
+        const tIds = new Set(auto.tents.filter((t, i) => ms.some((m) => m.ti === i)).map((t) => t.id));
+        doc.ents = doc.ents.filter((e) => !tIds.has(e.id));
+        const bbs = doc.ents.map(entBBox).filter(Boolean);
+        const size = (Math.max(...bbs.map((b) => b.maxX)) - Math.min(...bbs.map((b) => b.minX))) || 100;
+        const cx = (Math.min(...bbs.map((b) => b.minX)) + Math.max(...bbs.map((b) => b.maxX))) / 2, cy = (Math.min(...bbs.map((b) => b.minY)) + Math.max(...bbs.map((b) => b.maxY))) / 2;
+        const hh = Math.max(2.5, size * 0.025), ly = doc.layers.some((l) => l.name === 'Ölçü') ? 'Ölçü' : doc.cur;
+        for (const m of ms) {
+          const e = doc.ents.find((x) => x.id === sub[m.ei].id);
+          if (!e) continue;
+          if (e.t === 'line') {
+            const d = [e.b[0] - e.a[0], e.b[1] - e.a[1]], L = Math.hypot(...d), n = [-d[1] / L, d[0] / L];
+            const mm = [(e.a[0] + e.b[0]) / 2 - cx, (e.a[1] + e.b[1]) / 2 - cy];
+            addEnt({ t: 'dim', a: e.a.slice(), b: e.b.slice(), off: (mm[0] * n[0] + mm[1] * n[1] >= 0 ? 1 : -1) * Math.max(hh * 3, size * 0.06), h: hh, layer: ly });
+          } else addEnt({ t: 'text', p: [e.c[0] + e.r * 0.75, e.c[1] + e.r * 0.75], h: hh, s: (e.t === 'circle' ? 'Ø' + fmt(2 * e.r) : 'R' + fmt(e.r)), layer: ly });
+        }
+        auto = null; tool = 'setdim';
+        changed(); fit(); refresh();
+        setHint(ms.length + ' ölçü uygulandı. Kalanları 📐 Ölçü ver ile düzeltebilir, 🧊 3B ile parçaya çevirebilirsin.');
+        return;
+      }
+      const i = +a.slice(3); if (auto.matches[i]) { auto.matches[i].on = !auto.matches[i].on; refresh(); } return;
+    }
     if (a === 'tg-adddim') { F.adddim = F.adddim === '1' ? '0' : '1'; refresh(); return; }
     if (a === 'in-setdim') {
       const v = num('dv'), e = pickA;
@@ -723,9 +781,21 @@ export function openCad2D(opts = {}) {
     openPhotoImport(f, {
       onDone(ents, info) {
         commit();
-        for (const en of ents) addEnt({ ...en });
+        const added = ents.map((en) => addEnt({ ...en }));
+        const texts = info.texts || [];
+        if (texts.length && !doc.layers.some((l) => l.name === 'Okunan ölçü')) doc.layers.push({ name: 'Okunan ölçü', aci: 30, lt: 'CONTINUOUS' });
+        const tents = texts.map((t) => addEnt({ t: 'text', p: [t.p[0] - t.h * 0.3 * t.s.length, t.p[1] - t.h / 2], h: t.h, s: t.s, layer: 'Okunan ölçü' }));
         changed(); fit();
-        tab = 'edit'; tool = 'scale'; reset();
+        tab = 'edit'; reset();
+        if (texts.length) {
+          const m = matchDims(added, texts);
+          auto = { added, tents, texts, matches: m.map((x) => ({ ...x, on: true })) };
+          tool = 'autodim';
+          refresh();
+          setHint(ents.length + ' varlık ve ' + texts.length + ' ölçü rakamı (' + texts.map((t) => t.s).join(', ') + ') okundu. ' + m.length + ' tanesi çizgilere eşlendi: kontrol et, yanlışı kapat, "Ölçüleri uygula"ya bas.');
+          return;
+        }
+        tool = 'scale';
         refresh();
         setHint(ents.length + ' varlık eklendi. Ölçüyü düzeltmek için ölçüsünü bildiğin bir çizgiye dokun (Ölçekle). Fazlalıkları Sil / Kırp ile temizle; bitince 🧊 3B.' + (info.paper === 'f' ? ' (Serbest kağıt: ölçek tahmini.)' : ''));
       },

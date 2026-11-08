@@ -13,11 +13,11 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261108o';
-import { openSketch } from './sketch.js?v=20261108o';
-import { to3MF, toSTEP } from './export3d.js?v=20261108o';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261108o';
-import { openCad2D } from './cad2d.js?v=20261108o';
+} from './logic.js?v=20261109a';
+import { openSketch } from './sketch.js?v=20261109a';
+import { to3MF, toSTEP } from './export3d.js?v=20261109a';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109a';
+import { openCad2D } from './cad2d.js?v=20261109a';
 
 const APP_VER = '20261108o'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);

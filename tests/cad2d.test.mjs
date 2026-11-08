@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {
   arcFrom3, intersect, trimEntity, extendEntity, offsetEntity, filletLines, transformEntity, rotateFn, mirrorFn, moveFn,
-  stretchToLength, setRadius, snapPoints, closedLoops, toDXF, parseDXF, arcSpan, arcEnds, dist, normA,
+  stretchToLength, setRadius, matchDims, applyDims, snapPoints, closedLoops, toDXF, parseDXF, arcSpan, arcEnds, dist, normA,
 } from '../cad2d-geom.js';
 
 let fail = 0;
@@ -137,6 +137,19 @@ t('setRadius: yay yarıçapı değişince bağlı çizgi ucu takip eder', () => 
   const arc = { t: 'arc', c: [0, 0], r: 10, a0: 0, a1: Math.PI / 2 }, l = L([10, 0], [10, -20]);
   const o = setRadius([arc, l], arc, 15);
   assert.equal(o[0].r, 15); near(o[1].a, [15, 0]);
+});
+t('matchDims + applyDims: el çiziminden okunan 600, 300 ve Ø100', () => {
+  // kağıtta orantısız çizilmiş dikdörtgen (126 × 70) ve delik (çap 20)
+  const ents = [L([0, 0], [126, 0]), L([126, 0], [126, 70]), L([126, 70], [0, 70]), L([0, 70], [0, 0]), { t: 'circle', c: [40, 35], r: 10 }];
+  const texts = [{ value: 600, p: [63, -6], h: 5 }, { value: 300, p: [133, 35], h: 5 }, { value: 100, p: [40, 50], h: 5 }];
+  const m = matchDims(ents, texts);
+  assert.equal(m.length, 3);
+  assert.deepEqual(m.map((x) => [x.ti, x.ei, x.kind]).sort(), [[0, 0, 'len'], [1, 1, 'len'], [2, 4, 'dia']].sort());
+  const o = applyDims(ents, m);
+  assert.ok(Math.abs(dist(o[0].a, o[0].b) - 600) < 1e-6);
+  assert.ok(Math.abs(dist(o[1].a, o[1].b) - 300) < 1e-6);
+  assert.ok(Math.abs(o[4].r - 50) < 1e-9);
+  near(o[2].a, [600, 300]); near(o[3].a, [0, 300]);   // dikdörtgen bozulmadı
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
