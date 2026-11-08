@@ -1033,19 +1033,24 @@ function renderPanel() {
   } else if (tab === 'view') {
     const sec = section.on ? modelRange(section.axis) : [0, 1];
     const rg = Math.max(sec[1] - sec[0], 0.1);
-    body = btn('Üst', 'view-top') + btn('Ön', 'view-front') + btn('Yan', 'view-side') + btn('İzo', 'view-iso') + btn('Sığdır', 'fit') +
-      btn('Ortografik: ' + (settings.ortho ? 'açık' : 'kapalı'), 'ortho', settings.ortho) +
-      btn('📏 Ölçüm', 'measure', measure.on) +
-      btn('Kenar çizgisi: ' + (settings.edges === false || edgesBroken ? 'kapalı' : 'açık'), 'edges', settings.edges !== false && !edgesBroken) +
-      btn('Etiket yok', 'dim-off', settings.dim === 'off') + btn('Model ölçüsü', 'dim-model', settings.dim === 'model') + btn('Parça ölçüsü', 'dim-part', settings.dim === 'part') +
+    body = '<div class="lbl h">Bakış yönü</div>' +
+      btn('Üstten', 'view-top') + btn('Önden', 'view-front') + btn('Yandan', 'view-side') + btn('İzometrik', 'view-iso') + btn('Modele sığdır', 'fit') +
+      '<div class="lbl h">Ekran</div>' +
+      btn('Perspektif: ' + (settings.ortho ? 'yok (ortografik)' : 'var'), 'ortho', settings.ortho) +
+      btn('📏 Ölçüm aracı: ' + (measure.on ? 'açık' : 'kapalı'), 'measure', measure.on) +
+      btn('Kenar çizgileri: ' + (settings.edges === false || edgesBroken ? 'kapalı' : 'açık'), 'edges', settings.edges !== false && !edgesBroken) +
+      '<div class="lbl h">Modelin üstündeki ölçü yazıları</div>' +
+      btn('Yok', 'dim-off', settings.dim === 'off') + btn('Tüm model', 'dim-model', settings.dim === 'model') + btn('Her parça', 'dim-part', settings.dim === 'part') +
+      '<div class="lbl h">Ölçü birimi</div>' +
       btn('mm', 'unit-mm', settings.unit === 'mm') + btn('cm', 'unit-cm', settings.unit === 'cm') + btn('inç', 'unit-in', settings.unit === 'in') +
+      '<div class="lbl h">Kesit (modeli ortadan kesip içini göster)</div>' +
       btn('Kesit: ' + (section.on ? 'açık' : 'kapalı'), 'sec-toggle', section.on) +
       (section.on
-        ? btn('X', 'sec-x', section.axis === 'x') + btn('Y', 'sec-y', section.axis === 'y') + btn('Z', 'sec-z', section.axis === 'z') + btn('Ters çevir', 'sec-flip', section.flip) +
+        ? btn('X ekseni', 'sec-x', section.axis === 'x') + btn('Y ekseni', 'sec-y', section.axis === 'y') + btn('Z ekseni', 'sec-z', section.axis === 'z') + btn('Ters çevir', 'sec-flip', section.flip) +
           `<label class="f w2" style="flex:1 0 100%"><span data-sl>Kesit konumu: ${lenText(section.pos)}</span>` +
           `<input type="range" data-s="pos" min="${sec[0]}" max="${sec[1]}" step="${rg / 200}" value="${section.pos}"></label>`
         : '');
-    hint = 'Ölçüm: açıkken iki noktaya dokun (köşelere yapışır). Kesit: modeli ortadan kes.';
+    hint = 'Ölçüm aracı açıkken modelde iki noktaya dokun, aradaki mesafe yazılır (köşelere yapışır). Perspektif: kapalıyken (ortografik) uzaktaki şeyler küçülmez, ölçü almak için iyidir.';
   } else {
     const fl = fieldsFor(p);
     body = fl.map(([l, k, kd]) => field(l, k, p, kd)).join('') + (p.type === 'sketch' ? btn('✎ Krokiyi düzenle', 'sketch-edit') : '');
@@ -1053,6 +1058,7 @@ function renderPanel() {
     hint = 'Ölçüler (' + settings.unit + ')' + (p.type === 'box' || p.type === 'cylinder' ? '. Yuvarlama ve pah birlikte kullanılırsa yuvarlama geçerli olur. Eğim: üst yüz, her yönden yükseklik × tan(eğim) kadar daralır (döküm eğimi).' : '');
   }
   $('tabbody').innerHTML = body;
+  $('tabbody').classList.toggle('grid', tab === 'view');
   $('tabhint').textContent = hint;
   $('b-move').classList.toggle('on', settings.move);
 }
