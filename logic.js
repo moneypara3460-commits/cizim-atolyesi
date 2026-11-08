@@ -1052,7 +1052,9 @@ export const PROFILES = {
   b42: { name: 'Boru Ø42,4×2,6', kind: 'round', w: 42.4, h: 42.4, t: 2.6 },
   b48: { name: 'Boru Ø48,3×3', kind: 'round', w: 48.3, h: 48.3, t: 3 },
 };
-export const FRAME_DEFAULTS = { fr: 'table', pf: 'k40', fw: 1200, fd: 700, fh: 750, fs: 150, fn: 3 };
+export const FRAME_DEFAULTS = { fr: 'table', pf: 'k40', fw: 1200, fd: 700, fh: 750, fs: 150, fn: 3, fj: 'butt' };
+// gönye yapılabilir mi: kare / yuvarlak profil ve pano ya da kutu çerçeve
+export const miterOK = (p) => { const pr = PROFILES[p.pf] || PROFILES.k40; return (p.fr === 'rect' || p.fr === 'box') && (pr.kind === 'round' || pr.w === pr.h); };
 // profil kesit alanı (mm²)
 export function profileArea(pr) {
   if (pr.kind === 'round') { const r = pr.w / 2, ri = Math.max(r - pr.t, 0); return Math.PI * (r * r - ri * ri); }
@@ -1071,6 +1073,24 @@ export function frameMembers(p) {
     for (const s of [-1, 1]) out.push({ a: [s * (W / 2 - lx / 2), y, -(D / 2 - lz)], b: [s * (W / 2 - lx / 2), y, D / 2 - lz], u: [1, 0, 0], w: lx, h: pr.w, role: 'Kuşak (derinlik)' });
   };
   const rh = pr.w;
+  if (p.fj === 'miter' && miterOK(p)) {
+    // gönye: köşelerde 45° kesim. miter = { ax: kesitte gönye ekseni (0 = u, 1 = v), sign: dışa bakan yön }
+    const s = pr.w, M = (o) => out.push(o);
+    if (p.fr === 'rect') {
+      for (const sg of [-1, 1]) M({ a: [sg * (W / 2 - s / 2), s / 2, 0], b: [sg * (W / 2 - s / 2), H - s / 2, 0], u: [1, 0, 0], w: s, h: s, role: 'Dikme', miter: { ax: 0, sign: sg } });
+      // yatay: u = +Z, v = d × u = −Y → yukarısı v'nin eksisi
+      M({ a: [-(W / 2 - s / 2), s / 2, 0], b: [W / 2 - s / 2, s / 2, 0], u: [0, 0, 1], w: s, h: s, role: 'Yatay', miter: { ax: 1, sign: 1 } });
+      M({ a: [-(W / 2 - s / 2), H - s / 2, 0], b: [W / 2 - s / 2, H - s / 2, 0], u: [0, 0, 1], w: s, h: s, role: 'Yatay', miter: { ax: 1, sign: -1 } });
+      return { members: out, W, D: s, H, pr };
+    }
+    for (const y of [s / 2, H - s / 2]) {
+      const role = y < H / 2 ? 'Alt kuşak' : 'Üst kuşak';
+      for (const sz of [-1, 1]) M({ a: [-(W / 2 - s / 2), y, sz * (D / 2 - s / 2)], b: [W / 2 - s / 2, y, sz * (D / 2 - s / 2)], u: [0, 0, 1], w: s, h: s, role: role + ' (en)', miter: { ax: 0, sign: sz } });
+      for (const sx of [-1, 1]) M({ a: [sx * (W / 2 - s / 2), y, -(D / 2 - s / 2)], b: [sx * (W / 2 - s / 2), y, D / 2 - s / 2], u: [1, 0, 0], w: s, h: s, role: role + ' (derinlik)', miter: { ax: 0, sign: sx } });
+    }
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) M({ a: [sx * (W / 2 - s / 2), s, sz * (D / 2 - s / 2)], b: [sx * (W / 2 - s / 2), H - s, sz * (D / 2 - s / 2)], u: [1, 0, 0], w: s, h: s, role: 'Dikme' });
+    return { members: out, W, D, H, pr };
+  }
   if (p.fr === 'rect') {
     for (const s of [-1, 1]) out.push({ a: [s * (W / 2 - lx / 2), 0, 0], b: [s * (W / 2 - lx / 2), H, 0], u: [1, 0, 0], w: lx, h: lz, role: 'Dikme' });
     for (const y of [rh / 2, H - rh / 2]) out.push({ a: [-(W / 2 - lx), y, 0], b: [W / 2 - lx, y, 0], u: [0, 0, 1], w: lz, h: pr.w, role: 'Yatay' });
@@ -1102,14 +1122,17 @@ function memberTris(m, pr) {
     outer = [[-a, -b], [a, -b], [a, b], [-a, b]];
     inner = [[-ai, -bi], [ai, -bi], [ai, bi], [-ai, bi]];
   }
-  const at = (base, [x, y]) => v3add(base, v3add(v3mul(u, x), v3mul(v, y)));
+  // gönyede uç, kesitteki konuma göre ileri / geri kayar (45°: kayma = dışa doğru uzaklık)
+  const sh = (q) => (m.miter ? m.miter.sign * q[m.miter.ax] : 0);
+  const atA = (q) => v3add(m.a, v3add(v3mul(d, -sh(q)), v3add(v3mul(u, q[0]), v3mul(v, q[1]))));
+  const atB = (q) => v3add(m.b, v3add(v3mul(d, sh(q)), v3add(v3mul(u, q[0]), v3mul(v, q[1]))));
   const P = [];
   const tri = (a, b, c) => P.push(...a, ...b, ...c);
   const n = outer.length;
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
-    const o0 = at(m.a, outer[i]), o1 = at(m.a, outer[j]), O0 = at(m.b, outer[i]), O1 = at(m.b, outer[j]);
-    const i0 = at(m.a, inner[i]), i1 = at(m.a, inner[j]), I0 = at(m.b, inner[i]), I1 = at(m.b, inner[j]);
+    const o0 = atA(outer[i]), o1 = atA(outer[j]), O0 = atB(outer[i]), O1 = atB(outer[j]);
+    const i0 = atA(inner[i]), i1 = atA(inner[j]), I0 = atB(inner[i]), I1 = atB(inner[j]);
     tri(o0, o1, O1); tri(o0, O1, O0);          // dış yüz
     tri(i0, I1, i1); tri(i0, I0, I1);          // iç yüz (ters)
     tri(o0, i1, o1); tri(o0, i0, i1);          // alt halka
@@ -1121,7 +1144,7 @@ function memberTris(m, pr) {
 }
 // { pos (ortalanmış üçgenler), h, members, cut:[{ role, len, qty }], totalLen (mm), kg (çelik) }
 export function frameCalc(p) {
-  const key = JSON.stringify(['fr', p.fr, p.pf, p.fw, p.fd, p.fh, p.fs, p.fn]);
+  const key = JSON.stringify(['fr', p.fr, p.pf, p.fw, p.fd, p.fh, p.fs, p.fn, p.fj]);
   return memo(key, () => {
     const F = frameMembers(p);
     const parts = F.members.map((m) => memberTris(m, F.pr));
@@ -1131,15 +1154,17 @@ export function frameCalc(p) {
     for (const a of parts) { all.set(a, o); o += a.length; }
     for (let i = 1; i < all.length; i += 3) all[i] -= F.H / 2;           // y: 0..H -> -H/2..H/2 (x, z zaten ortada)
     const groups = new Map();
-    let totalLen = 0;
+    let totalLen = 0, axisLen = 0;
     for (const m of F.members) {
-      const L = Math.hypot(m.b[0] - m.a[0], m.b[1] - m.a[1], m.b[2] - m.a[2]);
-      totalLen += L;
-      const k = m.role.replace(/ \(.*\)$/, '') + '|' + Math.round(L * 10) / 10;
-      const g = groups.get(k) || { role: m.role, len: Math.round(L * 10) / 10, qty: 0 };
+      const Lc = Math.hypot(m.b[0] - m.a[0], m.b[1] - m.a[1], m.b[2] - m.a[2]);
+      const L = m.miter ? Lc + (m.miter.ax === 0 ? m.w : m.h) : Lc;     // gönyede uzun kenar boyu
+      totalLen += L; axisLen += Lc;
+      const cut = m.miter ? '45°/45°' : '90°';
+      const k = m.role.replace(/ \(.*\)$/, '') + '|' + Math.round(L * 10) / 10 + '|' + cut;
+      const g = groups.get(k) || { role: m.role.replace(/ \(.*\)$/, ''), len: Math.round(L * 10) / 10, qty: 0, cut };
       g.qty++; groups.set(k, g);
     }
-    const kg = profileArea(F.pr) * totalLen * 7.85e-6;
+    const kg = profileArea(F.pr) * axisLen * 7.85e-6;
     return { pos: all, h: F.H, members: F.members, cut: [...groups.values()].sort((a, b) => b.len - a.len), totalLen, kg, pr: F.pr };
   });
 }

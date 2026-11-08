@@ -2,7 +2,7 @@
 // Adımlar: kağıt köşeleri -> perspektif düzeltme -> uyarlamalı eşikleme (gölge temizliği) -> küçük lekeleri atma
 //          -> inceltme (iskelet) -> yol takibi -> çizgi / yay / daire uydurma -> düzgünleştirme (yatay/dikey, uç birleştirme)
 // Saf fonksiyonlar; DOM gerektirmez (tests/photo2d.test.mjs).
-import { arcFrom3 } from './cad2d-geom.js?v=20261108m';
+import { arcFrom3 } from './cad2d-geom.js?v=20261108n';
 
 const TAU = Math.PI * 2;
 const normA = (a) => { a %= TAU; return a < 0 ? a + TAU : a; };

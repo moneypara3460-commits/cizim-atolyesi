@@ -4,7 +4,7 @@ import {
   parseVoice, normalize, History, toSTLBinary, newPart, heightOf,
   UNITS, toUnit, fromUnit, fmtNum, snap, dist3,
   circlePts, rectPts, bboxPts, polyArea, sketchFromDraw, sketchToDraw, sketchHeight, revolveProfile,
-  chamferBoxPoints, cylinderProfile, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sectionProps,
+  chamferBoxPoints, cylinderProfile, miterOK, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sectionProps,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
   VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, FRAME_DEFAULTS, PROFILES, profileArea, frameCalc, SHEET_DEFAULTS, SHEET_PRESETS, sheetCalc, sheetFlatLines, solveCons, consError, freedom, fixConsAfterRemove, SWEEP_DEFAULTS, LOFT_DEFAULTS, filletPath, arcPath, helixPath, sweepTris, loftTris, signedVolume, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
@@ -651,6 +651,18 @@ t('minBendRadius: çelik sac ~1T, ahşap çok daha büyük; boru en az 1,5D', ()
   assert.equal(minBendRadius(matById('celik'), 2).R, 2);
   assert.ok(minBendRadius(matById('ahsap'), 2).R > 100);
   assert.ok(minTubeCLR(matById('celik'), 20).R >= 30);
+});
+t('gönye: pano ve kutu çerçevede uzun kenar boyu, hacim aynı, dış ölçü korunur', () => {
+  const r = frameCalc({ ...FRAME_DEFAULTS, fr: 'rect', fj: 'miter' });
+  assert.ok(r.cut.every((g) => g.cut === '45°/45°'));
+  assert.ok(r.cut.some((g) => g.len === 1200) && r.cut.some((g) => g.len === 750));
+  const b = frameCalc({ ...FRAME_DEFAULTS, fr: 'box', fj: 'miter' });
+  assert.ok(Math.abs(signedVolume(b.pos) - signedVolume(frameCalc({ ...FRAME_DEFAULTS, fr: 'box' }).pos)) < 1);
+  assert.ok(b.cut.some((g) => g.role === 'Dikme' && g.len === 670 && g.cut === '90°'));
+  assert.equal(miterOK({ fr: 'table', pf: 'k40' }), false);
+  assert.equal(miterOK({ fr: 'rect', pf: 'd4020' }), false);
+  assert.equal(miterOK({ fr: 'box', pf: 'b34' }), true);
+  assert.ok(frameCalc({ ...FRAME_DEFAULTS, fr: 'rect', pf: 'd4020', fj: 'miter' }).cut.every((g) => g.cut === '90°'));
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
