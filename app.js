@@ -12,9 +12,10 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js';
-import { openSketch } from './sketch.js';
+} from './logic.js?v=20261108a';
+import { openSketch } from './sketch.js?v=20261108a';
 
+const APP_VER = '20261108a'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -1050,7 +1051,7 @@ function renderPanel() {
           `<label class="f w2" style="flex:1 0 100%"><span data-sl>Kesit konumu: ${lenText(section.pos)}</span>` +
           `<input type="range" data-s="pos" min="${sec[0]}" max="${sec[1]}" step="${rg / 200}" value="${section.pos}"></label>`
         : '');
-    hint = 'Ölçüm aracı açıkken modelde iki noktaya dokun, aradaki mesafe yazılır (köşelere yapışır). Perspektif: kapalıyken (ortografik) uzaktaki şeyler küçülmez, ölçü almak için iyidir.';
+    hint = 'Ölçüm aracı açıkken modelde iki noktaya dokun, aradaki mesafe yazılır (köşelere yapışır). Perspektif: kapalıyken (ortografik) uzaktaki şeyler küçülmez, ölçü almak için iyidir. Sürüm: ' + APP_VER;
   } else {
     const fl = fieldsFor(p);
     body = fl.map(([l, k, kd]) => field(l, k, p, kd)).join('') + (p.type === 'sketch' ? btn('✎ Krokiyi düzenle', 'sketch-edit') : '');
