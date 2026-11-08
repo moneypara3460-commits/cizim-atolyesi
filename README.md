@@ -45,6 +45,11 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **Delik ölçüleri**: eksene paralel yuvarlak delikler için `Ø10`, kare delikler için `□ 8 × 6` yazısı ve eksen çizgileri; delik, eksenine bakan görünüşte gösterilir
 - Sayfadaki **✂ Kesit** düğmesi sağ alttaki izometriği A-A kesitiyle değiştirir: X ekseninde kesilir (Kesit sekmesi açık ve X seçiliyse onun konumunda, değilse ortada), kesilen yüzey 45° taranır, önden görünüşte kesit düzlemi işaretlenir
 
+**Hesap ve dışa aktarma (Hesap sekmesi)**
+- Malzeme seç (PLA, ABS, PETG, naylon, ahşap, alüminyum, çelik, paslanmaz, pirinç, bakır, titanyum): hacim, yüzey alanı, **ağırlık**, ağırlık merkezi, genel ölçü. Tam dolu katı varsayılır
+- **Parça listesi (CSV)**: Excel'de açılır (Türkçe, noktalı virgül ayraçlı)
+- **DXF**: ön / yan / üst görünüş, mm. Katmanlar: GORUNEN (düz), GIZLI (kesik), EKSEN (delik eksenleri). AutoCAD, FreeCAD, LibreCAD vb. açar. STEP yok (uygulama ağ tabanlı çalışır, gerçek katı çekirdeği değil)
+
 **Tek kenara pah / yuvarlama (Kenar sekmesi)**
 - Düz bir kutunun kenarına dokun (sarı çizgi seçileni gösterir), ölçüyü yaz, "Pah kır" ya da "Yuvarla". İşlem kenara oyuk parçası(ları) ekler; Parça listesinden silersen geri gelir. Yalnızca düz kutu parçalarında çalışır
 

@@ -11,11 +11,11 @@ import {
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
-  packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261108a';
-import { openSketch } from './sketch.js?v=20261108a';
+  MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
+} from './logic.js?v=20261108b';
+import { openSketch } from './sketch.js?v=20261108b';
 
-const APP_VER = '20261108a'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261108b'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -887,7 +887,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['calc', 'Hesap']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -1023,6 +1023,25 @@ function renderPanel() {
     body = btn('📐 Teknik resim oluştur', 'sheet-make') +
       '<div class="lbl" style="flex:1 0 100%">A4 yatay: ön, yan, üst ve izometrik görünüş; ölçek ve genel ölçüler.</div>';
     hint = 'Resim PNG ya da PDF olarak indirilir. Birim: ' + settings.unit + ' (Görünüm sekmesinden değiştirilir).';
+  } else if (tab === 'calc') {
+    const mat = MATERIALS.find((m) => m.id === settings.mat) || MATERIALS[0];
+    body = '<div class="lbl h">Malzeme</div>' + MATERIALS.map((m) => btn(m.name, 'mat-' + m.id, m.id === mat.id)).join('') +
+      '<div class="lbl h">Sonuçlar</div>';
+    if (!lastClean || !lastClean.attributes.position.count) {
+      body += '<div class="lbl" style="flex:1 0 100%">Önce bir model olmalı.</div>';
+    } else {
+      const mp = meshProps(lastClean.attributes.position.array);
+      const g = massGrams(mp.volume, mat.rho);
+      const sz = lastClean.boundingBox.getSize(new THREE.Vector3());
+      const row = (k, v) => `<div style="flex:1 0 100%;display:flex;justify-content:space-between;padding:5px 12px;border-top:1px solid #1e293b;font-size:14px"><span style="color:#94a3b8">${k}</span><b>${v}</b></div>`;
+      body += row('Hacim', fmtNum(mp.volume / 1000, 2) + ' cm³') +
+        row('Yüzey alanı', fmtNum(mp.area / 100, 2) + ' cm²') +
+        row('Ağırlık (' + mat.name + ')', g >= 1000 ? fmtNum(g / 1000, 3) + ' kg' : fmtNum(g, 1) + ' g') +
+        row('Ağırlık merkezi', mp.centroid ? 'X ' + fmtNum(toUnit(mp.centroid[0], settings.unit), 1) + '  Y ' + fmtNum(toUnit(mp.centroid[1], settings.unit), 1) + '  Z ' + fmtNum(toUnit(mp.centroid[2], settings.unit), 1) : '-') +
+        row('Genel ölçü', lenText(sz.x) + ' × ' + lenText(sz.z) + ' × ' + lenText(sz.y));
+    }
+    body += '<div class="lbl h">Dışa aktar</div>' + btn('📋 Parça listesi (CSV)', 'bom-csv') + btn('📐 DXF (ön / yan / üst)', 'dxf-out');
+    hint = 'Ağırlık tam dolu (içi dolu) katı için hesaplanır; 3B yazıcıda dolgu oranı ve duvar kalınlığı gerçek ağırlığı düşürür. DXF: AutoCAD, FreeCAD gibi programlarda açılır; gizli çizgiler ayrı katmandadır.';
   } else if (tab === 'part') {
     body = `<label class="f w2"><span>Parça adı</span><input type="text" data-k="name" data-t="text" value="${esc(p.name || '')}" placeholder="${esc(partName(p, idx))}"></label>` +
       `<div class="row" style="flex:1 0 100%;padding:0;flex-wrap:wrap">` +
@@ -1059,7 +1078,7 @@ function renderPanel() {
     hint = 'Ölçüler (' + settings.unit + ')' + (p.type === 'box' || p.type === 'cylinder' ? '. Yuvarlama ve pah birlikte kullanılırsa yuvarlama geçerli olur. Eğim: üst yüz, her yönden yükseklik × tan(eğim) kadar daralır (döküm eğimi).' : '');
   }
   $('tabbody').innerHTML = body;
-  $('tabbody').classList.toggle('grid', tab === 'view');
+  $('tabbody').classList.toggle('grid', tab === 'view' || tab === 'calc');
   $('tabhint').textContent = hint;
   $('b-move').classList.toggle('on', settings.move);
 }
@@ -1207,6 +1226,57 @@ function doCircular() {
   if (!(n >= 2 && n <= 41)) { toast('Toplam adet 2 ile 41 arasında olmalı'); return; }
   const b = parts[0];
   addCopies(circularArray(cur(), nextId, n, pos(b.x), pos(b.z), cp.ang || 360));
+}
+
+/* ---- dışa aktarma: parça listesi (CSV), DXF ---- */
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+const fileBase = () => (projName || 'model').replace(/[^\w\-çğıöşüÇĞİÖŞÜ ]+/g, '_');
+function exportBom() {
+  const fmt = (v) => fmtNum(toUnit(v, settings.unit), 2).replace('.', ',');
+  const rows = bomRows(parts, fmt);
+  rows[0][4] = 'Ölçü (' + settings.unit + ')';
+  saveBlob(new Blob([csvFromRows(rows)], { type: 'text/csv;charset=utf-8' }), fileBase() + '-parca-listesi.csv');
+  toast('Parça listesi indirildi');
+}
+function exportDXF() {
+  if (!lastClean || !lastClean.boundingBox) { toast('Önce bir model olmalı'); return; }
+  try {
+    const bb = lastClean.boundingBox, size = bb.getSize(new THREE.Vector3()), bbo = bboxObj(bb);
+    const gap = Math.max(20, Math.max(size.x, size.y, size.z) * 0.25);
+    const boxes = { front: { x: 0, y: 0 }, side: { x: size.x + gap, y: 0 }, top: { x: 0, y: size.y + gap } };
+    const bvh = makeBvh();
+    const eps = Math.max(0.02, size.length() * 2e-4);
+    const vis = [], hid = [], axis = [];
+    let skipped = false;
+    for (const name of ['front', 'side', 'top']) {
+      const r = viewLines(bvh, name, bbo, boxes[name], 1, eps, 2);
+      if (!r) { skipped = true; continue; }
+      vis.push(...r.vis); hid.push(...r.hid);
+      const want = name === 'front' ? 'z' : name === 'side' ? 'x' : 'y';
+      for (const h of holeList(parts)) {
+        if (h.axis !== want) continue;
+        const [cx, cy] = sheetProject(name, h.c, bbo, boxes[name], 1);
+        const hw = h.kind === 'round' ? h.d : h.ext[name === 'side' ? 2 : 0], hh = h.kind === 'round' ? h.d : h.ext[name === 'top' ? 2 : 1];
+        axis.push([cx - hw / 2 - 3, cy, cx + hw / 2 + 3, cy], [cx, cy - hh / 2 - 3, cx, cy + hh / 2 + 3]);
+      }
+    }
+    const flip = (ls) => ls.filter((l) => Math.hypot(l[2] - l[0], l[3] - l[1]) > 1e-3).map((l) => [l[0], -l[1], l[2], -l[3]]); // DXF'te Y yukarı
+    const dxf = dxfFromLayers([
+      { name: 'GORUNEN', color: 7, linetype: 'CONTINUOUS', lines: flip(vis) },
+      { name: 'GIZLI', color: 1, linetype: 'HIDDEN', lines: flip(hid) },
+      { name: 'EKSEN', color: 3, linetype: 'CENTER', lines: flip(axis) },
+    ]);
+    saveBlob(new Blob([dxf], { type: 'application/dxf' }), fileBase() + '.dxf');
+    toast('DXF indirildi (mm)' + (skipped ? ' · bazı görünüşler çok ayrıntılı, atlandı' : ''));
+  } catch (err) {
+    toast('DXF oluşturulamadı');
+  }
 }
 
 /* ---- tüm parçaları tek parçaya çevir ---- */
@@ -1891,29 +1961,42 @@ function mateApply() {
 
 /* ---- teknik resim: ön / yan / üst / izometrik (ya da kesit), ölçü, delik ölçüsü, gizli çizgi, PNG + PDF ---- */
 let sheetCut = false; // sağ alttaki kutuda izometrik yerine kesit görünüşü
-// Gizli kenarlar: modelin keskin + siluet kenarlarından, önünde başka yüzey olanlar (bakan gözden ışın atılarak)
-function hiddenLines(bvh, view, bb, box, s, eps) {
+// Görünüş çizgileri: modelin keskin + siluet kenarları, bakan gözden ışın atılarak görünen / gizli diye ayrılır.
+// Dönüş: { vis:[[x1,y1,x2,y2],...], hid:[...] } (kağıt koordinatı) ya da çok ayrıntılıysa null
+function viewLines(bvh, view, bbo, box, s, eps, piece = 3) {
   const dir = VIEW_TO_VIEWER[view];
   const segs = viewEdges(lastClean.attributes.position.array, dir);
   const dv = new THREE.Vector3(...dir).normalize();
-  const bbo = { min: [bb.min.x, bb.min.y, bb.min.z], max: [bb.max.x, bb.max.y, bb.max.z] };
   let pieces = 0;
-  const cnt = segs.map((e) => { const n = Math.max(1, Math.ceil(Math.hypot(e[3] - e[0], e[4] - e[1], e[5] - e[2]) * s / 3)); pieces += n; return n; });
+  const cnt = segs.map((e) => { const n = Math.max(1, Math.ceil(Math.hypot(e[3] - e[0], e[4] - e[1], e[5] - e[2]) * s / piece)); pieces += n; return n; });
   if (pieces > 40000) return null;
   const ray = new THREE.Ray(new THREE.Vector3(), dv);
-  const out = [];
+  const vis = [], hid = [];
   segs.forEach((e, i) => {
     const n = cnt[i];
+    const at = (t) => sheetProject(view, [e[0] + (e[3] - e[0]) * t, e[1] + (e[4] - e[1]) * t, e[2] + (e[5] - e[2]) * t], bbo, box, s);
+    let run = -1, start = 0;
+    const flush = (k0, k1, h) => { const A = at(k0 / n), B = at(k1 / n); (h ? hid : vis).push([A[0], A[1], B[0], B[1]]); };
     for (let k = 0; k < n; k++) {
-      const t0 = k / n, t1 = (k + 1) / n, tm = (t0 + t1) / 2;
+      const tm = (k + 0.5) / n;
       ray.origin.set(e[0] + (e[3] - e[0]) * tm + dv.x * eps, e[1] + (e[4] - e[1]) * tm + dv.y * eps, e[2] + (e[5] - e[2]) * tm + dv.z * eps);
-      if (!bvh.raycastFirst(ray, THREE.DoubleSide)) continue;
-      const A = sheetProject(view, [e[0] + (e[3] - e[0]) * t0, e[1] + (e[4] - e[1]) * t0, e[2] + (e[5] - e[2]) * t0], bbo, box, s);
-      const B = sheetProject(view, [e[0] + (e[3] - e[0]) * t1, e[1] + (e[4] - e[1]) * t1, e[2] + (e[5] - e[2]) * t1], bbo, box, s);
-      out.push([A[0], A[1], B[0], B[1]]);
+      const h = bvh.raycastFirst(ray, THREE.DoubleSide) ? 1 : 0;
+      if (run < 0) { run = h; start = k; } else if (h !== run) { flush(start, k, run); run = h; start = k; }
     }
+    flush(start, n, run);
   });
-  return chainPolylines(out);
+  return { vis, hid };
+}
+function makeBvh() {
+  const pg = new THREE.BufferGeometry();
+  pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(lastClean.attributes.position.array), 3));
+  return new MeshBVH(pg);
+}
+const bboxObj = (bb) => ({ min: [bb.min.x, bb.min.y, bb.min.z], max: [bb.max.x, bb.max.y, bb.max.z] });
+// Yalnızca gizli kenarlar, kesik çizgi desenin akması için uç uca bağlı çok noktalı çizgiler olarak
+function hiddenLines(bvh, view, bb, box, s, eps) {
+  const r = viewLines(bvh, view, bboxObj(bb), box, s, eps);
+  return r ? chainPolylines(r.hid) : null;
 }
 
 function makeSheet(cut) {
@@ -2074,9 +2157,7 @@ function makeSheet(cut) {
   // --- gizli çizgiler (kesik) ve delik ölçüleri; hata olursa resmin geri kalanı yine verilir ---
   const views = [['front', f], ['side', sd], ['top', tp]];
   try {
-    const pg = new THREE.BufferGeometry();
-    pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(lastClean.attributes.position.array), 3));
-    const bvh = new MeshBVH(pg);
+    const bvh = makeBvh();
     const eps = Math.max(0.02, size.length() * 2e-4);
     g.save();
     g.strokeStyle = '#333'; g.lineWidth = 1.5; g.setLineDash([mm(2), mm(1)]);
@@ -2262,6 +2343,9 @@ document.addEventListener('click', (e) => {
   if (act === 'mate-do') { mateApply(); return; }
   if (act === 'mate-reset') { mate.a = mate.b = null; disposeOverlay(faceGroup); renderPanel(); return; }
   if (act.startsWith('jt-') || act.startsWith('jx-') || act === 'jpick' || act === 'jreset' || act === 'j-unlink') { linkAct(act); return; }
+  if (act.startsWith('mat-')) { settings.mat = act.slice(4); saveSettings(); renderPanel(); return; }
+  if (act === 'bom-csv') { exportBom(); return; }
+  if (act === 'dxf-out') { exportDXF(); return; }
   if (act === 'bake') { bakeAll(); return; }
   if (act === 'sheet-make') { makeSheet(false); return; }
   if (act === 'edges') { settings.edges = settings.edges === false; afterSettings(); return; }

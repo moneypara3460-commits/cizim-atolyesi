@@ -671,6 +671,101 @@ export function jpegToPdf(jpeg, wPx, hPx) {
   return out;
 }
 
+/* ---------------- Hesap: hacim, ağırlık, parça listesi, DXF ---------------- */
+
+// Yoğunluklar g/cm³ (yaklaşık, tipik değerler)
+export const MATERIALS = [
+  { id: 'pla', name: 'PLA', rho: 1.24 },
+  { id: 'abs', name: 'ABS', rho: 1.04 },
+  { id: 'petg', name: 'PETG', rho: 1.27 },
+  { id: 'naylon', name: 'Naylon', rho: 1.14 },
+  { id: 'ahsap', name: 'Ahşap (meşe)', rho: 0.75 },
+  { id: 'aluminyum', name: 'Alüminyum', rho: 2.70 },
+  { id: 'celik', name: 'Çelik', rho: 7.85 },
+  { id: 'paslanmaz', name: 'Paslanmaz çelik', rho: 8.0 },
+  { id: 'pirinc', name: 'Pirinç', rho: 8.5 },
+  { id: 'bakir', name: 'Bakır', rho: 8.96 },
+  { id: 'titanyum', name: 'Titanyum', rho: 4.51 },
+];
+
+// Kapalı üçgen ağından hacim (mm³), yüzey alanı (mm²) ve ağırlık merkezi. pos: 9 sayı = 1 üçgen.
+// Dönüş: { volume, area, centroid:[x,y,z] | null }
+export function meshProps(pos) {
+  const nTri = Math.floor(pos.length / 9);
+  let vol = 0, area = 0, cx = 0, cy = 0, cz = 0;
+  for (let t = 0; t < nTri; t++) {
+    const o = t * 9;
+    const ax = pos[o], ay = pos[o + 1], az = pos[o + 2];
+    const bx = pos[o + 3], by = pos[o + 4], bz = pos[o + 5];
+    const qx = pos[o + 6], qy = pos[o + 7], qz = pos[o + 8];
+    const v = (ax * (by * qz - bz * qy) - ay * (bx * qz - bz * qx) + az * (bx * qy - by * qx)) / 6;
+    vol += v;
+    cx += v * (ax + bx + qx) / 4; cy += v * (ay + by + qy) / 4; cz += v * (az + bz + qz) / 4;
+    const ux = bx - ax, uy = by - ay, uz = bz - az, wx = qx - ax, wy = qy - ay, wz = qz - az;
+    area += Math.hypot(uy * wz - uz * wy, uz * wx - ux * wz, ux * wy - uy * wx) / 2;
+  }
+  const sg = vol < 0 ? -1 : 1; // ters dönük ağ da doğru hacim versin
+  const V = vol * sg;
+  return { volume: V, area, centroid: V > 1e-9 ? [cx * sg / V, cy * sg / V, cz * sg / V] : null };
+}
+// hacim mm³, yoğunluk g/cm³ -> gram
+export const massGrams = (volumeMm3, rho) => volumeMm3 / 1000 * rho;
+
+// Parça listesi (BOM). Dönüş: satırlar (ilk satır başlık). fmt(mm) = uzunluk metni (sayı, birim yok)
+export function bomRows(parts, fmt = (v) => String(Math.round(v * 100) / 100)) {
+  const f = (v) => fmt(Number(v) || 0);
+  const dims = (p) => {
+    switch (p.type) {
+      case 'box': return f(p.w) + ' × ' + f(p.l) + ' × ' + f(p.h);
+      case 'cylinder': return 'Ø' + f(p.d) + ' × ' + f(p.h);
+      case 'sphere': return 'Ø' + f(p.d);
+      case 'cone': return 'Ø' + f(p.d) + ' / Ø' + f(p.d2) + ' × ' + f(p.h);
+      case 'tube': return 'Ø' + f(p.d) + ' / iç Ø' + f(p.di) + ' × ' + f(p.h);
+      case 'sketch': return 'kalınlık ' + f(p.h);
+      default: return p.type === 'mesh' ? 'tek parça (h ' + f(p.h) + ')' : '';
+    }
+  };
+  const rows = [['No', 'Ad', 'Tür', 'İşlem', 'Ölçü', 'X', 'Y (alt)', 'Z', 'Gizli']];
+  parts.forEach((p, i) => {
+    rows.push([i + 1, p.name || '', TYPE_LABEL[p.type] || p.type, i > 0 && p.op === 'sub' ? 'Oyuk' : 'Birleştir', dims(p), f(p.x), f(p.y), f(p.z), p.hidden ? 'evet' : '']);
+  });
+  return rows;
+}
+// Excel (Türkçe) için: ; ayracı, tırnaklama, UTF-8 BOM
+export function csvFromRows(rows) {
+  const q = (v) => {
+    const t = String(v);
+    return /[;"\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  };
+  return '﻿' + rows.map((r) => r.map(q).join(';')).join('\r\n') + '\r\n';
+}
+
+// Basit DXF (R12, ASCII). layers: [{ name, color, linetype:'CONTINUOUS'|'HIDDEN'|'CENTER', lines:[[x1,y1,x2,y2],...] }]
+export function dxfFromLayers(layers) {
+  const n = (v) => (Math.round(v * 10000) / 10000).toString();
+  const o = [];
+  const g = (code, val) => { o.push(String(code), String(val)); };
+  g(0, 'SECTION'); g(2, 'HEADER'); g(9, '$ACADVER'); g(1, 'AC1009'); g(9, '$INSUNITS'); g(70, 4); g(0, 'ENDSEC');
+  g(0, 'SECTION'); g(2, 'TABLES');
+  g(0, 'TABLE'); g(2, 'LTYPE'); g(70, 3);
+  g(0, 'LTYPE'); g(2, 'CONTINUOUS'); g(70, 0); g(3, 'Solid line'); g(72, 65); g(73, 0); g(40, 0);
+  g(0, 'LTYPE'); g(2, 'HIDDEN'); g(70, 0); g(3, 'Hidden'); g(72, 65); g(73, 2); g(40, 6); g(49, 4); g(49, -2);
+  g(0, 'LTYPE'); g(2, 'CENTER'); g(70, 0); g(3, 'Center'); g(72, 65); g(73, 4); g(40, 14); g(49, 8); g(49, -2); g(49, 1); g(49, -2);
+  g(0, 'ENDTAB');
+  g(0, 'TABLE'); g(2, 'LAYER'); g(70, layers.length);
+  for (const L of layers) { g(0, 'LAYER'); g(2, L.name); g(70, 0); g(62, L.color || 7); g(6, L.linetype || 'CONTINUOUS'); }
+  g(0, 'ENDTAB'); g(0, 'ENDSEC');
+  g(0, 'SECTION'); g(2, 'ENTITIES');
+  for (const L of layers) {
+    for (const l of L.lines) {
+      g(0, 'LINE'); g(8, L.name);
+      g(10, n(l[0])); g(20, n(l[1])); g(30, 0); g(11, n(l[2])); g(21, n(l[3])); g(31, 0);
+    }
+  }
+  g(0, 'ENDSEC'); g(0, 'EOF');
+  return o.join('\r\n') + '\r\n';
+}
+
 /* ---------------- Tek parça (pişirilmiş ağ) ---------------- */
 
 // Üçgen listesini (konum: Float32 x3, normal: Float32 x3 ya da null) tek metne paketler: "n|base64".

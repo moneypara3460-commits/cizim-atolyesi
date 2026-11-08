@@ -7,7 +7,7 @@ import {
   chamferBoxPoints, cylinderProfile,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
-  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
+  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
 } from '../logic.js';
 
 let fail = 0;
@@ -472,6 +472,39 @@ t('packMesh / unpackMesh: gidiş-dönüş', () => {
   assert.equal(r2.nor, null);
   assert.equal(unpackMesh('bozuk'), null);
   assert.equal(unpackMesh('9|AAAA'), null);
+});
+t('meshProps: kutu hacmi, alanı, ağırlık merkezi', () => {
+  const r = meshProps(boxTris(10, 6, 4));
+  assert.ok(Math.abs(r.volume - 240) < 1e-6, 'hacim ' + r.volume);
+  assert.ok(Math.abs(r.area - 248) < 1e-6);
+  assert.ok(Math.abs(r.centroid[0]) < 1e-9 && Math.abs(r.centroid[1] - 3) < 1e-9 && Math.abs(r.centroid[2]) < 1e-9);
+});
+t('meshProps: ters dönük ağ da pozitif hacim verir; ağırlık', () => {
+  const b = boxTris(10, 6, 4), r = new Float32Array(b.length);
+  for (let i = 0; i < b.length; i += 9) { r.set(b.subarray(i, i + 3), i); r.set(b.subarray(i + 6, i + 9), i + 3); r.set(b.subarray(i + 3, i + 6), i + 6); }
+  assert.ok(Math.abs(meshProps(r).volume - 240) < 1e-6);
+  assert.ok(Math.abs(massGrams(240000, MATERIALS.find((m) => m.id === 'celik').rho) - 1884) < 1e-6); // 240 cm³ çelik
+});
+t('bomRows ve csvFromRows', () => {
+  const rows = bomRows([
+    { type: 'box', op: 'add', w: 80, l: 60, h: 40, x: 0, y: 0, z: 0, name: 'Gövde; ana' },
+    { type: 'cylinder', op: 'sub', d: 10, h: 42, x: 5, y: -1, z: 0, hidden: true },
+  ]);
+  assert.equal(rows.length, 3);
+  assert.equal(rows[1][4], '80 × 60 × 40');
+  assert.equal(rows[2][3], 'Oyuk');
+  assert.equal(rows[2][4], 'Ø10 × 42');
+  const csv = csvFromRows(rows);
+  assert.ok(csv.startsWith('\uFEFFNo;Ad'));
+  assert.ok(csv.includes('"Gövde; ana"'));
+});
+t('dxfFromLayers: katman ve çizgi sayısı', () => {
+  const d = dxfFromLayers([
+    { name: 'GORUNEN', color: 7, lines: [[0, 0, 10, 0], [10, 0, 10, 5]] },
+    { name: 'GIZLI', color: 1, linetype: 'HIDDEN', lines: [[1, 1, 2, 2]] },
+  ]);
+  assert.equal(d.split('\r\nLINE\r\n').length - 1, 3);
+  assert.ok(d.includes('GIZLI') && d.trim().endsWith('EOF'));
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
