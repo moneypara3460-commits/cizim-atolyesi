@@ -40,7 +40,10 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - Önce hareket edecek parçanın yüzüne, sonra yapışacağı başka parçanın yüzüne dokun; "Yüzü yüze birleştir" parçayı döndürür ve oturtur (boşluk ve yüz çevresinde döndürme ayarı; yüz merkezlerini hizalama açılıp kapanır). Geri al ile döner. Gerçek bir bağlantı (mate) çözücüsü değildir: tek seferlik yerleştirmedir, sonradan parça oynatılırsa bağlı kalmaz
 
 **Teknik resim (Resim sekmesi)**
-- A4 yatay sayfada ön, sağ yan, üst ve izometrik görünüş (üçüncü açı), standart ölçek (1:2, 1:5...), genel ölçü çizgileri, başlık kutusu. **PNG** ya da **PDF** olarak indirilir. Gizli kenarlar çizilmez; delik ve iç ölçüler otomatik ölçülendirilmez
+- A4 yatay sayfada ön, sağ yan, üst ve izometrik görünüş (üçüncü açı), standart ölçek (1:2, 1:5...), genel ölçü çizgileri, başlık kutusu. **PNG** ya da **PDF** olarak indirilir
+- **Gizli çizgiler** kesik çizgiyle gösterilir (başka yüzün arkasında kalan kenarlar ve silindir siluetleri)
+- **Delik ölçüleri**: eksene paralel yuvarlak delikler için `Ø10`, kare delikler için `□ 8 × 6` yazısı ve eksen çizgileri; delik, eksenine bakan görünüşte gösterilir
+- Sayfadaki **✂ Kesit** düğmesi sağ alttaki izometriği A-A kesitiyle değiştirir: X ekseninde kesilir (Kesit sekmesi açık ve X seçiliyse onun konumunda, değilse ortada), kesilen yüzey 45° taranır, önden görünüşte kesit düzlemi işaretlenir
 
 **Tek kenara pah / yuvarlama (Kenar sekmesi)**
 - Düz bir kutunun kenarına dokun (sarı çizgi seçileni gösterir), ölçüyü yaz, "Pah kır" ya da "Yuvarla". İşlem kenara oyuk parçası(ları) ekler; Parça listesinden silersen geri gelir. Yalnızca düz kutu parçalarında çalışır
@@ -81,7 +84,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - Kabuk ve eğim yalnızca düz kutu / silindirde (küre kabuğu var, eğim yok); eğimli ya da yuvarlamalı parçada kenar işlemi ve kabuk yapılamaz
 - Kabuğun iç boşluğu kendinden önceki tüm parçaları keser
 - Montaj yüzeyin ortalama düzlemine göre yapar; eğri yüzlerde (silindir yan yüzü gibi) dokunduğun noktadaki yüz yönü kullanılır
-- Teknik resim yalnızca dış çizgileri gösterir; kesit görünüşü, gizli çizgi ve delik ölçüleri yok
+- Teknik resimde delik ölçüsü yalnızca eksene paralel (Ø / kare) delikler için; eğik, küre ve koni oyuklarına yazılmaz. Gizli çizgiler çok ayrıntılı modelde (çok kenarlı) atlanır. Kesit yalnızca X ekseninde; Y/Z kesiti için sayfadaki izometrik/kesit seçimi yok
 - Kesit görünümünde kesilen yüzey turuncu "iç yüz" olarak gösterilir (gerçek dolu kesit yüzeyi değil)
 - Renkli parçalarda oyuğun iç duvarı tabanın rengini alır
 - Çok sayıda parçada (kırk üstü dizi vb.) birleştirme yavaşlar
@@ -103,4 +106,4 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 4. ~~Kroki çizip kalınlık verme / döndürme~~
 5. ~~Çoğaltma, ölçü etiketleri, ölçüm, kesit, parça yönetimi, birimler~~
 6. ~~Kroki yayları, eğim, kabuk, delik deseni, montaj, teknik resim (PNG / PDF)~~
-7. Sıradaki (isteğe bağlı): birleşik kroki (birden çok şekil), kroki kısıtları, delik / iç ölçülendirme, kesit görünüşlü teknik resim, bağlantılı (hareketli) montaj
+7. Sıradaki (isteğe bağlı): birleşik kroki (birden çok şekil), kroki kısıtları, delik / iç ölçülendirme, teknik resimde Y/Z kesiti ve delik konum ölçüleri

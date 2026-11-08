@@ -670,6 +670,161 @@ export function jpegToPdf(jpeg, wPx, hPx) {
   return out;
 }
 
+/* ---------------- Teknik resim: gizli çizgi, delik ölçüsü, kesit yerleşimi ---------------- */
+
+// Bakan gözün yönü (modelden göze doğru) — ön / yan / üst görünüş
+export const VIEW_TO_VIEWER = { front: [0, 0, 1], side: [1, 0, 0], top: [0, 1, 0] };
+
+// Model (dünya) noktasını kağıt mm'sine çevirir. bb = { min:[x,y,z], max:[x,y,z] }, box = görünüşün kağıttaki kutusu
+export function sheetProject(view, p, bb, box, s) {
+  if (view === 'front') return [box.x + (p[0] - bb.min[0]) * s, box.y + (bb.max[1] - p[1]) * s];
+  if (view === 'side') return [box.x + (bb.max[2] - p[2]) * s, box.y + (bb.max[1] - p[1]) * s];
+  return [box.x + (p[0] - bb.min[0]) * s, box.y + (p[2] - bb.min[2]) * s]; // üst: ekranın üstü = -Z
+}
+
+// THREE'nin 'XYZ' Euler sırasıyla (R = Rx·Ry·Rz) derece cinsinden döndürme
+export function rotXYZ(v, rx = 0, ry = 0, rz = 0) {
+  let [x, y, z] = v;
+  const c = (d) => Math.cos(d * D2R), n = (d) => Math.sin(d * D2R);
+  if (rz) { const a = x * c(rz) - y * n(rz), b = x * n(rz) + y * c(rz); x = a; y = b; }
+  if (ry) { const a = x * c(ry) + z * n(ry), b = -x * n(ry) + z * c(ry); x = a; z = b; }
+  if (rx) { const a = y * c(rx) - z * n(rx), b = y * n(rx) + z * c(rx); y = a; z = b; }
+  return [x, y, z];
+}
+// vektör bir dünya eksenine paralelse 'x' | 'y' | 'z', değilse null
+export function axisKey(v, tol = 1e-3) {
+  const l = Math.hypot(v[0], v[1], v[2]);
+  if (!(l > 1e-9)) return null;
+  const a = v.map((q) => Math.abs(q) / l);
+  if (a[0] > 1 - tol) return 'x';
+  if (a[1] > 1 - tol) return 'y';
+  if (a[2] > 1 - tol) return 'z';
+  return null;
+}
+
+// Eksene paralel yuvarlak / kare delikler (oyuk olan silindir ve kutular).
+// Dönüş: { id, kind:'round'|'rect', axis, c:[x,y,z] (orta nokta), d (yuvarlak), ext:[ex,ey,ez] (kare), len }
+export function holeList(parts) {
+  const out = [];
+  const num = (v, d = 0) => (isFinite(Number(v)) ? Number(v) : d);
+  parts.forEach((p, i) => {
+    if (i === 0 || p.hidden || p.op !== 'sub') return;
+    if (p.type !== 'cylinder' && p.type !== 'box') return;
+    const rx = num(p.rx), ry = num(p.ry), rz = num(p.rz);
+    const ax = rotXYZ([0, 1, 0], rx, ry, rz);
+    const key = axisKey(ax);
+    if (!key) return;
+    const h = Math.max(num(p.h, 1), 0.01);
+    const c = [num(p.x) + ax[0] * h / 2, num(p.y) + ax[1] * h / 2, num(p.z) + ax[2] * h / 2];
+    if (p.type === 'cylinder') {
+      out.push({ id: p.id, kind: 'round', axis: key, c, d: Math.max(num(p.d, 1), 0.01), len: h });
+      return;
+    }
+    const u = rotXYZ([Math.max(num(p.w, 1), 0.01), 0, 0], rx, ry, rz), v = rotXYZ([0, 0, Math.max(num(p.l, 1), 0.01)], rx, ry, rz);
+    if (!axisKey(u) || !axisKey(v)) return; // kendi ekseni etrafında eğik kare delik: etiketleme yok
+    out.push({ id: p.id, kind: 'rect', axis: key, c, ext: [0, 1, 2].map((k) => Math.abs(u[k]) + Math.abs(v[k])), len: h });
+  });
+  return out;
+}
+
+// Üçgen listesinden (düz Float32Array, 9 sayı = 1 üçgen) belirli bir bakış yönü için çizgi adayları:
+// keskin kenarlar (yüzler arası açı > creaseDeg) + siluet kenarları (biri göze bakan, diğeri bakmayan yüz).
+// dir: modelden göze doğru birim vektör. Dönüş: [[x1,y1,z1,x2,y2,z2], ...]
+export function viewEdges(pos, dir, creaseDeg = 35) {
+  const nTri = Math.floor(pos.length / 9);
+  const q = 1000;
+  const ids = new Map(), V = [];
+  const vid = (x, y, z) => {
+    const k = Math.round(x * q) + ',' + Math.round(y * q) + ',' + Math.round(z * q);
+    let id = ids.get(k);
+    if (id === undefined) { id = V.length; ids.set(k, id); V.push([x, y, z]); }
+    return id;
+  };
+  const dl = Math.hypot(dir[0], dir[1], dir[2]) || 1;
+  const d = [dir[0] / dl, dir[1] / dl, dir[2] / dl];
+  const cosC = Math.cos(creaseDeg * D2R);
+  const edges = new Map();
+  const N = [];
+  for (let t = 0; t < nTri; t++) {
+    const o = t * 9;
+    const a = vid(pos[o], pos[o + 1], pos[o + 2]), b = vid(pos[o + 3], pos[o + 4], pos[o + 5]), c = vid(pos[o + 6], pos[o + 7], pos[o + 8]);
+    if (a === b || b === c || a === c) continue;
+    const ux = pos[o + 3] - pos[o], uy = pos[o + 4] - pos[o + 1], uz = pos[o + 5] - pos[o + 2];
+    const vx = pos[o + 6] - pos[o], vy = pos[o + 7] - pos[o + 1], vz = pos[o + 8] - pos[o + 2];
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const nl = Math.hypot(nx, ny, nz);
+    if (!(nl > 1e-12)) continue;
+    const fi = N.length;
+    N.push([nx / nl, ny / nl, nz / nl]);
+    for (const [e0, e1] of [[a, b], [b, c], [c, a]]) {
+      const k = e0 < e1 ? e0 + '_' + e1 : e1 + '_' + e0;
+      let e = edges.get(k);
+      if (!e) { e = { a: Math.min(e0, e1), b: Math.max(e0, e1), f: [] }; edges.set(k, e); }
+      e.f.push(fi);
+    }
+  }
+  const out = [];
+  const eps = 1e-6;
+  for (const e of edges.values()) {
+    if (e.f.length < 2) continue;
+    let draw = e.f.length > 2;
+    if (!draw) {
+      const n1 = N[e.f[0]], n2 = N[e.f[1]];
+      if (n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2] < cosC) draw = true;
+      else {
+        const s1 = n1[0] * d[0] + n1[1] * d[1] + n1[2] * d[2], s2 = n2[0] * d[0] + n2[1] * d[1] + n2[2] * d[2];
+        draw = (s1 > eps && s2 < -eps) || (s1 < -eps && s2 > eps);
+      }
+    }
+    if (draw) out.push([...V[e.a], ...V[e.b]]);
+  }
+  return out;
+}
+
+// 2B kısa parçaları uç uca bağlayıp çok noktalı çizgilere çevirir (kesik çizgi deseni kesintisiz aksın diye).
+// segs: [[x1,y1,x2,y2], ...]  Dönüş: [[ [x,y], [x,y], ... ], ...]
+export function chainPolylines(segs, tol = 1e-3) {
+  const key = (x, y) => Math.round(x / tol) + ',' + Math.round(y / tol);
+  const list = segs.filter((s) => Math.hypot(s[2] - s[0], s[3] - s[1]) > tol);
+  const at = new Map();
+  list.forEach((s, i) => {
+    for (const k of [key(s[0], s[1]), key(s[2], s[3])]) {
+      if (!at.has(k)) at.set(k, []);
+      at.get(k).push(i);
+    }
+  });
+  const used = new Array(list.length).fill(false);
+  const extend = (line, front) => {
+    for (;;) {
+      const tip = front ? line[0] : line[line.length - 1];
+      const cand = (at.get(key(tip[0], tip[1])) || []).find((i) => !used[i]);
+      if (cand === undefined) return;
+      used[cand] = true;
+      const s = list[cand];
+      const sameStart = key(s[0], s[1]) === key(tip[0], tip[1]);
+      const next = sameStart ? [s[2], s[3]] : [s[0], s[1]];
+      if (front) line.unshift(next); else line.push(next);
+    }
+  };
+  const lines = [];
+  list.forEach((s, i) => {
+    if (used[i]) return;
+    used[i] = true;
+    const line = [[s[0], s[1]], [s[2], s[3]]];
+    extend(line, false);
+    extend(line, true);
+    lines.push(line);
+  });
+  return lines;
+}
+
+// Kesit görünüşü: verilen boşluğa (kağıt mm) sığan standart ölçek ve kutu. D = yatay boyut, H = dikey boyut.
+export function sectionFit(slot, D, H) {
+  const raw = Math.min((slot.w - 14) / Math.max(D, 0.001), (slot.h - 14) / Math.max(H, 0.001));
+  const scale = pickScale(raw);
+  return { scale, box: { x: slot.x + 10, y: slot.y + 3, w: D * scale, h: H * scale } };
+}
+
 /* ---------------- Genel köşe pahı / yuvarlaması (2B çokgen) ---------------- */
 
 // pts: [[x,y],...]; corners: pahlanacak/yuvarlanacak köşe indeksleri; rr > 0 ise yuvarlama (yarıçap), yoksa c kadar pah.

@@ -7,7 +7,7 @@ import {
   chamferBoxPoints, cylinderProfile,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
-  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
+  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
 } from '../logic.js';
 
 let fail = 0;
@@ -387,6 +387,80 @@ t('kopya bağlantıyı taşımaz', () => {
   const p = { ...newPart(1, 'box', 'add', null), parent: 7, joint: { type: 'hinge' } };
   const c = duplicatePart(p, 2);
   assert.equal(c.parent, undefined); assert.equal(c.joint, undefined);
+});
+
+/* ---- teknik resim: gizli çizgi, delik, kesit ---- */
+// n kenarlı prizma (Y ekseninde, yarıçap r, yükseklik h) üçgen listesi
+function prismTris(n, r, h) {
+  const P = [], top = [], bot = [];
+  for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2; top.push([r * Math.cos(a), h, r * Math.sin(a)]); bot.push([r * Math.cos(a), 0, r * Math.sin(a)]); }
+  const tri = (a, b, c) => P.push(...a, ...b, ...c);
+  for (let k = 0; k < n; k++) {
+    const j = (k + 1) % n;
+    tri(bot[k], bot[j], top[j]); tri(bot[k], top[j], top[k]);   // yan (dışa bakan)
+    tri([0, h, 0], top[j], top[k]);                              // üst kapak
+    tri([0, 0, 0], bot[k], bot[j]);                              // alt kapak
+  }
+  return new Float32Array(P);
+}
+function boxTris(w, h, d) {
+  const x = w / 2, z = d / 2, P = [];
+  const quad = (a, b, c, e) => P.push(...a, ...b, ...c, ...a, ...c, ...e);
+  quad([-x, 0, z], [x, 0, z], [x, h, z], [-x, h, z]);      // ön
+  quad([x, 0, -z], [-x, 0, -z], [-x, h, -z], [x, h, -z]);  // arka
+  quad([x, 0, z], [x, 0, -z], [x, h, -z], [x, h, z]);      // sağ
+  quad([-x, 0, -z], [-x, 0, z], [-x, h, z], [-x, h, -z]);  // sol
+  quad([-x, h, z], [x, h, z], [x, h, -z], [-x, h, -z]);    // üst
+  quad([-x, 0, -z], [x, 0, -z], [x, 0, z], [-x, 0, z]);    // alt
+  return new Float32Array(P);
+}
+t('viewEdges: kutu = 12 keskin kenar', () => {
+  assert.equal(viewEdges(boxTris(10, 6, 4), [0, 0, 1]).length, 12);
+});
+t('viewEdges: 16 kenarlı silindir ön görünüşte 32 kenar halkası + 2 siluet', () => {
+  assert.equal(viewEdges(prismTris(16, 5, 8), [0, 0, 1]).length, 34);
+  assert.equal(viewEdges(prismTris(16, 5, 8), [0, 1, 0]).length, 32); // üstten bakınca siluet yok, sadece halkalar
+});
+t('chainPolylines: uç uca parçalar tek çizgi olur, ayrık olan ayrı kalır', () => {
+  const r = chainPolylines([[0, 0, 1, 0], [2, 0, 1, 0], [2, 0, 2, 1], [10, 10, 11, 10]]);
+  assert.equal(r.length, 2);
+  assert.equal(r.map((l) => l.length).sort()[1], 4);
+});
+t('rotXYZ ve axisKey', () => {
+  assert.equal(axisKey(rotXYZ([0, 1, 0], 90, 0, 0)), 'z');
+  assert.equal(axisKey(rotXYZ([0, 1, 0], 0, 0, 90)), 'x');
+  assert.equal(axisKey(rotXYZ([0, 1, 0], 0, 0, 0)), 'y');
+  assert.equal(axisKey(rotXYZ([0, 1, 0], 30, 0, 0)), null);
+});
+t('holeList: yuvarlak ve kare delikler, tabanı ve eğik olanı atlar', () => {
+  const parts = [
+    { id: 1, type: 'box', op: 'add', w: 80, l: 60, h: 40, x: 0, y: 0, z: 0 },
+    { id: 2, type: 'cylinder', op: 'sub', d: 10, h: 42, x: 5, y: -1, z: -3 },
+    { id: 3, type: 'box', op: 'sub', w: 8, l: 6, h: 20, x: 0, y: 0, z: 0, rx: 90 },
+    { id: 4, type: 'cylinder', op: 'sub', d: 10, h: 20, rx: 30 },
+    { id: 5, type: 'sphere', op: 'sub', d: 10 },
+    { id: 6, type: 'cylinder', op: 'sub', d: 10, h: 20, hidden: true },
+  ];
+  const h = holeList(parts);
+  assert.equal(h.length, 2);
+  assert.deepEqual([h[0].kind, h[0].axis, h[0].d, h[0].c], ['round', 'y', 10, [5, 20, -3]]);
+  assert.deepEqual([h[1].kind, h[1].axis], ['rect', 'z']);
+  assert.deepEqual(h[1].ext.map((v) => Math.round(v * 1000) / 1000), [8, 6, 0]);
+});
+t('sheetProject: ön / yan / üst eşlemesi', () => {
+  const bb = { min: [0, 0, 0], max: [80, 40, 60] }, box = { x: 20, y: 30 };
+  assert.deepEqual(sheetProject('front', [0, 40, 60], bb, box, 1), [20, 30]);
+  assert.deepEqual(sheetProject('front', [80, 0, 0], bb, box, 0.5), [60, 50]);
+  assert.deepEqual(sheetProject('side', [10, 40, 60], bb, box, 1), [20, 30]);   // sağdan bakınca +Z solda
+  assert.deepEqual(sheetProject('top', [80, 10, 60], bb, box, 1), [100, 90]);   // üstten bakınca +Z aşağıda
+  assert.deepEqual(VIEW_TO_VIEWER.side, [1, 0, 0]);
+});
+t('sectionFit: boşluğa sığan standart ölçek', () => {
+  const f = sectionFit({ x: 130, y: 83, w: 157, h: 95 }, 60, 40);
+  assert.equal(f.scale, 2);
+  assert.ok(f.box.w <= 157 && f.box.h <= 95);
+  const g = sectionFit({ x: 130, y: 83, w: 157, h: 95 }, 600, 400);
+  assert.equal(g.scale, 0.2);
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');

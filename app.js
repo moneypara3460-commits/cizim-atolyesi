@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import { Brush, Evaluator, ADDITION, SUBTRACTION } from 'three-bvh-csg';
+import { MeshBVH } from 'three-mesh-bvh';
 import {
   TYPE_LABEL, DEFAULTS, heightOf, newPart, History, toSTLBinary, parseVoice,
   UNITS, toUnit, fromUnit, fmtNum, snap, dist3,
@@ -10,6 +11,7 @@ import {
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
+  VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
 } from './logic.js';
 import { openSketch } from './sketch.js';
 
@@ -1831,9 +1833,36 @@ function mateApply() {
   toast('Parça yüzü yüze birleştirildi');
 }
 
-/* ---- teknik resim: ön / yan / üst / izometrik, ölçü çizgileri, PNG + PDF ---- */
-function makeSheet() {
+/* ---- teknik resim: ön / yan / üst / izometrik (ya da kesit), ölçü, delik ölçüsü, gizli çizgi, PNG + PDF ---- */
+let sheetCut = false; // sağ alttaki kutuda izometrik yerine kesit görünüşü
+// Gizli kenarlar: modelin keskin + siluet kenarlarından, önünde başka yüzey olanlar (bakan gözden ışın atılarak)
+function hiddenLines(bvh, view, bb, box, s, eps) {
+  const dir = VIEW_TO_VIEWER[view];
+  const segs = viewEdges(lastClean.attributes.position.array, dir);
+  const dv = new THREE.Vector3(...dir).normalize();
+  const bbo = { min: [bb.min.x, bb.min.y, bb.min.z], max: [bb.max.x, bb.max.y, bb.max.z] };
+  let pieces = 0;
+  const cnt = segs.map((e) => { const n = Math.max(1, Math.ceil(Math.hypot(e[3] - e[0], e[4] - e[1], e[5] - e[2]) * s / 3)); pieces += n; return n; });
+  if (pieces > 40000) return null;
+  const ray = new THREE.Ray(new THREE.Vector3(), dv);
+  const out = [];
+  segs.forEach((e, i) => {
+    const n = cnt[i];
+    for (let k = 0; k < n; k++) {
+      const t0 = k / n, t1 = (k + 1) / n, tm = (t0 + t1) / 2;
+      ray.origin.set(e[0] + (e[3] - e[0]) * tm + dv.x * eps, e[1] + (e[4] - e[1]) * tm + dv.y * eps, e[2] + (e[5] - e[2]) * tm + dv.z * eps);
+      if (!bvh.raycastFirst(ray, THREE.DoubleSide)) continue;
+      const A = sheetProject(view, [e[0] + (e[3] - e[0]) * t0, e[1] + (e[4] - e[1]) * t0, e[2] + (e[5] - e[2]) * t0], bbo, box, s);
+      const B = sheetProject(view, [e[0] + (e[3] - e[0]) * t1, e[1] + (e[4] - e[1]) * t1, e[2] + (e[5] - e[2]) * t1], bbo, box, s);
+      out.push([A[0], A[1], B[0], B[1]]);
+    }
+  });
+  return chainPolylines(out);
+}
+
+function makeSheet(cut) {
   if (!lastClean || !lastClean.boundingBox) { toast('Önce bir model olmalı'); return; }
+  if (typeof cut === 'boolean') sheetCut = cut;
   const bb = lastClean.boundingBox;
   const size = bb.getSize(new THREE.Vector3()), ctr = bb.getCenter(new THREE.Vector3());
   const L = sheetLayout(size.x, size.y, size.z);
@@ -1842,6 +1871,12 @@ function makeSheet() {
   cv.width = Math.round(L.sheet.w * K); cv.height = Math.round(L.sheet.h * K);
   const g = cv.getContext('2d');
   g.fillStyle = '#ffffff'; g.fillRect(0, 0, cv.width, cv.height);
+  const mm = (v) => v * K;
+
+  // kesit: X ekseninde, kullanıcı kesit açıksa onun konumunda, yoksa ortada; sağdan bakılır (x ≤ konum kalır)
+  const sec = sheetCut ? sectionFit(L.iso, size.z, size.y) : null;
+  const secX = Math.min(Math.max(section.on && section.axis === 'x' ? section.pos : ctr.x, bb.min.x), bb.max.x);
+  const keepSec = { on: section.on, axis: section.axis, pos: section.pos, flip: section.flip };
 
   const saved = {
     pos: camera.position.clone(), quat: camera.quaternion.clone(), up: camera.up.clone(),
@@ -1849,7 +1884,7 @@ function makeSheet() {
     color: edgeMat.uniforms.uColor.value.clone(),
   };
   const R = size.length() / 2;
-  const shot = (box, dir, up, ppm) => {
+  const shot = (box, dir, up, ppm, hatch) => {
     const pad = 4;
     const VW = Math.max(16, Math.round(box.w * K + 2 * pad)), VH = Math.max(16, Math.round(box.h * K + 2 * pad));
     renderer.setPixelRatio(1);
@@ -1868,6 +1903,31 @@ function makeSheet() {
     renderer.clear();
     drawEdges();
     g.drawImage(renderer.domElement, 0, 0, VW, VH, box.x * K - pad, box.y * K - pad, VW, VH);
+    if (!hatch) return;
+    // kesilen yüzey: kesit düzleminden görünen iç (arka) yüzler = kesit alanı; 45° taramayla doldurulur
+    const tmp = new THREE.Scene();
+    const cm = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });
+    cm.clippingPlanes = [secPlane];
+    tmp.add(new THREE.Mesh(lastClean, cm));
+    renderer.setRenderTarget(null);
+    renderer.setClearColor(0xffffff, 1);
+    renderer.clear();
+    renderer.render(tmp, camera);
+    const mk = document.createElement('canvas'); mk.width = VW; mk.height = VH;
+    const mg = mk.getContext('2d');
+    mg.drawImage(renderer.domElement, 0, 0, VW, VH, 0, 0, VW, VH);
+    const id = mg.getImageData(0, 0, VW, VH), px = id.data;
+    for (let i = 0; i < px.length; i += 4) { const dark = px[i] < 128; px[i] = px[i + 1] = px[i + 2] = 0; px[i + 3] = dark ? 255 : 0; }
+    mg.putImageData(id, 0, 0);
+    const hc = document.createElement('canvas'); hc.width = VW; hc.height = VH;
+    const hg = hc.getContext('2d');
+    hg.strokeStyle = '#555'; hg.lineWidth = 1.2;
+    const sp = mm(2.6);
+    for (let k = -VH; k < VW + VH; k += sp) { hg.beginPath(); hg.moveTo(k, VH); hg.lineTo(k + VH, 0); hg.stroke(); }
+    hg.globalCompositeOperation = 'destination-in';
+    hg.drawImage(mk, 0, 0);
+    g.save(); g.globalCompositeOperation = 'multiply'; g.drawImage(hc, box.x * K - pad, box.y * K - pad); g.restore();
+    cm.dispose();
   };
   try {
     edgeMat.uniforms.uColor.value.set(0x111111);
@@ -1875,9 +1935,16 @@ function makeSheet() {
     shot(L.front, new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0), ppm);
     shot(L.side, new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), ppm);
     shot(L.top, new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), ppm);
-    const ippm = Math.min(L.iso.w, L.iso.h) * K / (2 * R * 1.15);
-    shot(L.iso, new THREE.Vector3(1, 0.8, 1), new THREE.Vector3(0, 1, 0), ippm);
+    if (sec) {
+      section.on = true; section.axis = 'x'; section.pos = secX; section.flip = false;
+      applySection();
+      shot(sec.box, new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), sec.scale * K, true);
+    } else {
+      const ippm = Math.min(L.iso.w, L.iso.h) * K / (2 * R * 1.15);
+      shot(L.iso, new THREE.Vector3(1, 0.8, 1), new THREE.Vector3(0, 1, 0), ippm);
+    }
   } finally {
+    if (sec) { section.on = keepSec.on; section.axis = keepSec.axis; section.pos = keepSec.pos; section.flip = keepSec.flip; applySection(); }
     edgeMat.uniforms.uColor.value.copy(saved.color);
     camera.position.copy(saved.pos); camera.up.copy(saved.up); camera.quaternion.copy(saved.quat);
     camera.fov = saved.fov; camera.near = saved.near; camera.far = saved.far; camera.aspect = saved.aspect;
@@ -1887,7 +1954,6 @@ function makeSheet() {
   }
 
   // --- 2B: çerçeve, ölçü çizgileri, yazılar ---
-  const mm = (v) => v * K;
   const num = (v) => fmtNum(toUnit(v, settings.unit), 2);
   g.strokeStyle = '#111'; g.fillStyle = '#111'; g.lineWidth = 2;
   g.strokeRect(mm(10), mm(10), mm(L.sheet.w - 20), mm(L.sheet.h - 20));
@@ -1927,18 +1993,99 @@ function makeSheet() {
   hdim(sd.x, sd.x + sd.w, sd.y + sd.h, 7, size.z);
   font(3.2, true); g.textAlign = 'left';
   g.fillText('Önden', mm(f.x), mm(f.y - 1)); g.fillText('Sağdan', mm(sd.x), mm(sd.y - 1));
-  g.fillText('Üstten', mm(tp.x), mm(tp.y - 1)); g.fillText('İzometrik (ölçeksiz)', mm(L.iso.x), mm(L.iso.y - 1));
+  g.fillText('Üstten', mm(tp.x), mm(tp.y - 1));
+  if (sec) {
+    const sb = sec.box;
+    g.fillText('A-A kesiti (ölçek ' + scaleLabel(sec.scale) + ')', mm(sb.x), mm(L.iso.y - 1));
+    hdim(sb.x, sb.x + sb.w, sb.y + sb.h, 7, size.z);
+    vdim(sb.y, sb.y + sb.h, sb.x, -7, size.y);
+    // kesit düzlemi işareti (önden görünüşte)
+    const cx = f.x + (secX - bb.min.x) * L.scale;
+    g.save();
+    g.lineWidth = 1.6; g.setLineDash([mm(8), mm(1.5), mm(1.5), mm(1.5)]);
+    g.beginPath(); g.moveTo(mm(cx), mm(f.y - 4)); g.lineTo(mm(cx), mm(f.y + f.h + 4)); g.stroke();
+    g.setLineDash([]); g.lineWidth = 2.4;
+    for (const [yy, up] of [[f.y - 4, -1], [f.y + f.h + 4, 1]]) {   // ucu sağa (bakış yönüne) dönük kısa ok
+      g.beginPath(); g.moveTo(mm(cx), mm(yy)); g.lineTo(mm(cx + 5), mm(yy)); g.stroke();
+      arrow(mm(cx + 5), mm(yy), 1, 0);
+      font(4, true); g.textAlign = 'center'; g.fillText('A', mm(cx), mm(yy + up * 3));
+    }
+    g.restore();
+  } else {
+    g.fillText('İzometrik (ölçeksiz)', mm(L.iso.x), mm(L.iso.y - 1));
+  }
 
-  showSheet(cv);
+  // --- gizli çizgiler (kesik) ve delik ölçüleri; hata olursa resmin geri kalanı yine verilir ---
+  const views = [['front', f], ['side', sd], ['top', tp]];
+  try {
+    const pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(lastClean.attributes.position.array), 3));
+    const bvh = new MeshBVH(pg);
+    const eps = Math.max(0.02, size.length() * 2e-4);
+    g.save();
+    g.strokeStyle = '#333'; g.lineWidth = 1.5; g.setLineDash([mm(2), mm(1)]);
+    let tooMany = false;
+    for (const [name, box] of views) {
+      const lines = hiddenLines(bvh, name, bb, box, L.scale, eps);
+      if (!lines) { tooMany = true; continue; }
+      for (const ln of lines) {
+        g.beginPath(); g.moveTo(mm(ln[0][0]), mm(ln[0][1]));
+        for (let i = 1; i < ln.length; i++) g.lineTo(mm(ln[i][0]), mm(ln[i][1]));
+        g.stroke();
+      }
+    }
+    g.restore();
+    if (tooMany) toast('Model çok ayrıntılı: bazı görünüşlerde gizli çizgi çizilmedi');
+  } catch (err) {
+    toast('Gizli çizgiler çizilemedi');
+  }
+  try {
+    const holes = holeList(parts);
+    const bbo = { min: [bb.min.x, bb.min.y, bb.min.z], max: [bb.max.x, bb.max.y, bb.max.z] };
+    const inside = (c, pad) => c[0] >= bb.min.x - pad && c[0] <= bb.max.x + pad && c[1] >= bb.min.y - pad && c[1] <= bb.max.y + pad && c[2] >= bb.min.z - pad && c[2] <= bb.max.z + pad;
+    const horiz = { front: 0, side: 2, top: 0 }, vert = { front: 1, side: 1, top: 2 };
+    g.save();
+    g.lineWidth = 1.1; g.strokeStyle = '#111'; g.fillStyle = '#111';
+    for (const [name, box] of views) {
+      const want = name === 'front' ? 'z' : name === 'side' ? 'x' : 'y';
+      let shown = 0;
+      for (const h of holes) {
+        if (h.axis !== want || shown >= 6 || !inside(h.c, 0.5)) continue;
+        shown++;
+        const [cx, cy] = sheetProject(name, h.c, bbo, box, L.scale);
+        let hw, hh, label;
+        if (h.kind === 'round') { hw = hh = h.d * L.scale; label = 'Ø' + num(h.d); }
+        else { hw = h.ext[horiz[name]] * L.scale; hh = h.ext[vert[name]] * L.scale; label = '□ ' + num(h.ext[horiz[name]]) + ' × ' + num(h.ext[vert[name]]); }
+        // eksen çizgileri (nokta-tire)
+        g.save(); g.lineWidth = 0.9; g.setLineDash([mm(5), mm(1), mm(1), mm(1)]);
+        g.beginPath();
+        g.moveTo(mm(cx - hw / 2 - 2.5), mm(cy)); g.lineTo(mm(cx + hw / 2 + 2.5), mm(cy));
+        g.moveTo(mm(cx), mm(cy - hh / 2 - 2.5)); g.lineTo(mm(cx), mm(cy + hh / 2 + 2.5));
+        g.stroke(); g.restore();
+        // gösterme çizgisi: kutunun dışına doğru, omuz + yazı
+        const right = cx >= box.x + box.w / 2 ? 1 : -1;
+        const px = cx + right * hw / 2 * 0.7071, py = cy - hh / 2 * 0.7071;
+        const ex = px + right * 5, ey = py - 5;
+        g.beginPath(); g.moveTo(mm(px), mm(py)); g.lineTo(mm(ex), mm(ey)); g.lineTo(mm(ex + right * 3), mm(ey)); g.stroke();
+        arrow(mm(px), mm(py), -right * 0.7071, 0.7071);
+        font(3.4, true); g.textAlign = right > 0 ? 'left' : 'right';
+        g.fillText(label, mm(ex + right * 4), mm(ey));
+      }
+    }
+    g.restore();
+  } catch (err) { /* delik ölçüsü eklenemezse resim yine de gösterilir */ }
+
+  showSheet(cv, sheetCut);
 }
-function showSheet(cv) {
+function showSheet(cv, cutMode) {
   let o = $('sheetov');
   if (o) o.remove();
   o = document.createElement('div');
   o.id = 'sheetov';
   o.style.cssText = 'position:fixed;inset:0;z-index:40;background:#0f172a;display:flex;flex-direction:column;font-family:system-ui,sans-serif';
   o.innerHTML = '<div style="display:flex;gap:6px;padding:8px"><button data-sh="close" style="flex:1;background:#7f1d1d">✕ Kapat</button>' +
-    '<button data-sh="png" style="flex:1">⬇ PNG</button><button data-sh="pdf" style="flex:1">⬇ PDF</button><button data-sh="zoom" style="flex:1">🔍 Büyüt</button></div>' +
+    '<button data-sh="png" style="flex:1">⬇ PNG</button><button data-sh="pdf" style="flex:1">⬇ PDF</button><button data-sh="zoom" style="flex:1">🔍 Büyüt</button>' +
+    '<button data-sh="mode" style="flex:1">' + (cutMode ? '🧊 İzometrik' : '✂ Kesit') + '</button></div>' +
     '<div id="sheetsc" style="flex:1;overflow:auto;background:#1e293b;touch-action:pan-x pan-y pinch-zoom"></div>';
   o.querySelectorAll('button').forEach((b) => { b.style.cssText += ';font:inherit;font-weight:600;color:#fff;border:0;border-radius:8px;padding:10px 4px;background:' + (b.style.background || '#1e293b') + ';background-color:' + (b.dataset.sh === 'close' ? '#7f1d1d' : '#0369a1'); });
   const sc = o.querySelector('#sheetsc');
@@ -1959,6 +2106,7 @@ function showSheet(cv) {
     if (!b) return;
     const a = b.dataset.sh;
     if (a === 'close') o.remove();
+    else if (a === 'mode') { o.remove(); makeSheet(!cutMode); }
     else if (a === 'zoom') { big = !big; cv.style.width = big ? '250%' : '100%'; b.textContent = big ? '🔍 Küçült' : '🔍 Büyüt'; }
     else if (a === 'png') cv.toBlob((bl) => { if (bl) { save(bl, 'png'); toast('PNG indirildi'); } }, 'image/png');
     else if (a === 'pdf') {
@@ -2058,7 +2206,7 @@ document.addEventListener('click', (e) => {
   if (act === 'mate-do') { mateApply(); return; }
   if (act === 'mate-reset') { mate.a = mate.b = null; disposeOverlay(faceGroup); renderPanel(); return; }
   if (act.startsWith('jt-') || act.startsWith('jx-') || act === 'jpick' || act === 'jreset' || act === 'j-unlink') { linkAct(act); return; }
-  if (act === 'sheet-make') { makeSheet(); return; }
+  if (act === 'sheet-make') { makeSheet(false); return; }
   if (act === 'edges') { settings.edges = settings.edges === false; afterSettings(); return; }
   if (act === 'face-hole') { faceFeature('sub'); return; }
   if (act === 'face-boss') { faceFeature('add'); return; }
