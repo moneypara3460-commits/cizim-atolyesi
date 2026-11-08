@@ -54,6 +54,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 
 **Parça yönetimi, ölçü, görünüm**
 - Parça sekmesi: ad, renk (12 renk), gizle / göster, sırayı değiştir
+- **🧩 Tek parça yap** (Parça sekmesi): tüm görünür parçaları, birleştirme ve oyuklar uygulanmış haliyle tek bir parçaya çevirir. Sonradan ölçüsü değişmez (konum ve döndürme çalışır); yeni parça ekleyip birleştirebilir ya da oyabilirsin. Gizli parçalar atılır, tek renk kalır, Geri al ile döner. Üçgen verisi proje kaydına yazılır (çok ayrıntılı modelde kayıt büyür)
 - Birimler: mm / cm / inç (içeride hep mm saklanır)
 - Ölçü etiketleri (modelin ya da seçili parçanın genişlik, derinlik, yükseklik) ve **📏 ölçüm aracı** (iki noktaya dokun, köşelere yapışır, mesafe ve Δx Δy Δz)
 - **Kesit görünümü** (X / Y / Z ekseninde, kaydırıcıyla, ters çevirilebilir)

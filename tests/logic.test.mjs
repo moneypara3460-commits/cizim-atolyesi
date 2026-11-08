@@ -7,7 +7,7 @@ import {
   chamferBoxPoints, cylinderProfile,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
-  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
+  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
 } from '../logic.js';
 
 let fail = 0;
@@ -461,6 +461,17 @@ t('sectionFit: boşluğa sığan standart ölçek', () => {
   assert.ok(f.box.w <= 157 && f.box.h <= 95);
   const g = sectionFit({ x: 130, y: 83, w: 157, h: 95 }, 600, 400);
   assert.equal(g.scale, 0.2);
+});
+t('packMesh / unpackMesh: gidiş-dönüş', () => {
+  const pos = new Float32Array([0, 0, 0, 1.5, 0, 0, 0, 2.25, 0, 0, 0, 5, 1, 0, 5, 0, 1, 5]);
+  const nor = new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, -1, 0, 0, -1]);
+  const r = unpackMesh(packMesh(pos, nor));
+  assert.deepEqual(Array.from(r.pos), Array.from(pos));
+  assert.ok(Math.abs(r.nor[2] - 1) < 0.01 && Math.abs(r.nor[11] + 1) < 0.01);
+  const r2 = unpackMesh(packMesh(pos, null));
+  assert.equal(r2.nor, null);
+  assert.equal(unpackMesh('bozuk'), null);
+  assert.equal(unpackMesh('9|AAAA'), null);
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');

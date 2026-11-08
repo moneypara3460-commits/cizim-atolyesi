@@ -11,7 +11,7 @@ import {
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
-  VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
+  packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
 } from './logic.js';
 import { openSketch } from './sketch.js';
 
@@ -45,8 +45,18 @@ const cp = { n: 3, dx: 40, dy: 0, dz: 0, cn: 6, ang: 360, touched: false, shape:
 
 const hist = new History();
 const snapshot = () => JSON.stringify({ parts, sel, nextId });
+// "Tek parça" ağları (üçgen verisi) geri al geçmişine girmesin diye parçada yalnızca anahtar (mk) durur, veri burada tutulur.
+// Kaydederken (otomatik kayıt, proje) veri de dosyaya yazılır.
+const meshStore = new Map();
+function snapshotSave() {
+  const o = { parts, sel, nextId };
+  const ks = [...new Set(parts.filter((q) => q.mk && meshStore.has(q.mk)).map((q) => q.mk))];
+  if (ks.length) { o.meshes = {}; ks.forEach((k) => { o.meshes[k] = meshStore.get(k); }); }
+  return JSON.stringify(o);
+}
 function restore(s) {
   const o = JSON.parse(s);
+  if (o.meshes) for (const k of Object.keys(o.meshes)) meshStore.set(k, o.meshes[k]);
   parts = o.parts; sel = o.sel; nextId = o.nextId;
   cleanLinks(parts);
   if (!parts.find((p) => p.id === sel)) sel = parts[0].id;
@@ -511,6 +521,14 @@ function baseGeo(p) {
   const w = clamp(p.w), l = clamp(p.l), h = clamp(p.h), d = clamp(p.d);
   switch (p.type) {
     case 'sketch': return sketchGeo(p);
+    case 'mesh': {
+      const m = unpackMesh(meshStore.get(p.mk));
+      if (!m) return new THREE.BoxGeometry(1, h, 1); // veri yoksa (bozuk kayıt) önemsiz bir kutu
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(m.pos, 3));
+      if (m.nor) g.setAttribute('normal', new THREE.BufferAttribute(m.nor, 3)); else g.computeVertexNormals();
+      return ensureUV(g);
+    }
     case 'cylinder': return cylinderGeo(p, d, h);
     case 'tube': {
       const rr = Math.max(pos(p.r), 0), cc = Math.max(pos(p.c), 0);
@@ -912,7 +930,9 @@ function renderPanel() {
   const snapBtns = SNAPS.map((v) => btn(v === 0 ? 'Yapışma yok' : 'Yapış ' + fmtNum(toUnit(v, settings.unit), 3), 'snap-' + v, settings.snap === v)).join('');
 
   if (tab === 'type') {
-    body = p.type === 'sketch'
+    body = p.type === 'mesh'
+      ? opBtns
+      : p.type === 'sketch'
       ? btn('✎ Krokiyi düzenle', 'sketch-edit') + opBtns
       : TYPES.map((t) => btn(TYPE_LABEL[t], 'type-' + t, p.type === t)).join('') + opBtns;
     hint = 'Seçili parçanın türü' + (idx > 0 ? ' ve birleştirme / oyuk durumu' : '');
@@ -1007,7 +1027,8 @@ function renderPanel() {
       `<div class="row" style="flex:1 0 100%;padding:0;flex-wrap:wrap">` +
       COLORS.map((c) => `<button class="sw${(p.color || DEFAULT_COLOR) === c ? ' on' : ''}" data-color="${c}" style="background:${c}"></button>`).join('') +
       `<button class="sw${!p.color ? ' on' : ''}" data-color="" style="flex:1 0 60px">Varsayılan</button></div>` +
-      btn(p.hidden ? '👁 Göster' : '⊘ Gizle', 'hide') + btn('↑ Yukarı', 'up') + btn('↓ Aşağı', 'down');
+      btn(p.hidden ? '👁 Göster' : '⊘ Gizle', 'hide') + btn('↑ Yukarı', 'up') + btn('↓ Aşağı', 'down') +
+      btn('🧩 Tek parça yap', 'bake') + '<div class="lbl" style="flex:1 0 100%">Tüm görünür parçaları (birleştirme ve oyuklar uygulanmış halde) tek parçaya çevirir. Gizli parçalar atılır, tek renk kalır. Geri al ile döner.</div>';
     hint = 'Gizli parça modele katılmaz. Sıra: 1. parça tabandır; oyuklar kendinden öncekileri keser.';
   } else if (tab === 'view') {
     const sec = section.on ? modelRange(section.axis) : [0, 1];
@@ -1028,6 +1049,7 @@ function renderPanel() {
   } else {
     const fl = fieldsFor(p);
     body = fl.map(([l, k, kd]) => field(l, k, p, kd)).join('') + (p.type === 'sketch' ? btn('✎ Krokiyi düzenle', 'sketch-edit') : '');
+    if (p.type === 'mesh') body = '<div class="lbl" style="flex:1 0 100%">Tek parça: ölçüleri artık değişmez. Konum ve Döndür sekmeleri çalışır; yeni parça ekleyip birleştirebilir ya da oyabilirsin.</div>';
     hint = 'Ölçüler (' + settings.unit + ')' + (p.type === 'box' || p.type === 'cylinder' ? '. Yuvarlama ve pah birlikte kullanılırsa yuvarlama geçerli olur. Eğim: üst yüz, her yönden yükseklik × tan(eğim) kadar daralır (döküm eğimi).' : '');
   }
   $('tabbody').innerHTML = body;
@@ -1053,7 +1075,7 @@ let saveT;
 function scheduleSave() {
   clearTimeout(saveT);
   saveT = setTimeout(() => {
-    try { localStorage.setItem('cizim:auto', JSON.stringify({ snap: snapshot(), projName })); } catch (e) { /* dolu/engelli */ }
+    try { localStorage.setItem('cizim:auto', JSON.stringify({ snap: snapshotSave(), projName })); } catch (e) { /* dolu/engelli */ }
   }, 500);
 }
 
@@ -1178,6 +1200,33 @@ function doCircular() {
   if (!(n >= 2 && n <= 41)) { toast('Toplam adet 2 ile 41 arasında olmalı'); return; }
   const b = parts[0];
   addCopies(circularArray(cur(), nextId, n, pos(b.x), pos(b.z), cp.ang || 360));
+}
+
+/* ---- tüm parçaları tek parçaya çevir ---- */
+function bakeAll() {
+  if (!lastClean || !lastClean.attributes.position.count) { toast('Önce bir model olmalı'); return; }
+  if (parts.length === 1 && parts[0].type === 'mesh') { toast('Zaten tek parça'); return; }
+  const g = lastClean, bb = g.boundingBox;
+  const cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2, my = (bb.min.y + bb.max.y) / 2;
+  const P = g.attributes.position, N = g.attributes.normal, n = P.count;
+  const pos3 = new Float32Array(n * 3), nor3 = N ? new Float32Array(n * 3) : null;
+  for (let i = 0; i < n; i++) {
+    pos3[i * 3] = P.getX(i) - cx; pos3[i * 3 + 1] = P.getY(i) - my; pos3[i * 3 + 2] = P.getZ(i) - cz;
+    if (nor3) { nor3[i * 3] = N.getX(i); nor3[i * 3 + 1] = N.getY(i); nor3[i * 3 + 2] = N.getZ(i); }
+  }
+  const packed = packMesh(pos3, nor3);
+  const vis = parts.filter((q) => !q.hidden);
+  const colors = new Set(vis.map((q) => q.color || DEFAULT_COLOR));
+  const dropped = parts.length - vis.length;
+  commit();
+  const key = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  meshStore.set(key, packed);
+  const m = { id: nextId++, type: 'mesh', op: 'add', ...DEFAULTS, x: cx, y: bb.min.y, z: cz, h: Math.max(bb.max.y - bb.min.y, 0.001), mk: key, name: projName && projName !== 'model' ? projName : 'Tek parça' };
+  if (vis[0] && vis[0].color) m.color = vis[0].color;
+  parts = [m]; sel = m.id;
+  tab = 'part';
+  refreshAll();
+  toast('Tek parça oldu' + (colors.size > 1 ? ' (tek renk)' : '') + (dropped ? ' · ' + dropped + ' gizli parça atıldı' : ''));
 }
 
 /* ---- parça yönetimi ---- */
@@ -2128,7 +2177,7 @@ function storeProjects(all) {
 }
 function saveProject(name) {
   const all = loadProjects();
-  all[name] = { data: snapshot(), at: Date.now() };
+  all[name] = { data: snapshotSave(), at: Date.now() };
   if (storeProjects(all)) { projName = name; scheduleSave(); toast('Kaydedildi: ' + name); }
 }
 function renderDialog() {
@@ -2206,6 +2255,7 @@ document.addEventListener('click', (e) => {
   if (act === 'mate-do') { mateApply(); return; }
   if (act === 'mate-reset') { mate.a = mate.b = null; disposeOverlay(faceGroup); renderPanel(); return; }
   if (act.startsWith('jt-') || act.startsWith('jx-') || act === 'jpick' || act === 'jreset' || act === 'j-unlink') { linkAct(act); return; }
+  if (act === 'bake') { bakeAll(); return; }
   if (act === 'sheet-make') { makeSheet(false); return; }
   if (act === 'edges') { settings.edges = settings.edges === false; afterSettings(); return; }
   if (act === 'face-hole') { faceFeature('sub'); return; }

@@ -10,6 +10,7 @@ export const TYPE_LABEL = {
   cone: 'Koni',
   tube: 'Boru',
   sketch: 'Kroki',
+  mesh: 'Tek parça',
 };
 
 export const DEFAULTS = {
@@ -668,6 +669,42 @@ export function jpegToPdf(jpeg, wPx, hPx) {
   let o = 0;
   for (const c of chunks) { out.set(c, o); o += c.length; }
   return out;
+}
+
+/* ---------------- Tek parça (pişirilmiş ağ) ---------------- */
+
+// Üçgen listesini (konum: Float32 x3, normal: Float32 x3 ya da null) tek metne paketler: "n|base64".
+// Konum 4 bayt, normal 1 bayt (−127..127) tutulur.
+export function packMesh(pos, nor) {
+  const n = Math.floor(pos.length / 3);
+  const bytes = new Uint8Array(n * 12 + n * 3);
+  bytes.set(new Uint8Array(pos.buffer, pos.byteOffset, n * 12), 0);
+  const nb = new Int8Array(bytes.buffer, n * 12, n * 3);
+  if (nor) for (let i = 0; i < n * 3; i++) nb[i] = Math.max(-127, Math.min(127, Math.round(nor[i] * 127)));
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return n + '|' + btoa(bin) + (nor ? '' : '|0');
+}
+// packMesh'in tersi: { pos: Float32Array, nor: Float32Array | null }; bozuk metinde null
+export function unpackMesh(str) {
+  try {
+    const [ns, b64, flag] = String(str).split('|');
+    const n = parseInt(ns, 10);
+    if (!(n > 0) || n % 3 !== 0) return null;
+    const bin = atob(b64);
+    if (bin.length !== n * 15) return null;
+    const buf = new ArrayBuffer(bin.length);
+    const u = new Uint8Array(buf);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    const pos = new Float32Array(buf, 0, n * 3);
+    let nor = null;
+    if (flag !== '0') {
+      const nb = new Int8Array(buf, n * 12, n * 3);
+      nor = new Float32Array(n * 3);
+      for (let i = 0; i < n * 3; i++) nor[i] = nb[i] / 127;
+    }
+    return { pos, nor };
+  } catch (e) { return null; }
 }
 
 /* ---------------- Teknik resim: gizli çizgi, delik ölçüsü, kesit yerleşimi ---------------- */
