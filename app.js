@@ -13,10 +13,10 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261108c';
-import { openSketch } from './sketch.js?v=20261108c';
+} from './logic.js?v=20261108d';
+import { openSketch } from './sketch.js?v=20261108d';
 
-const APP_VER = '20261108c'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261108d'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m

@@ -7,7 +7,7 @@ import {
   chamferBoxPoints, cylinderProfile,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
-  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, SWEEP_DEFAULTS, LOFT_DEFAULTS, filletPath, arcPath, helixPath, sweepTris, loftTris, signedVolume, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
+  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, solveCons, consError, freedom, fixConsAfterRemove, SWEEP_DEFAULTS, LOFT_DEFAULTS, filletPath, arcPath, helixPath, sweepTris, loftTris, signedVolume, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
 } from '../logic.js';
 
 let fail = 0;
@@ -552,6 +552,40 @@ t('heightOf: süpürme yüksekliği geometriden gelir; yeni parça varsayılanla
   n.pts[0][0] = 99;
   assert.equal(SWEEP_DEFAULTS.pts[0][0], 0); // varsayılan paylaşılmaz
   assert.equal(newPart(8, 'loft', 'add', null).ls1, 'circle');
+});
+t('solveCons: yatay/dikey + uzunluk + eşit + sabit = 20 mm kare', () => {
+  const cons = [{ t: 'h', e: 0 }, { t: 'v', e: 1 }, { t: 'h', e: 2 }, { t: 'v', e: 3 }, { t: 'len', e: 0, L: 20 }, { t: 'eq', e: 0, f: 1 }, { t: 'fix', i: 0 }];
+  const r = solveCons([[0, 0], [10, 1], [11, 9], [-1, 10]], cons);
+  assert.ok(r.ok);
+  const want = [[0, 0], [20, 0], [20, 20], [0, 20]];
+  r.pts.forEach((q, i) => assert.ok(Math.hypot(q[0] - want[i][0], q[1] - want[i][1]) < 1e-3, JSON.stringify(r.pts)));
+  assert.equal(freedom(4, cons), 0);
+});
+t('solveCons: eşkenar üçgen (60° + eşit), sürüklenen köşe sabit kalır', () => {
+  const r = solveCons([[0, 0], [10, 0], [5, 7]], [{ t: 'ang', e: 0, f: 1, A: 60 }, { t: 'eq', e: 0, f: 1 }, { t: 'h', e: 0 }], [0, 1]);
+  assert.ok(r.ok);
+  assert.ok(Math.abs(r.pts[2][1] - 5 * Math.sqrt(3)) < 1e-3);
+  assert.deepEqual(r.pts[0], [0, 0]);
+});
+t('solveCons: paralel ve dik', () => {
+  const r = solveCons([[0, 0], [10, 1], [11, 9], [0, 10]], [{ t: 'par', e: 0, f: 2 }, { t: 'perp', e: 0, f: 1 }]);
+  assert.ok(r.ok);
+  for (const c of [{ t: 'par', e: 0, f: 2 }, { t: 'perp', e: 0, f: 1 }]) assert.ok(consError(r.pts, c) < 1e-3);
+});
+t('solveCons: çelişen kısıtlar başarısız', () => {
+  const r = solveCons([[0, 0], [10, 0], [10, 10]], [{ t: 'fix', i: 0 }, { t: 'fix', i: 1 }, { t: 'len', e: 0, L: 20 }]);
+  assert.equal(r.ok, false);
+});
+t('fixConsAfterRemove: silinen köşeye değen kısıt düşer, numaralar kayar', () => {
+  const r = fixConsAfterRemove([{ t: 'h', e: 0 }, { t: 'v', e: 3 }, { t: 'fix', i: 4 }, { t: 'len', e: 1, L: 5 }], 4, 1);
+  assert.deepEqual(r, [{ t: 'v', e: 2 }, { t: 'fix', i: 3 }]);
+});
+t('sketchFromDraw / sketchToDraw kısıtları taşır', () => {
+  const d = { mode: 'extrude', plane: 'top', pts: [[0, 0], [20, 0], [20, 10], [0, 10]], h: 5, cons: [[{ t: 'h', e: 0 }]] };
+  const p = sketchFromDraw(d);
+  assert.deepEqual(p.cons, [[{ t: 'h', e: 0 }]]);
+  assert.deepEqual(sketchToDraw(p).cons, [[{ t: 'h', e: 0 }]]);
+  assert.equal(sketchFromDraw({ ...d, cons: [[]] }).cons, undefined);
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');

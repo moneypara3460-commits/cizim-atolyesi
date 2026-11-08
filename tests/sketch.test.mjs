@@ -51,6 +51,14 @@ t('tek şekil geriye uyumlu (more yok)', () => {
   const r = validateDraw('extrude', 'top', rectPts(0, 0, 10, 10), 5);
   assert.equal(r.draw.more, undefined);
 });
+t('validateDraw kısıtları döngü sırasıyla taşır; köşe sayısı değişirse atar', () => {
+  const big = rectPts(0, 0, 50, 50), small = rectPts(10, 10, 20, 20);
+  const r = validateDraw('extrude', 'top', [small, big], 5, [[{ t: 'h', e: 0 }], [{ t: 'v', e: 1 }]]);
+  assert.deepEqual(r.draw.cons, [[{ t: 'v', e: 1 }], [{ t: 'h', e: 0 }]]);
+  const dup = [[0, 0], [10, 0], [10, 0], [10, 10]];
+  const r2 = validateDraw('extrude', 'top', [dup], 5, [[{ t: 'h', e: 0 }]]);
+  assert.equal(r2.draw.cons, undefined);
+});
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
 process.exit(fail ? 1 : 0);

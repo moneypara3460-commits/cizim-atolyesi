@@ -318,6 +318,7 @@ export function sketchFromDraw(d) {
   const bb = bboxPts([...d.pts, ...more.flat()]);
   const cu = (bb.minU + bb.maxU) / 2, cv = (bb.minV + bb.maxV) / 2;
   const base = { type: 'sketch', mode: d.mode, plane: d.plane, h: d.mode === 'revolve' ? 0 : d.h };
+  if (Array.isArray(d.cons) && d.cons.some((c) => c && c.length)) base.cons = JSON.parse(JSON.stringify(d.cons));
   const r4 = (n) => Math.round(n * 1e4) / 1e4 + 0;
   const withMore = (o, f) => { if (more.length) o.more = more.map((l) => l.map(f)); return o; };
   if (d.mode === 'revolve') {
@@ -339,6 +340,7 @@ export function sketchToDraw(p) {
   else f = ([u, v]) => [u + x, v + y];
   const d = { mode: p.mode, plane: p.mode === 'revolve' ? 'front' : p.plane, pts: p.pts.map(f), h: fin(p.h, 20) };
   if (p.mode !== 'revolve' && p.more && p.more.length) d.more = p.more.map((l) => l.map(f));
+  if (Array.isArray(p.cons)) d.cons = JSON.parse(JSON.stringify(p.cons));
   return d;
 }
 export function sketchHeight(p) {
@@ -673,6 +675,147 @@ export function jpegToPdf(jpeg, wPx, hPx) {
   const out = new Uint8Array(len);
   let o = 0;
   for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out;
+}
+
+/* ---------------- Parametrik kroki: kısıtlar ve çözücü ---------------- */
+// Kısıtlar çokgenin köşe / kenar numaralarıyla tutulur. Kenar e = köşe e ile köşe (e+1) % n arası.
+//  { t:'h', e }            yatay        { t:'v', e }          dikey
+//  { t:'len', e, L }       uzunluk (mm) { t:'fix', i }        köşe sabit
+//  { t:'par', e, f }       paralel      { t:'perp', e, f }    dik       { t:'eq', e, f }   eşit uzunluk
+//  { t:'ang', e, f, A }    iki kenar arası açı (derece, 0–180)
+export const CONS_EQ = { h: 1, v: 1, len: 1, fix: 2, par: 1, perp: 1, eq: 1, ang: 1 };
+export const CONS_LABEL = { h: 'Yatay', v: 'Dikey', len: 'Uzunluk', fix: 'Sabit', par: 'Paralel', perp: 'Dik', eq: 'Eşit', ang: 'Açı' };
+
+const edgeV = (pts, e) => [e, (e + 1) % pts.length];
+const wrapPi = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+
+// Kısıt hatası (0 = sağlanıyor). Uzunluk mm, açı radyan cinsinden ölçülür.
+export function consError(pts, c) {
+  const n = pts.length;
+  const ed = (e) => { const [a, b] = edgeV(pts, e); return [pts[b][0] - pts[a][0], pts[b][1] - pts[a][1]]; };
+  const ang = (e) => { const d = ed(e); return Math.atan2(d[1], d[0]); };
+  const len = (e) => Math.hypot(...ed(e));
+  const ok = (e) => Number.isInteger(e) && e >= 0 && e < n;
+  if (c.t === 'fix') return 0;
+  if (!ok(c.e) || (c.f !== undefined && !ok(c.f))) return 0;
+  switch (c.t) {
+    case 'h': return Math.abs(ed(c.e)[1]);
+    case 'v': return Math.abs(ed(c.e)[0]);
+    case 'len': return Math.abs(len(c.e) - c.L);
+    case 'eq': return Math.abs(len(c.e) - len(c.f));
+    case 'par': { const d = wrapPi(2 * (ang(c.f) - ang(c.e))) / 2; return Math.abs(d) * Math.min(len(c.e), len(c.f)); }
+    case 'perp': { const d = wrapPi(2 * (ang(c.f) - ang(c.e) - Math.PI / 2)) / 2; return Math.abs(d) * Math.min(len(c.e), len(c.f)); }
+    case 'ang': {
+      // iç açı: iki kenarın doğrultuları arasındaki açı, 0–180
+      const da = Math.abs(wrapPi(ang(c.f) - ang(c.e)));
+      const want = c.A * D2R;
+      return Math.min(Math.abs(da - want), Math.abs(Math.PI - da - want)) * Math.min(len(c.e), len(c.f));
+    }
+  }
+  return 0;
+}
+
+// Konum tabanlı çözücü (Gauss-Seidel izdüşümü). pinned: ek olarak sabit tutulacak köşeler (ör. sürüklenen köşe).
+// Dönüş: { pts (yeni dizi), ok, err (en büyük hata, mm) }
+export function solveCons(pts0, cons, pinned = [], iters = 400, tol = 1e-5) {
+  const pts = pts0.map((q) => q.slice());
+  const n = pts.length;
+  if (!cons || !cons.length || n < 2) return { pts, ok: true, err: 0 };
+  const fixed = new Set(pinned);
+  for (const c of cons) if (c.t === 'fix' && c.i >= 0 && c.i < n) fixed.add(c.i);
+  const w = (i) => (fixed.has(i) ? 0 : 1);
+  const valid = cons.filter((c) => c.t !== 'fix' && Number.isInteger(c.e) && c.e >= 0 && c.e < n && (c.f === undefined || (Number.isInteger(c.f) && c.f >= 0 && c.f < n && c.f !== c.e)));
+  // kenarı pivot etrafında döndür; pivot sabit köşe ya da orta nokta
+  const rotateEdge = (e, da) => {
+    const [a, b] = edgeV(pts, e);
+    const wa = w(a), wb = w(b);
+    if (!wa && !wb) return false;
+    let px, py;
+    if (!wa) [px, py] = pts[a]; else if (!wb) [px, py] = pts[b];
+    else { px = (pts[a][0] + pts[b][0]) / 2; py = (pts[a][1] + pts[b][1]) / 2; }
+    const c = Math.cos(da), s = Math.sin(da);
+    for (const i of [a, b]) {
+      if (!w(i)) continue;
+      const x = pts[i][0] - px, y = pts[i][1] - py;
+      pts[i] = [px + x * c - y * s, py + x * s + y * c];
+    }
+    return true;
+  };
+  const setLen = (e, L, share = 1) => {
+    const [a, b] = edgeV(pts, e);
+    const wa = w(a), wb = w(b), ws = wa + wb;
+    if (!ws) return;
+    const dx = pts[b][0] - pts[a][0], dy = pts[b][1] - pts[a][1];
+    const cur = Math.hypot(dx, dy);
+    if (cur < 1e-9) { if (wb) pts[b] = [pts[a][0] + L, pts[a][1]]; else pts[a] = [pts[b][0] - L, pts[b][1]]; return; }
+    const k = (cur - L) * share / cur;
+    pts[a] = [pts[a][0] + dx * k * wa / ws, pts[a][1] + dy * k * wa / ws];
+    pts[b] = [pts[b][0] - dx * k * wb / ws, pts[b][1] - dy * k * wb / ws];
+  };
+  const angOf = (e) => { const [a, b] = edgeV(pts, e); return Math.atan2(pts[b][1] - pts[a][1], pts[b][0] - pts[a][0]); };
+  const lenOf = (e) => { const [a, b] = edgeV(pts, e); return Math.hypot(pts[b][0] - pts[a][0], pts[b][1] - pts[a][1]); };
+  const turn = (e, f, d) => {
+    // d kadar farkı iki kenara paylaştır (dönebilenlere)
+    const ce = (() => { const [a, b] = edgeV(pts, e); return w(a) + w(b) > 0; })();
+    const cf = (() => { const [a, b] = edgeV(pts, f); return w(a) + w(b) > 0; })();
+    if (ce && cf) { rotateEdge(e, d / 2); rotateEdge(f, -d / 2); } else if (ce) rotateEdge(e, d); else if (cf) rotateEdge(f, -d);
+  };
+  let err = 0;
+  for (let it = 0; it < iters; it++) {
+    for (const c of valid) {
+      const [a, b] = edgeV(pts, c.e);
+      switch (c.t) {
+        case 'h': case 'v': {
+          const k = c.t === 'h' ? 1 : 0, wa = w(a), wb = w(b), ws = wa + wb;
+          if (!ws) break;
+          const m = (pts[a][k] * (1 - wa / ws) + pts[b][k] * (1 - wb / ws));
+          const tgt = ws === 2 ? (pts[a][k] + pts[b][k]) / 2 : m;
+          if (wa) pts[a][k] = tgt;
+          if (wb) pts[b][k] = tgt;
+          break;
+        }
+        case 'len': setLen(c.e, Math.max(c.L, 1e-6)); break;
+        case 'eq': { const L = (lenOf(c.e) + lenOf(c.f)) / 2; setLen(c.e, L); setLen(c.f, L); break; }
+        case 'par': turn(c.e, c.f, wrapPi(2 * (angOf(c.f) - angOf(c.e))) / 2); break;
+        case 'perp': turn(c.e, c.f, wrapPi(2 * (angOf(c.f) - angOf(c.e) - Math.PI / 2)) / 2); break;
+        case 'ang': {
+          const want = c.A * D2R, d0 = wrapPi(angOf(c.f) - angOf(c.e));
+          // en yakın çözüm: ±want ya da ±(π − want)
+          let best = null;
+          for (const tgt of [want, -want, Math.PI - want, -(Math.PI - want)]) { const d = wrapPi(d0 - tgt); if (best === null || Math.abs(d) < Math.abs(best)) best = d; }
+          turn(c.e, c.f, best);
+          break;
+        }
+      }
+    }
+    err = 0;
+    for (const c of valid) err = Math.max(err, consError(pts, c));
+    if (err < tol) break;
+  }
+  return { pts, ok: err < 1e-3, err };
+}
+
+// Serbestlik derecesi (yaklaşık): 2·köşe − kısıt denklemleri. 0 → tam tanımlı, < 0 → fazla kısıt
+export function freedom(n, cons) {
+  let eq = 0;
+  for (const c of cons || []) eq += CONS_EQ[c.t] || 0;
+  return 2 * n - eq;
+}
+
+// Köşe silinince / eklenince kısıtları uyarlar. removed: silinen köşe indeksi (null = sadece temizle)
+export function fixConsAfterRemove(cons, n, removed) {
+  const out = [];
+  for (const c of cons || []) {
+    const map = (i) => (removed === null || removed === undefined ? i : i === removed ? -1 : i > removed ? i - 1 : i);
+    if (c.t === 'fix') { const i = map(c.i); if (i >= 0 && i < n) out.push({ ...c, i }); continue; }
+    // bir kenar, silinen köşeye değiyorsa kısıt düşer
+    const touches = (e) => removed !== null && removed !== undefined && (e === removed || (e + 1) % (n + 1) === removed);
+    if (touches(c.e) || (c.f !== undefined && touches(c.f))) continue;
+    const e = map(c.e), f = c.f === undefined ? undefined : map(c.f);
+    if (e < 0 || e >= n || (f !== undefined && (f < 0 || f >= n))) continue;
+    out.push(f === undefined ? { ...c, e } : { ...c, e, f });
+  }
   return out;
 }
 
