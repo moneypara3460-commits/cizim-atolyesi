@@ -13,13 +13,15 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261109d';
-import { openSketch } from './sketch.js?v=20261109d';
-import { to3MF, toSTEP } from './export3d.js?v=20261109d';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109d';
-import { openCad2D } from './cad2d.js?v=20261109d';
-import { openCutOpt } from './cutopt-ui.js?v=20261109d';
-import { createMfg } from './mfg-ui.js?v=20261109d';
+} from './logic.js?v=20261109e';
+import { openSketch } from './sketch.js?v=20261109e';
+import { to3MF, toSTEP } from './export3d.js?v=20261109e';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109e';
+import { openCad2D } from './cad2d.js?v=20261109e';
+import { openCutOpt } from './cutopt-ui.js?v=20261109e';
+import { createMfg } from './mfg-ui.js?v=20261109e';
+import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261109e';
+import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261109e';
 
 const APP_VER = '20261108o'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -51,12 +53,13 @@ const cp = { n: 3, dx: 40, dy: 0, dz: 0, cn: 6, ang: 360, touched: false, shape:
   mgap: 0, mrot: 0, mcenter: true, mtype: 'coinc', mval: 0, mang: 90, mflip: false };                                      // montaj // çoğaltma + yüz ayarları (mm)
 
 const hist = new History();
-const snapshot = () => JSON.stringify({ parts, sel, nextId });
+let weldPlan = null;   // Akıllı Kaynak Planlama: { welds, set, symbols, ver }
+const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan });
 // "Tek parça" ağları (üçgen verisi) geri al geçmişine girmesin diye parçada yalnızca anahtar (mk) durur, veri burada tutulur.
 // Kaydederken (otomatik kayıt, proje) veri de dosyaya yazılır.
 const meshStore = new Map();
 function snapshotSave() {
-  const o = { parts, sel, nextId };
+  const o = { parts, sel, nextId, welds: weldPlan };
   const ks = [...new Set(parts.filter((q) => q.mk && meshStore.has(q.mk)).map((q) => q.mk))];
   if (ks.length) { o.meshes = {}; ks.forEach((k) => { o.meshes[k] = meshStore.get(k); }); }
   return JSON.stringify(o);
@@ -64,7 +67,7 @@ function snapshotSave() {
 function restore(s) {
   const o = JSON.parse(s);
   if (o.meshes) for (const k of Object.keys(o.meshes)) meshStore.set(k, o.meshes[k]);
-  parts = o.parts; sel = o.sel; nextId = o.nextId;
+  parts = o.parts; sel = o.sel; nextId = o.nextId; weldPlan = o.welds || null;
   cleanLinks(parts);
   if (!parts.find((p) => p.id === sel)) sel = parts[0].id;
 }
@@ -381,10 +384,12 @@ resize();
 
 const labelSprites = [];
 const msrSprites = [];
+const weldSprites = [];
 function updateLabelScales() {
   const k = 2 * Math.tan(camera.fov * RAD / 2) * 0.045;
   for (const s of labelSprites) s.scale.set(k * s.userData.aspect, k, 1);
   for (const s of msrSprites) s.scale.set(k * s.userData.aspect, k, 1);
+  for (const s of weldSprites) s.scale.set(k * 0.8 * s.userData.aspect, k * 0.8, 1);
 }
 renderer.setAnimationLoop((now) => {
   if (anim.playing) animTick(now);
@@ -926,7 +931,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['mfg', 'Üretim']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['mfg', 'Üretim'], ['weld', 'Kaynak']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -1103,7 +1108,8 @@ function renderPanel() {
     drawJointAxis();
   } else if (tab === 'sheet') {
     body = btn('📐 Teknik resim oluştur', 'sheet-make') +
-      '<div class="lbl" style="flex:1 0 100%">A4 yatay: ön, yan, üst ve izometrik görünüş; ölçek ve genel ölçüler.</div>';
+      '<div class="lbl" style="flex:1 0 100%">A4 yatay: ön, yan, üst ve izometrik görünüş; ölçek ve genel ölçüler.</div>' +
+      (weldPlan && (weldPlan.welds || []).some((w) => w.status === 'approved') ? btn('Kaynak sembolleri: ' + (weldPlan.symbols !== false ? 'açık' : 'kapalı'), 'wd-sym', weldPlan.symbols !== false) + '<div class="lbl" style="flex:1 0 100%">Onaylı kaynaklar (Kaynak sekmesi) resimde ISO 2553 sembolüyle gösterilir: a = boğaz kalınlığı (girilmediyse a?), uzunluk, ○ çepeçevre, kuyrukta yöntem no ve kaynak harfi.</div>' : '');
     hint = 'Resim PNG ya da PDF olarak indirilir. Birim: ' + settings.unit + ' (Görünüm sekmesinden değiştirilir).';
   } else if (tab === 'anim') {
     const ds = animDrivers();
@@ -1148,6 +1154,9 @@ function renderPanel() {
       '<div class="lbl h">Dışa aktar</div>' + btn('📋 Parça listesi (CSV)', 'bom-csv') + btn('📐 DXF (ön / yan / üst)', 'dxf-out') +
       btn('🧊 STEP (SolidWorks, Fusion, FreeCAD)', 'step-out') + btn('🖨 3MF (3B yazıcı)', 'mf-out');
     hint = 'STEP yüzeyli (üçgen yüzlü) katı olarak yazılır: CAD programında açılır, ölçülür, montaja eklenir; ama yüzleri düzgün eğri değil, parametrik özellik ağacı yoktur. Kapalı olmayan modeller yüzey olarak gider. 3MF, Cura / PrusaSlicer / Bambu Studio içindir. Ağırlık tam dolu (içi dolu) katı için hesaplanır; 3B yazıcıda dolgu oranı ve duvar kalınlığı gerçek ağırlığı düşürür. DXF: AutoCAD, FreeCAD gibi programlarda açılır; gizli çizgiler ayrı katmandadır.';
+  } else if (tab === 'weld') {
+    body = weldUI.html();
+    hint = 'Kaynak planı: bulunan birleşimler öneridir, sen onaylarsın. Renkler: turuncu köşe, kırmızı alın, mor T kaynağı; soluk = onaylanmamış öneri, sarı = seçili. Sarf ve süre değerleri tahminidir; kaynak ölçüsü ve dayanımı mühendis onayı gerektirir.';
   } else if (tab === 'mfg') {
     body = mfg.html();
     hint = 'Üretilebilirlik kontrolü gerçek geometriyle yapılır ama bir ön kontroldür: kesin hata demek değildir, yapısal dayanımı göstermez. Sonuca dokununca kamera o bölgeye gider; kırmızı kutu problem bölgesi, turuncu parçalar ilgili parçalardır.';
@@ -1202,6 +1211,7 @@ function renderPanel() {
   }
   $('tabbody').innerHTML = body;
   $('tabbody').classList.add('grid'); // tüm sekmelerde düğmeler okunur boyutta, satıra en fazla 2 tane
+  if (typeof weldGroup !== 'undefined') { weldGroup.visible = tab === 'weld'; if (tab === 'weld') drawWelds(); }
   $('tabhint').textContent = hint;
   $('b-move').classList.toggle('on', settings.move);
 }
@@ -1455,6 +1465,66 @@ const mfg = createMfg({
     c.width = src.width; c.height = src.height; c.getContext('2d').drawImage(src, 0, 0);
     return c;
   },
+});
+
+/* ---- Akıllı Kaynak Planlama: 3B dikiş gösterimi ---- */
+const weldGroup = new THREE.Group();
+weldGroup.visible = false;
+scene.add(weldGroup);
+const WELD_COL = { kose: 0xf97316, alin: 0xef4444, t: 0xa855f7 };
+const weldMats = new Map();
+const weldMat = (col, op) => { const k = col + ':' + op; if (!weldMats.has(k)) weldMats.set(k, new THREE.MeshBasicMaterial({ color: col, transparent: op < 1, opacity: op, depthWrite: op >= 1 })); return weldMats.get(k); };
+function drawWelds() {
+  weldGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.isSprite) { o.material.map.dispose(); o.material.dispose(); } });
+  weldGroup.clear();
+  weldSprites.length = 0;
+  if (!weldPlan || !weldPlan.welds) return;
+  const bb = lastClean && lastClean.boundingBox, size = bb ? bb.getSize(new THREE.Vector3()).length() : 500;
+  const R = Math.max(1.2, size * 0.0025), selId = weldUI.state.sel;
+  for (const w of weldPlan.welds) {
+    if (w.status === 'rejected' || !w.pos) continue;
+    const on = w.id === selId, col = on ? 0xfacc15 : WELD_COL[w.type] || 0x94a3b8, op = w.status === 'approved' || on ? 1 : 0.45, r = on ? R * 1.7 : R;
+    const pts = (w.path || [w.pos]).map((p) => new THREE.Vector3(p[0], p[1], p[2]));
+    if (pts.length >= 2) {
+      const cp = new THREE.CurvePath();
+      const n = w.closed ? pts.length : pts.length - 1;
+      for (let i = 0; i < n; i++) cp.add(new THREE.LineCurve3(pts[i], pts[(i + 1) % pts.length]));
+      weldGroup.add(new THREE.Mesh(new THREE.TubeGeometry(cp, Math.max(8, n * 6), r, 6, false), weldMat(col, op)));
+    } else weldGroup.add(Object.assign(new THREE.Mesh(new THREE.SphereGeometry(r * 3, 12, 8), weldMat(col, op)), { position: pts[0] }));
+    const sp = textSprite(w.label + (w.status === 'approved' ? ' ✓' : ''));
+    sp.position.set(w.pos[0], w.pos[1], w.pos[2]);
+    weldGroup.add(sp); weldSprites.push(sp);
+  }
+  updateLabelScales();
+}
+function shot3D() {
+  renderer.render(scene, camera);
+  const src = renderer.domElement, c = document.createElement('canvas');
+  c.width = src.width; c.height = src.height; c.getContext('2d').drawImage(src, 0, 0);
+  return c;
+}
+const weldUI = createWeldUI({
+  getModel: mfgModel,
+  getPlan: () => weldPlan,
+  setPlan: (p) => { weldPlan = p; },
+  commit,
+  changed: () => { scheduleSave(); renderPanel(); if (tab !== 'weld') drawWelds(); },
+  render: () => { if (tab === 'weld') renderPanel(); else drawWelds(); },
+  focus(w) {
+    drawWelds();
+    if (!w || !w.pos) return;
+    const box = new THREE.Box3();
+    for (const p of w.path && w.path.length ? w.path : [w.pos]) box.expandByPoint(new THREE.Vector3(p[0], p[1], p[2]));
+    const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3()).multiplyScalar(3).max(new THREE.Vector3(120, 120, 120));
+    fit(new THREE.Box3().setFromCenterAndSize(c, sz));
+  },
+  toast,
+  name: () => projName || 'model',
+  parts: () => parts.filter((q) => !q.hidden && !(parts.indexOf(q) > 0 && q.op === 'sub')).map((q) => ({ id: q.id, name: partName(q, parts.indexOf(q)) })),
+  bbox: () => (lastClean && lastClean.boundingBox ? { min: lastClean.boundingBox.min.toArray(), max: lastClean.boundingBox.max.toArray() } : null),
+  version: () => rebuildCount,
+  openSheet: () => makeSheet(false),
+  snapshot: shot3D,
 });
 
 // projedeki bütün profil iskeletlerinin kesim listesi → kesim optimizasyonu girdisi
@@ -2154,6 +2224,7 @@ function linkTap(cx, cy) {
 }
 document.addEventListener('change', (e) => {
   const el = e.target;
+  if (el.dataset && el.dataset.wf) { weldUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.link === 'parent') setParent(cur(), el.value === '' ? null : Number(el.value));
 });
 
@@ -2722,8 +2793,42 @@ function makeSheet(cut) {
     }
     g.restore();
   } catch (err) { /* delik ölçüsü eklenemezse resim yine de gösterilir */ }
+  try { drawSheetWelds(g, views, bb, L, K); } catch (err) { /* kaynak sembolü çizilemezse resim yine de gösterilir */ }
 
   showSheet(cv, sheetCut);
+}
+// teknik resim: onaylı kaynakların ISO 2553 sembolleri, kaynağın en iyi göründüğü görünüşte
+function drawSheetWelds(g, views, bb, L, K) {
+  if (!weldPlan || weldPlan.symbols === false) return;
+  const ws = (weldPlan.welds || []).filter((w) => w.status === 'approved' && w.pos);
+  if (!ws.length) return;
+  const bbo = { min: [bb.min.x, bb.min.y, bb.min.z], max: [bb.max.x, bb.max.y, bb.max.z] };
+  const drop = { front: 2, side: 0, top: 1 };                     // görünüşte kaybolan eksen
+  const used = [];
+  const vmap = new Map(views);
+  for (const w of ws) {
+    const pts = w.path && w.path.length ? w.path : [w.pos];
+    // dikişin en geniş göründüğü görünüş
+    let best = null, bs = -1;
+    for (const [name] of views) {
+      if (!drop.hasOwnProperty(name)) continue;
+      const ax = [0, 1, 2].filter((k) => k !== drop[name]);
+      const spread = ax.reduce((s, k) => s + Math.max(...pts.map((p) => p[k])) - Math.min(...pts.map((p) => p[k])), 0);
+      if (spread > bs + 1e-6) { bs = spread; best = name; }
+    }
+    const box = vmap.get(best);
+    if (!box) continue;
+    const [cx, cy] = sheetProject(best, w.pos, bbo, box, L.scale);
+    const dir = cx < box.x + box.w / 2 ? -1 : 1;
+    for (let tries = 0; tries < 6; tries++) {
+      const rise = 7 + tries * 6;
+      const r = { x0: Math.min(cx, cx + dir * 58), x1: Math.max(cx, cx + dir * 58), y0: cy - rise - 4, y1: cy - rise + 4 };
+      if (tries < 5 && used.some((u) => r.x0 < u.x1 && r.x1 > u.x0 && r.y0 < u.y1 && r.y1 > u.y0)) continue;
+      used.push(r);
+      drawWeldSymbol(g, cx * K, cy * K, K, w, dir, weldPlan.set && weldPlan.set.method, rise);
+      break;
+    }
+  }
 }
 function showSheet(cv, cutMode) {
   let o = $('sheetov');
@@ -2822,6 +2927,7 @@ document.addEventListener('click', (e) => {
   const act = t.dataset.act;
   if (act === 'mfg-go') { tab = 'mfg'; renderPanel(); mfg.run(); return; }
   if (act && act.startsWith('mfg-') && mfg.act(act)) return;
+  if (act && act.startsWith('wd-') && weldUI.act(act)) return;
   if (!act) return;
   const p = cur();
 
@@ -2930,7 +3036,7 @@ document.addEventListener('click', (e) => {
   if (act === 'dlg-save') { saveProject(($('pname').value || '').trim() || 'model'); renderDialog(); return; }
   if (act === 'dlg-new') {
     commit();
-    parts = freshParts(); sel = 1; nextId = 2; projName = 'model';
+    parts = freshParts(); sel = 1; nextId = 2; projName = 'model'; weldPlan = null;
     closeDialog(); refreshAll(true);
     return;
   }
@@ -2987,6 +3093,7 @@ let lastKey = '', lastAt = 0;
 document.addEventListener('input', (e) => {
   const el = e.target;
   const d = el.dataset || {};
+  if (d.wf) { weldUI.input(el, 'input'); return; }
   if (d.s) {
     section.pos = el.valueAsNumber;
     applySection();
@@ -3133,7 +3240,7 @@ function loadExample(key) {
   const ex = buildExample(key);
   if (!ex) return;
   commit();
-  parts = ex.parts; nextId = ex.nextId; sel = ex.sel; projName = ex.name;
+  parts = ex.parts; nextId = ex.nextId; sel = ex.sel; projName = ex.name; weldPlan = null;
   cleanLinks(parts);
   if (ex.anim) Object.assign(anim.cfg, ex.anim);
   tab = 'dims';

@@ -15,7 +15,7 @@
 //   - Profil / ölçü: geçersiz ölçüler, uygulanamayan iskelet ölçüleri, stok boyundan uzun ya da çok kısa elemanlar, malzeme uyumu.
 // Yapılamayan kontroller (ör. kapalı olmayan yüzey) rapora "yapılamadı" diye yazılır; asla başarılı gösterilmez.
 
-import { frameMembers, PROFILES, miterOK } from './logic.js?v=20261109d';
+import { frameMembers, PROFILES, miterOK } from './logic.js?v=20261109e';
 
 const TOL = 0.05;          // temas toleransı (mm)
 const DEPTH_MIN = 0.2;     // bundan sığ iç içe geçme çakışma sayılmaz (mm)
@@ -219,7 +219,7 @@ function nearestDist(mesh, p, maxD) {
 
 /* ---------- iki parça: uzaklık ve çakışma ---------- */
 // noktanın üçgendeki en yakın noktası
-function closestOnTri(p, a, b, c) {
+export function closestOnTri(p, a, b, c) {
   const ab = sub(b, a), ac = sub(c, a), ap = sub(p, a);
   const d1 = dot(ab, ap), d2 = dot(ac, ap);
   if (d1 <= 0 && d2 <= 0) return a;
@@ -256,7 +256,7 @@ function segSeg(p1, q1, p2, q2) {
   return [len(sub(c1, c2)), c1];
 }
 // iki üçgen arası en kısa uzaklık: köşe–yüz ve kenar–kenar çiftleri; kesişiyorsa 0
-function triTri(A, B) {
+export function triTri(A, B) {
   let best = Infinity, at = null;
   const upd = (d, p) => { if (d < best) { best = d; at = p; } };
   for (let i = 0; i < 3; i++) {
@@ -439,7 +439,7 @@ export function frameWorldMembers(p) {
   return F.members.map((m) => {
     const a = toWorld(pose, m.a), b = toWorld(pose, m.b), axis = norm(sub(b, a));
     const u0 = mv(pose.R, m.u), u = norm(sub(u0, mul(axis, dot(u0, axis)))), v = cross(axis, u);
-    return { a, b, axis, u, v, w: m.w, h: m.h, role: m.role, len: len(sub(b, a)), miter: !!m.miter, kind: F.pr.kind };
+    return { a, b, axis, u, v, w: m.w, h: m.h, role: m.role, len: len(sub(b, a)), miter: !!m.miter, mit: m.miter || null, kind: F.pr.kind, t: F.pr.t };
   });
 }
 // nokta ile eleman (kutu) yüzeyi arasındaki uzaklık (eleman ekseni etrafında w×h kesit)
