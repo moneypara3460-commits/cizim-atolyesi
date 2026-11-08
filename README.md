@@ -80,6 +80,17 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **🔢 Ölçü rakamlarını oku** (açık gelir): kağıda elle yazılmış ölçü rakamları telefonda çalışan küçük bir yapay zekâ ile okunur (turuncu kutuyla gösterilir), çizgi olarak gelmez. Her rakam en yakın çizgiye (uzunluk), daireye (çap) veya yaya (yarıçap) eşlenir; listeden yanlış olan kapatılır, **Ölçüleri uygula** ile en uzun çizgi ölçeği belirler, diğerleri esnetilir, ölçüler (daire / yay için Ø / R ölçüsü) eklenir
 - Sınırlar: rakamlar yatay ve çizgiye değmeden yazılmalı (değen rakam okunmayabilir); Ø / R işaretleri ve harfler okunmaz; eşleşmeleri kontrol et. Ölçü okları / taramalar çizgi olarak gelebilir, silinmesi gerekir; kareli / çizgili kağıtta hassasiyet düşürülmeli
 
+**✂ Akıllı kesim optimizasyonu (profil iskelet → Tür → ✂ Kesim optimizasyonu, ya da Hesap → Üretim)**
+- Kesilecek parçalar **çizimden otomatik** alınır (projedeki bütün profil iskeletlerinin kesim listesi; gönyeli boylar uzun kenardan) ya da **elle** eklenir (profil, malzeme, ad, boy, adet). İkisi birlikte kullanılabilir
+- Farklı kesit, et kalınlığı ya da malzeme ayrı grupta optimize edilir (40×40×2 ile 40×40×3 asla aynı boydan kesilmez). Uygulamanın iskelet profillerine ek olarak L, U, lama, dolu mil ve "Diğer" (adını yaz) seçilebilir
+- Ayarlar: stok boyu (6000 mm), testere kesim payı (3 mm), uç düzeltme payı, saklanacak en kısa artık (300 mm), profil boy fiyatı
+- Algoritma gerçek 1B kesim stoğu optimizasyonu: FFD, BFD, **MBS** (her boyu en iyi dolduran parça kümesi, sınırlı sırt çantası DP) ve takaslı yerel iyileştirme birlikte denenir, en az boy + artığı tek boyda toplayan sonuç seçilir. **Teorik alt sınır** hesaplanır: sonuç ona eşitse "daha az profille yapılamaz ✅" yazar. Hiçbir boy stok uzunluğunu aşamaz (testere payı dahil; son parça boyun ucuna denk gelirse son kesim sayılmaz)
+- Görsel kesim planı: her 6 m boy ayrı çizilir, parçalar renkli, uzunluk ve kesim sırası numaralı; sonda kalan boy (yeşil = stoğa, kırmızı = fire). Aynı kesim düzenindeki boylar "4 boy aynı kesim" diye gruplanır
+- Rapor: parça sayısı, alınacak boy sayısı ve uzunluk, kesilen toplam, testere kaybı, stoğa kalan, gerçek fire, fire %, maliyet; "Bu iş için X adet 6 metrelik profil almanız yeterli" cümlesi
+- **♻ Artık stok:** kesimden sonra "artık stoğunu güncelle" ile kullanılabilir kalanlar (boy, profil, malzeme, et kalınlığı, durum) saklanır; sonraki işte yeni boy almadan önce bunlar kullanılır. Elle artık eklenebilir
+- Dışa aktarma: **PDF kesim planı** (A4, yazdırılabilir, operatöre verilir), **CSV** kesim listesi (Excel'de açılır)
+- Sınırlar: tek stok boyu (gruba göre farklı boy ve tedarikçi fiyatı için altyapı hazır, arayüzü sonra); kesim açısı (gönye) boyu etkilemez, uzun kenar ölçüsü kullanılır
+
 **2B Çizim — AutoCAD tarzı (📝 2B Çizim düğmesi)**
 - Ayrı tam ekran çizim alanı; telefonda otomatik saklanır, geri al / ileri al
 - **Çiz:** çizgi (zincirleme; X/Y, uzunluk ve açı yazarak), daire (merkez + çap), yay (3 nokta), dikdörtgen (köşe + genişlik/yükseklik), hizalı ölçü, **⌀ çap / R yarıçap ölçüsü** (daireye / yaya dokun, yazının yerini seç), **∠ açı ölçüsü** (iki çizgi + dokunulan açı bölgesi: 60° ya da 120°), **▨ tarama** (kapalı alanın içine dokun; içteki delikler boş kalır, açı / aralık ayarlı, çapraz kafes), yazı
@@ -90,16 +101,6 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **Dosya:** DXF kaydet / aç (LINE, CIRCLE, ARC, LWPOLYLINE + bulge, POLYLINE, TEXT, MTEXT), PNG kaydet
 - **🧊 3B parça yap:** kapalı şekiller (uçları birleşen çizgi / yaylar ve daireler) kalınlık verilerek 3B kroki parçasına çevrilir; iç içe olan delik olur
 - Kısıtlar 2B çizimde yok (kroki editöründe var); ölçüler ilişkisel değil (çizim değişince ölçü yazısı güncellenir ama ölçü şekli sürüklemez)
-
-**2B Çizim — AutoCAD tarzı (📝 2B Çizim düğmesi)**
-- Ayrı tam ekran çizim alanı; telefonda otomatik saklanır, geri al / ileri al
-- **Çiz:** çizgi (zincirleme; X/Y, uzunluk ve açı yazarak), daire (merkez + çap), yay (3 nokta), dikdörtgen (köşe + genişlik/yükseklik), hizalı ölçü, **⌀ çap / R yarıçap ölçüsü** (daireye / yaya dokun, yazının yerini seç), **∠ açı ölçüsü** (iki çizgi + dokunulan açı bölgesi: 60° ya da 120°), **▨ tarama** (kapalı alanın içine dokun; içteki delikler boş kalır, açı / aralık ayarlı, çapraz kafes), yazı
-- **Düzenle:** kırp (AutoCAD hızlı kırp), uzat, ofset, radyus (iki çizgi arası köşe yuvarlama, 0 = keskin köşe), taşı, kopyala (çoklu), döndür / döndürerek kopyala, ayna (aslı kalsın / silinsin), sil, seç, **▦ dizi** (seçileni çoğalt: dikdörtgen = satır × sütun ve aralıklar; dairesel = adet, toplam açı, merkeze dokun, döndürerek ya da döndürmeden)
-- **Yakalama:** uç nokta, orta nokta, merkez, kesişim, çeyrek, ızgara (0,5 / 1 / 5 / 10 mm), orto modu. Dokunurken parmağın altı büyüteçte gösterilir; parmağı kaydırıp doğru yere oturtup bırakınca nokta konur
-- **Katmanlar:** renk, çizgi tipi (sürekli, gizli, eksen), gizle, kilitle, etkin katman, seçileni katmana taşı
-- **Dosya:** DXF kaydet / aç (LINE, CIRCLE, ARC, LWPOLYLINE + bulge, POLYLINE, TEXT, MTEXT), PNG kaydet
-- **🧊 3B parça yap:** kapalı şekiller (uçları birleşen çizgi / yaylar ve daireler) kalınlık verilerek 3B kroki parçasına çevrilir; iç içe olan delik olur
-- 2B çizimde kısıt yok (kroki editöründe var); ölçüler çizimle birlikte değişmez, ayrı varlıktır
 
 **Parametrik kroki (Kroki → 📐 Kısıt)**
 - Çokgen kenarına dokun: **Yatay**, **Dikey**, **Uzunluğu kilitle** (ölçüyü sonradan yazınca şekil kendini ayarlar). İki kenar seç: **Paralel**, **Dik**, **Eşit uzunluk**, **Açı**. Köşeye dokun: **Sabitle**

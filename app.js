@@ -13,11 +13,12 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261109b';
-import { openSketch } from './sketch.js?v=20261109b';
-import { to3MF, toSTEP } from './export3d.js?v=20261109b';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109b';
-import { openCad2D } from './cad2d.js?v=20261109b';
+} from './logic.js?v=20261109c';
+import { openSketch } from './sketch.js?v=20261109c';
+import { to3MF, toSTEP } from './export3d.js?v=20261109c';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109c';
+import { openCad2D } from './cad2d.js?v=20261109c';
+import { openCutOpt } from './cutopt-ui.js?v=20261109c';
 
 const APP_VER = '20261108o'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -985,7 +986,7 @@ function renderPanel() {
       ? '<div class="lbl h">İskelet</div>' + [['table', 'Masa iskeleti'], ['box', 'Kutu çerçeve'], ['shelf', 'Raf / sehpa'], ['rect', 'Pano çerçeve']].map(([k, l]) => btn(l, 'frt-' + k, p.fr === k)).join('') +
         `<label class="f w2" style="flex:1 0 100%"><span>Profil</span><select data-pf="1">${Object.entries(PROFILES).map(([k, v]) => `<option value="${k}"${p.pf === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>` +
         '<div class="lbl h">Köşe birleşimi</div>' + btn('Alın (90°)', 'frj-butt', p.fj !== 'miter' || !miterOK(p)) + (miterOK(p) ? btn('Gönye (45°)', 'frj-miter', p.fj === 'miter') : '<div class="lbl" style="flex:1 0 100%">Gönye: pano ve kutu çerçevede, kare ya da yuvarlak profille yapılır.</div>') +
-        cutListHtml(p) + btn('📋 Kesim listesi (CSV)', 'fr-csv') + opBtns
+        cutListHtml(p) + btn('📋 Kesim listesi (CSV)', 'fr-csv') + btn('✂ Kesim optimizasyonu (6 m boylara böl)', 'cut-opt') + opBtns
       : p.type === 'sheet'
       ? '<div class="lbl h">Hazır profil</div>' + [['L', 'L köşebent'], ['U', 'U kanal'], ['Z', 'Z profil'], ['hat', 'Şapka'], ['C', 'C (dudaklı)']].map(([k, l]) => btn(l, 'shp-' + k, p.sh === k)).join('') +
         '<div class="lbl h">Açınım</div>' + btn(p.flat ? '📐 Bükülmüş göster' : '📄 Düz (açınım) göster', 'sh-flat', p.flat) + btn('⬇ Açınım DXF', 'sh-dxf') + opBtns
@@ -1141,7 +1142,8 @@ function renderPanel() {
         row('Ağırlık merkezi', mp.centroid ? 'X ' + fmtNum(toUnit(mp.centroid[0], settings.unit), 1) + '  Y ' + fmtNum(toUnit(mp.centroid[1], settings.unit), 1) + '  Z ' + fmtNum(toUnit(mp.centroid[2], settings.unit), 1) : '-') +
         row('Genel ölçü', lenText(sz.x) + ' × ' + lenText(sz.z) + ' × ' + lenText(sz.y));
     }
-    body += '<div class="lbl h">Dışa aktar</div>' + btn('📋 Parça listesi (CSV)', 'bom-csv') + btn('📐 DXF (ön / yan / üst)', 'dxf-out') +
+    body += '<div class="lbl h">Üretim</div>' + btn('✂ Akıllı kesim optimizasyonu (profil boy / fire / maliyet)', 'cut-opt') +
+      '<div class="lbl h">Dışa aktar</div>' + btn('📋 Parça listesi (CSV)', 'bom-csv') + btn('📐 DXF (ön / yan / üst)', 'dxf-out') +
       btn('🧊 STEP (SolidWorks, Fusion, FreeCAD)', 'step-out') + btn('🖨 3MF (3B yazıcı)', 'mf-out');
     hint = 'STEP yüzeyli (üçgen yüzlü) katı olarak yazılır: CAD programında açılır, ölçülür, montaja eklenir; ama yüzleri düzgün eğri değil, parametrik özellik ağacı yoktur. Kapalı olmayan modeller yüzey olarak gider. 3MF, Cura / PrusaSlicer / Bambu Studio içindir. Ağırlık tam dolu (içi dolu) katı için hesaplanır; 3B yazıcıda dolgu oranı ve duvar kalınlığı gerçek ağırlığı düşürür. DXF: AutoCAD, FreeCAD gibi programlarda açılır; gizli çizgiler ayrı katmandadır.';
   } else if (tab === 'part') {
@@ -1382,6 +1384,19 @@ function cutListHtml(p) {
     row('<b>Toplam</b>', c.members.length, '', '', '<b>' + lenText(c.totalLen) + '</b>') +
     (c.cut.some((g) => g.cut !== '90°') ? '<div class="lbl" style="flex:1 0 100%">Gönyeli boylar uzun kenardan (dış) ölçüdür; testere payını ayrıca ekle.</div>' : '') +
     `<div class="lbl" style="flex:1 0 100%;font-size:13px">Ağırlık (çelik): <b>${fmtNum(c.kg, 2)} kg</b> · 6 m'lik boydan yaklaşık ${Math.ceil(c.totalLen / 6000 * 1.05)} boy</div>`;
+}
+// projedeki bütün profil iskeletlerinin kesim listesi → kesim optimizasyonu girdisi
+const MAT_SHORT = { celik: 'Çelik', paslanmaz: 'Paslanmaz', aluminyum: 'Alüminyum', al6061: 'Alüminyum', pirinc: 'Pirinç', bakir: 'Bakır', titanyum: 'Titanyum' };
+function cadCutPieces() {
+  const frames = parts.filter((q) => q.type === 'frame');
+  const out = [];
+  frames.forEach((q) => {
+    const c = frameCalc(q), m = partMat(q);
+    const material = MAT_SHORT[m.id] || m.name;
+    const who = frames.length > 1 ? partName(q, parts.indexOf(q)) + ' · ' : '';
+    for (const g of c.cut) out.push({ profile: c.pr.name, material, t: c.pr.t, label: who + g.role + (g.cut !== '90°' ? ' (' + g.cut + ')' : ''), len: g.len, qty: g.qty });
+  });
+  return out;
 }
 function exportCutList(p) {
   const c = frameCalc(p);
@@ -2813,6 +2828,7 @@ document.addEventListener('click', (e) => {
   if (act === 'sketch-edit') { editSketch(); return; }
   if (act.startsWith('frt-')) { commit(); p.fr = act.slice(4); refreshAll(); return; }
   if (act === 'fr-csv') { exportCutList(p); return; }
+  if (act === 'cut-opt') { openCutOpt({ name: fileBase(), fromCad: cadCutPieces }); return; }
   if (act.startsWith('frj-')) { commit(); p.fj = act.slice(4); refreshAll(); return; }
   if (act.startsWith('shp-')) { commit(); Object.assign(p, JSON.parse(JSON.stringify(SHEET_PRESETS[act.slice(4)]))); refreshAll(); return; }
   if (act === 'sh-flat') { commit(); p.flat = !p.flat; refreshAll(); return; }
