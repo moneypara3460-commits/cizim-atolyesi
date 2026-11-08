@@ -68,6 +68,13 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **📄 Düz göster**: parçayı 3B'de açınım plakası olarak gösterir. **⬇ Açınım DXF**: lazer / abkant için dış kontur + kırmızı büküm çizgileri (mm)
 - Delik parçalarıyla sac delinebilir, ama delikler açınım DXF'ine aktarılmaz (yalnızca kontur ve büküm çizgileri)
 
+**Kağıttan çizim — fotoğraftan 2B / 3B (2B Çizim → Dosya → 📷 Fotoğraftan çizim)**
+- Kağıda elle çizilmiş çizimin fotoğrafı çekilir ya da galeriden seçilir; her şey telefonda, internetsiz yapılır
+- Kağıdın köşeleri otomatik bulunur (sarı noktalar sürüklenerek düzeltilir, sürüklerken büyüteç), eğik fotoğraf düz kağıda çevrilir (A4 dikey / yatay / serbest)
+- Gölge temizlenir (uyarlamalı eşik), küçük işaretler ve el yazısı rakamlar ayıklanır, kalem izi inceltilir, çizgiler takip edilip **düz çizgi / yay / daire** olarak tanınır; yataya / dikeye yakın çizgiler düzlenir, yakın uçlar birleştirilir, yayın teğet devamı ve kılçıklar temizlenir
+- Sonuç 2B çizime normal varlık olarak gelir (düzenlenebilir). **📏 Ölçekle**: bir çizgiye dokunup gerçek ölçüsünü yazınca bütün çizim ölçeklenir. **🧊 3B** düğmesi kapalı şekilleri kalınlık verip 3B parçaya çevirir (içteki daire delik olur)
+- Sınırlar: el yazısı ölçü rakamları okunmaz (ölçü Ölçekle ile verilir); ölçü okları / taramalar çizgi olarak gelebilir, silinmesi gerekir; kareli / çizgili kağıtta hassasiyet düşürülmeli
+
 **2B Çizim — AutoCAD tarzı (📝 2B Çizim düğmesi)**
 - Ayrı tam ekran çizim alanı; telefonda otomatik saklanır, geri al / ileri al
 - **Çiz:** çizgi (zincirleme; X/Y, uzunluk ve açı yazarak), daire (merkez + çap), yay (3 nokta), dikdörtgen (köşe + genişlik/yükseklik), hizalı ölçü, yazı
@@ -156,8 +163,9 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - `app.js` — uygulama: 3D sahne, CSG, kenar çizgileri, panel, taşıma, ölçüm, kesit, sesli komut
 - `sketch.js` — kroki editörü (2D tuval) ve doğrulama
 - `logic.js` — test edilebilir mantık: parça varsayılanları, geri al geçmişi, STL yazıcı, sesli komut çözücü, birimler, kroki dönüşümleri (yay, yuvarlak köşe), kopya / ayna / dizi, pah geometrisi, teknik resim yerleşimi ve PDF yazıcı
+- `photo2d.js`, `photoimport.js` — fotoğraftan çizim: görüntü işleme (eşik, inceltme, yol takibi, çizgi / yay / daire uydurma) ve ekranı
 - `cad2d.js`, `cad2d-geom.js` — 2B çizim modu ve saf geometrisi (kesişim, kırp, uzat, ofset, radyus, DXF)
-- `tests/` — testler: `node tests/logic.test.mjs`, `node tests/sketch.test.mjs`, `node tests/cad2d.test.mjs`
+- `tests/` — testler: `node tests/logic.test.mjs`, `node tests/sketch.test.mjs`, `node tests/cad2d.test.mjs`, `node tests/photo2d.test.mjs`
 - `App.js`, `viewerHtml.js`, `package.json` — eski React Native / Expo sürümü (2. aşama; güncellenmedi)
 
 ## Yol haritası

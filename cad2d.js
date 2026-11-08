@@ -1,11 +1,12 @@
 // 2B Çizim (AutoCAD tarzı) — tam ekran çizim alanı.
 // Kullanım: openCad2D({ onExtrude(draw), onClose() })  draw: kroki biçimi (sketch.js / validateDraw)
-import { fmtNum } from './logic.js?v=20261108i';
-import { validateDraw } from './sketch.js?v=20261108i';
+import { fmtNum } from './logic.js?v=20261108j';
+import { validateDraw } from './sketch.js?v=20261108j';
 import {
   arcFrom3, trimEntity, extendEntity, offsetEntity, filletLines, transformEntity, moveFn, rotateFn, mirrorFn,
   snapPoints, nearestOn, closedLoops, toDXF, parseDXF, dimLine, dimParts, dimText, arcSpan, arcEnds, entBBox, dist, normA, ACI,
-} from './cad2d-geom.js?v=20261108i';
+} from './cad2d-geom.js?v=20261108j';
+import { openPhotoImport } from './photoimport.js?v=20261108j';
 
 const KEY = 'cizim:2d';
 const CSS = `
@@ -42,7 +43,7 @@ const CSS = `
 `;
 const TOOLS = {
   draw: [['line', '╱ Çizgi'], ['circle', '◯ Daire'], ['arc', '◠ Yay'], ['rect', '▭ Dikdörtgen'], ['dim', '↔ Ölçü'], ['text', 'A Yazı'], ['select', '☝ Seç']],
-  edit: [['trim', '✂ Kırp'], ['extend', '⇥ Uzat'], ['offset', '⇉ Ofset'], ['fillet', '◜ Radyus'], ['move', '✥ Taşı'], ['copy', '⧉ Kopyala'], ['rotate', '⟳ Döndür'], ['mirror', '⇋ Ayna'], ['erase', '🗑 Sil'], ['select', '☝ Seç']],
+  edit: [['trim', '✂ Kırp'], ['extend', '⇥ Uzat'], ['offset', '⇉ Ofset'], ['fillet', '◜ Radyus'], ['move', '✥ Taşı'], ['copy', '⧉ Kopyala'], ['rotate', '⟳ Döndür'], ['mirror', '⇋ Ayna'], ['scale', '📏 Ölçekle'], ['erase', '🗑 Sil'], ['select', '☝ Seç']],
 };
 const HINTS = {
   line: ['Başlangıç noktasına dokun (ya da X, Y yaz).', 'Sonraki noktaya dokun ya da uzunluk ve açı yaz. Zincir devam eder; "Bitir" ile durdur.'],
@@ -61,6 +62,7 @@ const HINTS = {
   rotate: ['Döndürme merkezine dokun.', 'Açıyı yazıp "Döndür"e bas.'],
   mirror: ['Ayna ekseninin ilk noktası.', 'Ayna ekseninin ikinci noktası.'],
   erase: ['Silinecek varlığa dokun.'],
+  scale: ['Ölçüsünü bildiğin bir çizgiye / daireye dokun.', 'Gerçek ölçüsünü yaz ve "Ölçekle"ye bas: bütün çizim o oranda büyür / küçülür.'],
 };
 const LT_DASH = { CONTINUOUS: [], HIDDEN: [6, 4], CENTER: [14, 4, 3, 4] };
 const LT_NAME = { CONTINUOUS: 'Sürekli', HIDDEN: 'Gizli (kesik)', CENTER: 'Eksen' };
@@ -98,7 +100,7 @@ export function openCad2D(opts = {}) {
   let sel = new Set();        // seçili id'ler
   let osnap = true, ortho = false, grid = 1, clearArm = false;
   let aim = null;             // { p, k } parmak altındaki (yakalanmış) nokta
-  const F = { len: '', ang: '0', x: '0', y: '0', d: '20', w: '40', h: '20', off: '5', rad: '5', rot: '90', txt: 'Yazı', th: '5', dx: '0', dy: '0', thick: '10', keep: '1', nl: '' };
+  const F = { real: '', kf: '2', len: '', ang: '0', x: '0', y: '0', d: '20', w: '40', h: '20', off: '5', rad: '5', rot: '90', txt: 'Yazı', th: '5', dx: '0', dy: '0', thick: '10', keep: '1', nl: '' };
   const V = { s: 3, ox: 0, oy: 0 };
 
   const root = document.createElement('div');
@@ -107,7 +109,7 @@ export function openCad2D(opts = {}) {
     <div class="r">
       <button data-a="close" class="danger" style="flex:1">✕ Kapat</button>
       <div class="ttl">2B Çizim</div>
-      <button data-a="undo" style="flex:.7">↶</button><button data-a="redo" style="flex:.7">↷</button>
+      <button data-a="undo" style="flex:.7">↶</button><button data-a="redo" style="flex:.7">↷</button><button data-a="f-3d" class="ok" style="flex:.9">🧊 3B</button>
     </div>
     <div class="r" id="cad-tabs"></div>
     <div class="r tools" id="cad-tools"></div>
@@ -407,6 +409,10 @@ export function openCad2D(opts = {}) {
     const e = hitEnt(sx, sy);
     if (!e) { setHint('Orada varlık yok; çizginin üstüne dokun.', true); return; }
     const others = doc.ents.filter(visible);
+    if (tool === 'scale') {
+      if (!(e.t === 'line' || e.t === 'circle' || e.t === 'arc')) { setHint('Çizgi, daire ya da yaya dokun.', true); return; }
+      pickA = e; F.real = fmt(scaleRef(e)); refresh(); return;
+    }
     if (tool === 'erase') { commit(); doc.ents.splice(doc.ents.indexOf(e), 1); sel.delete(e.id); changed(); refresh(); return; }
     if (tool === 'trim') {
       const r = trimEntity(e, others, w);
@@ -455,6 +461,7 @@ export function openCad2D(opts = {}) {
       h += In('Yeni katman adı', 'nl', 'text') + B('+ Katman ekle', 'ly-add') + B('Seçilenleri etkin katmana taşı', 'ly-move', false, sel.size ? '' : 'disabled');
     } else if (tab === 'file') {
       h += '<div class="lb">Dosya</div>' + B('⬇ DXF kaydet', 'f-dxf') + B('📂 DXF aç', 'f-open') + B('🖼 PNG kaydet', 'f-png') +
+        '<div class="lb">Kağıttan çizim: el çiziminin fotoğrafını çek, çizgiler otomatik tanınsın</div>' + B('📷 Fotoğraftan çizim', 'f-photo') +
         '<div class="lb">3B parçaya çevir (kapalı şekiller kalınlık alır; iç içe olan delik olur)</div>' + In('Kalınlık (mm)', 'thick') + B('🧊 3B parça yap', 'f-3d') +
         '<div class="lb">Çizim</div>' + B(clearArm ? '⚠ Emin misin? Tekrar bas' : '🗑 Tümünü temizle', 'f-clear', false, clearArm ? 'class="danger"' : '');
     } else {
@@ -465,6 +472,7 @@ export function openCad2D(opts = {}) {
       else if (tool === 'text') h += In('Yazı', 'txt', 'text') + In('Yükseklik', 'th');
       else if (tool === 'offset') h += In('Ofset mesafesi', 'off');
       else if (tool === 'fillet') h += In('Yarıçap (0 = keskin)', 'rad');
+      else if (tool === 'scale') h += pickA ? '<div class="lb">Şu an: ' + fmt(scaleRef(pickA)) + ' mm (' + (pickA.t === 'line' ? 'uzunluk' : 'çap') + ')</div>' + In('Gerçek ölçü (mm)', 'real') + B('📏 Ölçekle', 'in-scale') : In('ya da katsayı (ör. 2 = iki kat)', 'kf') + B('Katsayıyla ölçekle', 'in-scalek');
       else if (tool === 'move' || tool === 'copy') h += pts.length ? In('dX', 'dx') + In('dY', 'dy') + B('Uygula', 'in-move') : '';
       else if (tool === 'rotate') h += In('Açı ° (saat yönü tersi +)', 'rot') + B('⟳ Döndür', 'in-rot', false, pts.length && sel.size ? '' : 'disabled') + B('Kopyasını döndür', 'in-rotc', false, pts.length && sel.size ? '' : 'disabled');
       else if (tool === 'mirror') h += B(F.keep === '0' ? 'Aslını sil: evet' : 'Aslını sil: hayır', 'keep', F.keep === '0');
@@ -635,11 +643,48 @@ export function openCad2D(opts = {}) {
     if (a === 'f-png') { exportPNG(); return; }
     if (a === 'f-open') { fileIn.click(); return; }
     if (a === 'f-3d') { to3D(); return; }
+    if (a === 'f-photo') { photoIn.click(); return; }
+    if (a === 'in-scale' || a === 'in-scalek') {
+      let f;
+      if (a === 'in-scale') { const real = num('real'), curv = pickA ? scaleRef(pickA) : 0; if (!(real > 0) || !(curv > 0)) { setHint('Gerçek ölçüyü yaz.', true); return; } f = real / curv; }
+      else { f = num('kf'); if (!(f > 0)) { setHint('Katsayı sıfırdan büyük olmalı.', true); return; } }
+      commit();
+      doc.ents = doc.ents.map((en) => scaleEnt(en, f));
+      reset(); changed(); fit(); refresh(); setHint('Çizim ' + fmtNum(f, 4) + ' kat ölçeklendi.'); return;
+    }
     if (a === 'f-clear') {
       if (!clearArm) { clearArm = true; refresh(); return; }
       clearArm = false; commit(); doc.ents = []; sel.clear(); reset(); changed(); refresh(); return;
     }
   });
+  function scaleRef(e) { return e.t === 'line' ? dist(e.a, e.b) : 2 * e.r; }
+  function scaleEnt(e, f) {
+    const o = JSON.parse(JSON.stringify(e)), m = (p) => [p[0] * f, p[1] * f];
+    for (const k of ['a', 'b', 'c', 'p']) if (o[k]) o[k] = m(o[k]);
+    if (o.r) o.r *= f;
+    if (o.t === 'dim') o.off *= f;
+    if (o.t === 'text') o.h = (o.h || 5) * f;
+    return o;
+  }
+  const photoIn = document.createElement('input');
+  photoIn.type = 'file'; photoIn.accept = 'image/*';
+  photoIn.addEventListener('change', () => {
+    const f = photoIn.files && photoIn.files[0];
+    photoIn.value = '';
+    if (f) importPhoto(f);
+  });
+  function importPhoto(f) {
+    openPhotoImport(f, {
+      onDone(ents, info) {
+        commit();
+        for (const en of ents) addEnt({ ...en });
+        changed(); fit();
+        tab = 'edit'; tool = 'scale'; reset();
+        refresh();
+        setHint(ents.length + ' varlık eklendi. Ölçüyü düzeltmek için ölçüsünü bildiğin bir çizgiye dokun (Ölçekle). Fazlalıkları Sil / Kırp ile temizle; bitince 🧊 3B.' + (info.paper === 'f' ? ' (Serbest kağıt: ölçek tahmini.)' : ''));
+      },
+    });
+  }
   const fileIn = document.createElement('input');
   fileIn.type = 'file'; fileIn.accept = '.dxf,application/dxf,text/plain';
   fileIn.addEventListener('change', () => {
@@ -667,5 +712,5 @@ export function openCad2D(opts = {}) {
 
   refresh();
   resize();
-  return { close, get doc() { return doc; }, get view() { return { ...V }; } };
+  return { close, importPhoto, get doc() { return doc; }, get view() { return { ...V }; } };
 }
