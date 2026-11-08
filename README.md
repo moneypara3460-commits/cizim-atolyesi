@@ -45,6 +45,11 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **Delik ölçüleri**: eksene paralel yuvarlak delikler için `Ø10`, kare delikler için `□ 8 × 6` yazısı ve eksen çizgileri; delik, eksenine bakan görünüşte gösterilir
 - Sayfadaki **✂ Kesit** düğmesi sağ alttaki izometriği A-A kesitiyle değiştirir: X ekseninde kesilir (Kesit sekmesi açık ve X seçiliyse onun konumunda, değilse ortada), kesilen yüzey 45° taranır, önden görünüşte kesit düzlemi işaretlenir
 
+**Hareket etüdü (Hareket sekmesi)**
+- Menteşe / kayar eklemler ile mesafe / açı eşleşmeleri baştan sona yumuşakça oynatılır (her biri için başlangıç ve bitiş değeri); eşleşmeli parçalar birlikte hareket eder
+- Git-gel, tek yön ya da sürekli döngü; süre ayarlanır
+- **🎬 Video kaydet**: ekrandaki görünüm bir tur boyunca WebM (iPhone'da MP4) olarak kaydedilip indirilir
+
 **Kalıcı eşleşmeler — mate (Montaj sekmesi)**
 - Türler: **Çakışık** (yüzler aynı düzlemde, yüz yüze ya da aynı yöne), **Mesafe**, **Paralel**, **Açı**, **Eş merkezli** (mil – delik / boru aynı eksende; parçaların dikey ekseni kullanılır)
 - 1. dokunulan parça hareket eder, 2. parça referanstır. Eşleşmeler saklanır: referans parça taşınınca / döndürülünce bağlı parça da gelir; bağlı parça sürüklenirse yalnızca serbest kalan yönde kayar

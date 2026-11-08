@@ -13,11 +13,11 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261108g';
-import { openSketch } from './sketch.js?v=20261108g';
-import { openCad2D } from './cad2d.js?v=20261108g';
+} from './logic.js?v=20261108h';
+import { openSketch } from './sketch.js?v=20261108h';
+import { openCad2D } from './cad2d.js?v=20261108h';
 
-const APP_VER = '20261108g'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261108h'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -382,7 +382,8 @@ function updateLabelScales() {
   for (const s of labelSprites) s.scale.set(k * s.userData.aspect, k, 1);
   for (const s of msrSprites) s.scale.set(k * s.userData.aspect, k, 1);
 }
-renderer.setAnimationLoop(() => {
+renderer.setAnimationLoop((now) => {
+  if (anim.playing) animTick(now);
   controls.update();
   updateInfinite();
   updateLabelScales();
@@ -913,7 +914,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['calc', 'Hesap']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['calc', 'Hesap']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -1085,6 +1086,25 @@ function renderPanel() {
     body = btn('📐 Teknik resim oluştur', 'sheet-make') +
       '<div class="lbl" style="flex:1 0 100%">A4 yatay: ön, yan, üst ve izometrik görünüş; ölçek ve genel ölçüler.</div>';
     hint = 'Resim PNG ya da PDF olarak indirilir. Birim: ' + settings.unit + ' (Görünüm sekmesinden değiştirilir).';
+  } else if (tab === 'anim') {
+    const ds = animDrivers();
+    if (!ds.length) {
+      body = '<div class="lbl" style="flex:1 0 100%">Hareket ettirilecek bir şey yok. Önce <b>Bağ</b> sekmesinde menteşe / kayar eklem ya da <b>Montaj</b> sekmesinde mesafe / açı eşleşmesi ekle.</div>';
+    } else {
+      body = '<div class="lbl h">Hareket edecekler (dokun = aç / kapat)</div>';
+      for (const d of ds) {
+        const st = anim.cfg[d.key] || (anim.cfg[d.key] = { on: true, from: d.cur, to: d.def });
+        body += `<div style="flex:1 0 100%;display:flex;gap:5px;align-items:flex-end">` +
+          `<button data-act="an-tog-${d.key}"${st.on ? ' class="on"' : ''} style="flex:2;text-align:left;padding-left:8px">${st.on ? '✓ ' : ''}${esc(d.label)}</button>` +
+          `<label class="f"><span>Baş (${d.unit})</span><input type="number" step="any" data-an="${d.key},from" value="${fmtNum(d.unit === '°' ? st.from : toUnit(st.from, settings.unit), 2)}"></label>` +
+          `<label class="f"><span>Son (${d.unit})</span><input type="number" step="any" data-an="${d.key},to" value="${fmtNum(d.unit === '°' ? st.to : toUnit(st.to, settings.unit), 2)}"></label></div>`;
+      }
+      body += '<div class="lbl h">Oynatma</div>' + cfield('Süre (sn)', 'adur', 'deg') +
+        btn('Git-gel', 'an-m-pp', anim.mode === 'pp') + btn('Tek yön', 'an-m-once', anim.mode === 'once') + btn('Sürekli döngü', 'an-m-loop', anim.mode === 'loop') +
+        (anim.playing ? btn('⏹ Durdur', 'an-stop', true) : btn('▶ Oynat', 'an-play')) +
+        btn(anim.rec ? '⏺ Kaydediliyor…' : '🎬 Video kaydet (1 tur)', 'an-rec', !!anim.rec) + btn('↺ Başa al', 'an-reset');
+    }
+    hint = 'Hareket etüdü: eklemler ve mesafe / açı eşleşmeleri baştan sona yumuşakça oynar; bağlı parçalar eşleşmelerle birlikte gelir. Video, ekrandaki görünümden WebM olarak kaydedilir (kamerayı önce istediğin açıya getir).';
   } else if (tab === 'calc') {
     const mat = MATERIALS.find((m) => m.id === settings.mat) || MATERIALS[0];
     body = '<div class="lbl h">Malzeme</div>' + MATERIALS.map((m) => btn(m.name, 'mat-' + m.id, m.id === mat.id)).join('') +
@@ -2034,6 +2054,88 @@ function mateTap(cx, cy) {
   }
   renderPanel();
 }
+/* ---- hareket etüdü (animasyon) ---- */
+const anim = { playing: false, t0: 0, mode: 'pp', cfg: {}, rec: null, startVals: null };
+cp.adur = 3;
+// sürülebilen değerler: eklem açısı / kayması, mesafe ve açı eşleşmeleri
+function animDrivers() {
+  const out = [];
+  parts.forEach((c, i) => {
+    if (c.joint && (c.joint.type === 'hinge' || c.joint.type === 'slide')) {
+      const h = c.joint.type === 'hinge';
+      out.push({ key: 'j' + c.id, label: partName(c, i) + (h ? ' · menteşe' : ' · kayar'), unit: h ? '°' : settings.unit, cur: c.joint.val || 0, def: h ? 90 : 50,
+        get: () => c.joint.val || 0, set: (v) => setJointVal(c, v) });
+    }
+    (c.mates || []).forEach((m, k) => {
+      if (m.t !== 'dist' && m.t !== 'ang') return;
+      const B = parts.find((x) => x.id === m.b);
+      out.push({ key: 'm' + c.id + '_' + k, label: partName(c, i) + ' → ' + (B ? partName(B, parts.indexOf(B)) : '?') + (m.t === 'ang' ? ' · açı' : ' · mesafe'), unit: m.t === 'ang' ? '°' : settings.unit,
+        cur: pos(m.v), def: m.t === 'ang' ? Math.min(pos(m.v) + 90, 180) : pos(m.v) + 50, get: () => pos(m.v), set: (v) => { m.v = v; } });
+    });
+  });
+  return out;
+}
+const ease = (x) => x * x * (3 - 2 * x);
+function animApply(f) {
+  for (const d of animDrivers()) {
+    const st = anim.cfg[d.key];
+    if (!st || !st.on) continue;
+    d.set(st.from + (st.to - st.from) * ease(Math.min(Math.max(f, 0), 1)));
+  }
+  rebuild(false);
+}
+function animTick(now) {
+  const dur = Math.max(pos(cp.adur), 0.2) * 1000;
+  if (!anim.t0) anim.t0 = now;
+  let u = (now - anim.t0) / dur, f, done = false;
+  if (anim.mode === 'once') { f = Math.min(u, 1); done = u >= 1; }
+  else if (anim.mode === 'pp') { const k = u % 2; f = k <= 1 ? k : 2 - k; if (anim.rec && u >= 2) { f = 0; done = true; } }
+  else { f = u % 1; if (anim.rec && u >= 1) { f = 1; done = true; } }
+  animApply(f);
+  if (done) animStop(true);
+}
+function animStart(record) {
+  const ds = animDrivers().filter((d) => anim.cfg[d.key] && anim.cfg[d.key].on);
+  if (!ds.length) { toast('Seçili hareket yok'); return; }
+  commit();               // oynatmadan önceki durum geri al ile gelir
+  anim.playing = true; anim.t0 = 0;
+  if (record) {
+    let stream = null, mr = null;
+    try {
+      stream = renderer.domElement.captureStream(30);
+      const types = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
+      const type = types.find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+      mr = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 8e6 } : undefined);
+    } catch (e) { toast('Bu tarayıcı video kaydını desteklemiyor'); anim.playing = false; return; }
+    const chunks = [];
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    mr.onstop = () => {
+      const type = mr.mimeType || 'video/webm';
+      saveBlob(new Blob(chunks, { type }), fileBase() + '-hareket.' + (type.includes('mp4') ? 'mp4' : 'webm'));
+      toast('Video indirildi');
+      stream.getTracks().forEach((t) => t.stop());
+    };
+    mr.start();
+    anim.rec = mr;
+  }
+  renderPanel();
+}
+function animStop(finished) {
+  anim.playing = false;
+  if (anim.rec) { const r = anim.rec; anim.rec = null; setTimeout(() => { try { r.stop(); } catch (e) { /* */ } }, 150); }
+  syncInputs(); scheduleSave(); updateToolbar();
+  if (tab === 'anim') renderPanel();
+  if (finished) toast('Hareket bitti');
+}
+function animAct(act) {
+  if (act === 'an-play') { animStart(false); return; }
+  if (act === 'an-rec') { if (!anim.rec) { if (anim.playing) animStop(false); animStart(true); } return; }
+  if (act === 'an-stop') { animStop(false); return; }
+  if (act === 'an-reset') { if (anim.playing) animStop(false); commit(); animApply(0); renderPanel(); return; }
+  if (act.startsWith('an-m-')) { anim.mode = act.slice(5); renderPanel(); return; }
+  if (act.startsWith('an-tog-')) { const st = anim.cfg[act.slice(7)]; if (st) st.on = !st.on; renderPanel(); return; }
+}
+
 /* ---- kalıcı eşleşmeler (mate) ---- */
 // Her eşleşme hareket eden parçada (A) saklanır: { t, b (referans parça id), pa, na (A'nın yerel çerçevesinde yüz noktası / normali), pb, nb, v, flip }
 let mateErr = 0;
@@ -2545,6 +2647,7 @@ document.addEventListener('click', (e) => {
   if (act === 'mate-do') { mateApply(); return; }
   if (act === 'mate-reset') { mate.a = mate.b = null; disposeOverlay(faceGroup); renderPanel(); return; }
   if (act.startsWith('jt-') || act.startsWith('jx-') || act === 'jpick' || act === 'jreset' || act === 'j-unlink') { linkAct(act); return; }
+  if (act.startsWith('an-')) { animAct(act); return; }
   if (act.startsWith('mat-')) { settings.mat = act.slice(4); saveSettings(); renderPanel(); return; }
   if (act === 'bom-csv') { exportBom(); return; }
   if (act === 'dxf-out') { exportDXF(); return; }
@@ -2681,6 +2784,12 @@ document.addEventListener('input', (e) => {
     const sc = sheetCalc(c);
     if (info) { info.innerHTML = sc.ok ? 'Açınım boyu: <b>' + lenText(sc.flatL) + '</b> × ' + lenText(sc.W) + ' · ' + sc.bends.length + ' büküm' : '⚠ ' + sc.err; info.style.color = sc.ok ? '#cbd5e1' : '#f87171'; }
     scheduleSave();
+    return;
+  }
+  if (d.an) {
+    const [key, which] = d.an.split(','), st = anim.cfg[key], dd = animDrivers().find((x) => x.key === key);
+    if (!st || !dd || !isFinite(el.valueAsNumber)) return;
+    st[which] = dd.unit === '°' ? el.valueAsNumber : fromUnit(el.valueAsNumber, settings.unit);
     return;
   }
   if (d.mv) {

@@ -1,11 +1,11 @@
 // 2B Çizim (AutoCAD tarzı) — tam ekran çizim alanı.
 // Kullanım: openCad2D({ onExtrude(draw), onClose() })  draw: kroki biçimi (sketch.js / validateDraw)
-import { fmtNum } from './logic.js?v=20261108g';
-import { validateDraw } from './sketch.js?v=20261108g';
+import { fmtNum } from './logic.js?v=20261108h';
+import { validateDraw } from './sketch.js?v=20261108h';
 import {
   arcFrom3, trimEntity, extendEntity, offsetEntity, filletLines, transformEntity, moveFn, rotateFn, mirrorFn,
   snapPoints, nearestOn, closedLoops, toDXF, parseDXF, dimLine, dimParts, dimText, arcSpan, arcEnds, entBBox, dist, normA, ACI,
-} from './cad2d-geom.js?v=20261108g';
+} from './cad2d-geom.js?v=20261108h';
 
 const KEY = 'cizim:2d';
 const CSS = `
