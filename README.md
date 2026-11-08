@@ -7,6 +7,9 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 
 ## Özellikler
 
+**❓ Rehber ve örnek projeler** — üst çubuktaki ❓: ilk açılışta kendiliğinden gelir. 7 hazır örnek (L braket, flanş, menteşeli kutu, mil ve burç, sac U kanal, masa iskeleti, boru dirseği) tek dokunuşla yüklenir ve ne deneneceği ekranın üstünde yazar; ↶ Geri önceki çalışmayı geri getirir. Konu konu kısa kullanım rehberi.
+
+
 **Şekiller ve düzenleme**
 - Sonsuz zemin ızgarası (yakınlaştırdıkça 10 mm, 100 mm, 1 m, 10 m... ölçeğine geçer); ölçü sınırı 100 m. Kırmızı çizgi X, mavi çizgi Z eksenidir
 - Şekiller: kutu, silindir, küre, koni / kesik koni, boru, **kroki** parçası
@@ -172,7 +175,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - `logic.js` — test edilebilir mantık: parça varsayılanları, geri al geçmişi, STL yazıcı, sesli komut çözücü, birimler, kroki dönüşümleri (yay, yuvarlak köşe), kopya / ayna / dizi, pah geometrisi, teknik resim yerleşimi ve PDF yazıcı
 - `photo2d.js`, `photoimport.js` — fotoğraftan çizim: görüntü işleme (eşik, inceltme, yol takibi, çizgi / yay / daire uydurma) ve ekranı
 - `cad2d.js`, `cad2d-geom.js` — 2B çizim modu ve saf geometrisi (kesişim, kırp, uzat, ofset, radyus, DXF)
-- `tests/` — testler: `node tests/logic.test.mjs`, `node tests/sketch.test.mjs`, `node tests/cad2d.test.mjs`, `node tests/photo2d.test.mjs`
+- `tests/` — testler: `node tests/logic.test.mjs`, `node tests/sketch.test.mjs`, `node tests/cad2d.test.mjs`, `node tests/photo2d.test.mjs`, `node tests/examples.test.mjs`
 - `App.js`, `viewerHtml.js`, `package.json` — eski React Native / Expo sürümü (2. aşama; güncellenmedi)
 
 ## Yol haritası

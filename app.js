@@ -13,11 +13,12 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261108l';
-import { openSketch } from './sketch.js?v=20261108l';
-import { openCad2D } from './cad2d.js?v=20261108l';
+} from './logic.js?v=20261108m';
+import { openSketch } from './sketch.js?v=20261108m';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261108m';
+import { openCad2D } from './cad2d.js?v=20261108m';
 
-const APP_VER = '20261108l'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261108m'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -2808,6 +2809,8 @@ document.addEventListener('click', (e) => {
   if (act === 'stl') { exportSTL(); return; }
   if (act === 'mic') { toggleMic(); return; }
   if (act === 'projects') { openDialog(); return; }
+  if (act === 'guide') { openGuide(); return; }
+  if (act === 'tip-close') { const el = $('tipcard'); if (el) el.style.display = 'none'; return; }
   if (act === 'dlg-close') { closeDialog(); return; }
   if (act === 'dlg-save') { saveProject(($('pname').value || '').trim() || 'model'); renderDialog(); return; }
   if (act === 'dlg-new') {
@@ -3010,6 +3013,54 @@ function toggleMic() {
   try { rec.start(); } catch (err) { rec = null; $('b-mic').classList.remove('rec'); }
 }
 
+/* ================= Rehber ve örnek projeler ================= */
+function loadExample(key) {
+  const ex = buildExample(key);
+  if (!ex) return;
+  commit();
+  parts = ex.parts; nextId = ex.nextId; sel = ex.sel; projName = ex.name;
+  cleanLinks(parts);
+  if (ex.anim) Object.assign(anim.cfg, ex.anim);
+  tab = 'dims';
+  refreshAll(true);
+  showTip('📘 ' + ex.name, ex.tip);
+}
+function showTip(title, text) {
+  let el = $('tipcard');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'tipcard';
+    el.style.cssText = 'position:absolute;left:8px;right:8px;top:8px;z-index:5;background:rgba(15,23,42,.94);border:1px solid #0284c7;border-radius:10px;padding:8px 36px 8px 10px;font-size:13px;line-height:1.35;color:#e2e8f0';
+    view.appendChild(el);
+  }
+  el.innerHTML = `<b style="color:#7dd3fc">${esc(title)}</b><br>${esc(text)}<button data-act="tip-close" style="position:absolute;right:4px;top:4px;flex:none;width:28px;padding:4px 0;background:#1e293b">✕</button>`;
+  el.style.display = 'block';
+}
+function openGuide() {
+  let o = $('guideov');
+  if (o) o.remove();
+  o = document.createElement('div');
+  o.id = 'guideov';
+  o.style.cssText = 'position:fixed;inset:0;z-index:45;background:#0f172a;color:#e2e8f0;overflow-y:auto;font-family:system-ui,sans-serif;padding:10px 12px 24px';
+  o.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="flex:1;font-weight:800;font-size:18px">❓ Rehber</div>' +
+    '<button data-g="close" style="flex:none;padding:9px 14px;background:#7f1d1d">✕ Kapat</button></div>' +
+    '<div style="font-size:13px;color:#94a3b8;margin-bottom:8px">Bir örneğe dokun: proje yüklenir ve ne deneyeceğin yazar. Önceki çalışman ↶ Geri ile geri gelir.</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">' +
+    EXAMPLES.map((e) => `<button data-ex="${e.key}" style="text-align:left;padding:10px;background:#1e293b;border-radius:10px;display:block;white-space:normal"><div style="font-size:15px;font-weight:800">${e.icon} ${esc(e.name)}</div><div style="font-size:11.5px;font-weight:400;color:#94a3b8;margin-top:3px">${esc(e.about)}</div></button>`).join('') +
+    '</div>' +
+    GUIDE.map((g) => `<div style="background:#111c33;border:1px solid #1e293b;border-radius:10px;padding:9px 11px;margin-bottom:8px"><div style="font-weight:800;margin-bottom:4px;color:#7dd3fc">${esc(g.t)}</div>` +
+      g.s.map((x) => `<div style="font-size:13px;line-height:1.4;margin:3px 0">• ${esc(x)}</div>`).join('') + '</div>').join('') +
+    '<div style="font-size:12px;color:#64748b;margin-top:6px">Her sekmenin altındaki gri yazı o sekmenin kısa açıklamasıdır.</div>';
+  o.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.g === 'close') { o.remove(); return; }
+    if (b.dataset.ex) { o.remove(); loadExample(b.dataset.ex); }
+  });
+  document.body.appendChild(o);
+  try { localStorage.setItem('cizim:guideSeen', '1'); } catch (e) { /* */ }
+}
+
 /* ================= Başlangıç ================= */
 try {
   const a = JSON.parse(localStorage.getItem('cizim:auto') || 'null');
@@ -3023,4 +3074,5 @@ renderPanel();
 updateToolbar();
 rebuild(true);
 edgesBroken = !selfTestEdges();
+try { if (!localStorage.getItem('cizim:guideSeen')) setTimeout(openGuide, 600); } catch (e) { /* */ }
 if (edgesBroken) toast('Bu cihazda kenar çizgisi doğru çizilemiyor; kapatıldı (Görünüm sekmesinden denenebilir).');

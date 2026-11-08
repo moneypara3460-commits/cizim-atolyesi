@@ -1,7 +1,7 @@
 // Kağıttan çizim: fotoğraf seç -> kağıt köşeleri -> analiz -> 2B varlıklar.
 // Kullanım: openPhotoImport(file, { onDone(ents, info), onCancel() })
-import { toGray, findPaperQuad, warpGray, vectorize } from './photo2d.js?v=20261108l';
-import { arcSpan } from './cad2d-geom.js?v=20261108l';
+import { toGray, findPaperQuad, warpGray, vectorize } from './photo2d.js?v=20261108m';
+import { arcSpan } from './cad2d-geom.js?v=20261108m';
 
 const CSS = `
 #ph { position: fixed; inset: 0; z-index: 40; background: #0b1220; color: #fff; display: flex; flex-direction: column;
