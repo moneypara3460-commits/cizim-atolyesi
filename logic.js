@@ -473,7 +473,7 @@ export function quatToEulerXYZ(q) { // derece
 
 /* ---------------- Çoğaltma: kopya, ayna, dizi ---------------- */
 
-const clone = (p) => { const c = JSON.parse(JSON.stringify(p)); delete c.parent; delete c.joint; return c; };
+const clone = (p) => { const c = JSON.parse(JSON.stringify(p)); delete c.parent; delete c.joint; delete c.mates; return c; };
 
 // ---- bağlantılar (üst / alt parça): parça.parent = üst parçanın id'si ----
 // id'nin bütün alt (torun dahil) parçaları

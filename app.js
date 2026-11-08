@@ -13,11 +13,11 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261108f';
-import { openSketch } from './sketch.js?v=20261108f';
-import { openCad2D } from './cad2d.js?v=20261108f';
+} from './logic.js?v=20261108g';
+import { openSketch } from './sketch.js?v=20261108g';
+import { openCad2D } from './cad2d.js?v=20261108g';
 
-const APP_VER = '20261108f'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261108g'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -44,7 +44,7 @@ const section = { on: false, axis: 'x', pos: 0, flip: false };
 const cp = { n: 3, dx: 40, dy: 0, dz: 0, cn: 6, ang: 360, touched: false, shape: 'round', fd: 10, fw: 10, fl: 10, depth: 5, es: 3,
   pat: 'single', px: 3, py: 2, sx: 20, sy: 20, pn: 6, pr: 20,            // delik deseni
   wall: 2, openTop: true, openBot: false,                                 // kabuk
-  mgap: 0, mrot: 0, mcenter: true };                                      // montaj // çoğaltma + yüz ayarları (mm)
+  mgap: 0, mrot: 0, mcenter: true, mtype: 'coinc', mval: 0, mang: 90, mflip: false };                                      // montaj // çoğaltma + yüz ayarları (mm)
 
 const hist = new History();
 const snapshot = () => JSON.stringify({ parts, sel, nextId });
@@ -718,6 +718,9 @@ function setMsg(text, err) {
 
 let ownedGeos = [];
 function rebuild(refit) {
+  const badBefore = mateErr > 1e-2;
+  const moved = solveMates();
+  if (tab === 'mate' && badBefore !== (mateErr > 1e-2) && !(document.activeElement && document.activeElement.closest && document.activeElement.closest('#tabbody'))) setTimeout(renderPanel, 0);
   try {
     ownedGeos.forEach((g) => g.dispose());
     ownedGeos = [];
@@ -766,6 +769,7 @@ function rebuild(refit) {
     setMsg('', false);
     refreshOverlays();
     if (tab === 'link') drawJointAxis();
+    if (moved) syncInputs();
     if (first || refit) { fit(clean.boundingBox); first = false; }
   } catch (err) {
     setMsg('Hata: ' + (err && err.message ? err.message : err), true);
@@ -1033,12 +1037,27 @@ function renderPanel() {
       : 'Kabuk: düz kutu, düz silindir ve küre için. Parçayı üstteki listeden seç.';
   } else if (tab === 'mate') {
     const nm = (m) => { const q = m && parts.find((x) => x.id === m.id); return q ? partName(q, parts.indexOf(q)) : ''; };
-    body = '<div class="lbl" style="flex:1 0 100%">1) Hareket edecek parçanın yüzüne dokun' + (mate.a ? ' ✓ ' + esc(nm(mate.a)) : '') + '</div>' +
-      '<div class="lbl" style="flex:1 0 100%">2) Yapışacağı yüze dokun (başka parça)' + (mate.b ? ' ✓ ' + esc(nm(mate.b)) : '') + '</div>' +
-      cfield('Boşluk', 'mgap') + cfield('Yüz çevresinde döndür°', 'mrot', 'deg') +
-      btn('Yüz merkezleri: ' + (cp.mcenter ? 'hizala' : 'dokunulan nokta'), 'mate-center', cp.mcenter) +
-      btn('🔗 Yüzü yüze birleştir', 'mate-do') + btn('Sıfırla', 'mate-reset');
-    hint = 'Birinci yüz, ikinci yüze yüzü yüze oturur ve parça döner. Düz olmayan yüzlerde dokunduğun noktanın yüzü kullanılır. Geri al ile döner.';
+    const MT = [['coinc', 'Çakışık'], ['dist', 'Mesafe'], ['par', 'Paralel'], ['ang', 'Açı'], ['conc', 'Eş merkezli']];
+    body = '<div class="lbl h">Kalıcı eşleşme türü</div>' + MT.map(([k, l]) => btn(l, 'mt-' + k, cp.mtype === k)).join('') +
+      (cp.mtype === 'dist' ? cfield('Mesafe', 'mval') : '') + (cp.mtype === 'ang' ? cfield('Açı °', 'mang', 'deg') : '') +
+      (['coinc', 'dist', 'par'].includes(cp.mtype) ? btn('Yön: ' + (cp.mflip ? 'aynı yöne bakar' : 'karşılıklı (yüz yüze)'), 'mt-flip', cp.mflip) : '') +
+      '<div class="lbl" style="flex:1 0 100%">1) Hareket edecek parçanın ' + (cp.mtype === 'conc' ? 'yuvarlak yüzüne' : 'yüzüne') + ' dokun' + (mate.a ? ' ✓ ' + esc(nm(mate.a)) : '') + '</div>' +
+      '<div class="lbl" style="flex:1 0 100%">2) Bağlanacağı parçanın ' + (cp.mtype === 'conc' ? 'yuvarlak yüzüne / deliğine' : 'yüzüne') + ' dokun' + (mate.b ? ' ✓ ' + esc(nm(mate.b)) : '') + '</div>' +
+      btn('➕ Kalıcı eşleşme ekle', 'mate-add') + btn('Seçimi sıfırla', 'mate-reset');
+    const all = [];
+    parts.forEach((A) => (A.mates || []).forEach((m, i) => all.push([A, m, i])));
+    body += '<div class="lbl h">Eşleşmeler (' + all.length + ')</div>';
+    const TN = Object.fromEntries(MT);
+    for (const [A, m, i] of all) {
+      const B = parts.find((x) => x.id === m.b);
+      const val = m.t === 'dist' ? `<input type="number" step="any" data-mv="${A.id},${i}" data-u="len" value="${lenVal(m.v)}" style="width:80px;flex:0 0 80px">`
+        : m.t === 'ang' ? `<input type="number" step="any" data-mv="${A.id},${i}" data-u="deg" value="${fmtNum(m.v, 2)}" style="width:70px;flex:0 0 70px">` : '';
+      body += `<div style="flex:1 0 100%;display:flex;gap:5px;align-items:center;font-size:13px;padding:2px 0"><span style="flex:1">${esc(partName(A, parts.indexOf(A)))} → ${B ? esc(partName(B, parts.indexOf(B))) : '?'}: <b>${TN[m.t]}</b>${m.flip ? ' (aynı yön)' : ''}</span>${val}<button data-act="mdel-${A.id}-${i}" class="danger" style="flex:0 0 auto;padding:8px 10px">Sil</button></div>`;
+    }
+    if (mateErr > 1e-2) body += '<div class="lbl" style="flex:1 0 100%;color:#f87171">⚠ Eşleşmeler birlikte sağlanamıyor (çelişki var). Son eklenen eşleşmeyi sil.</div>';
+    body += '<div class="lbl h">Tek seferlik oturtma</div>' + cfield('Boşluk', 'mgap') + cfield('Yüz çevresinde döndür°', 'mrot', 'deg') +
+      btn('Yüz merkezleri: ' + (cp.mcenter ? 'hizala' : 'dokunulan nokta'), 'mate-center', cp.mcenter) + btn('🔗 Yüzü yüze oturt (bir kez)', 'mate-do');
+    hint = 'Kalıcı eşleşme: 1. parça, 2. parçaya bağlı kalır; 2. parçayı taşıyınca 1. parça da gelir, 1. parçayı sürüklersen sadece serbest kalan yönde kayar. Çakışık: yüzler yüz yüze aynı düzlemde. Eş merkezli: mil ile delik / boru aynı eksende (parçaların dikey ekseni). Geri al ile döner.';
   } else if (tab === 'link') {
     const cand = parts.filter((q) => q.id !== p.id && !q.aux && !wouldCycle(parts, p.id, q.id));
     const J = p.joint || { type: 'fixed' };
@@ -2015,6 +2034,102 @@ function mateTap(cx, cy) {
   }
   renderPanel();
 }
+/* ---- kalıcı eşleşmeler (mate) ---- */
+// Her eşleşme hareket eden parçada (A) saklanır: { t, b (referans parça id), pa, na (A'nın yerel çerçevesinde yüz noktası / normali), pb, nb, v, flip }
+let mateErr = 0;
+const V3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+function rotAbout(A, q, c) {
+  const D = new THREE.Matrix4().makeTranslation(c.x, c.y, c.z).multiply(new THREE.Matrix4().makeRotationFromQuaternion(q)).multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+  carry(A, () => setPoseM(A, D.multiply(poseM(A))));
+}
+function shiftBy(A, d) { carry(A, () => { A.x = r4m(pos(A.x) + d.x); A.y = r4m(pos(A.y) + d.y); A.z = r4m(pos(A.z) + d.z); }); }
+// tek eşleşmeyi bir adım uygula; dönüş: kalan hata
+function mateStep(A, m) {
+  const B = parts.find((x) => x.id === m.b);
+  if (!B || B === A) return 0;
+  const qA = partQuat(A), qB = partQuat(B);
+  let err = 0;
+  if (m.t === 'conc') {
+    const up = new THREE.Vector3(0, 1, 0);
+    let aA = up.clone().applyQuaternion(qA), aB = up.clone().applyQuaternion(qB);
+    const oA = new THREE.Vector3(pos(A.x), pos(A.y), pos(A.z)), oB = new THREE.Vector3(pos(B.x), pos(B.y), pos(B.z));
+    const tgt = aA.dot(aB) >= 0 ? aB : aB.clone().negate();
+    const ang = aA.angleTo(tgt);
+    if (ang > 1e-6) { rotAbout(A, new THREE.Quaternion().setFromUnitVectors(aA, tgt), oA); err = Math.max(err, ang * 10); }
+    const oA2 = new THREE.Vector3(pos(A.x), pos(A.y), pos(A.z));
+    const foot = oB.clone().addScaledVector(aB, oA2.clone().sub(oB).dot(aB));
+    const d = foot.sub(oA2);
+    if (d.length() > 1e-6) { shiftBy(A, d); err = Math.max(err, d.length()); }
+    return err;
+  }
+  let nA = V3(m.na).applyQuaternion(qA).normalize();
+  const nB = V3(m.nb).applyQuaternion(qB).normalize();
+  let pA = V3(m.pa).applyMatrix4(poseM(A));
+  const pB = V3(m.pb).applyMatrix4(poseM(B));
+  // dönüş
+  let target = null;
+  if (m.t === 'coinc' || m.t === 'dist') target = m.flip ? nB.clone() : nB.clone().negate();
+  else if (m.t === 'par') target = m.flip ? nB.clone() : (nA.dot(nB) >= 0 ? nB.clone() : nB.clone().negate());
+  if (target) {
+    const ang = nA.angleTo(target);
+    if (ang > 1e-6) { rotAbout(A, new THREE.Quaternion().setFromUnitVectors(nA, target), pA); err = Math.max(err, ang * 10); }
+  } else if (m.t === 'ang') {
+    const want = Math.min(Math.max(pos(m.v), 0), 180) * RAD, cur = nA.angleTo(nB);
+    let k = nA.clone().cross(nB);
+    if (k.length() < 1e-9) { k = new THREE.Vector3(1, 0, 0).cross(nA); if (k.length() < 1e-6) k = new THREE.Vector3(0, 0, 1).cross(nA); }
+    k.normalize();
+    const phi = cur - want;
+    if (Math.abs(phi) > 1e-6) { rotAbout(A, new THREE.Quaternion().setFromAxisAngle(k, phi), pA); err = Math.max(err, Math.abs(phi) * 10); }
+    return err;
+  }
+  if (m.t === 'coinc' || m.t === 'dist') {
+    pA = V3(m.pa).applyMatrix4(poseM(A));
+    const gap = m.t === 'dist' ? pos(m.v) : 0;
+    const off = pA.clone().sub(pB).dot(nB);
+    const sgn = m.flip ? -1 : 1; // aynı yönde bakan yüzlerde mesafe karşı yöne ölçülür
+    const delta = gap * sgn - off;
+    if (Math.abs(delta) > 1e-6) { shiftBy(A, nB.clone().multiplyScalar(delta)); err = Math.max(err, Math.abs(delta)); }
+  }
+  return err;
+}
+// tüm eşleşmeleri yinelemeli çöz; bir şey hareket ettiyse true
+function solveMates() {
+  const list = [];
+  for (const A of parts) if (A.mates && A.mates.length) for (const m of A.mates) list.push([A, m]);
+  if (!list.length) { mateErr = 0; return false; }
+  let moved = false, err = 0;
+  for (let it = 0; it < 40; it++) {
+    err = 0;
+    for (const [A, m] of list) err = Math.max(err, mateStep(A, m));
+    if (err > 1e-4) moved = true;
+    if (err < 1e-4) break;
+  }
+  // son hata (bir tur daha ölç, değiştirmeden)
+  mateErr = err;
+  return moved;
+}
+function mateAdd() {
+  if (!mate.a || !mate.b) { toast('Önce iki yüze dokun (1. hareket eden, 2. bağlanacağı).'); return; }
+  const A = parts.find((q) => q.id === mate.a.id), B = parts.find((q) => q.id === mate.b.id);
+  if (!A || !B) return;
+  if (descendantsOf(parts, A.id).includes(B)) { toast('Referans parça, hareket eden parçanın alt parçası olamaz.'); return; }
+  const invA = poseM(A).invert(), invB = poseM(B).invert();
+  const qiA = partQuat(A).invert(), qiB = partQuat(B).invert();
+  const pa = (cp.mcenter ? mate.a.center : mate.a.point).clone().applyMatrix4(invA), pb = (cp.mcenter ? mate.b.center : mate.b.point).clone().applyMatrix4(invB);
+  const na = mate.a.normal.clone().applyQuaternion(qiA), nb = mate.b.normal.clone().applyQuaternion(qiB);
+  const r = (v) => [v.x, v.y, v.z].map((x) => Math.round(x * 1e5) / 1e5);
+  const m = { t: cp.mtype, b: B.id, pa: r(pa), na: r(na), pb: r(pb), nb: r(nb) };
+  if (cp.mtype === 'dist') m.v = pos(cp.mval);
+  if (cp.mtype === 'ang') m.v = pos(cp.mang);
+  if (cp.mflip && ['coinc', 'dist', 'par'].includes(cp.mtype)) m.flip = true;
+  commit();
+  (A.mates = A.mates || []).push(m);
+  mate.a = mate.b = null;
+  disposeOverlay(faceGroup);
+  sel = A.id;
+  refreshAll();
+  toast(mateErr > 1e-2 ? 'Eşleşme eklendi ama diğerleriyle çelişiyor' : 'Eşleşme eklendi');
+}
 function mateApply() {
   if (!mate.a || !mate.b) { toast('Önce iki yüz seç.'); return; }
   const A = parts.find((q) => q.id === mate.a.id);
@@ -2420,6 +2535,13 @@ document.addEventListener('click', (e) => {
   if (act === 'shell-bot') { cp.openBot = !cp.openBot; renderPanel(); return; }
   if (act === 'shell-do') { shellFeature(); return; }
   if (act === 'mate-center') { cp.mcenter = !cp.mcenter; renderPanel(); return; }
+  if (act.startsWith('mt-')) { if (act === 'mt-flip') cp.mflip = !cp.mflip; else cp.mtype = act.slice(3); renderPanel(); return; }
+  if (act === 'mate-add') { mateAdd(); return; }
+  if (act.startsWith('mdel-')) {
+    const [, aid, idx] = act.split('-'), A = parts.find((x) => x.id === Number(aid));
+    if (A && A.mates) { commit(); A.mates.splice(Number(idx), 1); if (!A.mates.length) delete A.mates; refreshAll(); }
+    return;
+  }
   if (act === 'mate-do') { mateApply(); return; }
   if (act === 'mate-reset') { mate.a = mate.b = null; disposeOverlay(faceGroup); renderPanel(); return; }
   if (act.startsWith('jt-') || act.startsWith('jx-') || act === 'jpick' || act === 'jreset' || act === 'j-unlink') { linkAct(act); return; }
@@ -2559,6 +2681,16 @@ document.addEventListener('input', (e) => {
     const sc = sheetCalc(c);
     if (info) { info.innerHTML = sc.ok ? 'Açınım boyu: <b>' + lenText(sc.flatL) + '</b> × ' + lenText(sc.W) + ' · ' + sc.bends.length + ' büküm' : '⚠ ' + sc.err; info.style.color = sc.ok ? '#cbd5e1' : '#f87171'; }
     scheduleSave();
+    return;
+  }
+  if (d.mv) {
+    const [aid, idx] = d.mv.split(',').map(Number), A = parts.find((x) => x.id === aid), m = A && A.mates && A.mates[idx];
+    if (!m || !isFinite(el.valueAsNumber)) return;
+    const mkey = 'mv' + d.mv, mnow = Date.now();
+    if (mkey !== lastKey || mnow - lastAt > 1500) { commit(); updateToolbar(); }
+    lastKey = mkey; lastAt = mnow;
+    m.v = d.u === 'len' ? fromUnit(el.valueAsNumber, settings.unit) : el.valueAsNumber;
+    rebuild(false); scheduleSave();
     return;
   }
   if (d.pt) {

@@ -613,6 +613,10 @@ t('newPart sac: varsayılan profil kopyalanır (paylaşılmaz)', () => {
   assert.equal(SHEET_PRESETS.L.seg[0].L, 40);
   assert.ok(heightOf(newPart(2, 'sheet', 'add', null)) > 39);
 });
+t('kopyalanan parça eşleşmeleri taşımaz', () => {
+  const c = duplicatePart({ id: 3, type: 'box', op: 'add', x: 0, y: 0, z: 0, mates: [{ t: 'coinc', b: 1 }] }, 9);
+  assert.equal(c.mates, undefined);
+});
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
 process.exit(fail ? 1 : 0);

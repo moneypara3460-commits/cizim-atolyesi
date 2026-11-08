@@ -45,6 +45,12 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **Delik ölçüleri**: eksene paralel yuvarlak delikler için `Ø10`, kare delikler için `□ 8 × 6` yazısı ve eksen çizgileri; delik, eksenine bakan görünüşte gösterilir
 - Sayfadaki **✂ Kesit** düğmesi sağ alttaki izometriği A-A kesitiyle değiştirir: X ekseninde kesilir (Kesit sekmesi açık ve X seçiliyse onun konumunda, değilse ortada), kesilen yüzey 45° taranır, önden görünüşte kesit düzlemi işaretlenir
 
+**Kalıcı eşleşmeler — mate (Montaj sekmesi)**
+- Türler: **Çakışık** (yüzler aynı düzlemde, yüz yüze ya da aynı yöne), **Mesafe**, **Paralel**, **Açı**, **Eş merkezli** (mil – delik / boru aynı eksende; parçaların dikey ekseni kullanılır)
+- 1. dokunulan parça hareket eder, 2. parça referanstır. Eşleşmeler saklanır: referans parça taşınınca / döndürülünce bağlı parça da gelir; bağlı parça sürüklenirse yalnızca serbest kalan yönde kayar
+- Birden çok eşleşme birlikte çözülür (yinelemeli); çelişki varsa uyarı çıkar. Mesafe / açı değeri listeden değiştirilebilir, eşleşme silinebilir
+- Eski "yüzü yüze oturt" (bir kerelik) de aynı sekmede duruyor
+
 **Sac metal (⌐ Sac metal düğmesi)**
 - Bükülmüş sac parça: kalınlık, iç büküm yarıçapı, derinlik, K faktörü. Hazır profiller: L köşebent, U kanal, Z, şapka, C (dudaklı); ya da kenar ekleyip her kenarın dış ölçüsünü ve büküm açısını (+ yukarı / − aşağı) kendin yaz
 - **Açınım boyu** otomatik hesaplanır (düz kısımlar + büküm payı, BA = açı × (R + K·T)); kenar büküm payından kısaysa uyarır
