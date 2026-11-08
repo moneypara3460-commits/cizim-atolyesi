@@ -56,6 +56,12 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - Birden çok eşleşme birlikte çözülür (yinelemeli); çelişki varsa uyarı çıkar. Mesafe / açı değeri listeden değiştirilebilir, eşleşme silinebilir
 - Eski "yüzü yüze oturt" (bir kerelik) de aynı sekmede duruyor
 
+**Kaynak konstrüksiyon (▦ Konstrüksiyon düğmesi)**
+- Hazır iskeletler: masa iskeleti (üst kuşak + isteğe bağlı alt kuşak), kutu çerçeve, raf / sehpa (raf sayısı), pano çerçeve
+- Standart profiller: kutu 20–80, dikdörtgen 40×20 / 60×40, boru Ø21,3–Ø48,3 (içi boş, et kalınlıklı)
+- Ölçüler dış ölçü; dikmeler tam boy, kuşaklar dikmeler arasına alın kesimle oturur (gönye kesim yok)
+- **Kesim listesi**: eleman, adet, boy, toplam boy, çelik ağırlığı, kaç 6 m'lik boy gerektiği; CSV olarak indirilir
+
 **Sac metal (⌐ Sac metal düğmesi)**
 - Bükülmüş sac parça: kalınlık, iç büküm yarıçapı, derinlik, K faktörü. Hazır profiller: L köşebent, U kanal, Z, şapka, C (dudaklı); ya da kenar ekleyip her kenarın dış ölçüsünü ve büküm açısını (+ yukarı / − aşağı) kendin yaz
 - **Açınım boyu** otomatik hesaplanır (düz kısımlar + büküm payı, BA = açı × (R + K·T)); kenar büküm payından kısaysa uyarır

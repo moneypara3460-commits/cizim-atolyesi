@@ -7,7 +7,7 @@ import {
   chamferBoxPoints, cylinderProfile,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
-  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, SHEET_DEFAULTS, SHEET_PRESETS, sheetCalc, sheetFlatLines, solveCons, consError, freedom, fixConsAfterRemove, SWEEP_DEFAULTS, LOFT_DEFAULTS, filletPath, arcPath, helixPath, sweepTris, loftTris, signedVolume, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
+  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, FRAME_DEFAULTS, PROFILES, profileArea, frameCalc, SHEET_DEFAULTS, SHEET_PRESETS, sheetCalc, sheetFlatLines, solveCons, consError, freedom, fixConsAfterRemove, SWEEP_DEFAULTS, LOFT_DEFAULTS, filletPath, arcPath, helixPath, sweepTris, loftTris, signedVolume, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
 } from '../logic.js';
 
 let fail = 0;
@@ -616,6 +616,24 @@ t('newPart sac: varsayılan profil kopyalanır (paylaşılmaz)', () => {
 t('kopyalanan parça eşleşmeleri taşımaz', () => {
   const c = duplicatePart({ id: 3, type: 'box', op: 'add', x: 0, y: 0, z: 0, mates: [{ t: 'coinc', b: 1 }] }, 9);
   assert.equal(c.mates, undefined);
+});
+t('frameCalc: masa iskeleti kesim listesi, hacim ve ağırlık', () => {
+  const c = frameCalc({ ...FRAME_DEFAULTS });   // 1200 × 700 × 750, kutu 40×40×2, alt kuşaklı
+  assert.equal(c.members.length, 12);
+  const legs = c.cut.find((g) => g.role === 'Dikme');
+  assert.deepEqual([legs.qty, legs.len], [4, 750]);
+  assert.ok(c.cut.some((g) => g.len === 1120 && g.qty === 4));
+  assert.ok(Math.abs(signedVolume(c.pos) - profileArea(PROFILES.k40) * c.totalLen) < 1);
+  assert.ok(Math.abs(c.kg - 304 * 9.96 * 7.85e-3) < 1e-6);
+  assert.equal(frameCalc({ ...FRAME_DEFAULTS, fs: 0 }).members.length, 8);
+});
+t('frameCalc: boru raf, pano çerçeve; dış ölçü korunur', () => {
+  const r = frameCalc({ ...FRAME_DEFAULTS, fr: 'shelf', pf: 'b34', fn: 4 });
+  assert.equal(r.members.length, 4 + 16);
+  assert.ok(signedVolume(r.pos) > 0);
+  const xs = []; for (let i = 0; i < r.pos.length; i += 3) xs.push(r.pos[i]);
+  assert.ok(Math.abs(Math.max(...xs) - Math.min(...xs) - 1200) < 1e-3);
+  assert.equal(frameCalc({ ...FRAME_DEFAULTS, fr: 'rect' }).members.length, 4);
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');

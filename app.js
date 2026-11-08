@@ -12,12 +12,12 @@ import {
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
-  sweepTris, loftTris, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261108h';
-import { openSketch } from './sketch.js?v=20261108h';
-import { openCad2D } from './cad2d.js?v=20261108h';
+  sweepTris, loftTris, frameCalc, PROFILES, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
+} from './logic.js?v=20261108i';
+import { openSketch } from './sketch.js?v=20261108i';
+import { openCad2D } from './cad2d.js?v=20261108i';
 
-const APP_VER = '20261108h'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261108i'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -525,6 +525,12 @@ function baseGeo(p) {
   const w = clamp(p.w), l = clamp(p.l), h = clamp(p.h), d = clamp(p.d);
   switch (p.type) {
     case 'sketch': return sketchGeo(p);
+    case 'frame': {
+      let g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(frameCalc(p).pos), 3));
+      try { g = toCreasedNormals(g, 30 * RAD); } catch (e) { g.computeVertexNormals(); }
+      return ensureUV(g);
+    }
     case 'sheet': {
       const c = sheetCalc(p);
       if (p.flat) return new THREE.BoxGeometry(Math.max(c.flatL, 0.01), c.T, c.W);
@@ -612,6 +618,7 @@ function partHeight(p) {
   if (p.type === 'sketch') return Math.max(heightOf(p), 0.01);
   if (p.type === 'sweep') return clamp(sweepTris(p).h);
   if (p.type === 'sheet') { const c = sheetCalc(p); return p.flat ? c.T : c.h; }
+  if (p.type === 'frame') return clamp(frameCalc(p).h);
   return p.type === 'sphere' ? clamp(p.d) : clamp(p.h);
 }
 
@@ -931,6 +938,8 @@ function fieldsFor(p) {
         : [['Eğri yarıçapı', 'br'], ['Açı °', 'ang', 'deg'], ['Baştaki düz boy', 's0'], ['Sondaki düz boy', 's1']];
       return [...prof, ...path];
     }
+    case 'frame': return [['Genişlik (dış)', 'fw'], ...(p.fr === 'rect' ? [] : [['Derinlik (dış)', 'fd']]), ['Yükseklik', 'fh'],
+      ...(p.fr === 'table' ? [['Alt kuşak yüksekliği (0 = yok)', 'fs']] : []), ...(p.fr === 'shelf' ? [['Raf sayısı', 'fn', 'deg']] : [])];
     case 'sheet': return [['Sac kalınlığı', 'st'], ['İç büküm yarıçapı', 'sr'], ['Derinlik (en)', 'sw'], ['K faktörü (0–1)', 'sk', 'deg'], ['Başlangıç yönü °', 'sa0', 'deg']];
     case 'loft': return [
       ...(p.ls0 === 'circle' ? [['Alt çap', 'd']] : [['Alt genişlik', 'w'], ['Alt derinlik', 'l']]),
@@ -970,7 +979,11 @@ function renderPanel() {
   const snapBtns = SNAPS.map((v) => btn(v === 0 ? 'Yapışma yok' : 'Yapış ' + fmtNum(toUnit(v, settings.unit), 3), 'snap-' + v, settings.snap === v)).join('');
 
   if (tab === 'type') {
-    body = p.type === 'sheet'
+    body = p.type === 'frame'
+      ? '<div class="lbl h">İskelet</div>' + [['table', 'Masa iskeleti'], ['box', 'Kutu çerçeve'], ['shelf', 'Raf / sehpa'], ['rect', 'Pano çerçeve']].map(([k, l]) => btn(l, 'frt-' + k, p.fr === k)).join('') +
+        `<label class="f w2" style="flex:1 0 100%"><span>Profil</span><select data-pf="1">${Object.entries(PROFILES).map(([k, v]) => `<option value="${k}"${p.pf === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>` +
+        cutListHtml(p) + btn('📋 Kesim listesi (CSV)', 'fr-csv') + opBtns
+      : p.type === 'sheet'
       ? '<div class="lbl h">Hazır profil</div>' + [['L', 'L köşebent'], ['U', 'U kanal'], ['Z', 'Z profil'], ['hat', 'Şapka'], ['C', 'C (dudaklı)']].map(([k, l]) => btn(l, 'shp-' + k, p.sh === k)).join('') +
         '<div class="lbl h">Açınım</div>' + btn(p.flat ? '📐 Bükülmüş göster' : '📄 Düz (açınım) göster', 'sh-flat', p.flat) + btn('⬇ Açınım DXF', 'sh-dxf') + opBtns
       : p.type === 'sweep'
@@ -1170,10 +1183,10 @@ function renderPanel() {
         btn('+ Nokta ekle', 'pt-add') + btn('− Son noktayı sil', 'pt-del');
     }
     if (p.type === 'mesh') body = '<div class="lbl" style="flex:1 0 100%">Tek parça: ölçüleri artık değişmez. Konum ve Döndür sekmeleri çalışır; yeni parça ekleyip birleştirebilir ya da oyabilirsin.</div>';
-    hint = (p.type === 'sheet' ? 'Sac: ölçüler dış ölçüdür (sanal keskin köşeye kadar). Açınım boyu = düz kısımlar + büküm payları, büküm payı = açı × (R + K × kalınlık). K faktörü malzemeye ve kalıba göre değişir (çelik için 0,3–0,5). ' : p.type === 'sweep' ? 'Süpürme: profil, yol boyunca sürülür (boru, dirsek, yay, vida). Yol Tür sekmesinden seçilir; çok noktalı yolda köşeler Köşe yarıçapı ile yuvarlanır. Eğri yarıçapı profilden küçük olamaz. ' : p.type === 'loft' ? 'Loft: alttaki şekilden üstteki şekle geçiş (kare tabandan yuvarlak ağza gibi). Burulma üst şekli döndürür. ' : '') + 'Ölçüler (' + settings.unit + ')' + (p.type === 'box' || p.type === 'cylinder' ? '. Yuvarlama ve pah birlikte kullanılırsa yuvarlama geçerli olur. Eğim: üst yüz, her yönden yükseklik × tan(eğim) kadar daralır (döküm eğimi).' : '');
+    hint = (p.type === 'frame' ? 'Konstrüksiyon: ölçüler dış ölçüdür. Dikmeler tam boy, kuşaklar dikmelerin arasına alın (düz) kesimle oturur. Ağırlık çelik (7,85) içindir. ' : p.type === 'sheet' ? 'Sac: ölçüler dış ölçüdür (sanal keskin köşeye kadar). Açınım boyu = düz kısımlar + büküm payları, büküm payı = açı × (R + K × kalınlık). K faktörü malzemeye ve kalıba göre değişir (çelik için 0,3–0,5). ' : p.type === 'sweep' ? 'Süpürme: profil, yol boyunca sürülür (boru, dirsek, yay, vida). Yol Tür sekmesinden seçilir; çok noktalı yolda köşeler Köşe yarıçapı ile yuvarlanır. Eğri yarıçapı profilden küçük olamaz. ' : p.type === 'loft' ? 'Loft: alttaki şekilden üstteki şekle geçiş (kare tabandan yuvarlak ağza gibi). Burulma üst şekli döndürür. ' : '') + 'Ölçüler (' + settings.unit + ')' + (p.type === 'box' || p.type === 'cylinder' ? '. Yuvarlama ve pah birlikte kullanılırsa yuvarlama geçerli olur. Eğim: üst yüz, her yönden yükseklik × tan(eğim) kadar daralır (döküm eğimi).' : '');
   }
   $('tabbody').innerHTML = body;
-  $('tabbody').classList.toggle('grid', tab === 'view' || tab === 'calc' || (tab === 'type' && (p.type === 'sweep' || p.type === 'loft' || p.type === 'sheet')));
+  $('tabbody').classList.toggle('grid', tab === 'view' || tab === 'calc' || (tab === 'type' && (p.type === 'sweep' || p.type === 'loft' || p.type === 'sheet' || p.type === 'frame')));
   $('tabhint').textContent = hint;
   $('b-move').classList.toggle('on', settings.move);
 }
@@ -1212,9 +1225,10 @@ function addPart(type, op, dims) {
   commit();
   const p = newPart(nextId++, type, op, parts[0]);
   if (dims) Object.assign(p, dims);
+  if (type === 'frame') p.y = 0;   // iskelet yere otursun
   parts.push(p);
   sel = p.id;
-  refreshAll();
+  refreshAll(type === 'frame');
   return p;
 }
 
@@ -1351,6 +1365,22 @@ function exportBom() {
   rows[0][4] = 'Ölçü (' + settings.unit + ')';
   saveBlob(new Blob([csvFromRows(rows)], { type: 'text/csv;charset=utf-8' }), fileBase() + '-parca-listesi.csv');
   toast('Parça listesi indirildi');
+}
+function cutListHtml(p) {
+  const c = frameCalc(p);
+  const row = (a, b, c2, d) => `<div style="flex:1 0 100%;display:flex;gap:6px;font-size:13px;padding:3px 4px;border-top:1px solid #1e293b"><span style="flex:2">${a}</span><span style="flex:1;text-align:right">${b}</span><span style="flex:1;text-align:right">${c2}</span><span style="flex:1;text-align:right">${d}</span></div>`;
+  return '<div class="lbl h">Kesim listesi · ' + esc(c.pr.name) + '</div>' + row('<b>Eleman</b>', '<b>Adet</b>', '<b>Boy</b>', '<b>Toplam</b>') +
+    c.cut.map((g) => row(esc(g.role), g.qty, lenText(g.len), lenText(g.len * g.qty))).join('') +
+    row('<b>Toplam</b>', c.members.length, '', '<b>' + lenText(c.totalLen) + '</b>') +
+    `<div class="lbl" style="flex:1 0 100%;font-size:13px">Ağırlık (çelik): <b>${fmtNum(c.kg, 2)} kg</b> · 6 m'lik boydan yaklaşık ${Math.ceil(c.totalLen / 6000 * 1.05)} boy</div>`;
+}
+function exportCutList(p) {
+  const c = frameCalc(p);
+  const f = (v) => fmtNum(v, 1).replace('.', ',');
+  const rows = [['Profil', 'Eleman', 'Adet', 'Boy (mm)', 'Toplam (mm)'], ...c.cut.map((g) => [c.pr.name, g.role, g.qty, f(g.len), f(g.len * g.qty)]),
+    ['', 'Toplam', c.members.length, '', f(c.totalLen)], ['', 'Ağırlık (kg, çelik)', '', '', f(c.kg)]];
+  saveBlob(new Blob([csvFromRows(rows)], { type: 'text/csv;charset=utf-8' }), fileBase() + '-kesim-listesi.csv');
+  toast('Kesim listesi indirildi');
 }
 function exportFlatDXF(p) {
   const c = sheetCalc(p);
@@ -2663,6 +2693,8 @@ document.addEventListener('click', (e) => {
   if (act === 'sketch-new') { newSketch(); return; }
   if (act === 'cad2d') { open2D(); return; }
   if (act === 'sketch-edit') { editSketch(); return; }
+  if (act.startsWith('frt-')) { commit(); p.fr = act.slice(4); refreshAll(); return; }
+  if (act === 'fr-csv') { exportCutList(p); return; }
   if (act.startsWith('shp-')) { commit(); Object.assign(p, JSON.parse(JSON.stringify(SHEET_PRESETS[act.slice(4)]))); refreshAll(); return; }
   if (act === 'sh-flat') { commit(); p.flat = !p.flat; refreshAll(); return; }
   if (act === 'sh-dxf') { exportFlatDXF(p); return; }
@@ -2786,6 +2818,7 @@ document.addEventListener('input', (e) => {
     scheduleSave();
     return;
   }
+  if (d.pf) { commit(); cur().pf = el.value; refreshAll(); return; }
   if (d.an) {
     const [key, which] = d.an.split(','), st = anim.cfg[key], dd = animDrivers().find((x) => x.key === key);
     if (!st || !dd || !isFinite(el.valueAsNumber)) return;

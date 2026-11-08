@@ -14,6 +14,7 @@ export const TYPE_LABEL = {
   sweep: 'Süpürme',
   loft: 'Loft',
   sheet: 'Sac',
+  frame: 'Konstrüksiyon',
 };
 
 export const DEFAULTS = {
@@ -28,6 +29,7 @@ export function heightOf(p) {
   if (p.type === 'sketch') return sketchHeight(p);
   if (p.type === 'sweep') return sweepTris(p).h;
   if (p.type === 'sheet') return sheetCalc(p).h;
+  if (p.type === 'frame') return frameCalc(p).h;
   return p.type === 'sphere' ? fin(p.d, 0) : fin(p.h, 0);
 }
 
@@ -38,6 +40,7 @@ export function newPart(id, type, op, base) {
   if (type === 'tube') { p.d = 30; p.di = 20; p.h = 20; }
   if (type === 'sweep') Object.assign(p, JSON.parse(JSON.stringify(SWEEP_DEFAULTS)));
   if (type === 'loft') Object.assign(p, LOFT_DEFAULTS);
+  if (type === 'frame') Object.assign(p, FRAME_DEFAULTS);
   if (type === 'sheet') Object.assign(p, JSON.parse(JSON.stringify(SHEET_PRESETS.L)), SHEET_DEFAULTS);
   if (!base) return p;
 
@@ -1033,6 +1036,114 @@ export function loftTris(p) {
   });
 }
 
+/* ---------------- Kaynak konstrüksiyon (profil iskelet) ---------------- */
+// Standart profiller (mm): kind 'rect' = kutu profil (w × h × t), 'round' = boru (dış çap w, et kalınlığı t)
+export const PROFILES = {
+  k20: { name: 'Kutu 20×20×1,5', kind: 'rect', w: 20, h: 20, t: 1.5 },
+  k30: { name: 'Kutu 30×30×2', kind: 'rect', w: 30, h: 30, t: 2 },
+  k40: { name: 'Kutu 40×40×2', kind: 'rect', w: 40, h: 40, t: 2 },
+  k50: { name: 'Kutu 50×50×3', kind: 'rect', w: 50, h: 50, t: 3 },
+  k80: { name: 'Kutu 80×80×3', kind: 'rect', w: 80, h: 80, t: 3 },
+  d4020: { name: 'Dikdörtgen 40×20×2', kind: 'rect', w: 40, h: 20, t: 2 },
+  d6040: { name: 'Dikdörtgen 60×40×3', kind: 'rect', w: 60, h: 40, t: 3 },
+  b21: { name: 'Boru Ø21,3×2', kind: 'round', w: 21.3, h: 21.3, t: 2 },
+  b27: { name: 'Boru Ø26,9×2', kind: 'round', w: 26.9, h: 26.9, t: 2 },
+  b34: { name: 'Boru Ø33,7×2,6', kind: 'round', w: 33.7, h: 33.7, t: 2.6 },
+  b42: { name: 'Boru Ø42,4×2,6', kind: 'round', w: 42.4, h: 42.4, t: 2.6 },
+  b48: { name: 'Boru Ø48,3×3', kind: 'round', w: 48.3, h: 48.3, t: 3 },
+};
+export const FRAME_DEFAULTS = { fr: 'table', pf: 'k40', fw: 1200, fd: 700, fh: 750, fs: 150, fn: 3 };
+// profil kesit alanı (mm²)
+export function profileArea(pr) {
+  if (pr.kind === 'round') { const r = pr.w / 2, ri = Math.max(r - pr.t, 0); return Math.PI * (r * r - ri * ri); }
+  return pr.w * pr.h - Math.max(pr.w - 2 * pr.t, 0) * Math.max(pr.h - 2 * pr.t, 0);
+}
+// iskelet elemanları: { a, b (yerel, y yukarı, taban ortası orijin), u (kesitin w yönü), w, h, role }
+export function frameMembers(p) {
+  const pr = PROFILES[p.pf] || PROFILES.k40;
+  const num = (v, d) => (isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
+  const lx = pr.w, lz = pr.h;                                 // ayağın X ve Z yönündeki kesiti
+  const W = Math.max(num(p.fw, 1000), 2 * lx + 1), D = Math.max(num(p.fd, 600), 2 * lz + 1), H = Math.max(num(p.fh, 700), 2 * pr.w + 1);
+  const out = [];
+  const leg = (x, z) => out.push({ a: [x, 0, z], b: [x, H, z], u: [1, 0, 0], w: lx, h: lz, role: 'Dikme' });
+  const ring = (y, role) => {                                // ayaklar arasında dört kuşak, merkez yüksekliği y
+    for (const s of [-1, 1]) out.push({ a: [-(W / 2 - lx), y, s * (D / 2 - lz / 2)], b: [W / 2 - lx, y, s * (D / 2 - lz / 2)], u: [0, 0, 1], w: lz, h: pr.w, role: 'Kuşak (en)' });
+    for (const s of [-1, 1]) out.push({ a: [s * (W / 2 - lx / 2), y, -(D / 2 - lz)], b: [s * (W / 2 - lx / 2), y, D / 2 - lz], u: [1, 0, 0], w: lx, h: pr.w, role: 'Kuşak (derinlik)' });
+  };
+  const rh = pr.w;
+  if (p.fr === 'rect') {
+    for (const s of [-1, 1]) out.push({ a: [s * (W / 2 - lx / 2), 0, 0], b: [s * (W / 2 - lx / 2), H, 0], u: [1, 0, 0], w: lx, h: lz, role: 'Dikme' });
+    for (const y of [rh / 2, H - rh / 2]) out.push({ a: [-(W / 2 - lx), y, 0], b: [W / 2 - lx, y, 0], u: [0, 0, 1], w: lz, h: pr.w, role: 'Yatay' });
+    return { members: out, W, D: lz, H, pr };
+  }
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) leg(sx * (W / 2 - lx / 2), sz * (D / 2 - lz / 2));
+  if (p.fr === 'box') { ring(rh / 2, 'Alt kuşak'); ring(H - rh / 2, 'Üst kuşak'); }
+  else if (p.fr === 'shelf') {
+    const n = Math.max(2, Math.min(12, Math.round(num(p.fn, 3))));
+    for (let k = 0; k < n; k++) ring(rh / 2 + (H - rh) * k / (n - 1), 'Raf');
+  } else {
+    ring(H - rh / 2, 'Üst kuşak');
+    const fs = Number(p.fs) || 0;
+    if (fs > rh / 2 && fs < H - 1.5 * rh) ring(fs, 'Alt kuşak');
+  }
+  return { members: out, W, D, H, pr };
+}
+function memberTris(m, pr) {
+  const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const d = v3norm(sub3(m.b, m.a));
+  const u = v3norm(v3sub(m.u, v3mul(d, v3dot(m.u, d)))), v = v3cross(d, u);
+  let outer, inner;
+  if (pr.kind === 'round') {
+    const n = 28, r = pr.w / 2, ri = Math.max(r - pr.t, 0.01);
+    outer = Array.from({ length: n }, (_, i) => [r * Math.cos(i / n * Math.PI * 2), r * Math.sin(i / n * Math.PI * 2)]);
+    inner = outer.map(([x, y]) => [x * ri / r, y * ri / r]);
+  } else {
+    const a = m.w / 2, b = m.h / 2, ai = Math.max(a - pr.t, 0.01), bi = Math.max(b - pr.t, 0.01);
+    outer = [[-a, -b], [a, -b], [a, b], [-a, b]];
+    inner = [[-ai, -bi], [ai, -bi], [ai, bi], [-ai, bi]];
+  }
+  const at = (base, [x, y]) => v3add(base, v3add(v3mul(u, x), v3mul(v, y)));
+  const P = [];
+  const tri = (a, b, c) => P.push(...a, ...b, ...c);
+  const n = outer.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const o0 = at(m.a, outer[i]), o1 = at(m.a, outer[j]), O0 = at(m.b, outer[i]), O1 = at(m.b, outer[j]);
+    const i0 = at(m.a, inner[i]), i1 = at(m.a, inner[j]), I0 = at(m.b, inner[i]), I1 = at(m.b, inner[j]);
+    tri(o0, o1, O1); tri(o0, O1, O0);          // dış yüz
+    tri(i0, I1, i1); tri(i0, I0, I1);          // iç yüz (ters)
+    tri(o0, i1, o1); tri(o0, i0, i1);          // alt halka
+    tri(O0, O1, I1); tri(O0, I1, I0);          // üst halka
+  }
+  let arr = new Float32Array(P);
+  if (signedVolume(arr) < 0) for (let o = 0; o < arr.length; o += 9) for (let k = 0; k < 3; k++) { const t = arr[o + 3 + k]; arr[o + 3 + k] = arr[o + 6 + k]; arr[o + 6 + k] = t; }
+  return arr;
+}
+// { pos (ortalanmış üçgenler), h, members, cut:[{ role, len, qty }], totalLen (mm), kg (çelik) }
+export function frameCalc(p) {
+  const key = JSON.stringify(['fr', p.fr, p.pf, p.fw, p.fd, p.fh, p.fs, p.fn]);
+  return memo(key, () => {
+    const F = frameMembers(p);
+    const parts = F.members.map((m) => memberTris(m, F.pr));
+    const len = parts.reduce((s, a) => s + a.length, 0);
+    const all = new Float32Array(len);
+    let o = 0;
+    for (const a of parts) { all.set(a, o); o += a.length; }
+    for (let i = 1; i < all.length; i += 3) all[i] -= F.H / 2;           // y: 0..H -> -H/2..H/2 (x, z zaten ortada)
+    const groups = new Map();
+    let totalLen = 0;
+    for (const m of F.members) {
+      const L = Math.hypot(m.b[0] - m.a[0], m.b[1] - m.a[1], m.b[2] - m.a[2]);
+      totalLen += L;
+      const k = m.role.replace(/ \(.*\)$/, '') + '|' + Math.round(L * 10) / 10;
+      const g = groups.get(k) || { role: m.role, len: Math.round(L * 10) / 10, qty: 0 };
+      g.qty++; groups.set(k, g);
+    }
+    const kg = profileArea(F.pr) * totalLen * 7.85e-6;
+    return { pos: all, h: F.H, members: F.members, cut: [...groups.values()].sort((a, b) => b.len - a.len), totalLen, kg, pr: F.pr };
+  });
+}
+
 /* ---------------- Sac metal ---------------- */
 // Parça: { type:'sheet', st (kalınlık), sr (iç büküm yarıçapı), sw (derinlik / genişlik), sk (K faktörü), sa0 (başlangıç yönü °),
 //          seg: [{ L }, { a, L }, ...] }  L = kenarın DIŞ ölçüsü (sanal keskin köşeye kadar), a = büküm açısı ° (+ sola / yukarı, − sağa)
@@ -1157,6 +1268,7 @@ export function bomRows(parts, fmt = (v) => String(Math.round(v * 100) / 100)) {
       case 'cone': return 'Ø' + f(p.d) + ' / Ø' + f(p.d2) + ' × ' + f(p.h);
       case 'tube': return 'Ø' + f(p.d) + ' / iç Ø' + f(p.di) + ' × ' + f(p.h);
       case 'sketch': return 'kalınlık ' + f(p.h);
+      case 'frame': { const c = frameCalc(p); return (PROFILES[p.pf] || {}).name + ' · ' + c.members.length + ' parça · toplam ' + f(c.totalLen) + ' · ' + (Math.round(c.kg * 100) / 100) + ' kg'; }
       case 'sheet': { const c = sheetCalc(p); return 'sac ' + f(c.T) + ' · açınım ' + f(c.flatL) + ' × ' + f(c.W) + ' · ' + c.bends.length + ' büküm'; }
       default: return p.type === 'mesh' ? 'tek parça (h ' + f(p.h) + ')' : '';
     }
