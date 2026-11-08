@@ -1,12 +1,12 @@
 // 2B Çizim (AutoCAD tarzı) — tam ekran çizim alanı.
 // Kullanım: openCad2D({ onExtrude(draw), onClose() })  draw: kroki biçimi (sketch.js / validateDraw)
-import { fmtNum } from './logic.js?v=20261108j';
-import { validateDraw } from './sketch.js?v=20261108j';
+import { fmtNum } from './logic.js?v=20261108k';
+import { validateDraw } from './sketch.js?v=20261108k';
 import {
   arcFrom3, trimEntity, extendEntity, offsetEntity, filletLines, transformEntity, moveFn, rotateFn, mirrorFn,
-  snapPoints, nearestOn, closedLoops, toDXF, parseDXF, dimLine, dimParts, dimText, arcSpan, arcEnds, entBBox, dist, normA, ACI,
-} from './cad2d-geom.js?v=20261108j';
-import { openPhotoImport } from './photoimport.js?v=20261108j';
+  stretchToLength, setRadius, snapPoints, nearestOn, closedLoops, toDXF, parseDXF, dimLine, dimParts, dimText, arcSpan, arcEnds, entBBox, dist, normA, ACI,
+} from './cad2d-geom.js?v=20261108k';
+import { openPhotoImport } from './photoimport.js?v=20261108k';
 
 const KEY = 'cizim:2d';
 const CSS = `
@@ -43,7 +43,7 @@ const CSS = `
 `;
 const TOOLS = {
   draw: [['line', '╱ Çizgi'], ['circle', '◯ Daire'], ['arc', '◠ Yay'], ['rect', '▭ Dikdörtgen'], ['dim', '↔ Ölçü'], ['text', 'A Yazı'], ['select', '☝ Seç']],
-  edit: [['trim', '✂ Kırp'], ['extend', '⇥ Uzat'], ['offset', '⇉ Ofset'], ['fillet', '◜ Radyus'], ['move', '✥ Taşı'], ['copy', '⧉ Kopyala'], ['rotate', '⟳ Döndür'], ['mirror', '⇋ Ayna'], ['scale', '📏 Ölçekle'], ['erase', '🗑 Sil'], ['select', '☝ Seç']],
+  edit: [['trim', '✂ Kırp'], ['extend', '⇥ Uzat'], ['offset', '⇉ Ofset'], ['fillet', '◜ Radyus'], ['move', '✥ Taşı'], ['copy', '⧉ Kopyala'], ['rotate', '⟳ Döndür'], ['mirror', '⇋ Ayna'], ['setdim', '📐 Ölçü ver'], ['scale', '📏 Ölçekle'], ['erase', '🗑 Sil'], ['select', '☝ Seç']],
 };
 const HINTS = {
   line: ['Başlangıç noktasına dokun (ya da X, Y yaz).', 'Sonraki noktaya dokun ya da uzunluk ve açı yaz. Zincir devam eder; "Bitir" ile durdur.'],
@@ -62,6 +62,7 @@ const HINTS = {
   rotate: ['Döndürme merkezine dokun.', 'Açıyı yazıp "Döndür"e bas.'],
   mirror: ['Ayna ekseninin ilk noktası.', 'Ayna ekseninin ikinci noktası.'],
   erase: ['Silinecek varlığa dokun.'],
+  setdim: ['Ölçüsünü vereceğin çizgiye (değişecek ucuna yakın), daireye ya da yaya dokun.', 'Ölçüyü yaz, "Uygula"ya bas. Çizgide, dokunduğun uç tarafındaki her şey birlikte kayar (esnet).'],
   scale: ['Ölçüsünü bildiğin bir çizgiye / daireye dokun.', 'Gerçek ölçüsünü yaz ve "Ölçekle"ye bas: bütün çizim o oranda büyür / küçülür.'],
 };
 const LT_DASH = { CONTINUOUS: [], HIDDEN: [6, 4], CENTER: [14, 4, 3, 4] };
@@ -100,7 +101,7 @@ export function openCad2D(opts = {}) {
   let sel = new Set();        // seçili id'ler
   let osnap = true, ortho = false, grid = 1, clearArm = false;
   let aim = null;             // { p, k } parmak altındaki (yakalanmış) nokta
-  const F = { real: '', kf: '2', len: '', ang: '0', x: '0', y: '0', d: '20', w: '40', h: '20', off: '5', rad: '5', rot: '90', txt: 'Yazı', th: '5', dx: '0', dy: '0', thick: '10', keep: '1', nl: '' };
+  const F = { dv: '', adddim: '1', real: '', kf: '2', len: '', ang: '0', x: '0', y: '0', d: '20', w: '40', h: '20', off: '5', rad: '5', rot: '90', txt: 'Yazı', th: '5', dx: '0', dy: '0', thick: '10', keep: '1', nl: '' };
   const V = { s: 3, ox: 0, oy: 0 };
 
   const root = document.createElement('div');
@@ -409,6 +410,10 @@ export function openCad2D(opts = {}) {
     const e = hitEnt(sx, sy);
     if (!e) { setHint('Orada varlık yok; çizginin üstüne dokun.', true); return; }
     const others = doc.ents.filter(visible);
+    if (tool === 'setdim') {
+      if (!(e.t === 'line' || e.t === 'circle' || e.t === 'arc')) { setHint('Çizgi, daire ya da yaya dokun.', true); return; }
+      pickA = e; pickA._p = w; F.dv = fmt(e.t === 'line' ? dist(e.a, e.b) : e.t === 'circle' ? 2 * e.r : e.r); refresh(); return;
+    }
     if (tool === 'scale') {
       if (!(e.t === 'line' || e.t === 'circle' || e.t === 'arc')) { setHint('Çizgi, daire ya da yaya dokun.', true); return; }
       pickA = e; F.real = fmt(scaleRef(e)); refresh(); return;
@@ -472,6 +477,8 @@ export function openCad2D(opts = {}) {
       else if (tool === 'text') h += In('Yazı', 'txt', 'text') + In('Yükseklik', 'th');
       else if (tool === 'offset') h += In('Ofset mesafesi', 'off');
       else if (tool === 'fillet') h += In('Yarıçap (0 = keskin)', 'rad');
+      else if (tool === 'setdim') h += pickA ? '<div class="lb">Şu an: ' + fmt(pickA.t === 'line' ? dist(pickA.a, pickA.b) : pickA.t === 'circle' ? 2 * pickA.r : pickA.r) + ' mm (' + (pickA.t === 'line' ? 'uzunluk' : pickA.t === 'circle' ? 'çap' : 'yarıçap') + ')</div>' +
+        In(pickA.t === 'line' ? 'Uzunluk (mm)' : pickA.t === 'circle' ? 'Çap (mm)' : 'Yarıçap (mm)', 'dv') + B('✓ Uygula', 'in-setdim') + B('Ölçü yazısı ekle: ' + (F.adddim === '1' ? 'evet' : 'hayır'), 'tg-adddim', F.adddim === '1') : '';
       else if (tool === 'scale') h += pickA ? '<div class="lb">Şu an: ' + fmt(scaleRef(pickA)) + ' mm (' + (pickA.t === 'line' ? 'uzunluk' : 'çap') + ')</div>' + In('Gerçek ölçü (mm)', 'real') + B('📏 Ölçekle', 'in-scale') : In('ya da katsayı (ör. 2 = iki kat)', 'kf') + B('Katsayıyla ölçekle', 'in-scalek');
       else if (tool === 'move' || tool === 'copy') h += pts.length ? In('dX', 'dx') + In('dY', 'dy') + B('Uygula', 'in-move') : '';
       else if (tool === 'rotate') h += In('Açı ° (saat yönü tersi +)', 'rot') + B('⟳ Döndür', 'in-rot', false, pts.length && sel.size ? '' : 'disabled') + B('Kopyasını döndür', 'in-rotc', false, pts.length && sel.size ? '' : 'disabled');
@@ -644,6 +651,45 @@ export function openCad2D(opts = {}) {
     if (a === 'f-open') { fileIn.click(); return; }
     if (a === 'f-3d') { to3D(); return; }
     if (a === 'f-photo') { photoIn.click(); return; }
+    if (a === 'tg-adddim') { F.adddim = F.adddim === '1' ? '0' : '1'; refresh(); return; }
+    if (a === 'in-setdim') {
+      const v = num('dv'), e = pickA;
+      if (!e || !(v > 0)) { setHint('Ölçü sıfırdan büyük olmalı.', true); return; }
+      const idx = doc.ents.indexOf(e);
+      if (idx < 0) { reset(); refresh(); return; }
+      const w0 = e._p; delete e._p;
+      let out;
+      if (e.t === 'line') {
+        const moveB = !w0 || dist(w0, e.b) <= dist(w0, e.a);
+        // yalnızca düzenlenebilir varlıklar esner; kilitli / gizli katmanlar yerinde kalır
+        const ed = doc.ents.filter(editable), res = stretchToLength(ed, e, v, moveB);
+        if (!res) { setHint('Bu çizgiye ölçü verilemiyor.', true); return; }
+        const map = new Map(ed.map((x, i) => [x, res[i]]));
+        out = doc.ents.map((x) => map.get(x) || x);
+      } else if (e.t === 'circle') { out = doc.ents.map((x) => (x === e ? { ...x, r: v / 2 } : x)); }
+      else { out = setRadius(doc.ents, e, v); }
+      if (!out) return;
+      commit();
+      doc.ents = out;
+      const ne = doc.ents[idx];
+      if (F.adddim === '1') {
+        const bbs = doc.ents.map(entBBox).filter(Boolean);
+        const cx = (Math.min(...bbs.map((b) => b.minX)) + Math.max(...bbs.map((b) => b.maxX))) / 2, cy = (Math.min(...bbs.map((b) => b.minY)) + Math.max(...bbs.map((b) => b.maxY))) / 2;
+        const size = Math.max(...bbs.map((b) => b.maxX)) - Math.min(...bbs.map((b) => b.minX)) || 100;
+        const ly = doc.layers.some((l) => l.name === 'Ölçü') ? 'Ölçü' : doc.cur, hh = Math.max(2.5, size * 0.025);
+        if (ne.t === 'line') {
+          // ölçüyü şeklin dışına koy
+          const d = [ne.b[0] - ne.a[0], ne.b[1] - ne.a[1]], L = Math.hypot(...d), n = [-d[1] / L, d[0] / L];
+          const m = [(ne.a[0] + ne.b[0]) / 2 - cx, (ne.a[1] + ne.b[1]) / 2 - cy];
+          const off = (m[0] * n[0] + m[1] * n[1] >= 0 ? 1 : -1) * Math.max(hh * 3, size * 0.06);
+          doc.ents = doc.ents.filter((x) => !(x.t === 'dim' && ((dist(x.a, e.a) < 1e-6 && dist(x.b, e.b) < 1e-6) || (dist(x.a, ne.a) < 1e-6 && dist(x.b, ne.b) < 1e-6))));
+          addEnt({ t: 'dim', a: ne.a.slice(), b: ne.b.slice(), off, h: hh, layer: ly });
+        } else {
+          addEnt({ t: 'text', p: [ne.c[0] + ne.r * 0.75, ne.c[1] + ne.r * 0.75], h: hh, s: (ne.t === 'circle' ? 'Ø' + fmt(2 * ne.r) : 'R' + fmt(ne.r)), layer: ly });
+        }
+      }
+      changed(); reset(); refresh(); setHint('Ölçü verildi. Başka bir çizgiye dokunarak devam et.'); return;
+    }
     if (a === 'in-scale' || a === 'in-scalek') {
       let f;
       if (a === 'in-scale') { const real = num('real'), curv = pickA ? scaleRef(pickA) : 0; if (!(real > 0) || !(curv > 0)) { setHint('Gerçek ölçüyü yaz.', true); return; } f = real / curv; }

@@ -460,3 +460,45 @@ export function parseDXF(txt) {
   }
   return { ents, layers, skipped };
 }
+
+/* ---------- ölçü verme (esnetme) ---------- */
+// Çizginin uzunluğunu L yapar: dokunulan uç (moveB) yönünde, o ucun önündeki yarı düzlemdeki her nokta aynı miktarda kayar
+// (AutoCAD STRETCH gibi). Dönüş: yeni varlık listesi (id'ler korunur).
+export function stretchToLength(ents, line, L, moveB = true) {
+  const L0 = dist(line.a, line.b);
+  if (!(L0 > 1e-9) || !(L > 0)) return null;
+  const u = mul(sub(line.b, line.a), 1 / L0), dir = moveB ? u : mul(u, -1);
+  const anchor = moveB ? line.b : line.a, delta = L - L0, eps = Math.max(L0, 1) * 1e-6;
+  const inH = (p) => dot(sub(p, anchor), dir) >= -eps;
+  const mv = (p) => (inH(p) ? add(p, mul(dir, delta)) : p);
+  return ents.map((e) => {
+    const o = clone(e);
+    if (e.t === 'line' || e.t === 'dim') { o.a = mv(e.a); o.b = mv(e.b); return o; }
+    if (e.t === 'text') { o.p = mv(e.p); return o; }
+    if (e.t === 'circle') { o.c = mv(e.c); return o; }
+    if (e.t === 'arc') {
+      const [s0, s1] = arcEnds(e), m = pAt(e.c, e.r, e.a0 + arcSpan(e) / 2);
+      const n0 = mv(s0), n1 = mv(s1), nm = mv(m);
+      if (inH(s0) && inH(s1) && inH(m)) { o.c = mv(e.c); return o; }
+      if (!inH(s0) && !inH(s1) && !inH(m)) return o;
+      const a = arcFrom3(n0, nm, n1);
+      return a ? { ...o, c: a.c, r: a.r, a0: a.a0, a1: a.a1 } : { ...o, t: 'line', a: n0, b: n1 };
+    }
+    return o;
+  });
+}
+// Daire / yay yarıçapını değiştirir; yayın uçlarına bağlı çizgi uçları da yeni uçlara taşınır
+export function setRadius(ents, target, r) {
+  if (!(r > 0)) return null;
+  const old = target.t === 'arc' ? arcEnds(target) : [];
+  const tol = Math.max(target.r, 1) * 1e-5;
+  const nt = { ...clone(target), r };
+  const now = target.t === 'arc' ? arcEnds(nt) : [];
+  return ents.map((e) => {
+    if (e === target) return nt;
+    if (e.t !== 'line' || !old.length) return clone(e);
+    const o = clone(e);
+    for (const k of ['a', 'b']) for (let i = 0; i < 2; i++) if (dist(e[k], old[i]) <= tol) o[k] = now[i].slice();
+    return o;
+  });
+}

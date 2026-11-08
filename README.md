@@ -79,6 +79,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - Ayrı tam ekran çizim alanı; telefonda otomatik saklanır, geri al / ileri al
 - **Çiz:** çizgi (zincirleme; X/Y, uzunluk ve açı yazarak), daire (merkez + çap), yay (3 nokta), dikdörtgen (köşe + genişlik/yükseklik), hizalı ölçü, yazı
 - **Düzenle:** kırp (AutoCAD hızlı kırp), uzat, ofset, radyus (iki çizgi arası köşe yuvarlama, 0 = keskin köşe), taşı, kopyala (çoklu), döndür / döndürerek kopyala, ayna (aslı kalsın / silinsin), sil, seç
+- **📐 Ölçü ver:** çizgiye dokunup uzunluğunu yaz; dokunulan uç tarafındaki her şey birlikte kayar (AutoCAD esnet gibi: dikdörtgenin eni değişince kenar dik kalır, delik yerinde kalır). Daireye çap, yaya yarıçap verilir (bağlı çizgi uçları takip eder). İsteğe bağlı ölçü yazısı otomatik eklenir. El çiziminden gelen taslağı tam ölçülü yapmak için
 - **Yakalama:** uç nokta, orta nokta, merkez, kesişim, çeyrek, ızgara (0,5 / 1 / 5 / 10 mm), orto modu. Dokunurken parmağın altı büyüteçte gösterilir; parmağı kaydırıp doğru yere oturtup bırakınca nokta konur
 - **Katmanlar:** renk, çizgi tipi (sürekli, gizli, eksen), gizle, kilitle, etkin katman, seçileni katmana taşı
 - **Dosya:** DXF kaydet / aç (LINE, CIRCLE, ARC, LWPOLYLINE + bulge, POLYLINE, TEXT, MTEXT), PNG kaydet

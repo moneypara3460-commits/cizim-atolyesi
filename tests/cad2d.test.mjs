@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {
   arcFrom3, intersect, trimEntity, extendEntity, offsetEntity, filletLines, transformEntity, rotateFn, mirrorFn, moveFn,
-  snapPoints, closedLoops, toDXF, parseDXF, arcSpan, arcEnds, dist, normA,
+  stretchToLength, setRadius, snapPoints, closedLoops, toDXF, parseDXF, arcSpan, arcEnds, dist, normA,
 } from '../cad2d-geom.js';
 
 let fail = 0;
@@ -117,6 +117,26 @@ t('DXF: LWPOLYLINE bulge ile yay', () => {
   assert.equal(r.ents[0].t, 'arc');
   near(r.ents[0].c, [5, 0]); assert.ok(Math.abs(r.ents[0].r - 5) < 1e-9);
   assert.ok(Math.abs(arcSpan(r.ents[0]) - Math.PI) < 1e-9);
+});
+t('stretchToLength: dikdörtgenin eni değişir, sağ kenar dik kalır, delik yerinde', () => {
+  const r = [L([0, 0], [100, 0]), L([100, 0], [100, 50]), L([100, 50], [0, 50]), L([0, 50], [0, 0]), { t: 'circle', c: [30, 25], r: 5 }];
+  const o = stretchToLength(r, r[0], 160, true);
+  near(o[0].b, [160, 0]); near(o[1].a, [160, 0]); near(o[1].b, [160, 50]); near(o[2].a, [160, 50]);
+  near(o[3].a, [0, 50]); near(o[4].c, [30, 25]);
+  const o2 = stretchToLength(r, r[1], 80, true);   // yükseklik 80: üstteki her şey kalkar
+  near(o2[2].a, [100, 80]); near(o2[2].b, [0, 80]); near(o2[0].a, [0, 0]);
+  const o3 = stretchToLength(r, r[0], 60, false);  // sol uçtan kısalt
+  near(o3[0].a, [40, 0]); near(o3[3].a, [40, 50]);
+});
+t('stretchToLength: yayla biten şekilde yay kayar', () => {
+  const ents = [L([0, 0], [50, 0]), { t: 'arc', c: [50, 10], r: 10, a0: -Math.PI / 2, a1: Math.PI / 2 }, L([50, 20], [0, 20]), L([0, 20], [0, 0])];
+  const o = stretchToLength(ents, ents[0], 80, true);
+  near(o[1].c, [80, 10]); near(o[2].a, [80, 20]);
+});
+t('setRadius: yay yarıçapı değişince bağlı çizgi ucu takip eder', () => {
+  const arc = { t: 'arc', c: [0, 0], r: 10, a0: 0, a1: Math.PI / 2 }, l = L([10, 0], [10, -20]);
+  const o = setRadius([arc, l], arc, 15);
+  assert.equal(o[0].r, 15); near(o[1].a, [15, 0]);
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
