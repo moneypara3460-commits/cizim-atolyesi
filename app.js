@@ -13,13 +13,13 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261108n';
-import { openSketch } from './sketch.js?v=20261108n';
-import { to3MF, toSTEP } from './export3d.js?v=20261108n';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261108n';
-import { openCad2D } from './cad2d.js?v=20261108n';
+} from './logic.js?v=20261108o';
+import { openSketch } from './sketch.js?v=20261108o';
+import { to3MF, toSTEP } from './export3d.js?v=20261108o';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261108o';
+import { openCad2D } from './cad2d.js?v=20261108o';
 
-const APP_VER = '20261108n'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261108o'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -1194,7 +1194,7 @@ function renderPanel() {
     hint = (p.type === 'frame' ? 'Konstrüksiyon: ölçüler dış ölçüdür. Dikmeler tam boy, kuşaklar dikmelerin arasına alın (düz) kesimle oturur. Ağırlık çelik (7,85) içindir. ' : p.type === 'sheet' ? 'Sac: ölçüler dış ölçüdür (sanal keskin köşeye kadar). Açınım boyu = düz kısımlar + büküm payları, büküm payı = açı × (R + K × kalınlık). K faktörü malzemeye ve kalıba göre değişir (çelik için 0,3–0,5). ' : p.type === 'sweep' ? 'Süpürme: profil, yol boyunca sürülür (boru, dirsek, yay, vida). Yol Tür sekmesinden seçilir; çok noktalı yolda köşeler Köşe yarıçapı ile yuvarlanır. Eğri yarıçapı profilden küçük olamaz. ' : p.type === 'loft' ? 'Loft: alttaki şekilden üstteki şekle geçiş (kare tabandan yuvarlak ağza gibi). Burulma üst şekli döndürür. ' : '') + 'Ölçüler (' + settings.unit + ')' + (p.type === 'box' || p.type === 'cylinder' ? '. Yuvarlama ve pah birlikte kullanılırsa yuvarlama geçerli olur. Eğim: üst yüz, her yönden yükseklik × tan(eğim) kadar daralır (döküm eğimi).' : '');
   }
   $('tabbody').innerHTML = body;
-  $('tabbody').classList.toggle('grid', tab === 'view' || tab === 'calc' || (tab === 'type' && (p.type === 'sweep' || p.type === 'loft' || p.type === 'sheet' || p.type === 'frame')));
+  $('tabbody').classList.add('grid'); // tüm sekmelerde düğmeler okunur boyutta, satıra en fazla 2 tane
   $('tabhint').textContent = hint;
   $('b-move').classList.toggle('on', settings.move);
 }

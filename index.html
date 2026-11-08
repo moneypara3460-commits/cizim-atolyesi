@@ -24,12 +24,12 @@
   .chip { flex: none; border-radius: 16px; padding: 8px 12px; }
   .chip.sub { background: #7f1d1d; }
   .chip.on { outline: 2px solid #38bdf8; }
-  #panel { max-height: 33vh; overflow-y: auto; }
+  #panel { max-height: 40vh; overflow-y: auto; }
   #tabs { overflow-x: auto; flex-wrap: nowrap; }
   .tab { flex: 0 0 auto; padding: 9px 13px; background: transparent; color: #94a3b8; border-bottom: 2px solid #1e293b; border-radius: 0; }
   .tab.on { background: transparent; color: #fff; border-bottom-color: #38bdf8; }
-  .f { flex: 1 1 70px; display: block; min-width: 0; }
-  .f span { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 2px; white-space: nowrap; }
+  .f { flex: 1 1 90px; display: block; min-width: 0; }
+  .f span { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 2px; white-space: normal; line-height: 1.2; }
   input { width: 100%; font: inherit; font-size: 15px; color: #fff; background: #1e293b;
           border: 0; border-radius: 8px; padding: 7px 9px; }
   .sw { flex: 0 0 34px; height: 30px; padding: 0; border: 2px solid transparent; }
@@ -39,7 +39,9 @@
   #measure { position: absolute; top: 8px; left: 8px; right: 8px; text-align: center; pointer-events: none;
              background: rgba(15,23,42,.88); border: 1px solid #334155; border-radius: 10px; padding: 7px 10px;
              font-size: 14px; display: none; }
-  #tabbody.grid button { flex: 1 1 44%; min-width: 120px; white-space: normal; line-height: 1.25; font-size: 14px; padding: 12px 6px; }
+  #tabbody.grid button:not(.sw) { flex: 1 1 44%; min-width: 120px; white-space: normal; line-height: 1.25; font-size: 14px; padding: 12px 6px; }
+  #tabbody.grid .f { flex: 1 1 28%; min-width: 90px; }
+  #tabbody.grid .f.w2 { flex: 1 0 100%; }
   .lbl.h { flex: 1 0 100%; font-size: 12px; font-weight: 700; color: #cbd5e1; padding: 6px 2px 0; }
   .lbl { font-size: 11px; color: #94a3b8; padding: 0 10px 3px; }
   #view { position: relative; flex: 1; min-height: 150px; }
@@ -133,6 +135,6 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=20261108n"></script>
+<script type="module" src="./app.js?v=20261108o"></script>
 </body>
 </html>
