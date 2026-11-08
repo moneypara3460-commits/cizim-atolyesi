@@ -13,6 +13,7 @@ export const TYPE_LABEL = {
   mesh: 'Tek parça',
   sweep: 'Süpürme',
   loft: 'Loft',
+  sheet: 'Sac',
 };
 
 export const DEFAULTS = {
@@ -26,6 +27,7 @@ const fin = (v, fallback) => (typeof v === 'number' && isFinite(v) ? v : fallbac
 export function heightOf(p) {
   if (p.type === 'sketch') return sketchHeight(p);
   if (p.type === 'sweep') return sweepTris(p).h;
+  if (p.type === 'sheet') return sheetCalc(p).h;
   return p.type === 'sphere' ? fin(p.d, 0) : fin(p.h, 0);
 }
 
@@ -36,6 +38,7 @@ export function newPart(id, type, op, base) {
   if (type === 'tube') { p.d = 30; p.di = 20; p.h = 20; }
   if (type === 'sweep') Object.assign(p, JSON.parse(JSON.stringify(SWEEP_DEFAULTS)));
   if (type === 'loft') Object.assign(p, LOFT_DEFAULTS);
+  if (type === 'sheet') Object.assign(p, JSON.parse(JSON.stringify(SHEET_PRESETS.L)), SHEET_DEFAULTS);
   if (!base) return p;
 
   const bh = heightOf(base) || 40;
@@ -1030,6 +1033,79 @@ export function loftTris(p) {
   });
 }
 
+/* ---------------- Sac metal ---------------- */
+// Parça: { type:'sheet', st (kalınlık), sr (iç büküm yarıçapı), sw (derinlik / genişlik), sk (K faktörü), sa0 (başlangıç yönü °),
+//          seg: [{ L }, { a, L }, ...] }  L = kenarın DIŞ ölçüsü (sanal keskin köşeye kadar), a = büküm açısı ° (+ sola / yukarı, − sağa)
+export const SHEET_DEFAULTS = { st: 2, sr: 2, sw: 50, sk: 0.44, flat: false };
+export const SHEET_PRESETS = {
+  L: { sh: 'L', sa0: 0, seg: [{ L: 40 }, { a: 90, L: 40 }] },
+  U: { sh: 'U', sa0: -90, seg: [{ L: 30 }, { a: 90, L: 60 }, { a: 90, L: 30 }] },
+  Z: { sh: 'Z', sa0: 0, seg: [{ L: 25 }, { a: 90, L: 50 }, { a: -90, L: 25 }] },
+  hat: { sh: 'hat', sa0: 0, seg: [{ L: 20 }, { a: 90, L: 30 }, { a: -90, L: 40 }, { a: -90, L: 30 }, { a: 90, L: 20 }] },
+  C: { sh: 'C', sa0: 0, seg: [{ L: 12 }, { a: -90, L: 30 }, { a: -90, L: 60 }, { a: -90, L: 30 }, { a: -90, L: 12 }] },
+};
+// Hesap: { ok, err, flatL, W, T, bends:[{ pos (açınımda büküm ortası), a, ba }], straights, poly (kesit), h, size }
+export function sheetCalc(p) {
+  const key = JSON.stringify(['sh', p.st, p.sr, p.sw, p.sk, p.sa0, p.seg]);
+  return memo(key, () => {
+    const num = (v, d) => (isFinite(Number(v)) ? Number(v) : d);
+    const T = Math.max(num(p.st, 2), 0.05), R = Math.max(num(p.sr, 0), 0), W = Math.max(num(p.sw, 50), 0.1);
+    const K = Math.min(Math.max(num(p.sk, 0.44), 0), 1);
+    const seg = Array.isArray(p.seg) && p.seg.length ? p.seg : [{ L: 40 }];
+    let err = '';
+    const ang = seg.map((s, i) => (i === 0 ? 0 : Math.max(-179, Math.min(179, num(s.a, 90)))));
+    const sb = ang.map((a) => (R + T) * Math.tan(Math.abs(a) * D2R / 2)); // dış geri çekilme (outside setback)
+    const straights = seg.map((s, i) => {
+      const L = Math.max(num(s.L, 10), 0.01);
+      const f = L - (i > 0 ? sb[i] : 0) - (i + 1 < seg.length ? sb[i + 1] : 0);
+      if (f < -1e-9 && !err) err = (i + 1) + '. kenar, büküm payından kısa (en az ' + fmtNum((i > 0 ? sb[i] : 0) + (i + 1 < seg.length ? sb[i + 1] : 0), 2) + ' mm olmalı)';
+      return Math.max(f, 0);
+    });
+    const bends = [];
+    let pos = 0;
+    for (let i = 0; i < seg.length; i++) {
+      pos += straights[i];
+      if (i + 1 < seg.length) {
+        const a = ang[i + 1], ba = Math.abs(a) * D2R * (R + K * T);
+        bends.push({ pos: pos + ba / 2, a, ba });
+        pos += ba;
+      }
+    }
+    // orta hat: düzler + yaylar (yarıçap R + T/2), sonra ±T/2 kaydırılmış iki yüz
+    const rm = R + T / 2;
+    let h = num(p.sa0, 0) * D2R, x = 0, y = 0;
+    const mid = [[x, y, h]];
+    for (let i = 0; i < seg.length; i++) {
+      x += Math.cos(h) * straights[i]; y += Math.sin(h) * straights[i]; mid.push([x, y, h]);
+      if (i + 1 < seg.length) {
+        const a = ang[i + 1] * D2R, sgn = a >= 0 ? 1 : -1;
+        const cx = x - Math.sin(h) * rm * sgn, cy = y + Math.cos(h) * rm * sgn; // yay merkezi (dönüş yönündeki tarafta)
+        const n = Math.max(2, Math.ceil(Math.abs(a) / (8 * D2R)));
+        for (let k = 1; k <= n; k++) {
+          const hh = h + a * k / n;
+          mid.push([cx + Math.sin(hh) * rm * sgn, cy - Math.cos(hh) * rm * sgn, hh]);
+        }
+        h += a; x = mid[mid.length - 1][0]; y = mid[mid.length - 1][1];
+      }
+    }
+    const left = mid.map(([px, py, hh]) => [px - Math.sin(hh) * T / 2, py + Math.cos(hh) * T / 2]);
+    const right = mid.map(([px, py, hh]) => [px + Math.sin(hh) * T / 2, py - Math.cos(hh) * T / 2]);
+    const clean = (arr) => arr.filter((q, i) => i === 0 || Math.hypot(q[0] - arr[i - 1][0], q[1] - arr[i - 1][1]) > 1e-9);
+    const poly = [...clean(left), ...clean(right).reverse()];
+    const xs = poly.map((q) => q[0]), ys = poly.map((q) => q[1]);
+    const size = [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), W];
+    return { ok: !err, err, flatL: pos, W, T, R, K, bends, straights, poly, h: Math.max(size[1], 0.001), size };
+  });
+}
+// Açınım DXF çizgileri (mm): dış kontur + büküm çizgileri
+export function sheetFlatLines(c) {
+  const L = c.flatL, W = c.W;
+  return {
+    outline: [[0, 0, L, 0], [L, 0, L, W], [L, W, 0, W], [0, W, 0, 0]],
+    bendLines: c.bends.map((b) => [b.pos, 0, b.pos, W]),
+  };
+}
+
 /* ---------------- Hesap: hacim, ağırlık, parça listesi, DXF ---------------- */
 
 // Yoğunluklar g/cm³ (yaklaşık, tipik değerler)
@@ -1081,6 +1157,7 @@ export function bomRows(parts, fmt = (v) => String(Math.round(v * 100) / 100)) {
       case 'cone': return 'Ø' + f(p.d) + ' / Ø' + f(p.d2) + ' × ' + f(p.h);
       case 'tube': return 'Ø' + f(p.d) + ' / iç Ø' + f(p.di) + ' × ' + f(p.h);
       case 'sketch': return 'kalınlık ' + f(p.h);
+      case 'sheet': { const c = sheetCalc(p); return 'sac ' + f(c.T) + ' · açınım ' + f(c.flatL) + ' × ' + f(c.W) + ' · ' + c.bends.length + ' büküm'; }
       default: return p.type === 'mesh' ? 'tek parça (h ' + f(p.h) + ')' : '';
     }
   };

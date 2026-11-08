@@ -7,7 +7,7 @@ import {
   chamferBoxPoints, cylinderProfile,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
-  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, solveCons, consError, freedom, fixConsAfterRemove, SWEEP_DEFAULTS, LOFT_DEFAULTS, filletPath, arcPath, helixPath, sweepTris, loftTris, signedVolume, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
+  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, SHEET_DEFAULTS, SHEET_PRESETS, sheetCalc, sheetFlatLines, solveCons, consError, freedom, fixConsAfterRemove, SWEEP_DEFAULTS, LOFT_DEFAULTS, filletPath, arcPath, helixPath, sweepTris, loftTris, signedVolume, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
 } from '../logic.js';
 
 let fail = 0;
@@ -586,6 +586,32 @@ t('sketchFromDraw / sketchToDraw kısıtları taşır', () => {
   assert.deepEqual(p.cons, [[{ t: 'h', e: 0 }]]);
   assert.deepEqual(sketchToDraw(p).cons, [[{ t: 'h', e: 0 }]]);
   assert.equal(sketchFromDraw({ ...d, cons: [[]] }).cons, undefined);
+});
+t('sheetCalc: L köşebent dış ölçü ve açınım boyu (standart formül)', () => {
+  const c = sheetCalc({ ...SHEET_DEFAULTS, ...SHEET_PRESETS.L });   // 40 × 40, T 2, R 2, K 0.44
+  const ba = Math.PI / 2 * (2 + 0.44 * 2), want = 2 * (40 - 4) + ba;
+  assert.ok(c.ok && Math.abs(c.flatL - want) < 1e-9);
+  assert.ok(Math.abs(c.size[0] - 40) < 1e-6 && Math.abs(c.size[1] - 40) < 1e-6);
+  assert.ok(Math.abs(c.bends[0].pos - (36 + ba / 2)) < 1e-9);
+  // kesit alanı ≈ T × orta hat uzunluğu (= açınım, K = 0.5 iken birebir)
+  const c5 = sheetCalc({ ...SHEET_DEFAULTS, ...SHEET_PRESETS.L, sk: 0.5 });
+  assert.ok(Math.abs(Math.abs(polyArea(c5.poly)) - 2 * c5.flatL) < 0.05);
+});
+t('sheetCalc: U / Z / şapka geçerli; kısa kenar hata verir', () => {
+  for (const k of Object.keys(SHEET_PRESETS)) assert.ok(sheetCalc({ ...SHEET_DEFAULTS, ...SHEET_PRESETS[k] }).ok, k);
+  const u = sheetCalc({ ...SHEET_DEFAULTS, ...SHEET_PRESETS.U });
+  assert.ok(Math.abs(u.size[0] - 60) < 1e-6 && Math.abs(u.size[1] - 30) < 1e-6);
+  const bad = sheetCalc({ ...SHEET_DEFAULTS, sa0: 0, seg: [{ L: 3 }, { a: 90, L: 40 }] });
+  assert.equal(bad.ok, false);
+  const fl = sheetFlatLines(u);
+  assert.equal(fl.bendLines.length, 2);
+  assert.equal(fl.outline.length, 4);
+});
+t('newPart sac: varsayılan profil kopyalanır (paylaşılmaz)', () => {
+  const a = newPart(1, 'sheet', 'add', null);
+  a.seg[0].L = 999;
+  assert.equal(SHEET_PRESETS.L.seg[0].L, 40);
+  assert.ok(heightOf(newPart(2, 'sheet', 'add', null)) > 39);
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');

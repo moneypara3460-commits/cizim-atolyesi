@@ -45,6 +45,12 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **Delik ölçüleri**: eksene paralel yuvarlak delikler için `Ø10`, kare delikler için `□ 8 × 6` yazısı ve eksen çizgileri; delik, eksenine bakan görünüşte gösterilir
 - Sayfadaki **✂ Kesit** düğmesi sağ alttaki izometriği A-A kesitiyle değiştirir: X ekseninde kesilir (Kesit sekmesi açık ve X seçiliyse onun konumunda, değilse ortada), kesilen yüzey 45° taranır, önden görünüşte kesit düzlemi işaretlenir
 
+**Sac metal (⌐ Sac metal düğmesi)**
+- Bükülmüş sac parça: kalınlık, iç büküm yarıçapı, derinlik, K faktörü. Hazır profiller: L köşebent, U kanal, Z, şapka, C (dudaklı); ya da kenar ekleyip her kenarın dış ölçüsünü ve büküm açısını (+ yukarı / − aşağı) kendin yaz
+- **Açınım boyu** otomatik hesaplanır (düz kısımlar + büküm payı, BA = açı × (R + K·T)); kenar büküm payından kısaysa uyarır
+- **📄 Düz göster**: parçayı 3B'de açınım plakası olarak gösterir. **⬇ Açınım DXF**: lazer / abkant için dış kontur + kırmızı büküm çizgileri (mm)
+- Delik parçalarıyla sac delinebilir, ama delikler açınım DXF'ine aktarılmaz (yalnızca kontur ve büküm çizgileri)
+
 **2B Çizim — AutoCAD tarzı (📝 2B Çizim düğmesi)**
 - Ayrı tam ekran çizim alanı; telefonda otomatik saklanır, geri al / ileri al
 - **Çiz:** çizgi (zincirleme; X/Y, uzunluk ve açı yazarak), daire (merkez + çap), yay (3 nokta), dikdörtgen (köşe + genişlik/yükseklik), hizalı ölçü, yazı
