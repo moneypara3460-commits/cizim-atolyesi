@@ -63,6 +63,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - Hazır iskeletler: masa iskeleti (üst kuşak + isteğe bağlı alt kuşak), kutu çerçeve, raf / sehpa (raf sayısı), pano çerçeve
 - Standart profiller: kutu 20–80, dikdörtgen 40×20 / 60×40, boru Ø21,3–Ø48,3 (içi boş, et kalınlıklı)
 - Ölçüler dış ölçü; dikmeler tam boy, kuşaklar dikmeler arasına alın kesimle oturur (alın birleşim) ya da gönye
+- **Gönye (45°)**: pano ve kutu çerçevede, kare / yuvarlak profille; kesim listesinde uzun kenar boyu ve kesim açısı
 - **Kesim listesi**: eleman, adet, boy, toplam boy, çelik ağırlığı, kaç 6 m'lik boy gerektiği; CSV olarak indirilir
 
 **Sac metal (⌐ Sac metal düğmesi)**
