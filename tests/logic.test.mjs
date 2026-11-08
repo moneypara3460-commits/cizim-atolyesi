@@ -7,7 +7,7 @@ import {
   chamferBoxPoints, cylinderProfile,
   eulerToQuat, quatMul, quatToEulerXYZ,
   duplicatePart, mirrorPart, linearArray, circularArray,
-  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
+  VIEW_DIRS, sectionPlane, fovDistance, arcPoints, roundedRectPts, pickScale, scaleLabel, sheetLayout, jpegToPdf, cornerCut, coneProfile, ringProfile, cornersAbove, pointInPoly, classifyLoops, SWEEP_DEFAULTS, LOFT_DEFAULTS, filletPath, arcPath, helixPath, sweepTris, loftTris, signedVolume, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, rotXYZ, axisKey, holeList, viewEdges, chainPolylines, sectionFit, descendantsOf, wouldCycle, cleanLinks,
 } from '../logic.js';
 
 let fail = 0;
@@ -505,6 +505,53 @@ t('dxfFromLayers: katman ve çizgi sayısı', () => {
   ]);
   assert.equal(d.split('\r\nLINE\r\n').length - 1, 3);
   assert.ok(d.includes('GIZLI') && d.trim().endsWith('EOF'));
+});
+t('filletPath: dik köşe yarıçap 2 ile yuvarlanır', () => {
+  const r = filletPath([[0, 0, 0], [0, 10, 0], [10, 10, 0]], 2);
+  assert.deepEqual(r[1].map((v) => Math.round(v * 1e6) / 1e6), [0, 8, 0]);
+  const e = r[r.length - 2];
+  assert.ok(Math.abs(e[0] - 2) < 1e-6 && Math.abs(e[1] - 10) < 1e-6);
+  assert.ok(r.every((q) => Math.abs(q[2]) < 1e-9));
+});
+t('arcPath ve helixPath uç noktaları', () => {
+  const a = arcPath(40, 90, 0, 0);
+  const e = a[a.length - 1];
+  assert.ok(Math.abs(e[0] - 40) < 1e-6 && Math.abs(e[1] - 40) < 1e-6);
+  const h = helixPath(20, 15, 4);
+  assert.ok(Math.abs(h[h.length - 1][1] - 60) < 1e-6);
+});
+t('sweepTris: dirsek hacmi Pappus ile tutar, içe dönük değil', () => {
+  const p = { ...SWEEP_DEFAULTS, s0: 0, s1: 0 };
+  const v = signedVolume(sweepTris(p).pos);
+  const want = 0.5 * 32 * 25 * Math.sin(2 * Math.PI / 32) * 40 * Math.PI / 2;
+  assert.ok(v > 0 && Math.abs(v - want) / want < 0.01, v + ' ~ ' + want);
+});
+t('sweepTris: dikdörtgen ve boru profili, helis, çok noktalı yol hep pozitif hacim', () => {
+  for (const prof of ['rect', 'tube', 'circle']) for (const path of ['arc', 'helix', 'poly']) {
+    const r = sweepTris({ ...SWEEP_DEFAULTS, prof, path });
+    assert.ok(signedVolume(r.pos) > 0, prof + '/' + path);
+    assert.ok(r.h > 0 && r.pos.every(Number.isFinite));
+  }
+  const tube = signedVolume(sweepTris({ ...SWEEP_DEFAULTS, prof: 'tube', s0: 0, s1: 0 }).pos);
+  const solid = signedVolume(sweepTris({ ...SWEEP_DEFAULTS, prof: 'circle', s0: 0, s1: 0 }).pos);
+  assert.ok(tube < solid * 0.7);
+});
+t('loftTris: kesik piramit ve koni hacmi', () => {
+  const f = signedVolume(loftTris({ ...LOFT_DEFAULTS, ls0: 'rect', ls1: 'rect' }).pos);
+  assert.ok(Math.abs(f - 40 / 3 * (1600 + 400 + 800)) < 1e-3);
+  const c = signedVolume(loftTris({ ...LOFT_DEFAULTS, ls0: 'circle', ls1: 'circle' }).pos);
+  assert.ok(Math.abs(c - 40 / 3 * Math.PI * 700) / (40 / 3 * Math.PI * 700) < 0.01);
+  const tw = signedVolume(loftTris({ ...LOFT_DEFAULTS, ls0: 'rect', ls1: 'rect', tw: 45 }).pos);
+  assert.ok(tw > 0);
+  assert.equal(Math.round(loftTris(LOFT_DEFAULTS).h * 1000) / 1000, 40);
+});
+t('heightOf: süpürme yüksekliği geometriden gelir; yeni parça varsayılanları', () => {
+  assert.ok(heightOf({ type: 'sweep', ...SWEEP_DEFAULTS, s0: 0, s1: 0 }) > 40);
+  const n = newPart(7, 'sweep', 'add', null);
+  assert.equal(n.path, 'arc');
+  n.pts[0][0] = 99;
+  assert.equal(SWEEP_DEFAULTS.pts[0][0], 0); // varsayılan paylaşılmaz
+  assert.equal(newPart(8, 'loft', 'add', null).ls1, 'circle');
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');

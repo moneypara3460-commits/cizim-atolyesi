@@ -45,6 +45,11 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **Delik ölçüleri**: eksene paralel yuvarlak delikler için `Ø10`, kare delikler için `□ 8 × 6` yazısı ve eksen çizgileri; delik, eksenine bakan görünüşte gösterilir
 - Sayfadaki **✂ Kesit** düğmesi sağ alttaki izometriği A-A kesitiyle değiştirir: X ekseninde kesilir (Kesit sekmesi açık ve X seçiliyse onun konumunda, değilse ortada), kesilen yüzey 45° taranır, önden görünüşte kesit düzlemi işaretlenir
 
+**Süpürme ve Loft (+ Süpürme, + Loft düğmeleri)**
+- **Süpürme**: bir profili (daire, dikdörtgen, boru) yol boyunca sürer. Yol: dirsek / yay (eğri yarıçapı, açı, baştaki ve sondaki düz boy), helis (yay, vida: sarım yarıçapı, adım, sarım sayısı) ya da çok noktalı boru hattı (X/Y/Z noktaları, köşeler yarıçapla yuvarlanır). Profil ve yol Tür sekmesinden seçilir. Oyuk olarak da kullanılır (kavisli kanal açmak için)
+- **Loft**: alt şekilden üst şekle geçiş (kare → daire, dikdörtgen → dikdörtgen vb.), üst şekli kaydırma ve burma. Kesik piramit, huni, kare tabandan yuvarlak ağza geçiş
+- Yolu parmakla çizme yok; ölçüler ve noktalar sayıyla girilir. Kendini kesen (çok dar eğri) süpürmeler CSG'de hata verebilir; eğri yarıçapı profilden küçük yapılamaz
+
 **Hesap ve dışa aktarma (Hesap sekmesi)**
 - Malzeme seç (PLA, ABS, PETG, naylon, ahşap, alüminyum, çelik, paslanmaz, pirinç, bakır, titanyum): hacim, yüzey alanı, **ağırlık**, ağırlık merkezi, genel ölçü. Tam dolu katı varsayılır
 - **Parça listesi (CSV)**: Excel'de açılır (Türkçe, noktalı virgül ayraçlı)

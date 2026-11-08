@@ -11,6 +11,8 @@ export const TYPE_LABEL = {
   tube: 'Boru',
   sketch: 'Kroki',
   mesh: 'Tek parça',
+  sweep: 'Süpürme',
+  loft: 'Loft',
 };
 
 export const DEFAULTS = {
@@ -23,6 +25,7 @@ const fin = (v, fallback) => (typeof v === 'number' && isFinite(v) ? v : fallbac
 // Parçanın yüksekliği (küre için çap)
 export function heightOf(p) {
   if (p.type === 'sketch') return sketchHeight(p);
+  if (p.type === 'sweep') return sweepTris(p).h;
   return p.type === 'sphere' ? fin(p.d, 0) : fin(p.h, 0);
 }
 
@@ -31,6 +34,8 @@ export function newPart(id, type, op, base) {
   const p = { id, type, op, ...DEFAULTS };
   if (type === 'cone') p.h = 30;
   if (type === 'tube') { p.d = 30; p.di = 20; p.h = 20; }
+  if (type === 'sweep') Object.assign(p, JSON.parse(JSON.stringify(SWEEP_DEFAULTS)));
+  if (type === 'loft') Object.assign(p, LOFT_DEFAULTS);
   if (!base) return p;
 
   const bh = heightOf(base) || 40;
@@ -669,6 +674,217 @@ export function jpegToPdf(jpeg, wPx, hPx) {
   let o = 0;
   for (const c of chunks) { out.set(c, o); o += c.length; }
   return out;
+}
+
+/* ---------------- Süpürme (sweep) ve Loft ---------------- */
+
+export const SWEEP_DEFAULTS = {
+  prof: 'circle', path: 'arc', d: 10, di: 6, w: 10, l: 6,
+  br: 40, ang: 90, s0: 20, s1: 20,                 // dirsek: eğri yarıçapı, açı, başlangıç / bitiş düz boyu
+  hr: 20, pitch: 15, turns: 4,                     // helis (yay / vida): sarım yarıçapı, adım, sarım sayısı
+  pts: [[0, 0, 0], [0, 60, 0], [60, 60, 0], [60, 60, 40]], // çok noktalı yol (köşeler br ile yuvarlanır)
+};
+export const LOFT_DEFAULTS = { ls0: 'rect', ls1: 'circle', w: 40, l: 40, d: 40, w2: 20, l2: 20, d2: 20, h: 40, ox: 0, oz: 0, tw: 0 };
+
+const v3sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const v3add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const v3mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+const v3dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const v3cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const v3len = (a) => Math.hypot(a[0], a[1], a[2]);
+const v3norm = (a) => { const l = v3len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+
+// Üç boyutlu çokgen yolun köşelerini yarıçap R ile yuvarlar (köşe başına düzlemsel yay)
+export function filletPath(pts, R, segDeg = 8) {
+  const out = [pts[0].slice()];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = pts[i - 1], p = pts[i], b = pts[i + 1];
+    const la = v3len(v3sub(a, p)), lb = v3len(v3sub(b, p));
+    if (la < 1e-9 || lb < 1e-9 || !(R > 0)) { out.push(p.slice()); continue; }
+    const u = v3norm(v3sub(a, p)), v = v3norm(v3sub(b, p));
+    const th = Math.acos(Math.max(-1, Math.min(1, v3dot(u, v))));
+    if (th > Math.PI - 0.01 || th < 0.01) { out.push(p.slice()); continue; }
+    const half = Math.tan(th / 2);
+    const t = Math.min(R / half, 0.45 * Math.min(la, lb));
+    const rad = t * half;
+    const A = v3add(p, v3mul(u, t));
+    const C = v3add(p, v3mul(v3norm(v3add(u, v)), rad / Math.sin(th / 2)));
+    const dA = v3mul(v3sub(A, C), 1 / rad);
+    const B = v3add(p, v3mul(v, t));
+    const dB = v3mul(v3sub(B, C), 1 / rad);
+    const sw = Math.acos(Math.max(-1, Math.min(1, v3dot(dA, dB))));
+    const w = v3norm(v3sub(dB, v3mul(dA, v3dot(dA, dB))));
+    const k = Math.max(2, Math.ceil(sw / (segDeg * D2R)));
+    for (let j = 0; j <= k; j++) {
+      const ang = sw * j / k;
+      out.push(v3add(C, v3mul(v3add(v3mul(dA, Math.cos(ang)), v3mul(w, Math.sin(ang))), rad)));
+    }
+  }
+  out.push(pts[pts.length - 1].slice());
+  return out;
+}
+
+// Dirsek: +Y yönünde başlar, +X tarafına açı kadar kıvrılır; başta s0, sonda s1 düz boy
+export function arcPath(br, angDeg, s0 = 0, s1 = 0, segDeg = 5) {
+  const out = [[0, 0, 0]];
+  const a = Math.max(angDeg, 0.1) * D2R, k = Math.max(2, Math.ceil(Math.max(angDeg, 0.1) / segDeg));
+  if (s0 > 1e-9) out.push([0, s0, 0]);
+  for (let j = 0; j <= k; j++) {
+    const t = a * j / k;
+    const q = [br - br * Math.cos(t), s0 + br * Math.sin(t), 0];
+    if (j === 0 && s0 > 1e-9) continue;
+    out.push(q);
+  }
+  if (s1 > 1e-9) { const e = out[out.length - 1]; out.push([e[0] + Math.sin(a) * s1, e[1] + Math.cos(a) * s1, 0]); }
+  return out;
+}
+// Helis: Y ekseni etrafında, adım = bir turda yükselme
+export function helixPath(hr, pitch, turns, segDeg = 10) {
+  const k = Math.max(4, Math.ceil(turns * 360 / segDeg)), out = [];
+  for (let j = 0; j <= k; j++) {
+    const t = turns * Math.PI * 2 * j / k;
+    out.push([hr * Math.cos(t), pitch * t / (Math.PI * 2), hr * Math.sin(t)]);
+  }
+  return out;
+}
+
+function profileOf(p) {
+  const pos = (v, d) => (isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
+  const circle = (r, n = 32) => Array.from({ length: n }, (_, i) => [r * Math.cos(i / n * Math.PI * 2), r * Math.sin(i / n * Math.PI * 2)]);
+  if (p.prof === 'rect') { const hw = pos(p.w, 10) / 2, hl = pos(p.l, 6) / 2; return { outer: [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]], inner: null, rad: Math.hypot(hw, hl) }; }
+  if (p.prof === 'tube') {
+    const d = pos(p.d, 10), di = Math.min(pos(p.di, 6), d * 0.95);
+    return { outer: circle(d / 2), inner: circle(di / 2), rad: d / 2 };
+  }
+  return { outer: circle(pos(p.d, 10) / 2), inner: null, rad: pos(p.d, 10) / 2 };
+}
+export function sweepPath(p) {
+  const prof = profileOf(p), num = (v, d) => (isFinite(Number(v)) ? Number(v) : d);
+  if (p.path === 'helix') return helixPath(Math.max(num(p.hr, 20), prof.rad * 1.01), num(p.pitch, 15), Math.max(num(p.turns, 4), 0.05));
+  if (p.path === 'poly' && Array.isArray(p.pts) && p.pts.length >= 2) return filletPath(p.pts.map((q) => [num(q[0], 0), num(q[1], 0), num(q[2], 0)]), Math.max(num(p.br, 0), 0));
+  return arcPath(Math.max(num(p.br, 40), prof.rad * 1.05), num(p.ang, 90), Math.max(num(p.s0, 0), 0), Math.max(num(p.s1, 0), 0));
+}
+
+// İşaretli hacim (içe dönük ağda negatif)
+export function signedVolume(pos) {
+  let vol = 0;
+  for (let o = 0; o + 8 < pos.length; o += 9) {
+    vol += (pos[o] * (pos[o + 4] * pos[o + 8] - pos[o + 5] * pos[o + 7]) - pos[o + 1] * (pos[o + 3] * pos[o + 8] - pos[o + 5] * pos[o + 6]) + pos[o + 2] * (pos[o + 3] * pos[o + 7] - pos[o + 4] * pos[o + 6])) / 6;
+  }
+  return vol;
+}
+// Yerel çerçevede (alt orta nokta yerine kutunun tam ortası) ortala; { pos, h, size }
+function centerTris(P) {
+  const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], P[i + k]); mx[k] = Math.max(mx[k], P[i + k]); }
+  const c = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2];
+  const pos = new Float32Array(P.length);
+  for (let i = 0; i < P.length; i += 3) { pos[i] = P[i] - c[0]; pos[i + 1] = P[i + 1] - c[1]; pos[i + 2] = P[i + 2] - c[2]; }
+  return { pos, h: Math.max(mx[1] - mn[1], 0.001), size: [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]] };
+}
+
+const tmemo = new Map();
+function memo(key, fn) {
+  if (tmemo.has(key)) return tmemo.get(key);
+  const r = fn();
+  if (tmemo.size > 24) tmemo.delete(tmemo.keys().next().value);
+  tmemo.set(key, r);
+  return r;
+}
+
+// Süpürme: profili yol boyunca (dönmeyen çerçeveyle) sürer. Dönüş: { pos (üçgenler, dışa dönük), h, size }
+export function sweepTris(p) {
+  const key = JSON.stringify(['sw', p.prof, p.path, p.d, p.di, p.w, p.l, p.br, p.ang, p.s0, p.s1, p.hr, p.pitch, p.turns, p.pts]);
+  return memo(key, () => {
+    const path = sweepPath(p), prof = profileOf(p), n = path.length;
+    const T = path.map((q, i) => v3norm(v3sub(path[Math.min(i + 1, n - 1)], path[Math.max(i - 1, 0)])));
+    const ref = Math.abs(T[0][1]) > 0.99 ? [1, 0, 0] : [0, 1, 0];
+    let N = v3norm(v3sub(ref, v3mul(T[0], v3dot(ref, T[0]))));
+    const frames = [];
+    for (let i = 0; i < n; i++) {
+      if (i > 0) {
+        const ax = v3cross(T[i - 1], T[i]), s = v3len(ax);
+        if (s > 1e-9) {
+          const k = v3norm(ax), c = v3dot(T[i - 1], T[i]);
+          N = v3add(v3add(v3mul(N, c), v3mul(v3cross(k, N), s)), v3mul(k, v3dot(k, N) * (1 - c)));
+        }
+        N = v3norm(v3sub(N, v3mul(T[i], v3dot(N, T[i]))));
+      }
+      frames.push({ N: N.slice(), B: v3cross(T[i], N) });
+    }
+    const ring = (loop, i) => loop.map(([u, v]) => v3add(path[i], v3add(v3mul(frames[i].N, u), v3mul(frames[i].B, v))));
+    const P = [];
+    const tri = (a, b, c) => P.push(...a, ...b, ...c);
+    const band = (loop, flip) => {
+      let r0 = ring(loop, 0);
+      for (let i = 1; i < n; i++) {
+        const r1 = ring(loop, i), m = loop.length;
+        for (let j = 0; j < m; j++) {
+          const j2 = (j + 1) % m, a = r0[j], b = r0[j2], c = r1[j2], d = r1[j];
+          if (flip) { tri(a, c, b); tri(a, d, c); } else { tri(a, b, c); tri(a, c, d); }
+        }
+        r0 = r1;
+      }
+    };
+    band(prof.outer, false);
+    if (prof.inner) band(prof.inner, true);
+    for (const end of [0, 1]) {
+      const i = end ? n - 1 : 0, ro = ring(prof.outer, i), m = ro.length;
+      if (prof.inner) {
+        const ri = ring(prof.inner, i);
+        for (let j = 0; j < m; j++) {
+          const j2 = (j + 1) % m;
+          if (end) { tri(ro[j], ro[j2], ri[j2]); tri(ro[j], ri[j2], ri[j]); } else { tri(ro[j], ri[j2], ro[j2]); tri(ro[j], ri[j], ri[j2]); }
+        }
+      } else {
+        const c = path[i];
+        for (let j = 0; j < m; j++) { const j2 = (j + 1) % m; if (end) tri(c, ro[j], ro[j2]); else tri(c, ro[j2], ro[j]); }
+      }
+    }
+    const arr = new Float32Array(P);
+    return centerTris(arr);
+  });
+}
+
+// Loft: alt şekilden üst şekle (daire / dikdörtgen), merkez kaydırma ve burulma
+export function loftTris(p) {
+  const key = JSON.stringify(['lf', p.ls0, p.ls1, p.w, p.l, p.d, p.w2, p.l2, p.d2, p.h, p.ox, p.oz, p.tw]);
+  return memo(key, () => {
+    const num = (v, d) => (isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
+    const sh = (kind, a, b, c) => (kind === 'circle' ? { kind, r: num(c, 20) / 2 } : { kind: 'rect', hx: num(a, 20) / 2, hz: num(b, 20) / 2 });
+    const s0 = sh(p.ls0, p.w, p.l, p.d), s1 = sh(p.ls1, p.w2, p.l2, p.d2);
+    const h = num(p.h, 20), ox = Number(p.ox) || 0, oz = Number(p.oz) || 0, tw = (Number(p.tw) || 0) * D2R;
+    const angs = [];
+    const N0 = 48;
+    for (let i = 0; i < N0; i++) angs.push(i / N0 * Math.PI * 2);
+    for (const s of [s0, s1]) if (s.kind === 'rect') { const c = Math.atan2(s.hz, s.hx); angs.push(c, Math.PI - c, Math.PI + c, Math.PI * 2 - c); }
+    angs.sort((a, b) => a - b);
+    const A = angs.filter((a, i) => i === 0 || a - angs[i - 1] > 1e-6);
+    const at = (s, a) => {
+      if (s.kind === 'circle') return [s.r * Math.cos(a), s.r * Math.sin(a)];
+      const t = Math.min(s.hx / Math.max(Math.abs(Math.cos(a)), 1e-12), s.hz / Math.max(Math.abs(Math.sin(a)), 1e-12));
+      return [t * Math.cos(a), t * Math.sin(a)];
+    };
+    const r0 = A.map((a) => { const q = at(s0, a); return [q[0], 0, q[1]]; });
+    const r1 = A.map((a) => {
+      const q = at(s1, a), c = Math.cos(tw), s = Math.sin(tw);
+      return [q[0] * c - q[1] * s + ox, h, q[0] * s + q[1] * c + oz];
+    });
+    const P = [], m = A.length;
+    const tri = (a, b, c) => P.push(...a, ...b, ...c);
+    const c0 = [0, 0, 0], c1 = [ox, h, oz];
+    for (let j = 0; j < m; j++) {
+      const j2 = (j + 1) % m;
+      tri(r0[j], r0[j2], r1[j2]); tri(r0[j], r1[j2], r1[j]);
+      tri(c0, r0[j2], r0[j]);
+      tri(c1, r1[j], r1[j2]);
+    }
+    let arr = new Float32Array(P);
+    if (signedVolume(arr) < 0) { // dışa dönük olsun
+      for (let o = 0; o < arr.length; o += 9) for (let k = 0; k < 3; k++) { const t = arr[o + 3 + k]; arr[o + 3 + k] = arr[o + 6 + k]; arr[o + 6 + k] = t; }
+    }
+    return centerTris(arr);
+  });
 }
 
 /* ---------------- Hesap: hacim, ağırlık, parça listesi, DXF ---------------- */

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
+import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Brush, Evaluator, ADDITION, SUBTRACTION } from 'three-bvh-csg';
 import { MeshBVH } from 'three-mesh-bvh';
 import {
@@ -11,11 +12,11 @@ import {
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
-  MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261108b';
-import { openSketch } from './sketch.js?v=20261108b';
+  sweepTris, loftTris, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
+} from './logic.js?v=20261108c';
+import { openSketch } from './sketch.js?v=20261108c';
 
-const APP_VER = '20261108b'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261108c'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -522,6 +523,14 @@ function baseGeo(p) {
   const w = clamp(p.w), l = clamp(p.l), h = clamp(p.h), d = clamp(p.d);
   switch (p.type) {
     case 'sketch': return sketchGeo(p);
+    case 'sweep':
+    case 'loft': {
+      const r = p.type === 'sweep' ? sweepTris(p) : loftTris(p);
+      let g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(r.pos), 3));
+      try { g = toCreasedNormals(g, 40 * RAD); } catch (e) { g.computeVertexNormals(); }
+      return ensureUV(g);
+    }
     case 'mesh': {
       const m = unpackMesh(meshStore.get(p.mk));
       if (!m) return new THREE.BoxGeometry(1, h, 1); // veri yoksa (bozuk kayıt) önemsiz bir kutu
@@ -589,6 +598,7 @@ function place(geo, p, hgt) {
 
 function partHeight(p) {
   if (p.type === 'sketch') return Math.max(heightOf(p), 0.01);
+  if (p.type === 'sweep') return clamp(sweepTris(p).h);
   return p.type === 'sphere' ? clamp(p.d) : clamp(p.h);
 }
 
@@ -897,6 +907,17 @@ function fieldsFor(p) {
     case 'cone': return [['Alt çap', 'd'], ['Üst çap', 'd2'], ['Yükseklik', 'h'], ['Yuvarlama', 'r'], ['Pah', 'c']];
     case 'tube': return [['Dış çap', 'd'], ['İç çap', 'di'], ['Yükseklik', 'h'], ['Yuvarlama', 'r'], ['Pah', 'c']];
     case 'sketch': return p.mode === 'revolve' ? [['Kenar yuvarlama', 'r'], ['Kenar pah', 'c']] : [['Kalınlık', 'h'], ['Köşe yuvarlama', 'r'], ['Köşe pah', 'c']];
+    case 'sweep': {
+      const prof = p.prof === 'rect' ? [['Profil genişlik', 'w'], ['Profil kalınlık', 'l']] : p.prof === 'tube' ? [['Dış çap', 'd'], ['İç çap', 'di']] : [['Profil çapı', 'd']];
+      const path = p.path === 'helix' ? [['Sarım yarıçapı', 'hr'], ['Adım (1 turda yükselme)', 'pitch'], ['Sarım sayısı', 'turns', 'deg']]
+        : p.path === 'poly' ? [['Köşe yarıçapı', 'br']]
+        : [['Eğri yarıçapı', 'br'], ['Açı °', 'ang', 'deg'], ['Baştaki düz boy', 's0'], ['Sondaki düz boy', 's1']];
+      return [...prof, ...path];
+    }
+    case 'loft': return [
+      ...(p.ls0 === 'circle' ? [['Alt çap', 'd']] : [['Alt genişlik', 'w'], ['Alt derinlik', 'l']]),
+      ...(p.ls1 === 'circle' ? [['Üst çap', 'd2']] : [['Üst genişlik', 'w2'], ['Üst derinlik', 'l2']]),
+      ['Yükseklik', 'h'], ['Üst kayma X', 'ox'], ['Üst kayma Z', 'oz'], ['Burulma °', 'tw', 'deg']];
     default: return [];
   }
 }
@@ -931,7 +952,13 @@ function renderPanel() {
   const snapBtns = SNAPS.map((v) => btn(v === 0 ? 'Yapışma yok' : 'Yapış ' + fmtNum(toUnit(v, settings.unit), 3), 'snap-' + v, settings.snap === v)).join('');
 
   if (tab === 'type') {
-    body = p.type === 'mesh'
+    body = p.type === 'sweep'
+      ? '<div class="lbl h">Profil (kesit şekli)</div>' + btn('Daire', 'prof-circle', p.prof === 'circle') + btn('Dikdörtgen', 'prof-rect', p.prof === 'rect') + btn('Boru (içi boş)', 'prof-tube', p.prof === 'tube') +
+        '<div class="lbl h">Yol</div>' + btn('Dirsek / yay', 'path-arc', p.path === 'arc') + btn('Helis (yay, vida)', 'path-helix', p.path === 'helix') + btn('Çok noktalı (boru hattı)', 'path-poly', p.path === 'poly') + opBtns
+      : p.type === 'loft'
+      ? '<div class="lbl h">Alt şekil</div>' + btn('Dikdörtgen', 'ls0-rect', p.ls0 !== 'circle') + btn('Daire', 'ls0-circle', p.ls0 === 'circle') +
+        '<div class="lbl h">Üst şekil</div>' + btn('Dikdörtgen', 'ls1-rect', p.ls1 !== 'circle') + btn('Daire', 'ls1-circle', p.ls1 === 'circle') + opBtns
+      : p.type === 'mesh'
       ? opBtns
       : p.type === 'sketch'
       ? btn('✎ Krokiyi düzenle', 'sketch-edit') + opBtns
@@ -1074,11 +1101,16 @@ function renderPanel() {
   } else {
     const fl = fieldsFor(p);
     body = fl.map(([l, k, kd]) => field(l, k, p, kd)).join('') + (p.type === 'sketch' ? btn('✎ Krokiyi düzenle', 'sketch-edit') : '');
+    if (p.type === 'sweep' && p.path === 'poly') {
+      body += (p.pts || []).map((q, i) => '<div class="lbl h">Yol noktası ' + (i + 1) + '</div>' +
+        ['X', 'Y', 'Z'].map((a, k) => `<label class="f"><span>${a} (${settings.unit})</span><input type="number" step="any" data-pt="${i},${k}" value="${lenVal(q[k])}"></label>`).join('')).join('') +
+        btn('+ Nokta ekle', 'pt-add') + btn('− Son noktayı sil', 'pt-del');
+    }
     if (p.type === 'mesh') body = '<div class="lbl" style="flex:1 0 100%">Tek parça: ölçüleri artık değişmez. Konum ve Döndür sekmeleri çalışır; yeni parça ekleyip birleştirebilir ya da oyabilirsin.</div>';
-    hint = 'Ölçüler (' + settings.unit + ')' + (p.type === 'box' || p.type === 'cylinder' ? '. Yuvarlama ve pah birlikte kullanılırsa yuvarlama geçerli olur. Eğim: üst yüz, her yönden yükseklik × tan(eğim) kadar daralır (döküm eğimi).' : '');
+    hint = (p.type === 'sweep' ? 'Süpürme: profil, yol boyunca sürülür (boru, dirsek, yay, vida). Yol Tür sekmesinden seçilir; çok noktalı yolda köşeler Köşe yarıçapı ile yuvarlanır. Eğri yarıçapı profilden küçük olamaz. ' : p.type === 'loft' ? 'Loft: alttaki şekilden üstteki şekle geçiş (kare tabandan yuvarlak ağza gibi). Burulma üst şekli döndürür. ' : '') + 'Ölçüler (' + settings.unit + ')' + (p.type === 'box' || p.type === 'cylinder' ? '. Yuvarlama ve pah birlikte kullanılırsa yuvarlama geçerli olur. Eğim: üst yüz, her yönden yükseklik × tan(eğim) kadar daralır (döküm eğimi).' : '');
   }
   $('tabbody').innerHTML = body;
-  $('tabbody').classList.toggle('grid', tab === 'view' || tab === 'calc');
+  $('tabbody').classList.toggle('grid', tab === 'view' || tab === 'calc' || (tab === 'type' && (p.type === 'sweep' || p.type === 'loft')));
   $('tabhint').textContent = hint;
   $('b-move').classList.toggle('on', settings.move);
 }
@@ -2357,6 +2389,11 @@ document.addEventListener('click', (e) => {
   if (act === 'hole-square') { addPart('box', 'sub'); return; }
   if (act === 'sketch-new') { newSketch(); return; }
   if (act === 'sketch-edit') { editSketch(); return; }
+  if (act.startsWith('prof-')) { commit(); p.prof = act.slice(5); refreshAll(); return; }
+  if (act.startsWith('path-')) { commit(); p.path = act.slice(5); refreshAll(); return; }
+  if (act.startsWith('ls0-') || act.startsWith('ls1-')) { commit(); p[act.slice(0, 3)] = act.slice(4); refreshAll(); return; }
+  if (act === 'pt-add' && p.pts) { commit(); const e = p.pts[p.pts.length - 1]; p.pts.push([e[0] + 20, e[1], e[2]]); refreshAll(); return; }
+  if (act === 'pt-del' && p.pts && p.pts.length > 2) { commit(); p.pts.pop(); refreshAll(); return; }
   if (act.startsWith('type-')) { commit(); p.type = act.slice(5); refreshAll(); return; }
   if (act === 'op-add') { commit(); p.op = 'add'; refreshAll(); return; }
   if (act === 'op-sub') { commit(); p.op = 'sub'; refreshAll(); return; }
@@ -2452,6 +2489,17 @@ document.addEventListener('input', (e) => {
     const isH = c.joint.type === 'hinge';
     const jl = document.querySelector('[data-jl]');
     if (jl) jl.textContent = (isH ? 'Açı: ' + fmtNum(c.joint.val, 1) + '°' : 'Kayma: ' + lenText(c.joint.val));
+    scheduleSave();
+    return;
+  }
+  if (d.pt) {
+    const [pi, ax] = d.pt.split(',').map(Number), c = cur();
+    if (!c.pts || !c.pts[pi] || !isFinite(el.valueAsNumber)) return;
+    const pkey = c.id + '.pt' + d.pt, pnow = Date.now();
+    if (pkey !== lastKey || pnow - lastAt > 1500) { commit(); updateToolbar(); }
+    lastKey = pkey; lastAt = pnow;
+    c.pts[pi][ax] = fromUnit(el.valueAsNumber, settings.unit);
+    rebuild(false);
     scheduleSave();
     return;
   }
