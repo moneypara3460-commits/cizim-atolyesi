@@ -5,6 +5,7 @@
 //   { t:'arc', c, r, a0, a1 }  (radyan, a0'dan a1'e saat yönünün tersi)
 //   { t:'dim', a, b, off }     (hizalı ölçü; off = ölçü çizgisinin ab'den işaretli uzaklığı)
 //   { t:'text', p, h, s }      (s = yazı, h = yükseklik)
+//   hatch / rdim / adim: dosyanın sonundaki tarama ve ölçü bölümüne bak
 // Hepsinde ayrıca id ve layer alanları bulunur.
 
 const TAU = Math.PI * 2;
@@ -119,6 +120,12 @@ export function nearestOn(e, p) {
   }
   if (e.t === 'dim') { const n = nearestOn({ t: 'line', ...dimLine(e) }, p); return n; }
   if (e.t === 'text') return { p: e.p, t: 0 };
+  if (e.t === 'rdim' || e.t === 'adim' || e.t === 'hatch') {
+    const segs = e.t === 'rdim' ? rdimParts(e).slice(0, 1) : e.t === 'adim' ? adimParts(e) : e.loops.flatMap((l) => l.map((q, i) => [q, l[(i + 1) % l.length]]));
+    let best = { p: e.p || segs[0][0], t: 0 }, bd = Infinity;
+    for (const [a, b] of segs) { const n = nearestOn({ t: 'line', a, b }, p), d = dist(n.p, p); if (d < bd) { bd = d; best = n; } }
+    return best;
+  }
   return { p, t: 0 };
 }
 export function dimLine(e) {
@@ -259,7 +266,12 @@ export function transformEntity(e, f, kind = 'rigid') {
   if (o.a) o.a = f(o.a);
   if (o.b) o.b = f(o.b);
   if (o.p) o.p = f(o.p);
-  if (o.t === 'circle') o.c = f(o.c);
+  if (o.p0) o.p0 = f(o.p0);
+  if (o.p1) o.p1 = f(o.p1);
+  if (o.loops) o.loops = o.loops.map((l) => l.map(f));
+  if (o.t === 'circle' || o.t === 'rdim' || o.t === 'adim') o.c = f(o.c);
+  if (o.t === 'adim' && kind === 'mirror') { const t = o.p0; o.p0 = o.p1; o.p1 = t; }
+  if (o.t === 'hatch') { const q0 = f([0, 0]), q1 = f([Math.cos(e.ang || 0), Math.sin(e.ang || 0)]); o.ang = Math.atan2(q1[1] - q0[1], q1[0] - q0[0]); }
   if (o.t === 'arc') {
     const [s0, s1] = arcEnds(e).map(f);
     o.c = f(e.c);
@@ -297,6 +309,9 @@ export function entBBox(e) {
   if (e.t === 'circle') return { minX: e.c[0] - e.r, maxX: e.c[0] + e.r, minY: e.c[1] - e.r, maxY: e.c[1] + e.r };
   if (e.t === 'arc') { const pts = arcEnds(e); for (let i = 0; i < 4; i++) if (onArc(e, i * Math.PI / 2)) pts.push(pAt(e.c, e.r, i * Math.PI / 2)); return bbOf(pts); }
   if (e.t === 'text') return { minX: e.p[0], maxX: e.p[0] + (e.h || 5) * 0.6 * String(e.s).length, minY: e.p[1], maxY: e.p[1] + (e.h || 5) };
+  if (e.t === 'hatch') return bbOf(e.loops.flat());
+  if (e.t === 'rdim') return bbOf(rdimParts(e).flat().concat([e.p]));
+  if (e.t === 'adim') return bbOf(adimParts(e).flat().concat([adimTextPos(e)]));
   return null;
 }
 function bbOf(pts) {
@@ -375,7 +390,9 @@ export function toDXF(ents, layers) {
       const txt = dimText(e), w = h * 0.6 * txt.length;
       const mid = mul(add(dl.a, dl.b), 0.5), u = [Math.cos(rot), Math.sin(rot)], nn = [-u[1], u[0]];
       text(add(add(mid, mul(u, -w / 2)), mul(nn, h * 0.4)), h, txt, ly, rot);
-    }
+    } else if (e.t === 'hatch') { for (const s of hatchSegs(e)) line(s[0], s[1], ly); }
+    else if (e.t === 'rdim') { for (const s of rdimParts(e)) line(s[0], s[1], ly); text(add(e.p, [1, 1]), e.h || 3.5, rdimText(e), ly); }
+    else if (e.t === 'adim') { for (const s of adimParts(e)) line(s[0], s[1], ly); const h = e.h || 3.5, q = adimTextPos(e), tx = adimText(e); text(sub(q, [h * 0.3 * tx.length, h / 2]), h, tx, ly); }
   }
   g(0, 'ENDSEC'); g(0, 'EOF');
   return o.join('\r\n') + '\r\n';
@@ -477,6 +494,7 @@ export function stretchToLength(ents, line, L, moveB = true) {
     if (e.t === 'line' || e.t === 'dim') { o.a = mv(e.a); o.b = mv(e.b); return o; }
     if (e.t === 'text') { o.p = mv(e.p); return o; }
     if (e.t === 'circle') { o.c = mv(e.c); return o; }
+    if (e.t === 'hatch' || e.t === 'rdim' || e.t === 'adim') return mapPoints(e, mv);
     if (e.t === 'arc') {
       const [s0, s1] = arcEnds(e), m = pAt(e.c, e.r, e.a0 + arcSpan(e) / 2);
       const n0 = mv(s0), n1 = mv(s1), nm = mv(m);
@@ -541,8 +559,9 @@ export function applyDims(ents0, matches) {
     const sc = (p) => [p[0] * f, p[1] * f];
     ents = ents.map((e) => {
       const o = clone(e);
-      for (const k of ['a', 'b', 'c', 'p']) if (o[k]) o[k] = sc(o[k]);
+      Object.assign(o, mapPoints(o, sc));
       if (o.r) o.r *= f;
+      if (o.sp) o.sp *= f;
       if (o.t === 'dim') o.off *= f;
       if (o.t === 'text') o.h = (o.h || 5) * f;
       return o;
@@ -561,4 +580,128 @@ export function applyDims(ents0, matches) {
     else if (m.kind === 'rad' && e.t === 'arc') { const r = setRadius(ents, e, m.value); if (r) ents = r; }
   }
   return ents;
+}
+
+/* ---------- tarama, açı / yarıçap ölçüsü, dizi ---------- */
+//   { t:'hatch', loops:[[[x,y],...], ...], ang, sp }   (ilk döngü dış sınır, diğerleri delik; ang radyan, sp aralık mm)
+//   { t:'rdim', c, r, p, dia }                         (dia: true = Ø çap, false = R yarıçap; p = yazının yeri)
+//   { t:'adim', c, p0, p1, p }                         (c köşe, p0 / p1 iki kol üzerinde, p yayın geçtiği yer)
+export function pointInPoly(poly, p) {
+  let ins = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) ins = !ins;
+  }
+  return ins;
+}
+const polyArea = (l) => { let s = 0; for (let i = 0; i < l.length; i++) s += cross(l[i], l[(i + 1) % l.length]); return Math.abs(s) / 2; };
+// p noktasını içine alan en küçük kapalı alan + içindeki delikler. Bulunamazsa null
+export function findHatchRegion(ents, p) {
+  const loops = closedLoops(ents.filter(geomOK), 1e-3, 4);
+  const cont = loops.filter((l) => pointInPoly(l, p)).sort((a, b) => polyArea(a) - polyArea(b));
+  if (!cont.length) return null;
+  const outer = cont[0], A = polyArea(outer);
+  const holes = loops.filter((l) => l !== outer && polyArea(l) < A && !pointInPoly(l, p) && pointInPoly(outer, l[0]));
+  // deliğin içindeki adacıkları atla (yalnızca en dıştaki delikler)
+  const top = holes.filter((h) => !holes.some((o) => o !== h && polyArea(o) > polyArea(h) && pointInPoly(o, h[0])));
+  return [outer, ...top];
+}
+export function hatchSegs(e, maxLines = 3000) {
+  const u = [Math.cos(e.ang || 0), Math.sin(e.ang || 0)], n = [-u[1], u[0]], sp = Math.max(e.sp || 3, 1e-6);
+  const all = e.loops.flat();
+  if (!all.length) return [];
+  const pr = all.map((q) => dot(q, n)), mn = Math.min(...pr), mx = Math.max(...pr);
+  let k0 = Math.ceil(mn / sp), k1 = Math.floor(mx / sp);
+  if (k1 - k0 > maxLines) { const m = (k0 + k1) / 2; k0 = Math.round(m - maxLines / 2); k1 = Math.round(m + maxLines / 2); }
+  const out = [];
+  for (let k = k0; k <= k1; k++) {
+    const t = k * sp, xs = [];
+    for (const l of e.loops) for (let i = 0; i < l.length; i++) {
+      const a = l[i], b = l[(i + 1) % l.length], da = dot(a, n) - t, db = dot(b, n) - t;
+      if ((da > 0) === (db > 0) || da === db) continue;
+      const s = da / (da - db), x = add(a, mul(sub(b, a), s));
+      xs.push(dot(x, u));
+    }
+    xs.sort((a, b) => a - b);
+    for (let i = 0; i + 1 < xs.length; i += 2) {
+      if (xs[i + 1] - xs[i] < 1e-9) continue;
+      out.push([add(mul(n, t), mul(u, xs[i])), add(mul(n, t), mul(u, xs[i + 1]))]);
+    }
+  }
+  return out;
+}
+// yarıçap / çap ölçüsü: kılavuz çizgisi + ok
+export function rdimParts(e) {
+  let u = sub(e.p, e.c); const L = Math.hypot(...u);
+  u = L > 1e-9 ? mul(u, 1 / L) : [1, 0];
+  const on = add(e.c, mul(u, e.r)), far = L > e.r ? e.p : on;
+  const start = e.dia ? sub(e.c, mul(u, e.r)) : e.c;
+  const out = [[start, far]];
+  const al = Math.min(3, e.r / 2), aw = al * 0.3, nn = [-u[1], u[0]];
+  const wing = (p, s) => { const q = add(p, mul(u, s * al)); out.push([p, add(q, mul(nn, aw))], [p, sub(q, mul(nn, aw))]); };
+  wing(on, L > e.r ? 1 : -1);
+  if (e.dia) wing(sub(e.c, mul(u, e.r)), 1);
+  return out;
+}
+export const rdimText = (e) => (e.dia ? 'Ø' : 'R') + String(Math.round((e.dia ? 2 * e.r : e.r) * 100) / 100).replace('.', ',');
+// iki çizgiden açı ölçüsü: p'nin bulunduğu (180°'den küçük) açı bölgesi seçilir
+export function angDimFrom(l1, l2, p) {
+  const d1 = sub(l1.b, l1.a), d2 = sub(l2.b, l2.a), cr = cross(d1, d2);
+  if (Math.abs(cr) < 1e-9 * Math.hypot(...d1) * Math.hypot(...d2)) return null;
+  const s = cross(sub(l2.a, l1.a), d2) / cr, c = add(l1.a, mul(d1, s));
+  const u1 = mul(d1, 1 / Math.hypot(...d1)), u2 = mul(d2, 1 / Math.hypot(...d2)), ap = Math.atan2(p[1] - c[1], p[0] - c[0]);
+  for (const s1 of [1, -1]) for (const s2 of [1, -1]) {
+    const r1 = mul(u1, s1), r2 = mul(u2, s2);
+    for (const [ra, rb] of [[r1, r2], [r2, r1]]) {
+      const a0 = Math.atan2(ra[1], ra[0]), span = normA(Math.atan2(rb[1], rb[0]) - a0);
+      if (span > 1e-9 && span < Math.PI && normA(ap - a0) <= span) return { t: 'adim', c, p0: add(c, ra), p1: add(c, rb), p };
+    }
+  }
+  return null;
+}
+export function adimGeom(e) {
+  const a0 = Math.atan2(e.p0[1] - e.c[1], e.p0[0] - e.c[0]), span = normA(Math.atan2(e.p1[1] - e.c[1], e.p1[0] - e.c[0]) - a0);
+  return { a0, span, r: Math.max(dist(e.c, e.p), 1e-6) };
+}
+export const adimText = (e) => String(Math.round(adimGeom(e).span * 180 / Math.PI * 100) / 100).replace('.', ',') + '°';
+export function adimParts(e) {
+  const { a0, span, r } = adimGeom(e), k = Math.max(4, Math.ceil(span / (Math.PI / 36))), out = [];
+  for (let i = 0; i < k; i++) out.push([pAt(e.c, r, a0 + span * i / k), pAt(e.c, r, a0 + span * (i + 1) / k)]);
+  // kollar yaya ulaşmıyorsa uzatma çizgisi
+  for (const q of [e.p0, e.p1]) { const L = dist(e.c, q); if (L < r) { const u = mul(sub(q, e.c), 1 / L); out.push([add(e.c, mul(u, L)), add(e.c, mul(u, r * 1.05))]); } }
+  const al = Math.min(3, r * span / 4), aw = al * 0.3;
+  for (const [ang, s] of [[a0, 1], [a0 + span, -1]]) {
+    const p0 = pAt(e.c, r, ang), tg = [-Math.sin(ang) * s, Math.cos(ang) * s], rd = [Math.cos(ang), Math.sin(ang)], q = add(p0, mul(tg, al));
+    out.push([p0, add(q, mul(rd, aw))], [p0, sub(q, mul(rd, aw))]);
+  }
+  return out;
+}
+export const adimTextPos = (e) => { const { a0, span, r } = adimGeom(e); return pAt(e.c, r * 1.12, a0 + span / 2); };
+// her varlığın bütün noktalarına f uygular (ölçekleme / esnetme için)
+export function mapPoints(e, f) {
+  const o = clone(e);
+  for (const k of ['a', 'b', 'c', 'p', 'p0', 'p1']) if (o[k]) o[k] = f(o[k]);
+  if (o.loops) o.loops = o.loops.map((l) => l.map(f));
+  return o;
+}
+// dikdörtgen dizi: satır × sütun (asıl kopya dahil değil)
+export function arrayRect(ents, rows, cols, dx, dy) {
+  const out = [];
+  for (let i = 0; i < rows; i++) for (let j = 0; j < cols; j++) {
+    if (!i && !j) continue;
+    for (const e of ents) out.push(transformEntity(e, moveFn(j * dx, i * dy)));
+  }
+  return out;
+}
+// dairesel dizi: n adet, toplam açı (radyan; 2π = tam tur), merkez c
+export function arrayPolar(ents, n, total, c, rotate = true) {
+  const out = [], full = Math.abs(Math.abs(total) - TAU) < 1e-6, step = n > 1 ? total / (full ? n : n - 1) : 0;
+  for (let i = 1; i < n; i++) {
+    const ang = step * i, f = rotateFn(c, ang);
+    for (const e of ents) {
+      if (rotate) out.push(transformEntity(e, f));
+      else { const bb = entBBox(e), m = bb ? [(bb.minX + bb.maxX) / 2, (bb.minY + bb.maxY) / 2] : c, t = f(m); out.push(transformEntity(e, moveFn(t[0] - m[0], t[1] - m[1]))); }
+    }
+  }
+  return out;
 }

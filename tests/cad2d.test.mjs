@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {
   arcFrom3, intersect, trimEntity, extendEntity, offsetEntity, filletLines, transformEntity, rotateFn, mirrorFn, moveFn,
-  stretchToLength, setRadius, matchDims, applyDims, snapPoints, closedLoops, toDXF, parseDXF, arcSpan, arcEnds, dist, normA,
+  stretchToLength, setRadius, matchDims, applyDims, snapPoints, findHatchRegion, hatchSegs, angDimFrom, adimGeom, adimText, rdimParts, rdimText, arrayRect, arrayPolar, entBBox, nearestOn, closedLoops, toDXF, parseDXF, arcSpan, arcEnds, dist, normA,
 } from '../cad2d-geom.js';
 
 let fail = 0;
@@ -150,6 +150,56 @@ t('matchDims + applyDims: el çiziminden okunan 600, 300 ve Ø100', () => {
   assert.ok(Math.abs(dist(o[1].a, o[1].b) - 300) < 1e-6);
   assert.ok(Math.abs(o[4].r - 50) < 1e-9);
   near(o[2].a, [600, 300]); near(o[3].a, [0, 300]);   // dikdörtgen bozulmadı
+});
+
+t('tarama: delikli bölge, çizgiler delikte kesilir', () => {
+  const sq = [L([0, 0], [100, 0]), L([100, 0], [100, 100]), L([100, 100], [0, 100]), L([0, 100], [0, 0])];
+  const hole = { t: 'circle', c: [50, 50], r: 20 };
+  const reg = findHatchRegion([...sq, hole], [10, 10]);
+  assert.equal(reg.length, 2);
+  const segs = hatchSegs({ t: 'hatch', loops: reg, ang: 0, sp: 10 });
+  const at50 = segs.filter((s) => Math.abs(s[0][1] - 50) < 1e-9);
+  assert.equal(at50.length, 2); assert.ok(Math.abs(at50[0][1][0] - 30) < 0.2);
+  const inner = findHatchRegion([...sq, hole], [50, 50]);
+  assert.equal(inner.length, 1);
+  assert.equal(findHatchRegion(sq, [200, 200]), null);
+  for (const s of hatchSegs({ t: 'hatch', loops: reg, ang: Math.PI / 4, sp: 3 })) for (const q of s) assert.ok(q[0] > -1e-6 && q[0] < 100 + 1e-6 && q[1] > -1e-6 && q[1] < 100 + 1e-6);
+});
+t('açı ölçüsü: dokunulan bölgeye göre 60° ya da 120°', () => {
+  const h = L([0, 0], [50, 0]), d = L([0, 0], [25, 25 * Math.sqrt(3)]);
+  const a = angDimFrom(h, d, [20, 5]);
+  assert.equal(adimText(a), '60°'); near(a.c, [0, 0]);
+  const b = angDimFrom(h, d, [-20, 5]);
+  assert.equal(adimText(b), '120°');
+  assert.equal(angDimFrom(h, L([0, 5], [10, 5]), [1, 1]), null);
+  const m = transformEntity(a, mirrorFn([0, 0], [0, 1]), 'mirror');
+  assert.ok(Math.abs(adimGeom(m).span - Math.PI / 3) < 1e-9);
+});
+t('çap / yarıçap ölçüsü', () => {
+  const e = { t: 'rdim', c: [0, 0], r: 10, p: [20, 0], dia: true };
+  assert.equal(rdimText(e), 'Ø20'); assert.equal(rdimText({ ...e, dia: false }), 'R10');
+  near(rdimParts(e)[0][0], [-10, 0]); near(rdimParts(e)[0][1], [20, 0]);
+  assert.ok(entBBox(e).maxX >= 20);
+  assert.ok(dist(nearestOn(e, [5, 3]).p, [5, 0]) < 1e-9);
+});
+t('dizi: dikdörtgen ve dairesel', () => {
+  const c = { t: 'circle', c: [0, 0], r: 2 };
+  const r = arrayRect([c], 2, 3, 10, 20);
+  assert.equal(r.length, 5); near(r[r.length - 1].c, [20, 20]);
+  const p = arrayPolar([{ t: 'circle', c: [10, 0], r: 1 }], 4, 2 * Math.PI, [0, 0]);
+  assert.equal(p.length, 3); near(p[0].c, [0, 10]); near(p[1].c, [-10, 0]);
+  const half = arrayPolar([L([10, 0], [12, 0])], 3, Math.PI, [0, 0]);
+  near(half[1].a, [-10, 0]);
+  const nr = arrayPolar([L([10, 0], [12, 0])], 2, Math.PI / 2, [0, 0], false);
+  near(nr[0].a, [-1, 11]); near(nr[0].b, [1, 11]);
+});
+t('ölçekleme / esnetme taramayı ve ölçüleri taşır', () => {
+  const sq = [L([0, 0], [10, 0]), L([10, 0], [10, 10]), L([10, 10], [0, 10]), L([0, 10], [0, 0])];
+  const hz = { t: 'hatch', loops: findHatchRegion(sq, [5, 5]), ang: 0, sp: 1 };
+  const out = stretchToLength([...sq, hz], sq[0], 20, true);
+  assert.equal(Math.max(...out[4].loops[0].map((q) => q[0])), 20);
+  const ap = applyDims([...sq, hz], [{ ei: 0, kind: 'len', value: 50, cur: 10 }]);
+  assert.equal(ap[4].sp, 5);
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');

@@ -1,12 +1,12 @@
 // 2B Çizim (AutoCAD tarzı) — tam ekran çizim alanı.
 // Kullanım: openCad2D({ onExtrude(draw), onClose() })  draw: kroki biçimi (sketch.js / validateDraw)
-import { fmtNum } from './logic.js?v=20261109a';
-import { validateDraw } from './sketch.js?v=20261109a';
+import { fmtNum } from './logic.js?v=20261109b';
+import { validateDraw } from './sketch.js?v=20261109b';
 import {
   arcFrom3, trimEntity, extendEntity, offsetEntity, filletLines, transformEntity, moveFn, rotateFn, mirrorFn,
-  stretchToLength, setRadius, matchDims, applyDims, snapPoints, nearestOn, closedLoops, toDXF, parseDXF, dimLine, dimParts, dimText, arcSpan, arcEnds, entBBox, dist, normA, ACI,
-} from './cad2d-geom.js?v=20261109a';
-import { openPhotoImport } from './photoimport.js?v=20261109a';
+  stretchToLength, setRadius, matchDims, applyDims, findHatchRegion, hatchSegs, pointInPoly, rdimParts, rdimText, angDimFrom, adimParts, adimText, adimTextPos, mapPoints, arrayRect, arrayPolar, snapPoints, nearestOn, closedLoops, toDXF, parseDXF, dimLine, dimParts, dimText, arcSpan, arcEnds, entBBox, dist, normA, ACI,
+} from './cad2d-geom.js?v=20261109b';
+import { openPhotoImport } from './photoimport.js?v=20261109b';
 
 const KEY = 'cizim:2d';
 const CSS = `
@@ -33,8 +33,9 @@ const CSS = `
              padding: 3px 8px; border-radius: 6px; pointer-events: none; }
 #cad label.f { flex: 1 1 28%; display: block; min-width: 80px; }
 #cad label.f span { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 2px; white-space: nowrap; }
-#cad input, #cad select { width: 100%; font: inherit; font-size: 15px; color: #fff; background: #1e293b; border: 0; border-radius: 8px; padding: 7px 9px; }
+#cad input, #cad select { box-sizing: border-box; width: 100%; font: inherit; font-size: 15px; color: #fff; background: #1e293b; border: 0; border-radius: 8px; padding: 7px 9px; }
 #cad .bot { padding-bottom: 8px; max-height: 30vh; overflow-y: auto; }
+#cad .bot > button { flex: 1 1 44%; min-width: 130px; white-space: normal; line-height: 1.25; }
 #cad .lb { flex: 1 0 100%; font-size: 12px; color: #cbd5e1; font-weight: 700; padding: 3px 2px 0; }
 #cad .ly { flex: 1 0 100%; display: flex; gap: 5px; align-items: center; }
 #cad .ly .sw { width: 22px; height: 22px; border-radius: 5px; flex: none; }
@@ -42,8 +43,8 @@ const CSS = `
 #cad .ly button { flex: 0 0 auto; padding: 8px 10px; }
 `;
 const TOOLS = {
-  draw: [['line', '╱ Çizgi'], ['circle', '◯ Daire'], ['arc', '◠ Yay'], ['rect', '▭ Dikdörtgen'], ['dim', '↔ Ölçü'], ['text', 'A Yazı'], ['select', '☝ Seç']],
-  edit: [['trim', '✂ Kırp'], ['extend', '⇥ Uzat'], ['offset', '⇉ Ofset'], ['fillet', '◜ Radyus'], ['move', '✥ Taşı'], ['copy', '⧉ Kopyala'], ['rotate', '⟳ Döndür'], ['mirror', '⇋ Ayna'], ['setdim', '📐 Ölçü ver'], ['scale', '📏 Ölçekle'], ['erase', '🗑 Sil'], ['select', '☝ Seç']],
+  draw: [['line', '╱ Çizgi'], ['circle', '◯ Daire'], ['arc', '◠ Yay'], ['rect', '▭ Dikdörtgen'], ['dim', '↔ Ölçü'], ['rdim', '⌀ Çap / R'], ['adim', '∠ Açı ölçü'], ['hatch', '▨ Tarama'], ['text', 'A Yazı'], ['select', '☝ Seç']],
+  edit: [['trim', '✂ Kırp'], ['extend', '⇥ Uzat'], ['offset', '⇉ Ofset'], ['fillet', '◜ Radyus'], ['move', '✥ Taşı'], ['copy', '⧉ Kopyala'], ['rotate', '⟳ Döndür'], ['mirror', '⇋ Ayna'], ['array', '▦ Dizi'], ['setdim', '📐 Ölçü ver'], ['scale', '📏 Ölçekle'], ['erase', '🗑 Sil'], ['select', '☝ Seç']],
 };
 const HINTS = {
   line: ['Başlangıç noktasına dokun (ya da X, Y yaz).', 'Sonraki noktaya dokun ya da uzunluk ve açı yaz. Zincir devam eder; "Bitir" ile durdur.'],
@@ -61,7 +62,11 @@ const HINTS = {
   copy: ['Kopyalama: temel noktaya dokun.', 'Hedef noktalara dokun (birden çok kopya). Bitince başka araca geç.'],
   rotate: ['Döndürme merkezine dokun.', 'Açıyı yazıp "Döndür"e bas.'],
   mirror: ['Ayna ekseninin ilk noktası.', 'Ayna ekseninin ikinci noktası.'],
-  erase: ['Silinecek varlığa dokun.'],
+  erase: ['Silinecek varlığa dokun (taramayı silmek için içine dokun).'],
+  rdim: ['Ölçülecek daireye ya da yaya dokun.', 'Ölçü yazısının yerine dokun (Ø çap / R yarıçap aşağıdan değişir).'],
+  adim: ['Açının birinci çizgisine dokun.', 'İkinci çizgiye dokun.', 'Ölçünün yerine dokun: hangi açı bölgesine dokunursan o açı ölçülür (ör. 60° ya da 120°).'],
+  hatch: ['Taranacak kapalı alanın içine dokun (içteki delikler boş kalır). Açıyı ve aralığı aşağıdan ayarla.'],
+  array: ['Önce Seç ile çoğaltılacakları seç. Dikdörtgen: satır / sütun ve aralıkları yaz, Uygula. Dairesel: adet ve açıyı yaz, sonra merkeze dokun.'],
   setdim: ['Ölçüsünü vereceğin çizgiye (değişecek ucuna yakın), daireye ya da yaya dokun.', 'Ölçüyü yaz, "Uygula"ya bas. Çizgide, dokunduğun uç tarafındaki her şey birlikte kayar (esnet).'],
   autodim: ['Okunan ölçüleri kontrol et: turuncu çizgi hangi yazının hangi çizgiye gittiğini gösterir.'],
   scale: ['Ölçüsünü bildiğin bir çizgiye / daireye dokun.', 'Gerçek ölçüsünü yaz ve "Ölçekle"ye bas: bütün çizim o oranda büyür / küçülür.'],
@@ -99,11 +104,12 @@ export function openCad2D(opts = {}) {
   let tab = 'draw', tool = 'line';
   let pts = [];               // etkin komutun topladığı noktalar
   let pickA = null;           // ofset / radyus için seçilen varlık
+  let pickB = null;           // açı ölçüsünün ikinci çizgisi
   let sel = new Set();        // seçili id'ler
   let auto = null;           // fotoğraftan okunan ölçüler: { added, tents, texts, matches }
   let osnap = true, ortho = false, grid = 1, clearArm = false;
   let aim = null;             // { p, k } parmak altındaki (yakalanmış) nokta
-  const F = { dv: '', adddim: '1', real: '', kf: '2', len: '', ang: '0', x: '0', y: '0', d: '20', w: '40', h: '20', off: '5', rad: '5', rot: '90', txt: 'Yazı', th: '5', dx: '0', dy: '0', thick: '10', keep: '1', nl: '' };
+  const F = { dv: '', adddim: '1', real: '', kf: '2', len: '', ang: '0', x: '0', y: '0', d: '20', w: '40', h: '20', off: '5', rad: '5', rot: '90', txt: 'Yazı', th: '5', dx: '0', dy: '0', thick: '10', keep: '1', nl: '', hang: '45', hsp: '3', rdia: '1', amode: 'rect', arows: '2', acols: '3', adx: '20', ady: '20', an: '6', aang: '360', arot: '1' };
   const V = { s: 3, ox: 0, oy: 0 };
 
   const root = document.createElement('div');
@@ -198,11 +204,15 @@ export function openCad2D(opts = {}) {
   function hitEnt(sx, sy, filter = editable) {
     const w = toW(sx, sy);
     let best = null, bd = 16;
+    // geometri isteyen komutlar tarama / ölçü / yazıyı seçmesin
+    const geoOnly = ['trim', 'extend', 'offset', 'fillet', 'setdim', 'scale', 'rdim', 'adim'].includes(tool);
     for (const e of doc.ents) {
       if (!filter(e)) continue;
+      if (geoOnly && !(e.t === 'line' || e.t === 'circle' || e.t === 'arc')) continue;
       let d;
       if (e.t === 'circle') d = Math.abs(dist(w, e.c) - e.r) * V.s;
       else if (e.t === 'text') { const b = entBBox(e); d = w[0] >= b.minX && w[0] <= b.maxX && w[1] >= b.minY && w[1] <= b.maxY ? 0 : 99; }
+      else if (e.t === 'hatch') { d = dist(nearestOn(e, w).p, w) * V.s + 4; if (pointInPoly(e.loops[0], w) && !e.loops.slice(1).some((l) => pointInPoly(l, w))) d = Math.min(d, 12); }
       else d = dist(nearestOn(e, w).p, w) * V.s;
       if (d < bd) { bd = d; best = e; }
     }
@@ -225,6 +235,19 @@ export function openCad2D(opts = {}) {
       g.save(); g.translate(m[0], m[1]); g.rotate(ang);
       g.font = `${Math.min(hpx, 60)}px system-ui, sans-serif`; g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'bottom';
       g.fillText(dimText(e), 0, -2); g.restore();
+    } else if (e.t === 'hatch' || e.t === 'rdim' || e.t === 'adim') {
+      if (e.t === 'hatch') { g.lineWidth = Math.max(0.8, width * 0.6); g.globalAlpha = 0.85; }
+      else g.setLineDash([]);
+      const segs = e.t === 'hatch' ? hatchSegs(e) : e.t === 'rdim' ? rdimParts(e) : adimParts(e);
+      g.beginPath();
+      for (const sg of segs) { g.moveTo(...toS(sg[0])); g.lineTo(...toS(sg[1])); }
+      g.stroke(); g.globalAlpha = 1;
+      if (e.t !== 'hatch') {
+        const hpx = Math.max(10, (e.h || 3.5) * V.s), tx = e.t === 'rdim' ? rdimText(e) : adimText(e), q = toS(e.t === 'rdim' ? e.p : adimTextPos(e));
+        g.font = `${Math.min(hpx, 60)}px system-ui, sans-serif`; g.fillStyle = color;
+        g.textAlign = e.t === 'rdim' ? (e.p[0] >= e.c[0] ? 'left' : 'right') : 'center'; g.textBaseline = e.t === 'rdim' ? 'bottom' : 'middle';
+        g.fillText(tx, q[0] + (e.t === 'rdim' ? (e.p[0] >= e.c[0] ? 3 : -3) : 0), q[1] - (e.t === 'rdim' ? 2 : 0));
+      }
     } else if (e.t === 'text') {
       const p = toS(e.p), hpx = Math.max(6, (e.h || 5) * V.s);
       g.font = `${Math.min(hpx, 200)}px system-ui, sans-serif`; g.fillStyle = color; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
@@ -271,6 +294,7 @@ export function openCad2D(opts = {}) {
       strokeEnt(e, sel.has(e.id) ? '#fbbf24' : col, sel.has(e.id) ? 2.6 : 1.6, (LT_DASH[L.lt] || []));
     }
     if (pickA) strokeEnt(pickA, '#f97316', 3.5);
+    if (pickB) strokeEnt(pickB, '#f97316', 3.5);
     if (tool === 'autodim' && auto) for (const m of auto.matches) {
       const e = auto.added[m.ei], t = auto.texts[m.ti];
       if (!e || !doc.ents.includes(e)) continue;
@@ -328,8 +352,11 @@ export function openCad2D(opts = {}) {
     return ((p[0] - a[0]) * -d[1] + (p[1] - a[1]) * d[0]) / L;
   }
   function setHint(m, err) { $('cad-hint').textContent = m; $('cad-hint').classList.toggle('err', !!err); }
-  function hintNow() { const h = HINTS[tool] || ['']; return h[Math.min(pts.length + (pickA && (tool === 'offset' || tool === 'fillet') ? 1 : 0), h.length - 1)]; }
-  function reset() { pts = []; pickA = null; }
+  function hintNow() { const h = HINTS[tool] || ['']; return h[Math.min(pts.length + (pickA && ['offset', 'fillet', 'rdim', 'adim'].includes(tool) ? 1 : 0) + (pickB ? 1 : 0), h.length - 1)]; }
+  function reset() { pts = []; pickA = null; pickB = null; }
+  const dimLayer = () => (doc.layers.some((l) => l.name === 'Ölçü') ? 'Ölçü' : doc.cur);
+  // çap / yarıçap ölçüsünü şeklin dışına, sağ üste koyar
+  function autoRdim(e, hh) { const k = 0.7071; return { t: 'rdim', c: e.c.slice(), r: e.r, p: [e.c[0] + e.r * k + hh * 3, e.c[1] + e.r * k + hh * 3], dia: e.t === 'circle', h: hh, layer: dimLayer() }; }
 
   /* ---------- komutlar ---------- */
   function placePoint(p) {
@@ -390,6 +417,16 @@ export function openCad2D(opts = {}) {
           sel = new Set(out.map((e) => e.id)); }
         changed(); reset();
         break;
+      case 'array': {
+        if (!sel.size) { setHint('Önce Seç aracıyla çoğaltılacakları seç.', true); return; }
+        const n = Math.round(num('an')), A = num('aang') * Math.PI / 180;
+        if (!(n >= 2 && n <= 500) || !A) { setHint('Adet 2–500 arası, açı sıfırdan farklı olmalı.', true); return; }
+        commit();
+        const list = selected();
+        for (const en of arrayPolar(list, n, A, p, F.arot === '1')) addEnt({ ...en, layer: en.layer });
+        changed(); refresh(); setHint(n + ' adet dairesel dizi yapıldı. Başka merkeze dokunarak tekrar dizebilirsin.');
+        return;
+      }
       case 'offset':
         if (!pickA) return;
         { const d = num('off');
@@ -417,6 +454,24 @@ export function openCad2D(opts = {}) {
       refresh(); return;
     }
     if (tool === 'offset' && pickA) { placePoint(snapAt(sx, sy).p); return; }
+    if (tool === 'hatch') {
+      const loops = findHatchRegion(doc.ents.filter(visible), w);
+      if (!loops) { setHint('Burası kapalı bir alan değil. Çizgilerin uçları birbirine değmeli (uç nokta yakalama).', true); return; }
+      const sp = num('hsp'), ang = num('hang');
+      if (!(sp > 0) || !isFinite(ang)) { setHint('Aralık sıfırdan büyük olmalı.', true); return; }
+      commit(); addEnt({ t: 'hatch', loops, ang: ang * Math.PI / 180, sp }); changed(); refresh();
+      setHint('Tarandı' + (loops.length > 1 ? ' (' + (loops.length - 1) + ' delik boş bırakıldı)' : '') + '. Başka alana dokunarak devam et.');
+      return;
+    }
+    if (tool === 'rdim' && pickA) {
+      commit(); addEnt({ t: 'rdim', c: pickA.c.slice(), r: pickA.r, p: w, dia: F.rdia === '1', h: 3.5, layer: dimLayer() });
+      changed(); reset(); refresh(); return;
+    }
+    if (tool === 'adim' && pickB) {
+      const a = angDimFrom(pickA, pickB, w);
+      if (!a) { setHint('Bu iki çizgi paralel; açı ölçülemez.', true); reset(); refresh(); return; }
+      commit(); addEnt({ ...a, h: 3.5, layer: dimLayer() }); changed(); reset(); refresh(); return;
+    }
     const e = hitEnt(sx, sy);
     if (!e) { setHint('Orada varlık yok; çizginin üstüne dokun.', true); return; }
     const others = doc.ents.filter(visible);
@@ -427,6 +482,16 @@ export function openCad2D(opts = {}) {
     if (tool === 'scale') {
       if (!(e.t === 'line' || e.t === 'circle' || e.t === 'arc')) { setHint('Çizgi, daire ya da yaya dokun.', true); return; }
       pickA = e; F.real = fmt(scaleRef(e)); refresh(); return;
+    }
+    if (tool === 'rdim') {
+      if (!(e.t === 'circle' || e.t === 'arc')) { setHint('Daireye ya da yaya dokun.', true); return; }
+      pickA = e; F.rdia = e.t === 'circle' ? '1' : '0'; refresh(); return;
+    }
+    if (tool === 'adim') {
+      if (e.t !== 'line') { setHint('Açı iki çizgi arasında ölçülür; çizgiye dokun.', true); return; }
+      if (!pickA) { pickA = e; refresh(); return; }
+      if (e === pickA) return;
+      pickB = e; refresh(); return;
     }
     if (tool === 'erase') { commit(); doc.ents.splice(doc.ents.indexOf(e), 1); sel.delete(e.id); changed(); refresh(); return; }
     if (tool === 'trim') {
@@ -486,6 +551,14 @@ export function openCad2D(opts = {}) {
       else if (tool === 'arc' || tool === 'dim') h += In('X', 'x') + In('Y', 'y') + B('Nokta koy', 'in-pt');
       else if (tool === 'text') h += In('Yazı', 'txt', 'text') + In('Yükseklik', 'th');
       else if (tool === 'offset') h += In('Ofset mesafesi', 'off');
+      else if (tool === 'hatch') h += In('Açı °', 'hang') + In('Aralık (mm)', 'hsp') + B('45°', 'hp-45') + B('0°', 'hp-0') + B('Çapraz kafes', 'hp-x');
+      else if (tool === 'rdim') h += B('Ø Çap', 'rd-1', F.rdia === '1') + B('R Yarıçap', 'rd-0', F.rdia !== '1');
+      else if (tool === 'array') {
+        h += B('▦ Dikdörtgen', 'am-rect', F.amode === 'rect') + B('◎ Dairesel', 'am-polar', F.amode === 'polar');
+        if (!sel.size) h += '<div class="lb" style="color:#fca5a5">Önce ☝ Seç ile çoğaltılacak varlıkları seç.</div>';
+        if (F.amode === 'rect') h += In('Satır', 'arows') + In('Sütun', 'acols') + In('Sütun aralığı X', 'adx') + In('Satır aralığı Y', 'ady') + B('✓ Uygula', 'in-arect', false, sel.size ? '' : 'disabled');
+        else h += In('Adet (asıl dahil)', 'an') + In('Toplam açı °', 'aang') + B('Döndürerek: ' + (F.arot === '1' ? 'evet' : 'hayır'), 'tg-arot', F.arot === '1') + '<div class="lb">Sonra dizinin merkezine dokun.</div>';
+      }
       else if (tool === 'fillet') h += In('Yarıçap (0 = keskin)', 'rad');
       else if (tool === 'autodim') {
         if (!auto || !auto.matches.length) h += '<div class="lb">Eşlenecek ölçü yok.</div>';
@@ -540,7 +613,7 @@ export function openCad2D(opts = {}) {
     if (ptrs.size > 2) return;
     const [sx, sy] = local(e);
     down = { sx, sy, moved: false };
-    const wantsPoint = pointTools.includes(tool) || (tool === 'offset' && pickA);
+    const wantsPoint = pointTools.includes(tool) || (tool === 'offset' && pickA) || (tool === 'array' && F.amode === 'polar' && sel.size > 0);
     if (wantsPoint) { aim = snapAt(sx, sy); draw(); }
     else panning = { sx, sy, ox: V.ox, oy: V.oy };
   });
@@ -700,7 +773,7 @@ export function openCad2D(opts = {}) {
             const d = [e.b[0] - e.a[0], e.b[1] - e.a[1]], L = Math.hypot(...d), n = [-d[1] / L, d[0] / L];
             const mm = [(e.a[0] + e.b[0]) / 2 - cx, (e.a[1] + e.b[1]) / 2 - cy];
             addEnt({ t: 'dim', a: e.a.slice(), b: e.b.slice(), off: (mm[0] * n[0] + mm[1] * n[1] >= 0 ? 1 : -1) * Math.max(hh * 3, size * 0.06), h: hh, layer: ly });
-          } else addEnt({ t: 'text', p: [e.c[0] + e.r * 0.75, e.c[1] + e.r * 0.75], h: hh, s: (e.t === 'circle' ? 'Ø' + fmt(2 * e.r) : 'R' + fmt(e.r)), layer: ly });
+          } else addEnt(autoRdim(e, hh));
         }
         auto = null; tool = 'setdim';
         changed(); fit(); refresh();
@@ -708,6 +781,17 @@ export function openCad2D(opts = {}) {
         return;
       }
       const i = +a.slice(3); if (auto.matches[i]) { auto.matches[i].on = !auto.matches[i].on; refresh(); } return;
+    }
+    if (a.startsWith('hp-')) { if (a === 'hp-x') { F.hang = String((parseFloat(F.hang) || 45) + 90); } else F.hang = a.slice(3); refresh(); if (a === 'hp-x') setHint('Açı 90° çevrildi: aynı alana bir kez daha dokununca çapraz kafes olur.'); return; }
+    if (a === 'rd-1' || a === 'rd-0') { F.rdia = a.slice(3); refresh(); return; }
+    if (a === 'am-rect' || a === 'am-polar') { F.amode = a.slice(3); refresh(); return; }
+    if (a === 'tg-arot') { F.arot = F.arot === '1' ? '0' : '1'; refresh(); return; }
+    if (a === 'in-arect') {
+      const r = Math.round(num('arows')), c = Math.round(num('acols')), dx = num('adx'), dy = num('ady');
+      if (!(r >= 1 && c >= 1 && r * c >= 2 && r * c <= 2000) || !isFinite(dx) || !isFinite(dy)) { setHint('Satır × sütun 2–2000 arası olmalı.', true); return; }
+      commit();
+      for (const en of arrayRect(selected(), r, c, dx, dy)) addEnt({ ...en, layer: en.layer });
+      changed(); refresh(); setHint(r + ' × ' + c + ' dizi yapıldı.'); return;
     }
     if (a === 'tg-adddim') { F.adddim = F.adddim === '1' ? '0' : '1'; refresh(); return; }
     if (a === 'in-setdim') {
@@ -743,7 +827,8 @@ export function openCad2D(opts = {}) {
           doc.ents = doc.ents.filter((x) => !(x.t === 'dim' && ((dist(x.a, e.a) < 1e-6 && dist(x.b, e.b) < 1e-6) || (dist(x.a, ne.a) < 1e-6 && dist(x.b, ne.b) < 1e-6))));
           addEnt({ t: 'dim', a: ne.a.slice(), b: ne.b.slice(), off, h: hh, layer: ly });
         } else {
-          addEnt({ t: 'text', p: [ne.c[0] + ne.r * 0.75, ne.c[1] + ne.r * 0.75], h: hh, s: (ne.t === 'circle' ? 'Ø' + fmt(2 * ne.r) : 'R' + fmt(ne.r)), layer: ly });
+          doc.ents = doc.ents.filter((x) => !(x.t === 'rdim' && dist(x.c, ne.c) < 1e-6));
+          addEnt(autoRdim(ne, hh));
         }
       }
       changed(); reset(); refresh(); setHint('Ölçü verildi. Başka bir çizgiye dokunarak devam et.'); return;
@@ -763,9 +848,9 @@ export function openCad2D(opts = {}) {
   });
   function scaleRef(e) { return e.t === 'line' ? dist(e.a, e.b) : 2 * e.r; }
   function scaleEnt(e, f) {
-    const o = JSON.parse(JSON.stringify(e)), m = (p) => [p[0] * f, p[1] * f];
-    for (const k of ['a', 'b', 'c', 'p']) if (o[k]) o[k] = m(o[k]);
+    const o = mapPoints(e, (p) => [p[0] * f, p[1] * f]);
     if (o.r) o.r *= f;
+    if (o.sp) o.sp *= f;
     if (o.t === 'dim') o.off *= f;
     if (o.t === 'text') o.h = (o.h || 5) * f;
     return o;
