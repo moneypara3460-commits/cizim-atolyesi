@@ -13,12 +13,13 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261109c';
-import { openSketch } from './sketch.js?v=20261109c';
-import { to3MF, toSTEP } from './export3d.js?v=20261109c';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109c';
-import { openCad2D } from './cad2d.js?v=20261109c';
-import { openCutOpt } from './cutopt-ui.js?v=20261109c';
+} from './logic.js?v=20261109d';
+import { openSketch } from './sketch.js?v=20261109d';
+import { to3MF, toSTEP } from './export3d.js?v=20261109d';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109d';
+import { openCad2D } from './cad2d.js?v=20261109d';
+import { openCutOpt } from './cutopt-ui.js?v=20261109d';
+import { createMfg } from './mfg-ui.js?v=20261109d';
 
 const APP_VER = '20261108o'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -763,6 +764,7 @@ function rebuild(refit) {
     }
     clean.computeBoundingBox();
     lastClean = clean;
+    rebuildCount++;
 
     let materials = matFor(vis[0].color);
     if (clean.groups.length) {
@@ -924,7 +926,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['mfg', 'Üretim']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -1142,10 +1144,13 @@ function renderPanel() {
         row('Ağırlık merkezi', mp.centroid ? 'X ' + fmtNum(toUnit(mp.centroid[0], settings.unit), 1) + '  Y ' + fmtNum(toUnit(mp.centroid[1], settings.unit), 1) + '  Z ' + fmtNum(toUnit(mp.centroid[2], settings.unit), 1) : '-') +
         row('Genel ölçü', lenText(sz.x) + ' × ' + lenText(sz.z) + ' × ' + lenText(sz.y));
     }
-    body += '<div class="lbl h">Üretim</div>' + btn('✂ Akıllı kesim optimizasyonu (profil boy / fire / maliyet)', 'cut-opt') +
+    body += '<div class="lbl h">Üretim</div>' + btn('🏭 Üretimi analiz et (çakışma, montaj, kaynak)', 'mfg-go') + btn('✂ Akıllı kesim optimizasyonu (profil boy / fire / maliyet)', 'cut-opt') +
       '<div class="lbl h">Dışa aktar</div>' + btn('📋 Parça listesi (CSV)', 'bom-csv') + btn('📐 DXF (ön / yan / üst)', 'dxf-out') +
       btn('🧊 STEP (SolidWorks, Fusion, FreeCAD)', 'step-out') + btn('🖨 3MF (3B yazıcı)', 'mf-out');
     hint = 'STEP yüzeyli (üçgen yüzlü) katı olarak yazılır: CAD programında açılır, ölçülür, montaja eklenir; ama yüzleri düzgün eğri değil, parametrik özellik ağacı yoktur. Kapalı olmayan modeller yüzey olarak gider. 3MF, Cura / PrusaSlicer / Bambu Studio içindir. Ağırlık tam dolu (içi dolu) katı için hesaplanır; 3B yazıcıda dolgu oranı ve duvar kalınlığı gerçek ağırlığı düşürür. DXF: AutoCAD, FreeCAD gibi programlarda açılır; gizli çizgiler ayrı katmandadır.';
+  } else if (tab === 'mfg') {
+    body = mfg.html();
+    hint = 'Üretilebilirlik kontrolü gerçek geometriyle yapılır ama bir ön kontroldür: kesin hata demek değildir, yapısal dayanımı göstermez. Sonuca dokununca kamera o bölgeye gider; kırmızı kutu problem bölgesi, turuncu parçalar ilgili parçalardır.';
   } else if (tab === 'part') {
     body = `<label class="f w2"><span>Parça adı</span><input type="text" data-k="name" data-t="text" value="${esc(p.name || '')}" placeholder="${esc(partName(p, idx))}"></label>` +
       `<div class="row" style="flex:1 0 100%;padding:0;flex-wrap:wrap">` +
@@ -1385,6 +1390,73 @@ function cutListHtml(p) {
     (c.cut.some((g) => g.cut !== '90°') ? '<div class="lbl" style="flex:1 0 100%">Gönyeli boylar uzun kenardan (dış) ölçüdür; testere payını ayrıca ekle.</div>' : '') +
     `<div class="lbl" style="flex:1 0 100%;font-size:13px">Ağırlık (çelik): <b>${fmtNum(c.kg, 2)} kg</b> · 6 m'lik boydan yaklaşık ${Math.ceil(c.totalLen / 6000 * 1.05)} boy</div>`;
 }
+/* ---- Akıllı Üretilebilirlik Kontrolü: model hazırlama, 3B işaretleme ---- */
+function geoTris(geo) {
+  const P = geo.attributes.position, idx = geo.index, total = idx ? idx.count : P.count;
+  const start = geo.drawRange.start || 0, count = Math.max(0, Math.min(isFinite(geo.drawRange.count) ? geo.drawRange.count : total - start, total - start));
+  const out = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) { const v = idx ? idx.getX(start + i) : start + i; out[i * 3] = P.getX(v); out[i * 3 + 1] = P.getY(v); out[i * 3 + 2] = P.getZ(v); }
+  return out;
+}
+let rebuildCount = 0;
+function mfgModel() {
+  const mates = [];
+  for (const A of parts) for (const m of A.mates || []) mates.push([A.id, m.b, m.t]);
+  let stock = 6000;
+  try { stock = Number((JSON.parse(localStorage.getItem('cizim:cutopt') || '{}').set || {}).stock) || 6000; } catch (e) { /* */ }
+  return {
+    parts: lastBrushes.map(({ p, geo }) => {
+      const m = partMat(p);
+      return { id: p.id, name: partName(p, parts.indexOf(p)), type: p.type, op: parts.indexOf(p) > 0 && p.op === 'sub' ? 'sub' : 'add', tris: geoTris(geo), p, material: { id: m.id, name: m.name, kind: m.kind }, warnings: bendWarnings(p) };
+    }),
+    mates, mateErr, stock, hiddenCount: parts.filter((q) => q.hidden).length,
+  };
+}
+const mfgGroup = new THREE.Group();
+scene.add(mfgGroup);
+const mfgRegionMat = new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0.28, depthTest: false, depthWrite: false });
+const mfgPartMat = new THREE.MeshBasicMaterial({ color: 0xf97316, transparent: true, opacity: 0.35, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+function mfgMark(x) {
+  mfgGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+  mfgGroup.clear();
+  if (!x) return;
+  const box = new THREE.Box3();
+  for (const id of x.parts || []) {
+    const b = lastBrushes.find((q) => q.p.id === id);
+    if (!b) continue;
+    const g = b.geo.clone();
+    mfgGroup.add(new THREE.Mesh(g, mfgPartMat));
+    g.computeBoundingBox(); if (!x.box) box.union(g.boundingBox);
+  }
+  if (x.box) {
+    const mn = new THREE.Vector3(...x.box.min), mx = new THREE.Vector3(...x.box.max), c = mn.clone().add(mx).multiplyScalar(0.5);
+    const sz = mx.clone().sub(mn).max(new THREE.Vector3(8, 8, 8));
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sz.x, sz.y, sz.z), mfgRegionMat);
+    m.position.copy(c); m.renderOrder = 999;
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(sz.x, sz.y, sz.z)), new THREE.LineBasicMaterial({ color: 0xef4444, depthTest: false }));
+    e.position.copy(c); e.renderOrder = 1000;
+    mfgGroup.add(m, e);
+    box.setFromCenterAndSize(c, sz.clone().multiplyScalar(2.5).max(new THREE.Vector3(40, 40, 40)));
+  }
+  if (!box.isEmpty()) fit(box);
+}
+const mfg = createMfg({
+  getModel: mfgModel,
+  mark: mfgMark,
+  selectPart(id) { if (parts.some((q) => q.id === id)) { sel = id; refreshOverlays(); renderPanel(); toast('Parça seçildi: düzenlemek için Ölçü / Konum sekmesine geç'); } },
+  render: () => { if (tab === 'mfg') renderPanel(); },
+  toast,
+  name: () => projName || 'model',
+  version: () => rebuildCount,
+  openCutOpt: () => openCutOpt({ name: fileBase(), fromCad: cadCutPieces }),
+  snapshot() {
+    renderer.render(scene, camera);
+    const src = renderer.domElement, c = document.createElement('canvas');
+    c.width = src.width; c.height = src.height; c.getContext('2d').drawImage(src, 0, 0);
+    return c;
+  },
+});
+
 // projedeki bütün profil iskeletlerinin kesim listesi → kesim optimizasyonu girdisi
 const MAT_SHORT = { celik: 'Çelik', paslanmaz: 'Paslanmaz', aluminyum: 'Alüminyum', al6061: 'Alüminyum', pirinc: 'Pirinç', bakir: 'Bakır', titanyum: 'Titanyum' };
 function cadCutPieces() {
@@ -2748,6 +2820,8 @@ document.addEventListener('click', (e) => {
   }
 
   const act = t.dataset.act;
+  if (act === 'mfg-go') { tab = 'mfg'; renderPanel(); mfg.run(); return; }
+  if (act && act.startsWith('mfg-') && mfg.act(act)) return;
   if (!act) return;
   const p = cur();
 

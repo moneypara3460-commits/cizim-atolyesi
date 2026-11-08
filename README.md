@@ -80,6 +80,20 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **🔢 Ölçü rakamlarını oku** (açık gelir): kağıda elle yazılmış ölçü rakamları telefonda çalışan küçük bir yapay zekâ ile okunur (turuncu kutuyla gösterilir), çizgi olarak gelmez. Her rakam en yakın çizgiye (uzunluk), daireye (çap) veya yaya (yarıçap) eşlenir; listeden yanlış olan kapatılır, **Ölçüleri uygula** ile en uzun çizgi ölçeği belirler, diğerleri esnetilir, ölçüler (daire / yay için Ø / R ölçüsü) eklenir
 - Sınırlar: rakamlar yatay ve çizgiye değmeden yazılmalı (değen rakam okunmayabilir); Ø / R işaretleri ve harfler okunmaz; eşleşmeleri kontrol et. Ölçü okları / taramalar çizgi olarak gelebilir, silinmesi gerekir; kareli / çizgili kağıtta hassasiyet düşürülmeli
 
+**🏭 Akıllı Üretilebilirlik Kontrolü (Üretim sekmesi → ÜRETİMİ ANALİZ ET, ya da Hesap → Üretim)**
+- Model gerçek geometriyle (dünya koordinatındaki üçgenler, BVH ağacı) incelenir; analiz sırasında ilerleme çubuğu gösterilir
+- **Çakışma:** iki parçanın ortak malzeme hacmi ızgara örneklemesi + ışın paritesi ile ölçülür; yüzeyi değen parçalar (kaynak / montaj teması) çakışma sayılmaz (iç noktalar yüzeyden en az 0,05 mm içeride olmalı, en az 0,2 mm batma). Çakışma bölgesinin kalınlığı (kaç mm kaydırmalı) ve malzemeye giriş derinliği (içi boş profilde farklıdır) ayrı verilir
+- **Boşluk:** tam üçgen–üçgen en kısa uzaklık; 0,05–2 mm arası "neredeyse değiyor" uyarısı, eşleşmesi olup değmeyen parçalar, hiçbir parçaya değmeyen (havada) parçalar
+- **Montaj:** parçalar 6 ana eksende tek tek sökülmeye çalışılır (projeksiyon ızgarasıyla süpürme testi); kaynaklı ve tek gövde gruplar birlikte hareket eder. Takılamayan parçalar uyarılır, önerilen montaj sırası verilir. Döndürerek takma denenmez (raporda yazar)
+- **Kaynak erişimi (uyarı):** iskelet bağlantılarında ve birbirine değen metal profil / sac parçalarda, her kenardan yarım küre içinde torç ışınları (Ø12 mm meme, 150 mm boy) atılır; açık yön oranı düşükse "erişim zor" uyarısı. Çelik–alüminyum teması kritik sayılır
+- **Delik / cıvata:** oyuk silindirlerde cıvata başı ve somun alanı (Ø1,8·d × 1,2·d), kenar mesafesi (1,2·d), standart matkap çapı, hiçbir parçayı kesmeyen oyuk
+- **Ölçü / profil:** boş / sıfır ölçü, uygulanamayan iskelet ölçüsü, geçersiz alt kuşak, uygulanamayan gönye, stok boyundan (kesim optimizasyonundaki stok boyu) uzun ya da çok kısa eleman, ince boru et kalınlığı, sac büküm uyarıları, çelişen montaj eşleşmeleri
+- Sonuçlar 🔴 kritik / 🟠 uyarı / 🟢 öneri kartlarıdır: başlık, açıklama, parça, konum, çözüm önerisi. Karta dokununca kamera bölgeye gider, problem bölgesi kırmızı kutu, ilgili parçalar turuncu görünür; parça seçilebilir, "çözüldü" işaretlenebilir, yeniden analiz edilebilir. Model değişince "sonuçlar eski" uyarısı çıkar
+- "Yapılan kontroller" listesi: her kontrolün yapıldığı / kısmen yapıldığı / yapılmadığı açıkça yazılır (ör. kapalı olmayan yüzeyde çakışma testi yapılamaz, yapısal dayanım kapsam dışı)
+- **Parçalar modu:** otomatik (profil, sac, boru ve eşleşmeli parçalar ayrı; iç içe basit parçalar tek gövde) ya da "her parça ayrı"
+- **📄 PDF rapor:** özet, genel sonuç, 3B görüntü, bütün bulgular ve yapılan kontroller
+- Sınırlar: ön kontroldür, kesin hata iddiası değildir; yapısal dayanım, kaynak dikiş kalitesi ve toleranslar kapsam dışı; kaynak planlama ayrı bir özellik olacak
+
 **✂ Akıllı kesim optimizasyonu (profil iskelet → Tür → ✂ Kesim optimizasyonu, ya da Hesap → Üretim)**
 - Kesilecek parçalar **çizimden otomatik** alınır (projedeki bütün profil iskeletlerinin kesim listesi; gönyeli boylar uzun kenardan) ya da **elle** eklenir (profil, malzeme, ad, boy, adet). İkisi birlikte kullanılabilir
 - Farklı kesit, et kalınlığı ya da malzeme ayrı grupta optimize edilir (40×40×2 ile 40×40×3 asla aynı boydan kesilmez). Uygulamanın iskelet profillerine ek olarak L, U, lama, dolu mil ve "Diğer" (adını yaz) seçilebilir
