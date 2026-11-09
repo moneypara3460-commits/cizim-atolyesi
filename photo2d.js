@@ -2,8 +2,8 @@
 // Adımlar: kağıt köşeleri -> perspektif düzeltme -> uyarlamalı eşikleme (gölge temizliği) -> küçük lekeleri atma
 //          -> inceltme (iskelet) -> yol takibi -> çizgi / yay / daire uydurma -> düzgünleştirme (yatay/dikey, uç birleştirme)
 // Saf fonksiyonlar; DOM gerektirmez (tests/photo2d.test.mjs).
-import { arcFrom3 } from './cad2d-geom.js?v=20261109j';
-import { DIGIT_NET } from './digits-model.js?v=20261109j';
+import { arcFrom3 } from './cad2d-geom.js?v=20261109k';
+import { DIGIT_NET } from './digits-model.js?v=20261109k';
 
 const TAU = Math.PI * 2;
 const normA = (a) => { a %= TAU; return a < 0 ? a + TAU : a; };
@@ -15,6 +15,41 @@ export function toGray(rgba, w, h) {
   return g;
 }
 // 4 nokta -> 4 nokta izdüşüm matrisi (src -> dst), 3x3 dizi (h33 = 1)
+// Renge duyarlı mürekkep haritası (0 = koyu mürekkep, 255 = kağıt). Gri yerine kullanılır:
+// 1) yerel kağıt parlaklığına bölünür → gölge ve ışık farkı silinir; 2) kalem rengi (mavi, siyah, kırmızı…)
+// kağıttan doygunluk / ton farkıyla ayrılır → soluk defter çizgileri ve basılı sayfa numaraları zayıflar.
+export function inkGray(rgba, w, h) {
+  const N = w * h, Y = new Float32Array(N), S = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const r = rgba[i * 4], g = rgba[i * 4 + 1], b = rgba[i * 4 + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    Y[i] = 0.299 * r + 0.587 * g + 0.114 * b; S[i] = mx > 0 ? (mx - mn) / mx : 0;
+  }
+  // kağıt parlaklığı ve doygunluğu: kalem izinden geniş pencerede en parlak / ortanca (ayrılabilir max + kutu bulanıklığı)
+  const R = Math.max(4, Math.round(Math.max(w, h) / 90));
+  // morfolojik kapama (genişlet + aşındır): ince koyu kalem izini doldurur, gölge sınırındaki basamağı korur
+  const ext = (src, sg) => { const t = new Float32Array(N), o = new Float32Array(N);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let m = sg > 0 ? -1e9 : 1e9; for (let k = Math.max(0, x - R); k <= Math.min(w - 1, x + R); k++) { const v = src[y * w + k]; if (sg > 0 ? v > m : v < m) m = v; } t[y * w + x] = m; }
+    for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) { let m = sg > 0 ? -1e9 : 1e9; for (let k = Math.max(0, y - R); k <= Math.min(h - 1, y + R); k++) { const v = t[k * w + x]; if (sg > 0 ? v > m : v < m) m = v; } o[y * w + x] = m; }
+    return o; };
+  const maxF = (src) => ext(ext(src, 1), -1);
+  const box = (src, r) => { const t = new Float32Array(N), o = new Float32Array(N);
+    for (let y = 0; y < h; y++) { let s = 0, n = 0; for (let k = 0; k <= Math.min(w - 1, r); k++) { s += src[y * w + k]; n++; } for (let x = 0; x < w; x++) { t[y * w + x] = s / n; const a = x + r + 1, b = x - r; if (a < w) { s += src[y * w + a]; n++; } if (b >= 0) { s -= src[y * w + b]; n--; } } }
+    for (let x = 0; x < w; x++) { let s = 0, n = 0; for (let k = 0; k <= Math.min(h - 1, r); k++) { s += t[k * w + x]; n++; } for (let y = 0; y < h; y++) { o[y * w + x] = s / n; const a = y + r + 1, b = y - r; if (a < h) { s += t[a * w + x]; n++; } if (b >= 0) { s -= t[b * w + x]; n--; } } }
+    return o; };
+  const bg = box(maxF(Y), Math.max(1, R >> 2)), bgS = box(S, R * 2);
+  // kalemin rengi: koyu (göreli parlaklık < 0,7) piksellerin ortalama doygunluk fazlası; belirginse (renkli kalem) renk ağırlığı verilir
+  let sumS = 0, cnt = 0;
+  for (let i = 0; i < N; i++) if (Y[i] < bg[i] * 0.7) { sumS += S[i] - bgS[i]; cnt++; }
+  const inkSat = cnt > 50 ? sumS / cnt : 0, colorPen = inkSat > 0.12;
+  const out = new Uint8ClampedArray(N);
+  for (let i = 0; i < N; i++) {
+    let v = Y[i] / Math.max(1, bg[i]);                       // 1 = kağıt, küçük = koyu
+    if (colorPen) { const ds = (S[i] - bgS[i]) / inkSat; v -= 0.35 * Math.max(0, Math.min(1.2, ds)) - 0.12 * Math.max(0, -ds); }
+    out[i] = Math.max(0, Math.min(255, Math.round(v * 255)));
+  }
+  out.colorPen = colorPen; out.inkSat = inkSat;
+  return out;
+}
 export function homography(src, dst) {
   const A = [], b = [];
   for (let i = 0; i < 4; i++) {
@@ -492,10 +527,17 @@ export function beautify(ents0, tol, angDeg = 5) {
 
 /* ---------- el yazısı rakamlar (ölçü yazıları) ---------- */
 // Bileşenin piksellerini 16x16 girdiye çevirir (eğitimdeki gibi: kutuya kırp, oranı koruyarak 14 px'e sığdır, ortala)
-export function glyphVector(c, w) {
-  const gw = c.maxX - c.minX + 1, gh = c.maxY - c.minY + 1;
+// rot: yazının döndürülme açısı (0, 90 = saat yönünde yan yazı, 180, 270); glif okuma yönüne çevrilir
+export function glyphVector(c, w, rot = 0) {
+  const W0 = c.maxX - c.minX + 1, H0 = c.maxY - c.minY + 1, sw = rot === 90 || rot === 270;
+  const gw = sw ? H0 : W0, gh = sw ? W0 : H0;
   const g = new Float32Array(gw * gh);
-  for (const q of c.px) { const x = q % w - c.minX, y = ((q / w) | 0) - c.minY; g[y * gw + x] = 1; }
+  for (const q of c.px) {
+    const x = q % w, y = (q / w) | 0;
+    const u = rot === 90 ? y - c.minY : rot === 270 ? c.maxY - y : rot === 180 ? c.maxX - x : x - c.minX;
+    const v = rot === 90 ? c.maxX - x : rot === 270 ? x - c.minX : rot === 180 ? c.maxY - y : y - c.minY;
+    g[v * gw + u] = 1;
+  }
   const k = 14 / Math.max(gw, gh), nw = Math.max(1, Math.round(gw * k)), nh = Math.max(1, Math.round(gh * k));
   const out = new Float32Array(256), ox = (16 - nw) >> 1, oy = (16 - nh) >> 1;
   const kx = gw / nw, ky = gh / nh;   // hedef pikselin kaynakta kapladığı alan (alan ortalaması)
@@ -516,22 +558,21 @@ export function glyphVector(c, w) {
 export function classifyDigit(vec) {
   const N = DIGIT_NET, H = new Float32Array(N.n_h);
   for (let j = 0; j < N.n_h; j++) { let z = N.b1[j]; for (let i = 0; i < 256; i++) if (vec[i]) z += vec[i] * N.W1[i * N.n_h + j]; H[j] = z > 0 ? z : 0; }
-  const o = new Float32Array(10);
-  for (let c = 0; c < 10; c++) { let z = N.b2[c]; for (let j = 0; j < N.n_h; j++) z += H[j] * N.W2[j * 10 + c]; o[c] = z; }
+  const K = N.n_out || 10, o = new Float32Array(K);   // 0–9 rakam, 10 = yan / ters glif (rakam değil), 11 = Ø
+  for (let c = 0; c < K; c++) { let z = N.b2[c]; for (let j = 0; j < N.n_h; j++) z += H[j] * N.W2[j * K + c]; o[c] = z; }
   let mx = -Infinity; for (const v of o) mx = Math.max(mx, v);
-  let sum = 0; for (let c = 0; c < 10; c++) { o[c] = Math.exp(o[c] - mx); sum += o[c]; }
-  let best = 0; for (let c = 1; c < 10; c++) if (o[c] > o[best]) best = c;
+  let sum = 0; for (let c = 0; c < K; c++) { o[c] = Math.exp(o[c] - mx); sum += o[c]; }
+  let best = 0; for (let c = 1; c < K; c++) if (o[c] > o[best]) best = c;
   return { d: best, p: o[best] / sum };
 }
-// Bileşenlerden yatay sayı grupları bulur. Dönüş: { texts: [{ s, value, box, conf }], used: Set(bileşen) }
-export function findNumbers(list, maxDim) {
+// okuma çerçevesine göre kutu (X okuma yönü, Y glif aşağısı)
+const rbox = (c, rot) => rot === 90 ? { minX: c.minY, maxX: c.maxY, minY: -c.maxX, maxY: -c.minX } : rot === 270 ? { minX: -c.maxY, maxX: -c.minY, minY: c.minX, maxY: c.maxX } : rot === 180 ? { minX: -c.maxX, maxX: -c.minX, minY: -c.maxY, maxY: -c.minY } : c;
+function numbersAt(list, maxDim, rot) {
   const hMin = maxDim * 0.008, hMax = maxDim * 0.07;
-  const cand = list.filter((c) => {
-    const gh = c.maxY - c.minY + 1, gw = c.maxX - c.minX + 1;
-    return gh >= hMin && gh <= hMax && gw <= gh * 1.3 && c.n >= 6;
-  });
+  const B = new Map(list.map((c) => [c, rbox(c, rot)]));
+  const cand = list.filter((c) => { const b = B.get(c), gh = b.maxY - b.minY + 1, gw = b.maxX - b.minX + 1; return gh >= hMin && gh <= hMax && gw <= gh * 1.3 && c.n >= 6; });
   const dots = list.filter((c) => Math.max(c.maxX - c.minX, c.maxY - c.minY) + 1 < hMin * 1.2 && c.n >= 2);
-  cand.sort((a, b) => a.minX - b.minX);
+  cand.sort((a, b) => B.get(a).minX - B.get(b).minX);
   const used = new Array(cand.length).fill(false), groups = [];
   for (let i = 0; i < cand.length; i++) {
     if (used[i]) continue;
@@ -539,44 +580,130 @@ export function findNumbers(list, maxDim) {
     const g = [cand[i]];
     for (let j = i + 1; j < cand.length; j++) {
       if (used[j]) continue;
-      const last = g[g.length - 1], c = cand[j];
+      const last = B.get(g[g.length - 1]), c = B.get(cand[j]);
       const h1 = last.maxY - last.minY + 1, h2 = c.maxY - c.minY + 1, hh = Math.max(h1, h2);
       const ov = Math.min(last.maxY, c.maxY) - Math.max(last.minY, c.minY);
       if (c.minX - last.maxX > hh * 0.9) break;
-      if (ov < Math.min(h1, h2) * 0.5 || h1 / h2 > 2 || h2 / h1 > 2) continue;
-      used[j] = true; g.push(c);
+      if (ov < Math.min(h1, h2) * 0.5 || h1 / h2 > (g.length === 1 ? 2.6 : 2) || h2 / h1 > 2) continue;   // ilk glif Ø olabilir (büyük)
+      used[j] = true; g.push(cand[j]);
     }
     groups.push(g);
   }
-  const texts = [], usedSet = new Set();
-  for (const g of groups) {
-    let s = '', conf = 1;
+  const texts = [];
+  for (let g of groups) {
+    let s = '', conf = 1, dia = false;
+    const g0 = g;   // Ø işareti dahil tüm bileşenler (aynı glif başka okumada tekrar kullanılmasın)
+    const cls = g.map((c) => classifyDigit(glyphVector(c, c.w, rot)));
+    // Ø işareti: ilk glif Ø sınıfı (ya da "0" / belirgin büyük halka) → çap işareti
+    if (g.length >= 2) {
+      const hs = g.map((c) => { const b = B.get(c); return b.maxY - b.minY + 1; }), rest = hs.slice(1).sort((a, b) => a - b)[(hs.length - 1) >> 1];
+      const b0 = B.get(g[0]), fat1 = cls[0].d === 1 && (b0.maxX - b0.minX + 1) > (b0.maxY - b0.minY + 1) * 0.6;   // "1" bu kadar geniş olmaz: Ø
+      if (cls[0].d === 11 || cls[0].d === 0 || fat1 || (hs[0] > rest * 1.25 && hasHole(g[0], 1) && !(cls[0].d >= 1 && cls[0].d <= 9 && cls[0].d !== 6 && cls[0].d !== 9 && cls[0].d !== 8 && cls[0].p > 0.97))) { dia = true; g = g.slice(1); cls.shift(); }
+    }
+    for (let k = 0; k < cls.length; k++) if (cls[k].d === 11) cls[k] = { d: 0, p: hasHole(g[k], 1) ? Math.max(cls[k].p, 0.9) : cls[k].p };   // baştaki dışında Ø yok: halka biçimli "0"
+    // basık / yatık yazılmış "0": içi boş, yuvarlağa yakın glif reddedilmişse 0 say (rakam grubunun içinde)
+    if (g.length >= 2) for (let k = 1; k < g.length; k++) if (cls[k].d === 10 && cls[k].p < 0.95) { const b = B.get(g[k]), r = (b.maxX - b.minX + 1) / (b.maxY - b.minY + 1); if (r > 0.45 && r < 1.8 && hasHole(g[k], 1)) cls[k] = { d: 0, p: 0.85 }; }
+    if (cls.some((c) => c.d === 10)) continue;   // yan / ters glif: bu yönde okunmaz
     for (let k = 0; k < g.length; k++) {
-      const r = classifyDigit(glyphVector(g[k], g[k].w));
-      s += r.d; conf *= r.p;
-      if (k + 1 < g.length) { // aradaki ondalık nokta / virgül
-        const a = g[k], b = g[k + 1], hh = Math.max(a.maxY - a.minY, b.maxY - b.minY) + 1;
-        if (dots.some((d) => d.minX >= a.maxX - 1 && d.maxX <= b.minX + 1 && d.minY > a.minY + hh * 0.55)) s += ',';
+      s += cls[k].d; conf *= cls[k].p;
+      if (k + 1 < g.length) {
+        const a = B.get(g[k]), b2 = B.get(g[k + 1]), hh = Math.max(a.maxY - a.minY, b2.maxY - b2.minY) + 1;
+        if (dots.some((d0) => { const d = rbox(d0, rot); return d.minX >= a.maxX - 1 && d.maxX <= b2.minX + 1 && d.minY > a.minY + hh * 0.55; })) s += ',';
       }
     }
+    if (!g.length) continue;
     const box = { minX: Math.min(...g.map((c) => c.minX)), maxX: Math.max(...g.map((c) => c.maxX)), minY: Math.min(...g.map((c) => c.minY)), maxY: Math.max(...g.map((c) => c.maxY)) };
-    if (g.length === 1 && (s === '0' || s === '1')) continue;          // küçük daire / kısa çizgiyle karışır
+    if (g.length === 1 && (s === '0' || s === '1') && !dia) continue;          // küçük daire / kısa çizgiyle karışır
     if (conf < Math.pow(0.8, g.length) || /^0\d/.test(s)) continue;
     const value = parseFloat(s.replace(',', '.'));
     if (!(value > 0)) continue;
-    texts.push({ s, value, box, conf });
-    for (const c of g) usedSet.add(c);
+    const ch = g.map((c) => { const b = B.get(c); return b.maxY - b.minY + 1; });
+    texts.push({ s, value, box, conf, rot, dia, comps: g0, nd: g.length, gh: Math.max(...ch) });
   }
-  return { texts, used: usedSet };
+  return texts;
 }
-
+// Bileşenlerden sayı grupları bulur (yatay ve yan yazılmış: 0°, 90°, 270°, 180°). Aynı bileşen tek okumaya girer: güven × uzunlukça en iyisi seçilir.
+// Dönüş: { texts: [{ s, value, box, conf, rot, dia }], used: Set(bileşen) }
+export function findNumbers(list, maxDim, rots = [0, 90, 270, 180]) {
+  const all = [];
+  for (const rot of rots) for (const t of numbersAt(list, maxDim, rot)) all.push(t);
+  const base = (t) => Math.pow(t.conf, 1 / t.nd) * (1 + 0.5 * (t.nd - 1));
+  // baskın yazı yönü: güvenilir çok haneli okumaların oylaması (bir çizimdeki ölçüler çoğunlukla aynı yönde yazılır)
+  const vote = new Map();
+  for (const t of all) if (t.nd >= 2 && t.conf > 0.85) vote.set(t.rot, (vote.get(t.rot) || 0) + base(t));
+  let dom = 0, dv = 0; for (const [r, v] of vote) if (v > dv) { dv = v; dom = r; }
+  const score = (t) => base(t) * (t.rot === dom ? 1.4 : t.rot === 0 ? 1 : 0.75);
+  // ters (180°) okuma ancak çizimin baskın yönü de tersse geçerli; aksi halde 6↔9 karışmaları üretir. Baskının tam tersi yön de atılır.
+  const opp = (dom + 180) % 360;
+  for (let i = all.length - 1; i >= 0; i--) { const r = all[i].rot; if ((r === 180 && dom !== 180) || (r === opp && dom !== 0 && all[i].conf < 0.97)) all.splice(i, 1); }
+  all.sort((a, b) => score(b) - score(a));
+  const usedSet = new Set(), texts = [];
+  for (const t of all) {
+    if (t.comps.some((c) => usedSet.has(c))) continue;
+    for (const c of t.comps) usedSet.add(c);
+    texts.push(t);
+  }
+  // tek başına duran Ø işareti: deliği olan glif, sayının hemen önünde (okuma yönünde) → çap
+  const hMin = maxDim * 0.008, hMax = maxDim * 0.09;
+  for (const t of texts) {
+    if (t.dia) continue;
+    const tb = rbox(t.box, t.rot), th = tb.maxY - tb.minY + 1;
+    const pre = list.find((c) => {
+      if (usedSet.has(c) && !t.comps.includes(c)) { const other = texts.find((o) => o !== t && o.comps.includes(c)); if (!other || other.nd > 1) return false; }
+      if (t.comps.includes(c)) return false;
+      const b = rbox(c, t.rot), gh = b.maxY - b.minY + 1, gw = b.maxX - b.minX + 1;
+      if (gh < hMin || gh > hMax || gw > gh * 1.8 || gh > th * 2.2) return false;
+      const gap = tb.minX - b.maxX, ov = Math.min(b.maxY, tb.maxY) - Math.max(b.minY, tb.minY);
+      return gap > -th * 0.3 && gap < th * 1.6 && ov > Math.min(gh, th) * 0.4 && (classifyDigit(glyphVector(c, c.w, t.rot)).d === 11 || hasHole(c));
+    });
+    if (pre) {
+      t.dia = true;
+      const other = texts.find((o) => o !== t && o.comps.includes(pre)); if (other) other.drop = true;
+      usedSet.add(pre); t.box = { minX: Math.min(t.box.minX, pre.minX), maxX: Math.max(t.box.maxX, pre.maxX), minY: Math.min(t.box.minY, pre.minY), maxY: Math.max(t.box.maxY, pre.maxY) };
+    }
+  }
+  return { texts: texts.filter((t) => !t.drop).map((t) => ({ s: t.s, value: t.value, box: t.box, conf: t.conf, rot: t.rot, dia: t.dia })), used: usedSet, dominant: dom };
+}
+// bileşenin içinde kapalı boşluk var mı (0, 6, 8, 9, Ø, halka)
+export function hasHole(c, dil = 0) {
+  const gw = c.maxX - c.minX + 3 + 2 * dil, gh = c.maxY - c.minY + 3 + 2 * dil, m = new Uint8Array(gw * gh);
+  for (const q of c.px) { const x = q % c.w - c.minX + 1 + dil, y = ((q / c.w) | 0) - c.minY + 1 + dil; for (let dy = -dil; dy <= dil; dy++) for (let dx = -dil; dx <= dil; dx++) m[(y + dy) * gw + x + dx] = 1; }
+  const st = [0]; m[0] = 2;
+  while (st.length) { const q = st.pop(), x = q % gw, y = (q / gw) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue; const k = ny * gw + nx; if (!m[k]) { m[k] = 2; st.push(k); } } }
+  let holes = 0; for (let i = 0; i < m.length; i++) if (!m[i]) holes++;
+  return holes >= Math.max(4, (gw * gh) * 0.03);
+}
+export function otsu(gray) {
+  const hist = new Float64Array(256); for (const v of gray) hist[v]++;
+  const N = gray.length; let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
+  let sB = 0, wB = 0, best = 0, T = 128;
+  for (let t = 0; t < 256; t++) { wB += hist[t]; if (!wB) continue; const wF = N - wB; if (!wF) break; sB += t * hist[t]; const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) ** 2; if (v > best) { best = v; T = t; } }
+  return T;
+}
 /* ---------- tüm akış ---------- */
 // gray: düzeltilmiş kağıt görüntüsü (w × h). mmPerPx: ölçek. Dönüş: { ents (mm, Y yukarı), stats }
 export function vectorize(gray, w, h, opts = {}) {
   const k = opts.sens ?? 0.15;
   const maxDim = Math.max(w, h);
-  const bin = adaptiveThreshold(gray, w, h, Math.max(15, Math.round(maxDim / 14)) | 1, k);
+  let bin;
+  if (opts.ink) {   // mürekkep haritası (inkGray): gölgesiz → tek eşik (Otsu); hassasiyet eşiği kaydırır
+    const T = Math.min(185, Math.max(50, otsu(gray) * (0.7 + 2 * k)));
+    bin = new Uint8Array(w * h); for (let i = 0; i < bin.length; i++) bin[i] = gray[i] < T ? 1 : 0;
+  } else bin = adaptiveThreshold(gray, w, h, Math.max(15, Math.round(maxDim / 14)) | 1, k);
   const cl = cleanComponents(bin, w, h, Math.max(4, maxDim * (opts.minSpan ?? 0.03)), opts.dropBorder !== false);
+  if (opts.ink) {
+    // kağıt kenarına değen lekeler (köşe gölgesi) ve kenar boşluğundaki küçük basılı yazılar (sayfa / satır numarası) atılır
+    const mx = w * 0.075, my = h * 0.05;
+    for (const c of cl.list) {
+      const touch = c.minX <= 1 || c.minY <= 1 || c.maxX >= w - 2 || c.maxY >= h - 2;
+      const inMargin = (c.maxX < mx || c.minX > w - mx || c.maxY < my || c.minY > h - my) && c.span < maxDim * 0.05;
+      // tamamen kağıt kenarına yapışık bantta kalan (köşe biraz içeriden seçilince kalan kağıt kenarı / gölge çizgisi)
+      const bx = w * 0.025, by = h * 0.025;
+      const edgeBand = c.maxX < bx || c.minX > w - bx || c.maxY < by || c.minY > h - by;
+      if (touch || inMargin || edgeBand) { if (c.keep) for (const q of c.px) cl.bin[q] = 0; c.keep = false; c.drop = true; }
+    }
+    cl.list = cl.list.filter((c) => !c.drop);
+  }
   // ölçü rakamları: küçük ve orta boy bileşenlere bakılır; rakam olanlar çizimden çıkarılır
   let texts = [];
   if (opts.readNumbers !== false) {
@@ -595,6 +722,6 @@ export function vectorize(gray, w, h, opts = {}) {
     ents.push(...fitPath(pts, tolPx * s, maxDim * s * 2));
   }
   const clean = opts.beautify === false ? ents : beautify(ents, tolPx * s, opts.angDeg ?? 5);
-  const tx = texts.map((t) => ({ s: t.s, value: t.value, conf: t.conf, p: [((t.box.minX + t.box.maxX) / 2) * s, (h - 1 - (t.box.minY + t.box.maxY) / 2) * s], h: (t.box.maxY - t.box.minY + 1) * s, box: t.box }));
+  const tx = texts.map((t) => ({ s: t.s, value: t.value, conf: t.conf, rot: t.rot || 0, dia: !!t.dia, p: [((t.box.minX + t.box.maxX) / 2) * s, (h - 1 - (t.box.minY + t.box.maxY) / 2) * s], h: (t.box.maxY - t.box.minY + 1) * s, box: t.box }));
   return { ents: clean, texts: tx, stats: { comps: cl.comps, kept: cl.kept, paths: paths.length, raw: ents.length, out: clean.length, numbers: tx.length } };
 }

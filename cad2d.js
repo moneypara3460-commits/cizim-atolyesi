@@ -1,12 +1,12 @@
 // 2B Çizim (AutoCAD tarzı) — tam ekran çizim alanı.
 // Kullanım: openCad2D({ onExtrude(draw), onClose() })  draw: kroki biçimi (sketch.js / validateDraw)
-import { fmtNum } from './logic.js?v=20261109j';
-import { validateDraw } from './sketch.js?v=20261109j';
+import { fmtNum } from './logic.js?v=20261109k';
+import { validateDraw } from './sketch.js?v=20261109k';
 import {
   arcFrom3, trimEntity, extendEntity, offsetEntity, filletLines, transformEntity, moveFn, rotateFn, mirrorFn,
   stretchToLength, setRadius, matchDims, applyDims, findHatchRegion, hatchSegs, pointInPoly, rdimParts, rdimText, angDimFrom, adimParts, adimText, adimTextPos, mapPoints, arrayRect, arrayPolar, snapPoints, nearestOn, closedLoops, toDXF, parseDXF, dimLine, dimParts, dimText, arcSpan, arcEnds, entBBox, dist, normA, ACI,
-} from './cad2d-geom.js?v=20261109j';
-import { openPhotoImport } from './photoimport.js?v=20261109j';
+} from './cad2d-geom.js?v=20261109k';
+import { openPhotoImport } from './photoimport.js?v=20261109k';
 
 const KEY = 'cizim:2d';
 const CSS = `
@@ -866,6 +866,14 @@ export function openCad2D(opts = {}) {
     openPhotoImport(f, {
       onDone(ents, info) {
         commit();
+        if (info.part) {   // temiz parça: dış şekil + delikler + ölçüler hazır geldi
+          if (!doc.layers.some((l) => l.name === 'Ölçü')) doc.layers.push({ name: 'Ölçü', aci: 4, lt: 'CONTINUOUS' });
+          for (const en of ents) { const o = { ...en }; const isDim = !!o._dim; for (const k of Object.keys(o)) if (k[0] === '_') delete o[k]; if (isDim) o.layer = 'Ölçü'; addEnt(o); }
+          changed(); fit(); tab = 'edit'; tool = 'setdim'; reset(); refresh();
+          const p = info.part;
+          setHint(`Parça çizildi: ${p.w} × ${p.h} mm${p.holes.length ? ', ' + p.holes.length + ' delik' : ''}. Ölçüler "Ölçü" katmanında. Düzeltmek için ölçüye / çizgiye dokunup düzenle; bitince 🧊 3B.`);
+          return;
+        }
         const added = ents.map((en) => addEnt({ ...en }));
         const texts = info.texts || [];
         if (texts.length && !doc.layers.some((l) => l.name === 'Okunan ölçü')) doc.layers.push({ name: 'Okunan ölçü', aci: 30, lt: 'CONTINUOUS' });

@@ -75,10 +75,13 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 **Kağıttan çizim — fotoğraftan 2B / 3B (2B Çizim → Dosya → 📷 Fotoğraftan çizim)**
 - Kağıda elle çizilmiş çizimin fotoğrafı çekilir ya da galeriden seçilir; her şey telefonda, internetsiz yapılır
 - Kağıdın köşeleri otomatik bulunur (sarı noktalar sürüklenerek düzeltilir, sürüklerken büyüteç), eğik fotoğraf düz kağıda çevrilir (A4 dikey / yatay / serbest)
-- Gölge temizlenir (uyarlamalı eşik), küçük işaretler ve el yazısı rakamlar ayıklanır, kalem izi inceltilir, çizgiler takip edilip **düz çizgi / yay / daire** olarak tanınır; yataya / dikeye yakın çizgiler düzlenir, yakın uçlar birleştirilir, yayın teğet devamı ve kılçıklar temizlenir
+- **Mürekkep ayırma:** kağıt arka planı morfolojik kapamayla bulunur (el / telefon gölgesi silinir), mavi / renkli tükenmez rengiyle ayrılır, çizgili / kareli defter satırları ve kenar boşluğundaki basılı sayfa numaraları atılır
+- Gölge temizlenir, küçük işaretler ve el yazısı rakamlar ayıklanır, kalem izi inceltilir, çizgiler takip edilip **düz çizgi / yay / daire** olarak tanınır; yataya / dikeye yakın çizgiler düzlenir, yakın uçlar birleştirilir, yayın teğet devamı ve kılçıklar temizlenir
 - Sonuç 2B çizime normal varlık olarak gelir (düzenlenebilir). **📏 Ölçekle**: bir çizgiye dokunup gerçek ölçüsünü yazınca bütün çizim ölçeklenir. **🧊 3B** düğmesi kapalı şekilleri kalınlık verip 3B parçaya çevirir (içteki daire delik olur)
 - **🔢 Ölçü rakamlarını oku** (açık gelir): kağıda elle yazılmış ölçü rakamları telefonda çalışan küçük bir yapay zekâ ile okunur (turuncu kutuyla gösterilir), çizgi olarak gelmez. Her rakam en yakın çizgiye (uzunluk), daireye (çap) veya yaya (yarıçap) eşlenir; listeden yanlış olan kapatılır, **Ölçüleri uygula** ile en uzun çizgi ölçeği belirler, diğerleri esnetilir, ölçüler (daire / yay için Ø / R ölçüsü) eklenir
-- Sınırlar: rakamlar yatay ve çizgiye değmeden yazılmalı (değen rakam okunmayabilir); Ø / R işaretleri ve harfler okunmaz; eşleşmeleri kontrol et. Ölçü okları / taramalar çizgi olarak gelebilir, silinmesi gerekir; kareli / çizgili kağıtta hassasiyet düşürülmeli
+- Rakamlar düz, yan (90° / 270°) ya da ters yazılmış olabilir; ters / yan duran glifler yapay zekâ tarafından reddedilir (15 ↔ 51 karışmaz), **Ø işareti** (ayrı ya da rakama bitişik) okunur ve çap olarak işaretlenir
+- **📐 Parça yorumu (Temiz parça):** çizim bir parça olarak anlaşılır — dış şeklin kutusu (ölçü uzatma çizgilerine göre), her köşenin biçimi (keskin / radyüs / pah; çizimden ya da köşe yanındaki rakamdan), delikler (daireler) ve kılavuz çizgisiyle bağlı Ø rakamları. Kenar yanındaki rakam o kenarın ölçüsü olur (yatay ve dikey ölçek ayrı, el çizimi oransız olsa da). Yazılmayan ölçüler (ör. delik konumu) çizimden orantıyla tahmin edilir ve kartta "≈ çizimden" diye gösterilir; yazıdan gelenler "✍ yazından". Kartta genişlik, yükseklik, köşe tipi / ölçüsü, delik çapı / konumu düzeltilir, delik eklenip silinir; önizleme anında güncellenir. **Çizime aktar** temiz, kapalı dış şekli, delikleri ve ölçüleri (genişlik, yükseklik, R, pah, Ø, delik konumları — "Ölçü" katmanında) çizer. **Çizgiler olduğu gibi** ile eski davranış (ham çizgiler + ölçü eşleme) seçilebilir
+- Sınırlar: bu bir tahmindir — dikdörtgen tabanlı parçalar (köşeleri radyüslü / pahlı, delikli) için tasarlandı; karmaşık dış şekiller için "Çizgiler olduğu gibi" kullanılmalı. Çizgiye değen rakam okunmayabilir; harfler (R, M, x) okunmaz; kart değerleri her zaman kontrol edilmeli
 
 **₺ Akıllı Üretim Maliyeti (Maliyet sekmesi, ya da Hesap → Ağırlık ve maliyet)**
 - **Fiyat uydurulmaz:** malzeme kg fiyatı (ya da Kesim optimizasyonundaki profil boy fiyatı), işçilik ve makine saat ücretleri, kaynak teli / gaz / elektrot fiyatı ve ekstra giderleri kullanıcı girer; bu cihazda saklanır, her projede kullanılır. Girilmeyen kalem "eksik bilgi" listesine düşer, toplama katılmaz ve toplam EKSİK diye işaretlenir
@@ -266,7 +269,8 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - `app.js` — uygulama: 3D sahne, CSG, kenar çizgileri, panel, taşıma, ölçüm, kesit, sesli komut
 - `sketch.js` — kroki editörü (2D tuval) ve doğrulama
 - `logic.js` — test edilebilir mantık: parça varsayılanları, geri al geçmişi, STL yazıcı, sesli komut çözücü, birimler, kroki dönüşümleri (yay, yuvarlak köşe), kopya / ayna / dizi, pah geometrisi, teknik resim yerleşimi ve PDF yazıcı
-- `photo2d.js`, `photoimport.js` — fotoğraftan çizim: görüntü işleme (eşik, inceltme, yol takibi, çizgi / yay / daire uydurma) ve ekranı
+- `photo2d.js`, `photoimport.js` — fotoğraftan çizim: görüntü işleme (mürekkep ayırma, eşik, inceltme, yol takibi, çizgi / yay / daire uydurma, rakam okuma) ve ekranı
+- `part2d.js` — elle çizilmiş parçayı yorumlama (kutu, köşe radyüs / pah, delik + Ø, ölçek) ve temiz ölçülü çizim üretimi
 - `cad2d.js`, `cad2d-geom.js` — 2B çizim modu ve saf geometrisi (kesişim, kırp, uzat, ofset, radyus, DXF)
 - `cam.js`, `cam-ui.js` — CNC: yükseklik haritası, uzaklık alanı, takım yolları, simülasyon, G-kodu, iş kartı
 - `mech.js` — evolvent dişli profili, mekanizma bağıntıları

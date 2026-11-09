@@ -15,7 +15,7 @@
 //   - Profil / ölçü: geçersiz ölçüler, uygulanamayan iskelet ölçüleri, stok boyundan uzun ya da çok kısa elemanlar, malzeme uyumu.
 // Yapılamayan kontroller (ör. kapalı olmayan yüzey) rapora "yapılamadı" diye yazılır; asla başarılı gösterilmez.
 
-import { frameMembers, PROFILES, miterOK } from './logic.js?v=20261109j';
+import { frameMembers, PROFILES, miterOK } from './logic.js?v=20261109k';
 
 const TOL = 0.05;          // temas toleransı (mm)
 const DEPTH_MIN = 0.2;     // bundan sığ iç içe geçme çakışma sayılmaz (mm)

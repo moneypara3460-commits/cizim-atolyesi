@@ -1,7 +1,7 @@
 // Akıllı Ağırlık ve Ağırlık Merkezi — "Ağırlık" sekmesi arayüzü.
 // api: { compute() → analyzeWeight sonucu (önbellekli), materials, partMat(id), setMat(id, matId), setRho(id, v|null), focusPart(id),
 //        show3D (get/set), showLift (get/set), render(), toast(m), name(), snapshot()? }
-import { pdfFromJpegs } from './cutopt.js?v=20261109j';
+import { pdfFromJpegs } from './cutopt.js?v=20261109k';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 export const fkg = (kg) => (kg == null ? '—' : kg >= 1000 ? (kg / 1000).toLocaleString('tr-TR', { maximumFractionDigits: 3 }) + ' t' : kg >= 1 ? kg.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' kg' : (kg * 1000).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + ' g');

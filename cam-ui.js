@@ -1,7 +1,7 @@
 // CNC sekmesi: takımlar, işlemler, takım yolu hesabı, malzeme kaldırma simülasyonu, G-kodu ve iş kartı.
 // api: { model() → { tris, holes, matId, name }, draw(spec), clear(), enter(), leave(), render(), toast(m), name(), saveBlob(b, n), snapshot(), date() }
-import * as C from './cam.js?v=20261109j';
-import { pdfFromJpegs } from './cutopt.js?v=20261109j';
+import * as C from './cam.js?v=20261109k';
+import { pdfFromJpegs } from './cutopt.js?v=20261109k';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 1) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));

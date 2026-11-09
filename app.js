@@ -13,26 +13,26 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
-} from './logic.js?v=20261109j';
-import { openSketch } from './sketch.js?v=20261109j';
-import { to3MF, toSTEP } from './export3d.js?v=20261109j';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109j';
-import { openCad2D } from './cad2d.js?v=20261109j';
-import { openCutOpt } from './cutopt-ui.js?v=20261109j';
-import { createMfg } from './mfg-ui.js?v=20261109j';
-import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261109j';
-import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261109j';
-import { analyzeWeight } from './weight.js?v=20261109j';
-import { createWeightUI, fkg } from './weight-ui.js?v=20261109j';
-import { createCostUI } from './cost-ui.js?v=20261109j';
-import { planReport as weldReport } from './welds.js?v=20261109j';
-import { altCons as weldAltCons } from './weld-ui.js?v=20261109j';
-import { groupKey } from './cutopt.js?v=20261109j';
-import { createAssemblyUI } from './assembly-ui.js?v=20261109j';
-import { createSimUI } from './sim-ui.js?v=20261109j';
-import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261109j';
-import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261109j';
-import { createCamUI } from './cam-ui.js?v=20261109j';
+} from './logic.js?v=20261109k';
+import { openSketch } from './sketch.js?v=20261109k';
+import { to3MF, toSTEP } from './export3d.js?v=20261109k';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109k';
+import { openCad2D } from './cad2d.js?v=20261109k';
+import { openCutOpt } from './cutopt-ui.js?v=20261109k';
+import { createMfg } from './mfg-ui.js?v=20261109k';
+import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261109k';
+import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261109k';
+import { analyzeWeight } from './weight.js?v=20261109k';
+import { createWeightUI, fkg } from './weight-ui.js?v=20261109k';
+import { createCostUI } from './cost-ui.js?v=20261109k';
+import { planReport as weldReport } from './welds.js?v=20261109k';
+import { altCons as weldAltCons } from './weld-ui.js?v=20261109k';
+import { groupKey } from './cutopt.js?v=20261109k';
+import { createAssemblyUI } from './assembly-ui.js?v=20261109k';
+import { createSimUI } from './sim-ui.js?v=20261109k';
+import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261109k';
+import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261109k';
+import { createCamUI } from './cam-ui.js?v=20261109k';
 
 const APP_VER = '20261108o'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
