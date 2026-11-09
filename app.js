@@ -8,28 +8,31 @@ import { MeshBVH } from 'three-mesh-bvh';
 import {
   TYPE_LABEL, DEFAULTS, heightOf, newPart, History, toSTLBinary, parseVoice,
   UNITS, toUnit, fromUnit, fmtNum, snap, dist3,
-  sketchFromDraw, sketchToDraw, revolveProfile, chamferBoxPoints, cylinderProfile,
+  sketchFromDraw, sketchToDraw, revolveProfile, chamferBoxPoints, cylinderProfile, circlePts,
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
-} from './logic.js?v=20261109i';
-import { openSketch } from './sketch.js?v=20261109i';
-import { to3MF, toSTEP } from './export3d.js?v=20261109i';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109i';
-import { openCad2D } from './cad2d.js?v=20261109i';
-import { openCutOpt } from './cutopt-ui.js?v=20261109i';
-import { createMfg } from './mfg-ui.js?v=20261109i';
-import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261109i';
-import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261109i';
-import { analyzeWeight } from './weight.js?v=20261109i';
-import { createWeightUI, fkg } from './weight-ui.js?v=20261109i';
-import { createCostUI } from './cost-ui.js?v=20261109i';
-import { planReport as weldReport } from './welds.js?v=20261109i';
-import { altCons as weldAltCons } from './weld-ui.js?v=20261109i';
-import { groupKey } from './cutopt.js?v=20261109i';
-import { createAssemblyUI } from './assembly-ui.js?v=20261109i';
-import { createSimUI } from './sim-ui.js?v=20261109i';
+} from './logic.js?v=20261109j';
+import { openSketch } from './sketch.js?v=20261109j';
+import { to3MF, toSTEP } from './export3d.js?v=20261109j';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109j';
+import { openCad2D } from './cad2d.js?v=20261109j';
+import { openCutOpt } from './cutopt-ui.js?v=20261109j';
+import { createMfg } from './mfg-ui.js?v=20261109j';
+import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261109j';
+import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261109j';
+import { analyzeWeight } from './weight.js?v=20261109j';
+import { createWeightUI, fkg } from './weight-ui.js?v=20261109j';
+import { createCostUI } from './cost-ui.js?v=20261109j';
+import { planReport as weldReport } from './welds.js?v=20261109j';
+import { altCons as weldAltCons } from './weld-ui.js?v=20261109j';
+import { groupKey } from './cutopt.js?v=20261109j';
+import { createAssemblyUI } from './assembly-ui.js?v=20261109j';
+import { createSimUI } from './sim-ui.js?v=20261109j';
+import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261109j';
+import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261109j';
+import { createCamUI } from './cam-ui.js?v=20261109j';
 
 const APP_VER = '20261108o'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -62,14 +65,15 @@ const cp = { n: 3, dx: 40, dy: 0, dz: 0, cn: 6, ang: 360, touched: false, shape:
 
 const hist = new History();
 let weldPlan = null;   // Akıllı Kaynak Planlama: { welds, set, symbols, ver }
+let mechData = { cs: [], motor: null };   // Mekanizma: bağıntılar (dişli, kasnak, kremayer, vida, oran) ve motor
 let simData = null;   // Geleceğimi Göster: onay, test kurulumu, saklanan alternatifler
 let asmAnswers = {};   // Montaj planı: kullanıcının bildirdiği bağlantı türleri { 'a-b': 'kaynak' | 'cıvata' | ... }
-const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData });
+const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData });
 // "Tek parça" ağları (üçgen verisi) geri al geçmişine girmesin diye parçada yalnızca anahtar (mk) durur, veri burada tutulur.
 // Kaydederken (otomatik kayıt, proje) veri de dosyaya yazılır.
 const meshStore = new Map();
 function snapshotSave() {
-  const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData };
+  const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData };
   const ks = [...new Set(parts.filter((q) => q.mk && meshStore.has(q.mk)).map((q) => q.mk))];
   if (ks.length) { o.meshes = {}; ks.forEach((k) => { o.meshes[k] = meshStore.get(k); }); }
   return JSON.stringify(o);
@@ -77,7 +81,7 @@ function snapshotSave() {
 function restore(s) {
   const o = JSON.parse(s);
   if (o.meshes) for (const k of Object.keys(o.meshes)) meshStore.set(k, o.meshes[k]);
-  parts = o.parts; sel = o.sel; nextId = o.nextId; weldPlan = o.welds || null; asmAnswers = o.asm && typeof o.asm === 'object' ? o.asm : {}; simData = o.sim && typeof o.sim === 'object' ? o.sim : null;
+  parts = o.parts; sel = o.sel; nextId = o.nextId; weldPlan = o.welds || null; asmAnswers = o.asm && typeof o.asm === 'object' ? o.asm : {}; simData = o.sim && typeof o.sim === 'object' ? o.sim : null; mechData = o.mech && Array.isArray(o.mech.cs) ? o.mech : { cs: [], motor: null };
   cleanLinks(parts);
   if (!parts.find((p) => p.id === sel)) sel = parts[0].id;
 }
@@ -410,6 +414,7 @@ renderer.setAnimationLoop((now) => {
   if (anim.playing) animTick(now);
   if (asmUI) asmUI.tick(now);
   if (simAnim.spec) simTick(now);
+  if (camUI && camUI.playing) camUI.tick();
   controls.update();
   updateInfinite();
   updateLabelScales();
@@ -789,6 +794,7 @@ function rebuild(refit) {
     rebuildCount++;
     if (typeof scheduleWeightMarker === 'function') scheduleWeightMarker();
     if (simUI && simUI.active) { simUI.invalidate(); if (tab === 'sim') setTimeout(renderPanel, 0); }
+    if (camUI && camUI.active) { camUI.invalidate(); if (tab === 'cam') setTimeout(renderPanel, 0); }
     if (asmUI && asmUI.active) { asmUI.invalidate(); if (tab === 'asm') setTimeout(renderPanel, 0); }
 
     let materials = matFor(vis[0].color);
@@ -951,7 +957,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['wgt', 'Ağırlık'], ['cost', 'Maliyet'], ['mfg', 'Üretim'], ['weld', 'Kaynak'], ['asm', 'Montaj planı'], ['sim', '🔮 Gelecek']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['wgt', 'Ağırlık'], ['cost', 'Maliyet'], ['mfg', 'Üretim'], ['weld', 'Kaynak'], ['asm', 'Montaj planı'], ['sim', '🔮 Gelecek'], ['cam', '⚙ CNC']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -960,7 +966,8 @@ function fieldsFor(p) {
     case 'sphere': return [['Çap', 'd']];
     case 'cone': return [['Alt çap', 'd'], ['Üst çap', 'd2'], ['Yükseklik', 'h'], ['Yuvarlama', 'r'], ['Pah', 'c']];
     case 'tube': return [['Dış çap', 'd'], ['İç çap', 'di'], ['Yükseklik', 'h'], ['Yuvarlama', 'r'], ['Pah', 'c']];
-    case 'sketch': return p.mode === 'revolve' ? [['Kenar yuvarlama', 'r'], ['Kenar pah', 'c']] : [['Kalınlık', 'h'], ['Köşe yuvarlama', 'r'], ['Köşe pah', 'c']];
+    case 'sketch': if (p.gear) return [['Modül', 'gm'], ['Diş sayısı', 'gz', 'deg'], ['Kalınlık', 'h'], ['Mil deliği çapı (0 = yok)', 'gb']];
+      return p.mode === 'revolve' ? [['Kenar yuvarlama', 'r'], ['Kenar pah', 'c']] : [['Kalınlık', 'h'], ['Köşe yuvarlama', 'r'], ['Köşe pah', 'c']];
     case 'sweep': {
       const prof = p.prof === 'rect' ? [['Profil genişlik', 'w'], ['Profil kalınlık', 'l']] : p.prof === 'tube' ? [['Dış çap', 'd'], ['İç çap', 'di']] : [['Profil çapı', 'd']];
       const path = p.path === 'helix' ? [['Sarım yarıçapı', 'hr'], ['Adım (1 turda yükselme)', 'pitch'], ['Sarım sayısı', 'turns', 'deg']]
@@ -1149,6 +1156,7 @@ function renderPanel() {
         (anim.playing ? btn('⏹ Durdur', 'an-stop', true) : btn('▶ Oynat', 'an-play')) +
         btn(anim.rec ? '⏺ Kaydediliyor…' : '🎬 Video kaydet (1 tur)', 'an-rec', !!anim.rec) + btn('↺ Başa al', 'an-reset');
     }
+    body += mechPanel();
     hint = 'Hareket etüdü: eklemler ve mesafe / açı eşleşmeleri baştan sona yumuşakça oynar; bağlı parçalar eşleşmelerle birlikte gelir. Video, ekrandaki görünümden WebM olarak kaydedilir (kamerayı önce istediğin açıya getir).';
   } else if (tab === 'str') {
     body = strengthPanel(p);
@@ -1170,7 +1178,7 @@ function renderPanel() {
         row('Ağırlık merkezi', mp.centroid ? 'X ' + fmtNum(toUnit(mp.centroid[0], settings.unit), 1) + '  Y ' + fmtNum(toUnit(mp.centroid[1], settings.unit), 1) + '  Z ' + fmtNum(toUnit(mp.centroid[2], settings.unit), 1) : '-') +
         row('Genel ölçü', lenText(sz.x) + ' × ' + lenText(sz.z) + ' × ' + lenText(sz.y));
     }
-    body += '<div class="lbl h">Ağırlık ve maliyet</div>' + btn('⚖ Parça parça ağırlık, ağırlık merkezi, denge, kaldırma', 'wg-go') + btn('₺ Üretim maliyeti (hammadde, işçilik, makine, adet)', 'cs-go') + btn('🧩 Montaj sırası ve patlatılmış görünüm', 'as-go-tab') + btn('🔮 Geleceğimi göster (sanal dayanım, titreşim, sıcaklık, ömür testi)', 'sm-go-tab') +
+    body += '<div class="lbl h">Ağırlık ve maliyet</div>' + btn('⚖ Parça parça ağırlık, ağırlık merkezi, denge, kaldırma', 'wg-go') + btn('₺ Üretim maliyeti (hammadde, işçilik, makine, adet)', 'cs-go') + btn('🧩 Montaj sırası ve patlatılmış görünüm', 'as-go-tab') + btn('🔮 Geleceğimi göster (sanal dayanım, titreşim, sıcaklık, ömür testi)', 'sm-go-tab') + btn('⚙ CNC freze: takım yolu ve G-kodu', 'cn-go-tab') +
       '<div class="lbl h">Üretim</div>' + btn('🏭 Üretimi analiz et (çakışma, montaj, kaynak)', 'mfg-go') + btn('✂ Akıllı kesim optimizasyonu (profil boy / fire / maliyet)', 'cut-opt') +
       '<div class="lbl h">Dışa aktar</div>' + btn('📋 Parça listesi (CSV)', 'bom-csv') + btn('📐 DXF (ön / yan / üst)', 'dxf-out') +
       btn('🧊 STEP (SolidWorks, Fusion, FreeCAD)', 'step-out') + btn('🖨 3MF (3B yazıcı)', 'mf-out');
@@ -1181,6 +1189,9 @@ function renderPanel() {
   } else if (tab === 'wgt') {
     body = weightUI.html();
     hint = 'Ağırlık her parçanın kendi malzemesi (Dayanım sekmesinde ya da burada seçilir) ve gerçek 3B hacmiyle hesaplanır. Kırmızı-beyaz küre ağırlık merkezidir; kesik çizgi zemine izdüşümü, yeşil / turuncu / kırmızı çizgi destek alanıdır. Model döndürülünce işaret de modelle birlikte döner; parça değişince yeniden hesaplanır.';
+  } else if (tab === 'cam') {
+    body = camUI.html();
+    hint = 'CNC: takım yolları modelin üstten görünen yüzeyinden hesaplanır (3 eksen). Kesme değerleri başlangıç değeridir; ilk parçada makinede düşük ilerlemeyle dene. Program çalıştırmadan önce kumandada simülasyonla kontrol et.';
   } else if (tab === 'sim') {
     body = simUI.html();
     hint = 'Geleceğimi Göster: tasarım küp elemanlara bölünüp gerçek sonlu eleman analiziyle (doğrusal-elastik) test edilir; renkler ve şekil değişimi hesaplanan sonuçtan çizilir. Yorulma, aşınma ve yüksek sıcaklık değerleri yaklaşık tahmindir. Sonuçlar profesyonel mühendislik onayının yerine geçmez.';
@@ -1224,7 +1235,7 @@ function renderPanel() {
     hint = 'Ölçüm aracı açıkken modelde iki noktaya dokun, aradaki mesafe yazılır (köşelere yapışır). Perspektif: kapalıyken (ortografik) uzaktaki şeyler küçülmez, ölçü almak için iyidir. Sürüm: ' + APP_VER;
   } else {
     const fl = fieldsFor(p);
-    body = fl.map(([l, k, kd]) => field(l, k, p, kd)).join('') + (p.type === 'sketch' ? btn('✎ Krokiyi düzenle', 'sketch-edit') : '');
+    body = fl.map(([l, k, kd]) => field(l, k, p, kd)).join('') + (p.type === 'sketch' && !p.gear ? btn('✎ Krokiyi düzenle', 'sketch-edit') : '') + (p.gear ? gearInfo(p) : '');
     if (p.type === 'sheet') {
       const c = sheetCalc(p);
       body += (p.seg || []).map((sg, i) => '<div class="lbl h">' + (i + 1) + '. kenar</div>' +
@@ -1906,6 +1917,96 @@ var simUI = createSimUI({   // var: yeniden çizim modül yüklenirken çağrıl
   prices() { try { return (JSON.parse(localStorage.getItem('cizim:cost') || '{}').prices) || {}; } catch (e) { return {}; } },
 });
 
+/* ---- ⚙ CNC: takım yolu çizimi ve malzeme kaldırma simülasyonu ---- */
+const camGroup = new THREE.Group(); scene.add(camGroup);
+const camState = { stock: null, tool: null, key: null };
+const M2W = (x, y, z) => new THREE.Vector3(x, z, -y);   // makine → dünya
+function camClear() { camGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); camGroup.clear(); camState.stock = null; camState.tool = null; camState.key = null; if (camState.hid) { modelGroup.visible = true; camState.hid = false; } }
+const OPCOL = { face: 0x60a5fa, rough: 0x22c55e, walls: 0xf59e0b, finish: 0x38bdf8, drill: 0xa855f7 };
+function camDraw(spec) {
+  if (spec.mode === 'paths' || camState.key !== spec.mode) camClear();
+  camState.key = spec.mode;
+  const R = spec.R;
+  if (spec.mode === 'paths') {
+    if (camState.hid) { modelGroup.visible = true; camState.hid = false; }
+    const rap = [];
+    for (const op of R.ops) {
+      const cut = []; let last = null;
+      for (const m of op.moves) {
+        if (m.k === 'd') { cut.push(M2W(m.x, m.y, m.r), M2W(m.x, m.y, m.z)); last = [m.x, m.y, m.r]; continue; }
+        if (last) (m.k === 'r' ? rap : cut).push(M2W(...last), M2W(m.x, m.y, m.z));
+        last = [m.x, m.y, m.z];
+      }
+      if (cut.length) camGroup.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(cut), new THREE.LineBasicMaterial({ color: OPCOL[op.type] || 0x22c55e, depthTest: false, transparent: true, opacity: 0.9 })));
+    }
+    if (rap.length) { const l = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(rap), new THREE.LineDashedMaterial({ color: 0xef4444, dashSize: 2, gapSize: 2, depthTest: false, transparent: true, opacity: 0.6 })); l.computeLineDistances(); camGroup.add(l); }
+    const s = R.P.stock, bx = new THREE.Box3().setFromPoints([M2W(s.x0, s.y0, s.zBot), M2W(s.x1, s.y1, s.zTop)]);
+    camGroup.add(new THREE.Box3Helper(bx, 0x94a3b8));
+    // sıfır noktası
+    const z0 = R.P.zero, ax = new THREE.AxesHelper(Math.max(10, (s.x1 - s.x0) * 0.15)); ax.position.copy(M2W(z0[0], z0[1], z0[2])); ax.material.depthTest = false; ax.renderOrder = 999; camGroup.add(ax);
+    camGroup.children.forEach((o) => { o.renderOrder = o.renderOrder || 990; });
+    return;
+  }
+  // simülasyon: stok yüzeyi (yükseklik ağı)
+  modelGroup.visible = false; camState.hid = true;
+  const SG = spec.SG, s = R.P.stock;
+  if (!camState.stock || camState.stock.userData.SG !== SG) {
+    if (camState.stock) { camGroup.remove(camState.stock); camState.stock.geometry.dispose(); }
+    const n = SG.nx * SG.ny, pos = new Float32Array(n * 3), col = new Float32Array(n * 3), idx = [];
+    for (let j = 0; j < SG.ny; j++) for (let i = 0; i < SG.nx; i++) { const c = i + SG.nx * j; pos[c * 3] = SG.ox + (i + 0.5) * SG.res; pos[c * 3 + 2] = -(SG.oy + (j + 0.5) * SG.res); }
+    for (let j = 0; j + 1 < SG.ny; j++) for (let i = 0; i + 1 < SG.nx; i++) { const a = i + SG.nx * j, b = a + 1, c2 = a + SG.nx, d = c2 + 1; if (SG.S[a] === -Infinity || SG.S[b] === -Infinity || SG.S[c2] === -Infinity || SG.S[d] === -Infinity) continue; idx.push(a, c2, b, b, c2, d); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setIndex(idx);
+    const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, metalness: 0.35, roughness: 0.45 }));
+    mesh.userData.SG = SG; camState.stock = mesh; camGroup.add(mesh);
+  }
+  const g = camState.stock.geometry, P = g.attributes.position.array, Cc = g.attributes.color.array, mk = spec.mark;
+  for (let c = 0; c < SG.nx * SG.ny; c++) {
+    const z = SG.S[c]; P[c * 3 + 1] = z === -Infinity ? s.zBot : z;
+    const t = Math.max(0, Math.min(1, (z - s.zBot) / ((s.zTop - s.zBot) || 1)));
+    let r = 0.55 + 0.25 * t, gg = 0.6 + 0.25 * t, b = 0.68 + 0.25 * t;
+    if (mk && mk[c] === 1) { r = 0.94; gg = 0.27; b = 0.27; } else if (mk && mk[c] === -1) { r = 0.66; gg = 0.33; b = 0.97; }
+    Cc[c * 3] = r; Cc[c * 3 + 1] = gg; Cc[c * 3 + 2] = b;
+  }
+  g.attributes.position.needsUpdate = true; g.attributes.color.needsUpdate = true; g.computeVertexNormals();
+  // takım
+  if (spec.tool && spec.pos) {
+    const t = spec.tool, key = t.type + t.d;
+    if (!camState.tool || camState.tool.userData.key !== key) {
+      if (camState.tool) { camGroup.remove(camState.tool); camState.tool.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+      const grp = new THREE.Group(), mat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.6, roughness: 0.3 }), r = t.d / 2, L = Math.max(t.flute || 20, t.d * 3);
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, L, 24), mat); body.position.y = (t.type === 'ball' ? r : 0) + L / 2; grp.add(body);
+      if (t.type === 'ball') { const sp = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 12), mat); sp.position.y = r; grp.add(sp); }
+      if (t.type === 'drill') { const cone = new THREE.Mesh(new THREE.ConeGeometry(r, r * 0.6, 24), mat); cone.rotation.x = Math.PI; cone.position.y = r * 0.3; grp.add(cone); body.position.y = r * 0.6 + L / 2; }
+      grp.userData.key = key; camState.tool = grp; camGroup.add(grp);
+    }
+    camState.tool.position.copy(M2W(spec.pos[0], spec.pos[1], spec.pos[2]));
+    camState.tool.visible = true;
+  } else if (camState.tool) camState.tool.visible = false;
+}
+var camUI = createCamUI({   // var: yeniden çizim modül yüklenirken çağrılırsa henüz tanımsız olabilir
+  model() {
+    if (!lastClean) throw new Error('Model yok');
+    const tris = geoTris(lastClean);
+    const holes = [];
+    for (const { p } of lastBrushes) {
+      if (!(parts.indexOf(p) > 0 && p.op === 'sub' && p.type === 'cylinder')) continue;
+      const H = cHoleAxis(p); if (Math.abs(H.axis[1]) < 0.999) continue;
+      holes.push({ x: (H.base[0] + H.top[0]) / 2, z: (H.base[2] + H.top[2]) / 2, d: +p.d, top: Math.max(H.base[1], H.top[1]), bottom: Math.min(H.base[1], H.top[1]) });
+    }
+    const vis = parts.filter((q) => !q.hidden && q.op !== 'sub');
+    const m = vis.length ? partMat(vis[0]) : { id: 'celik' };
+    return { tris, holes, matId: m.id };
+  },
+  draw: camDraw,
+  clear: camClear,
+  render: () => { if (tab === 'cam') renderPanel(); },
+  toast,
+  name: () => projName || 'parca',
+  saveBlob,
+  snapshot: shot3D,
+  date: () => new Date().toLocaleDateString('tr-TR'),
+});
+
 // projedeki bütün profil iskeletlerinin kesim listesi → kesim optimizasyonu girdisi
 const MAT_SHORT = { celik: 'Çelik', paslanmaz: 'Paslanmaz', aluminyum: 'Alüminyum', al6061: 'Alüminyum', pirinc: 'Pirinç', bakir: 'Bakır', titanyum: 'Titanyum' };
 function cadCutPieces() {
@@ -2531,7 +2632,17 @@ function jointInfo(c) {
   const pivot = new THREE.Vector3(...(c.joint.pv || [0, 0, 0])).applyMatrix4(poseM(par));
   return { par, axis, pivot };
 }
+// eklem değeri + bağıntılarla bağlı eklemler (dişli, kayış, kremayer, vida)
 function setJointVal(c, nv) {
+  if (!c.joint) return;
+  const d = nv - (c.joint.val || 0);
+  if (!d) return;
+  const cs = mechData.cs.filter((x) => couplingValid(x));
+  if (!cs.length) { setJointValRaw(c, nv); return; }
+  const { deltas } = mechPropagate(cs, c.id, d);
+  for (const [id, dd] of deltas) { const q = id === c.id ? c : parts.find((x) => x.id === id); if (q && q.joint) setJointValRaw(q, (q.joint.val || 0) + dd); }
+}
+function setJointValRaw(c, nv) {
   const ji = jointInfo(c);
   if (!ji || !c.joint) return;
   const d = nv - (c.joint.val || 0);
@@ -2609,6 +2720,7 @@ document.addEventListener('change', (e) => {
   if (el.dataset && el.dataset.wg) { weightUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.cf) { costUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.as) { asmUI.input(el, 'change'); return; }
+  if (el.dataset && (el.dataset.cs || el.dataset.cn || el.dataset.ct || el.dataset.co)) { camUI.input(el, 'change'); return; }
   if (el.dataset && (el.dataset.sm || el.dataset.sf || el.dataset.sp || el.dataset.sv || el.dataset.st || el.dataset.sl2)) { simUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.link === 'parent') setParent(cur(), el.value === '' ? null : Number(el.value));
 });
@@ -2731,7 +2843,7 @@ cp.adur = 3;
 function animDrivers() {
   const out = [];
   parts.forEach((c, i) => {
-    if (c.joint && (c.joint.type === 'hinge' || c.joint.type === 'slide')) {
+    if (c.joint && (c.joint.type === 'hinge' || c.joint.type === 'slide') && !mechData.cs.some((x) => x.b === c.id && couplingValid(x))) {
       const h = c.joint.type === 'hinge';
       out.push({ key: 'j' + c.id, label: partName(c, i) + (h ? ' · menteşe' : ' · kayar'), unit: h ? '°' : settings.unit, cur: c.joint.val || 0, def: h ? 90 : 50,
         get: () => c.joint.val || 0, set: (v) => setJointVal(c, v) });
@@ -2755,6 +2867,14 @@ function animApply(f) {
   rebuild(false);
 }
 function animTick(now) {
+  if (anim.motor) {
+    if (!anim.t0) anim.t0 = now;
+    const t = (now - anim.t0) / 1000, M = anim.motor, c = parts.find((x) => x.id === M.id);
+    if (!c || !c.joint) { animStop(false); return; }
+    setJointVal(c, M.start + M.rate * t); rebuild(false); drawMechOverlay();
+    if (anim.rec && t >= M.recT) animStop(true);
+    return;
+  }
   const dur = Math.max(pos(cp.adur), 0.2) * 1000;
   if (!anim.t0) anim.t0 = now;
   let u = (now - anim.t0) / dur, f, done = false;
@@ -2764,9 +2884,19 @@ function animTick(now) {
   animApply(f);
   if (done) animStop(true);
 }
-function animStart(record) {
-  const ds = animDrivers().filter((d) => anim.cfg[d.key] && anim.cfg[d.key].on);
-  if (!ds.length) { toast('Seçili hareket yok'); return; }
+function animStart(record, motor) {
+  anim.motor = null;
+  if (motor) {
+    const M = mechData.motor, c = M && parts.find((x) => x.id === M.id);
+    if (!c || !c.joint || c.joint.type !== 'hinge' || !(Math.abs(M.rpm) > 0)) { toast('Motor için döner (menteşe) eklem ve devir seç'); return; }
+    const rate = rpmToDegPerSec(M.rpm);
+    // çok hızlı motor ekranda görünmez: görüntü 1 tur ≥ 2 sn olacak şekilde yavaşlatılır (oranlar korunur)
+    const shown = Math.sign(rate) * Math.min(Math.abs(rate), 180);
+    anim.motor = { id: c.id, start: c.joint.val || 0, rate: shown, recT: 360 / Math.abs(shown), slowed: Math.abs(rate) > 180 };
+  } else {
+    const ds = animDrivers().filter((d) => anim.cfg[d.key] && anim.cfg[d.key].on);
+    if (!ds.length) { toast('Seçili hareket yok'); return; }
+  }
   commit();               // oynatmadan önceki durum geri al ile gelir
   anim.playing = true; anim.t0 = 0;
   if (record) {
@@ -2791,7 +2921,7 @@ function animStart(record) {
   renderPanel();
 }
 function animStop(finished) {
-  anim.playing = false;
+  anim.playing = false; anim.motor = null;
   if (anim.rec) { const r = anim.rec; anim.rec = null; setTimeout(() => { try { r.stop(); } catch (e) { /* */ } }, 150); }
   syncInputs(); scheduleSave(); updateToolbar();
   if (tab === 'anim') renderPanel();
@@ -2799,11 +2929,209 @@ function animStop(finished) {
 }
 function animAct(act) {
   if (act === 'an-play') { animStart(false); return; }
+  if (act === 'an-motor') { animStart(false, true); return; }
+  if (act === 'an-motor-rec') { if (!anim.rec) { if (anim.playing) animStop(false); animStart(true, true); } return; }
   if (act === 'an-rec') { if (!anim.rec) { if (anim.playing) animStop(false); animStart(true); } return; }
   if (act === 'an-stop') { animStop(false); return; }
   if (act === 'an-reset') { if (anim.playing) animStop(false); commit(); animApply(0); renderPanel(); return; }
   if (act.startsWith('an-m-')) { anim.mode = act.slice(5); renderPanel(); return; }
   if (act.startsWith('an-tog-')) { const st = anim.cfg[act.slice(7)]; if (st) st.on = !st.on; renderPanel(); return; }
+}
+
+/* ---- ⚙ Mekanizma: dişli çark, bağıntılar, motor, hareket çarpışma kontrolü ---- */
+const r4g = (n) => Math.round(n * 1e4) / 1e4 + 0;
+function regenGear(p) {
+  p.gm = Math.max(0.2, Number(p.gm) || 2); p.gz = Math.max(6, Math.min(400, Math.round(Number(p.gz) || 20))); p.gb = Math.max(0, Number(p.gb) || 0);
+  const d = gearDims(p.gm, p.gz);
+  if (p.gb >= 2 * d.rf * 0.95) p.gb = r4g(d.rf * 1.4);
+  p.pts = gearOutline(p.gm, p.gz).map(([x, y]) => [r4g(x), r4g(y)]);
+  p.more = p.gb > 0 ? [circlePts(0, 0, p.gb / 2, 48).map(([x, y]) => [r4g(x), r4g(y)])] : [];
+  p.name = 'Dişli m' + fmtNum(p.gm, 2) + ' z' + p.gz;
+}
+function addGear(base) {
+  commit();
+  const p = Object.assign(newPart(nextId++, 'box', 'add', null), { type: 'sketch', mode: 'extrude', plane: 'top', h: 10, x: 0, y: 0, z: 0, gear: true, gm: 2, gz: 20, gb: 10 }, base || {});
+  regenGear(p);
+  parts.push(p); sel = p.id; refreshAll(true);
+  toast('Dişli eklendi: modül ve diş sayısı Ölçü sekmesinden değişir');
+  return p;
+}
+function gearInfo(p) {
+  const d = gearDims(p.gm, p.gz);
+  return `<div class="lbl" style="flex:1 0 100%;line-height:1.5">Bölüm dairesi Ø${fmtNum(d.dp, 2)} · dış çap Ø${fmtNum(d.da, 2)} · diş dibi Ø${fmtNum(d.df, 2)} · adım ${fmtNum(d.pitch, 2)} mm · basınç açısı 20° (evolvent). İki dişli arası eksen mesafesi = m·(z₁+z₂)/2.</div>` +
+    `<label class="f"><span>Eş dişlinin diş sayısı</span><input type="number" step="1" min="6" data-mc="pairz" value="${mechForm.pairz || p.gz * 2}"></label>` +
+    `<button data-act="mc-gearpair">⚙ Eş dişliyi ekle (doğru mesafede, dişler kavraşır)</button>` +
+    (p.gz < 17 ? '<div class="lbl" style="flex:1 0 100%;color:#fbbf24">⚠ 17\'den az dişte gerçek imalatta diş dibi oyulması (alttan kesilme) olur; profil düzeltmesi gerekir.</div>' : '');
+}
+const mechForm = { t: 'gear', a: '', b: '', z1: '', z2: '', d1: '', d2: '', m: '', p: '', n: 1, k: 1, rev: false, pairz: '' };
+const jointParts = () => parts.filter((q) => q.joint && (q.joint.type === 'hinge' || q.joint.type === 'slide'));
+function addGearPair() {
+  const g = cur();
+  if (!g.gear) return;
+  const z2 = Math.max(6, Math.round(Number(mechForm.pairz) || g.gz * 2)), a = centerDistance(g.gm, g.gz, z2);
+  const ry = (g.ry || 0) * RAD, dir = new THREE.Vector3(Math.cos(-ry), 0, Math.sin(-ry));
+  // eş dişli: g'nin yerel +X yönünde; kavrama için çift diş sayısında yarım diş döndürülür
+  const half = z2 % 2 === 0 ? 180 / z2 : 0;
+  commit();
+  const q = Object.assign(newPart(nextId++, 'box', 'add', null), { type: 'sketch', mode: 'extrude', plane: 'top', h: g.h, x: r4g(g.x + dir.x * a), y: g.y, z: r4g(g.z + dir.z * a), rx: g.rx || 0, ry: r4g((g.ry || 0) + half), rz: g.rz || 0, gear: true, gm: g.gm, gz: z2, gb: g.gb, mat: g.mat });
+  regenGear(q); parts.push(q);
+  let linked = false;
+  if (g.parent != null && g.joint && g.joint.type === 'hinge') {
+    const par = parts.find((x) => x.id === g.parent);
+    if (par) {
+      const pv = new THREE.Vector3(pos(q.x), pos(q.y), pos(q.z)).applyMatrix4(poseM(par).invert());
+      q.parent = par.id; q.joint = { type: 'hinge', axis: g.joint.axis, pv: [r4g(pv.x), r4g(pv.y), r4g(pv.z)], val: 0 };
+      mechData.cs.push({ id: Date.now(), t: 'gear', a: g.id, b: q.id, z1: g.gz, z2: z2 }); linked = true;
+    }
+  }
+  sel = q.id; refreshAll(true);
+  toast(linked ? 'Eş dişli eklendi ve dişli bağıntısı kuruldu: birini döndür, öteki kavrar' : 'Eş dişli eklendi (eksen mesafesi ' + fmtNum(a, 2) + ' mm). Döndürmek için ikisini de Bağ sekmesinde bir gövdeye menteşeyle bağla, sonra Hareket → Mekanizma\'dan dişli bağıntısı ekle.');
+}
+function mechPanel() {
+  const J = jointParts(), nm = (id) => { const q = parts.find((x) => x.id === id); return q ? partName(q, parts.indexOf(q)) : '?'; };
+  const typ = (q) => (q.joint.type === 'hinge' ? 'döner' : 'kayar');
+  let h = '<div class="lbl h">⚙ Mekanizma: bağıntılar</div>';
+  if (J.length < 2) return h + '<div class="lbl" style="flex:1 0 100%">Bağıntı için en az iki eklem gerekir (Bağ sekmesinde menteşe / kayar). Dişli için şekil çubuğundaki <b>⚙ Dişli</b> ile dişli ekle, Ölçü sekmesinde "Eş dişliyi ekle".</div>';
+  for (const [i, c] of mechData.cs.entries()) {
+    const k = couplingK(c), A = parts.find((x) => x.id === c.a), B = parts.find((x) => x.id === c.b);
+    const unitA = A && A.joint && A.joint.type === 'slide' ? 'mm' : '°', unitB = B && B.joint && B.joint.type === 'slide' ? 'mm' : '°';
+    h += `<div style="flex:1 0 100%;display:flex;gap:6px;align-items:center;background:#111a2e;border:1px solid #1e293b;border-radius:10px;padding:7px 9px;font-size:13.5px"><span style="flex:1"><b>${esc(COUPLINGS[c.t].name)}</b>: ${esc(nm(c.a))} → ${esc(nm(c.b))}<br><span style="color:#94a3b8">1 ${unitA} → ${fmtNum(k, 4)} ${unitB}${c.t === 'gear' || c.t === 'igear' ? ' · z ' + c.z1 + ' / ' + c.z2 : ''}${!A || !B ? ' · ⚠ eklem yok' : ''}</span></span><button data-act="mc-del-${i}" class="danger" style="flex:0 0 auto;padding:8px 10px">Sil</button></div>`;
+  }
+  const F = mechForm, opts = (sel2, filt) => '<option value="">— seç —</option>' + J.filter(filt).map((q) => `<option value="${q.id}"${String(sel2) === String(q.id) ? ' selected' : ''}>${esc(partName(q, parts.indexOf(q)))} (${typ(q)})</option>`).join('');
+  const T = COUPLINGS[F.t], fromOK = (q) => T.from === 'any' || q.joint.type === T.from, toOK = (q) => T.to === 'any' || q.joint.type === T.to;
+  h += `<label class="f w2" style="flex:1 0 100%"><span>Yeni bağıntı türü</span><select data-mc="t">${Object.entries(COUPLINGS).map(([k, v]) => `<option value="${k}"${F.t === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>`;
+  h += `<label class="f"><span>Sürücü (1)</span><select data-mc="a">${opts(F.a, fromOK)}</select></label><label class="f"><span>Sürülen (2)</span><select data-mc="b">${opts(F.b, toOK)}</select></label>`;
+  const nf = (k, l, st = 'any') => `<label class="f"><span>${l}</span><input type="number" step="${st}" data-mc="${k}" value="${F[k] ?? ''}"></label>`;
+  if (F.t === 'gear' || F.t === 'igear') h += nf('z1', 'z₁ (sürücü diş)', 1) + nf('z2', 'z₂ (sürülen diş)', 1);
+  if (F.t === 'belt') h += nf('d1', 'd₁ sürücü kasnak çapı') + nf('d2', 'd₂ sürülen kasnak çapı');
+  if (F.t === 'rack') h += nf('m', 'Modül') + nf('z1', 'Pinyon diş sayısı', 1);
+  if (F.t === 'screw') h += nf('p', 'Vida adımı (mm)') + nf('n', 'Ağız sayısı', 1);
+  if (F.t === 'ratio') h += nf('k', 'Oran (Δ2 / Δ1)');
+  h += btn((F.rev ? '☑' : '☐') + ' Ters yön', 'mc-rev', F.rev) + btn('+ Bağıntıyı ekle', 'mc-add');
+  h += `<div class="lbl" style="flex:1 0 100%">${esc(T.note)} Sürücü dönünce / kayınca sürülen eklem bu oranla hareket eder (Bağ sekmesindeki kaydırıcıda da, oynatmada da). Sürülen eklemin kendi Baş / Son ayarı kullanılmaz.</div>`;
+  // motor
+  const H = J.filter((q) => q.joint.type === 'hinge'), M = mechData.motor || {};
+  h += '<div class="lbl h">Motor (sürekli dönüş)</div>';
+  if (!H.length) h += '<div class="lbl" style="flex:1 0 100%">Motor için döner (menteşe) eklem gerekir.</div>';
+  else {
+    h += `<label class="f"><span>Motor eklemi</span><select data-mc="motor">${'<option value="">— seç —</option>' + H.map((q) => `<option value="${q.id}"${M.id === q.id ? ' selected' : ''}>${esc(partName(q, parts.indexOf(q)))}</option>`).join('')}</select></label>` +
+      `<label class="f"><span>Devir (d/dk, − ters)</span><input type="number" step="any" data-mc="rpm" value="${M.rpm ?? 30}"></label>`;
+    h += (anim.playing && anim.motor ? btn('⏹ Durdur', 'an-stop', true) : btn('▶ Motorla çalıştır', 'an-motor')) + btn(anim.rec ? '⏺ Kaydediliyor…' : '🎬 Video (1 tur)', 'an-motor-rec', !!anim.rec);
+    if (M.id && M.rpm) {
+      const rows = [];
+      const deg = rpmToDegPerSec(M.rpm), { deltas } = mechPropagate(mechData.cs.filter(couplingValid), M.id, deg);
+      for (const [id, dd] of deltas) { const q = parts.find((x) => x.id === id); if (!q || !q.joint || id === M.id) continue; rows.push(esc(partName(q, parts.indexOf(q))) + ': ' + (q.joint.type === 'hinge' ? fmtNum(dd / 6, 2) + ' d/dk' : fmtNum(dd, 2) + ' mm/s')); }
+      if (rows.length) h += `<div class="lbl" style="flex:1 0 100%">Motor ${fmtNum(M.rpm, 1)} d/dk iken: ${rows.join(' · ')}</div>`;
+      if (Math.abs(deg) > 180) h += '<div class="lbl" style="flex:1 0 100%">Ekranda 30 d/dk\'ya yavaşlatılarak gösterilir (oranlar aynı kalır).</div>';
+    }
+  }
+  // çarpışma
+  h += '<div class="lbl h">Hareket sırasında çarpışma kontrolü</div>' + btn(mechCol.busy ? '⏳ Kontrol ediliyor… ' + mechCol.busy : '🔍 Çarpışmaları bul (bir tur)', 'mc-col', false, 'flex:1 0 100%');
+  if (mechCol.res) {
+    const R = mechCol.res;
+    if (!R.hits.length) h += `<div class="lbl" style="flex:1 0 100%;color:#22c55e">🟢 ${R.frames} konumda kontrol edildi: hareket eden parçalar hiçbir parçaya çarpmıyor.</div>`;
+    else R.hits.forEach((x, i) => { h += `<button data-act="mc-show-${i}" style="all:unset;box-sizing:border-box;flex:1 0 100%;background:#2a1010;border:1px solid #7f1d1d;border-radius:10px;padding:8px 10px;cursor:pointer;font-size:13.5px"><b style="color:#f87171">🔴 ${esc(x.a)} ↔ ${esc(x.b)}</b><br>${esc(x.at)} · en fazla ${fmtNum(x.depth, 2)} mm batma · ${x.n} konumda${x.atStart ? ' · başlangıçta da çakışıyor' : ''} <span style="color:#94a3b8">(dokun: o konumu göster)</span></button>`; });
+    h += `<div class="lbl" style="flex:1 0 100%">${R.frames} konum, ${R.pairs} parça çifti denetlendi. Yalnızca birbirine giren hacimler sayılır; değen yüzeyler (dişlerin teması, mil–delik) çarpışma değildir.</div>`;
+  }
+  return h;
+}
+function mechInput(el) {
+  const k = el.dataset.mc, v = el.value;
+  if (k === 'motor') { mechData.motor = { ...(mechData.motor || { rpm: 30 }), id: v ? Number(v) : null }; scheduleSave(); renderPanel(); return; }
+  if (k === 'rpm') { mechData.motor = { ...(mechData.motor || {}), rpm: Number(String(v).replace(',', '.')) || 0 }; scheduleSave(); if (el.type !== 'number' || document.activeElement !== el) renderPanel(); return; }
+  mechForm[k] = k === 't' || k === 'a' || k === 'b' ? v : v;
+  if (k === 't' || k === 'a' || k === 'b') {
+    const A = parts.find((x) => String(x.id) === String(mechForm.a)), B = parts.find((x) => String(x.id) === String(mechForm.b));
+    if (A && A.gear && !mechForm.z1) mechForm.z1 = A.gz; if (B && B.gear && !mechForm.z2) mechForm.z2 = B.gz;
+    if (A && A.gear && !mechForm.m) mechForm.m = A.gm;
+    if (k === 'a' && A && A.gear) { mechForm.z1 = A.gz; mechForm.m = A.gm; } if (k === 'b' && B && B.gear) mechForm.z2 = B.gz;
+    renderPanel();
+  }
+}
+function mechAct(act) {
+  if (act === 'mc-gearpair') { addGearPair(); return; }
+  if (act === 'mc-rev') { mechForm.rev = !mechForm.rev; renderPanel(); return; }
+  if (act === 'mc-add') {
+    const F = mechForm, a = Number(F.a), b = Number(F.b), num = (x) => Number(String(x).replace(',', '.'));
+    if (!a || !b || a === b) { toast('Farklı iki eklem seç'); return; }
+    const c = { id: Date.now(), t: F.t, a, b, z1: num(F.z1), z2: num(F.z2), d1: num(F.d1), d2: num(F.d2), m: num(F.m), p: num(F.p), n: num(F.n) || 1, k: num(F.k), rev: !!F.rev };
+    if (!couplingValid(c)) { toast('Oran için gereken ölçüleri gir'); return; }
+    const test = mechPropagate([...mechData.cs.filter(couplingValid), c], a, 1);
+    if (test.conflict) { toast('Bu bağıntı mevcutlarla çelişiyor (kapalı döngü); eklenmedi'); return; }
+    commit(); mechData.cs.push(c); scheduleSave(); renderPanel(); toast('Bağıntı eklendi'); return;
+  }
+  let m = act.match(/^mc-del-(\d+)$/); if (m) { commit(); mechData.cs.splice(+m[1], 1); scheduleSave(); renderPanel(); return; }
+  if (act === 'mc-col') { mechCollision(); return; }
+  m = act.match(/^mc-show-(\d+)$/); if (m) { mechShow(+m[1]); return; }
+}
+// her parçanın kendi katısı: parça − sırada sonra gelen oyuklar (diğer parçalar düşülmez: çarpışma görünsün)
+function collItems() {
+  const B = lastBrushes.map(({ p, geo }) => { if (!geo.boundingBox) geo.computeBoundingBox(); return { p, geo, sub: parts.indexOf(p) > 0 && p.op === 'sub', box: geo.boundingBox }; });
+  const keep = evaluator.useGroups; evaluator.useGroups = false;
+  const out = [];
+  try {
+    B.forEach((b, i) => {
+      if (b.sub) return;
+      let tris;
+      try {
+        const cuts = B.slice(i + 1).filter((o) => o.sub && o.box.intersectsBox(b.box));
+        if (!cuts.length) tris = geoTris(b.geo);
+        else { let res = new Brush(b.geo.clone()); res.updateMatrixWorld(); for (const o of cuts) { const ob = new Brush(o.geo.clone()); ob.updateMatrixWorld(); const nx = evaluator.evaluate(res, ob, SUBTRACTION); res.geometry.dispose(); ob.geometry.dispose(); res = nx; res.updateMatrixWorld(); } tris = geoTris(res.geometry); res.geometry.dispose(); }
+      } catch (e) { tris = geoTris(b.geo); }
+      out.push({ id: b.p.id, name: partName(b.p, parts.indexOf(b.p)), tris, key: b.p.x + ',' + b.p.y + ',' + b.p.z + ',' + b.p.rx + ',' + b.p.ry + ',' + b.p.rz });
+    });
+  } finally { evaluator.useGroups = keep; }
+  return out;
+}
+const mechCol = { busy: null, res: null, frames: [] };
+const mechGroup = new THREE.Group(); scene.add(mechGroup);
+function drawMechOverlay() { /* animasyon sırasında çarpışma kutusu gizlenir */ if (mechGroup.children.length && anim.playing) { mechGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); mechGroup.clear(); } }
+async function mechCollision() {
+  if (mechCol.busy) return;
+  const M = mechData.motor, mc = M && M.id && parts.find((x) => x.id === M.id && x.joint);
+  const ds = animDrivers().filter((d) => anim.cfg[d.key] && anim.cfg[d.key].on);
+  if (!mc && !ds.length) { toast('Önce motor seç ya da Oynatma listesinde bir hareket aç'); return; }
+  const snap = snapshot(), N = mc ? 36 : 24, start = mc ? mc.joint.val || 0 : 0;
+  const setF = (i) => { if (mc) { setJointVal(mc, start + (360 * i) / N * Math.sign(M.rpm || 1)); rebuild(false); } else animApply(i / (N - 1)); };
+  const pairs = new Map(); let base = null, meshCache = new Map(), npairs = 0;
+  mechCol.res = null;
+  try {
+    for (let i = 0; i < N; i++) {
+      mechCol.busy = (i + 1) + '/' + N; if (tab === 'anim') renderPanel();
+      await new Promise((r) => setTimeout(r, 0));
+      setF(i);
+      const items = collItems().map((it) => { let m = meshCache.get(it.id + '|' + it.key); if (!m) { m = new CMesh(it.tris); meshCache.set(it.id + '|' + it.key, m); } return { ...it, mesh: m }; });
+      if (!base) base = new Map(items.map((it) => [it.id, it.key]));
+      for (let a = 0; a < items.length; a++) for (let b = a + 1; b < items.length; b++) {
+        const A = items[a], B = items[b];
+        if (base.get(A.id) === A.key && base.get(B.id) === B.key && i > 0) continue;   // ikisi de hareket etmedi
+        if (i === 0) npairs++;
+        const r = cInterference(A.mesh, B.mesh, [], { samples: 8000 });
+        if (r.count > 0 && r.depth > 0.1) {
+          const key = A.id + '-' + B.id, x = pairs.get(key) || { a: A.name, b: B.name, depth: 0, n: 0, frame: i, atStart: false, box: r.region };
+          x.n++; if (r.depth > x.depth) { x.depth = r.depth; x.frame = i; x.box = r.region; } if (i === 0) x.atStart = true;
+          pairs.set(key, x);
+        }
+      }
+      if (meshCache.size > 400) meshCache = new Map();
+    }
+  } finally {
+    restore(snap); mechCol.busy = null; refreshAll();
+  }
+  const hits = [...pairs.values()].sort((a, b) => b.depth - a.depth).map((x) => ({ ...x, at: mc ? 'motor ' + fmtNum((360 * x.frame) / N, 0) + '° konumunda' : 'hareketin %' + Math.round((x.frame / (N - 1)) * 100) + "'inde" }));
+  mechCol.res = { hits, frames: N, pairs: npairs, N, motor: !!mc, start };
+  if (tab === 'anim') renderPanel();
+  toast(hits.length ? hits.length + ' çarpışma bulundu' : 'Çarpışma yok');
+}
+function mechShow(i) {
+  const R = mechCol.res, x = R && R.hits[i];
+  if (!x) return;
+  commit();
+  const M = mechData.motor, mc = M && parts.find((q) => q.id === M.id && q.joint);
+  if (R.motor && mc) { setJointVal(mc, (mc.joint.val || 0) + (360 * x.frame) / R.N * Math.sign(M.rpm || 1)); rebuild(false); } else animApply(x.frame / (R.N - 1));
+  mechGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); mechGroup.clear();
+  if (x.box) { const bx = new THREE.Box3(new THREE.Vector3(...x.box.min), new THREE.Vector3(...x.box.max)).expandByScalar(1); const hlp = new THREE.Box3Helper(bx, 0xef4444); hlp.material.depthTest = false; hlp.renderOrder = 999; mechGroup.add(hlp); fit(bx.clone().expandByScalar(bx.getSize(new THREE.Vector3()).length() * 2 + 20)); }
+  toast('Çarpışma konumu gösteriliyor (Geri al ile önceki duruma dön)');
 }
 
 /* ---- kalıcı eşleşmeler (mate) ---- */
@@ -3317,6 +3645,8 @@ document.addEventListener('click', (e) => {
   if (act && act.startsWith('wg-') && weightUI.act(act)) return;
   if (act === 'cs-go') { tab = 'cost'; renderPanel(); return; }
   if (act === 'sm-go-tab') { tab = 'sim'; renderPanel(); return; }
+  if (act === 'cn-go-tab') { tab = 'cam'; renderPanel(); return; }
+  if (act && act.startsWith('cn-') && camUI.act(act)) return;
   if (act && act.startsWith('sm-') && simUI.act(act)) return;
   if (act === 'as-go-tab') { tab = 'asm'; renderPanel(); asmUI.start(); return; }
   if (act && act.startsWith('as-') && asmUI.act(act)) return;
@@ -3324,8 +3654,10 @@ document.addEventListener('click', (e) => {
   if (!act) return;
   const p = cur();
 
+  if (act === 'add-gear') { addGear(); return; }
+  if (act.startsWith('mc-')) { mechAct(act); return; }
   if (act.startsWith('add-')) { addPart(act.slice(4), 'add'); return; }
-  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'asm' && asmUI.active) asmUI.stop(); if (tab !== 'sim' && simUI.active) simUI.exit(); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate' && tab !== 'link') clearFace();
+  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'asm' && asmUI.active) asmUI.stop(); if (tab !== 'sim' && simUI.active) simUI.exit(); if (tab !== 'cam') camUI.leave(); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate' && tab !== 'link') clearFace();
     linkPick = false;
     if (tab !== 'mate') { mate.a = null; mate.b = null; }
     if (tab !== 'edge') edgeSels = []; renderPanel(); return; }
@@ -3429,7 +3761,7 @@ document.addEventListener('click', (e) => {
   if (act === 'dlg-save') { saveProject(($('pname').value || '').trim() || 'model'); renderDialog(); return; }
   if (act === 'dlg-new') {
     commit();
-    parts = freshParts(); sel = 1; nextId = 2; projName = 'model'; weldPlan = null; asmAnswers = {}; simData = null;
+    parts = freshParts(); sel = 1; nextId = 2; projName = 'model'; weldPlan = null; asmAnswers = {}; simData = null; mechData = { cs: [], motor: null };
     closeDialog(); refreshAll(true);
     return;
   }
@@ -3490,6 +3822,8 @@ document.addEventListener('input', (e) => {
   if (d.wg) { if (d.wg === 'mat') weightUI.input(el, 'change'); return; }
   if (d.cf) return;   // maliyet girdileri değişince (change) işlenir
   if (d.as) { asmUI.input(el, 'input'); return; }
+  if (d.cs === 'speed') { camUI.input(el, 'input'); return; }
+  if (d.cs || d.cn || d.ct || d.co) return;   // CNC: değişince işlenir
   if (d.sf || d.sv || d.st) { simUI.input(el, 'input'); return; }
   if (d.sm || d.sp || d.sl2) return;   // değişince (change) işlenir
   if (d.s) {
@@ -3537,6 +3871,7 @@ document.addEventListener('input', (e) => {
   }
   if (d.pmat) { commit(); cur().mat = el.value; refreshAll(); return; }
   if (d.pf) { commit(); cur().pf = el.value; refreshAll(); return; }
+  if (d.mc) { mechInput(el); return; }
   if (d.an) {
     const [key, which] = d.an.split(','), st = anim.cfg[key], dd = animDrivers().find((x) => x.key === key);
     if (!st || !dd || !isFinite(el.valueAsNumber)) return;
@@ -3572,6 +3907,7 @@ document.addEventListener('input', (e) => {
   if (d.t === 'text') { cur()[k] = el.value; renderChips(); scheduleSave(); return; }
   const setv = () => { cur()[k] = d.u === 'deg' ? el.valueAsNumber : fromUnit(el.valueAsNumber, settings.unit); };
   if (POSE_KEYS.includes(k)) carry(cur(), setv); else setv();
+  if (cur().gear && (k === 'gm' || k === 'gz' || k === 'gb')) regenGear(cur());
   rebuild(false);
   scheduleSave();
 });
@@ -3638,7 +3974,7 @@ function loadExample(key) {
   const ex = buildExample(key);
   if (!ex) return;
   commit();
-  parts = ex.parts; nextId = ex.nextId; sel = ex.sel; projName = ex.name; weldPlan = null; asmAnswers = {}; simData = null;
+  parts = ex.parts; nextId = ex.nextId; sel = ex.sel; projName = ex.name; weldPlan = null; asmAnswers = {}; simData = null; mechData = { cs: [], motor: null };
   cleanLinks(parts);
   if (ex.anim) Object.assign(anim.cfg, ex.anim);
   tab = 'dims';

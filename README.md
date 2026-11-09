@@ -90,6 +90,22 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **Akıllı maliyet optimizasyonu (kural tabanlı, doğrulanabilir hesaplar):** fiyatı girilmiş aynı türdeki malzemelere geçiş (dayanımı düşükse "doğrulama gerekir"), daha büyük partide birim maliyet, plaka gibi parçada bloktan CNC yerine lazer kesim, dönel parçada CNC yerine torna, kaynak yöntemi karşılaştırması, talaş oranı yüksek parçalar, kendine ait hacmi olmayan gereksiz parça, profil ve sac firesi; "mevcut maliyet → önerilerle → tahmini tasarruf"
 - **📄 PDF maliyet raporu:** bütün kalemler, işlemler, adet tablosu, öneriler ve hesaplama varsayımları
 
+**⚙ CNC freze — takım yolu ve G-kodu (⚙ CNC sekmesi, ya da Hesap → CNC freze)**
+- Modelin üstten görünen yüzeyi yükseklik haritasına çevrilir (3 eksen dik işleme); takımın modele değmeden gidebileceği bölge kesin Öklid uzaklık alanıyla bulunur
+- **İşlemler:** yüzey alma (zikzak), **kaba boşaltma** (Z seviyeleri, düz taban seviyeleri otomatik eklenir, modelden ofset konturlar içten dışa, yan / taban payı), **duvar ve taban ince işleme** (pay sıfır son kontur, cep tabanları tamamen), **3B paralel ince işleme** (küresel / düz uç, drop-cutter, dik geçişlerde noktalar sıklaştırılır), **delik delme** (dik yuvarlak delikler standart matkapla; derin delikte G83 gagalama, boydan boya uç payı)
+- **Takımlar:** düz parmak, küresel uç, matkap; çap, ağız sayısı, kesme boyu, devir, ilerleme, dalma; malzemeye göre önerilen kesme değerleri (Vc, diş başı ilerleme, makine en yüksek devri)
+- **Stok ve sıfır:** yan / üst pay ve alt bağlama payı; G54 sıfırı stok üst ön-sol köşe, üst yüz ortası ya da alt köşe
+- **Simülasyon:** malzeme kaldırma animasyonu (takım görünür), işlenmiş parça; **kalan malzeme** (kırmızı) ve **modele dalma** kontrolü; takım boyu yetersizliği, üstten görünmeyen (alttan girinti) bölge, standart olmayan delik uyarıları; tahmini süre
+- **G-kodu:** Fanuc (Haas, Mitsubishi, Syntec uyumlu), Mach3 / Mach4 / LinuxCNC, GRBL; ondalık noktalı koordinatlar, satır numarası seçeneği, Türkçe karakter yok; GRBL'de takım değişiminde M0 bekleme ve açık delme döngüsü. **⬇ İndir** (.nc / .tap / .gcode) → OTG ile USB belleğe → makine
+- **📄 CNC iş kartı (PDF):** stok, sıfır, takım listesi (S / F), işlem sırası, uyarılar, kontrol listesi
+- Sınırlar: 3 eksen (4. / 5. eksen yok), tek bağlama; bağlama aparatı ve takım tutucu çarpışması hesaplanmaz; kesme değerleri başlangıç değeridir
+
+**⚙ Mekanizma: dişli, bağıntılar, motor, çarpışma (⚙ Dişli düğmesi, Hareket sekmesi)**
+- **Dişli çark:** evolvent düz dişli (20° basınç açısı); modül, diş sayısı, kalınlık, mil deliği Ölçü sekmesinden; bölüm / dış / diş dibi çapı yazılır. **Eş dişliyi ekle**: doğru eksen mesafesinde (m·(z₁+z₂)/2), dişler kavraşacak açıda; ilk dişli bir gövdeye menteşeyle bağlıysa eşi de bağlanır ve dişli bağıntısı kurulur
+- **Bağıntılar:** dişli (ters yön, z₁/z₂), iç dişli, kasnak / kayış / zincir (d₁/d₂), kremayer (bir turda π·m·z kayma), vida (adım × ağız), serbest oran; ters yön seçeneği; iki yönlü (sürülen itilince sürücü de döner); çelişen kapalı döngü eklenmez
+- **Motor:** döner eklem + devir (d/dk); bağlı eklemlerin devri / kayma hızı yazılır; motorla sürekli çalıştırma ve 1 tur video
+- **Çarpışma kontrolü:** motor bir tur (36 konum) ya da oynatma hareketi (24 konum) boyunca hareket eden parçalar birbirine giriyor mu (gerçek hacim kesişimi; değen yüzeyler sayılmaz); konum, parça çifti, batma derinliği; dokununca o konum ve bölge gösterilir
+
 **🔮 Geleceğimi Göster — sanal test ortamı (🔮 Gelecek sekmesi, ya da Hesap → Geleceğimi göster)**
 - **Akış:** tasarımı bitir → ölçüler → her parçanın malzemesini seç → **✓ Tasarımımı onayla** → **🔮 GELECEĞİMİ GÖSTER** açılır. Onaydan sonra tasarım değişirse yeniden onay ister. Tasarım test ortamına kopyalanır; orijinal hiçbir zaman değiştirilmez
 - **Gerçek sonlu eleman analizi (FEA):** katı geometri küp elemanlara (voxel) bölünür; 8 düğümlü uyumsuz modlu hekzahedral eleman (eğilmede kilitlenmez), doğrusal-elastik, çok katmanlı (multigrid) ön koşullu eşlenik gradyan çözücü, arka plan iş parçacığında (Worker). Eleman boyu ölçülerle hizalanır (kalınlık yuvarlama hatası olmasın). Ağ: Hızlı / Normal / İnce
@@ -252,6 +268,8 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - `logic.js` — test edilebilir mantık: parça varsayılanları, geri al geçmişi, STL yazıcı, sesli komut çözücü, birimler, kroki dönüşümleri (yay, yuvarlak köşe), kopya / ayna / dizi, pah geometrisi, teknik resim yerleşimi ve PDF yazıcı
 - `photo2d.js`, `photoimport.js` — fotoğraftan çizim: görüntü işleme (eşik, inceltme, yol takibi, çizgi / yay / daire uydurma) ve ekranı
 - `cad2d.js`, `cad2d-geom.js` — 2B çizim modu ve saf geometrisi (kesişim, kırp, uzat, ofset, radyus, DXF)
+- `cam.js`, `cam-ui.js` — CNC: yükseklik haritası, uzaklık alanı, takım yolları, simülasyon, G-kodu, iş kartı
+- `mech.js` — evolvent dişli profili, mekanizma bağıntıları
 - `fea.js`, `fea-worker.js`, `sim-ui.js` — Geleceğimi Göster: sonlu eleman çözücü (voxel H8, multigrid), modal, ısıl, yorulma / aşınma, alternatifler, arayüz ve PDF
 - `assembly.js`, `assembly-ui.js` — montaj sırası: parça tanıma, delik → cıvata, sökme analizi, patlatma / animasyon, PDF
 - `tests/` — testler: `node tests/logic.test.mjs`, `node tests/sketch.test.mjs`, `node tests/cad2d.test.mjs`, `node tests/photo2d.test.mjs`, `node tests/examples.test.mjs`, `node tests/export3d.test.mjs`
