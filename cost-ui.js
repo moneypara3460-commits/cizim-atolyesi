@@ -1,8 +1,8 @@
 // Akıllı Üretim Maliyeti — "Maliyet" sekmesi arayüzü.
 // api: { model() → maliyet modeli, materials, render(), toast(m), name(), snapshot()? }
 // Fiyatlar ve saat ücretleri atölyenin kendi verisidir: cihazda saklanır (cizim:cost), her projede kullanılır.
-import { computeCost, qtyTable, suggestions, defaultCostConfig, OPS, EXTRAS, PARAMS, QTY_STEPS } from './cost.js?v=20261109g';
-import { pdfFromJpegs } from './cutopt.js?v=20261109g';
+import { computeCost, qtyTable, suggestions, defaultCostConfig, OPS, EXTRAS, PARAMS, QTY_STEPS } from './cost.js?v=20261109h';
+import { pdfFromJpegs } from './cutopt.js?v=20261109h';
 
 const KEY = 'cizim:cost';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

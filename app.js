@@ -13,21 +13,22 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
-} from './logic.js?v=20261109g';
-import { openSketch } from './sketch.js?v=20261109g';
-import { to3MF, toSTEP } from './export3d.js?v=20261109g';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109g';
-import { openCad2D } from './cad2d.js?v=20261109g';
-import { openCutOpt } from './cutopt-ui.js?v=20261109g';
-import { createMfg } from './mfg-ui.js?v=20261109g';
-import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261109g';
-import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261109g';
-import { analyzeWeight } from './weight.js?v=20261109g';
-import { createWeightUI, fkg } from './weight-ui.js?v=20261109g';
-import { createCostUI } from './cost-ui.js?v=20261109g';
-import { planReport as weldReport } from './welds.js?v=20261109g';
-import { altCons as weldAltCons } from './weld-ui.js?v=20261109g';
-import { groupKey } from './cutopt.js?v=20261109g';
+} from './logic.js?v=20261109h';
+import { openSketch } from './sketch.js?v=20261109h';
+import { to3MF, toSTEP } from './export3d.js?v=20261109h';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109h';
+import { openCad2D } from './cad2d.js?v=20261109h';
+import { openCutOpt } from './cutopt-ui.js?v=20261109h';
+import { createMfg } from './mfg-ui.js?v=20261109h';
+import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261109h';
+import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261109h';
+import { analyzeWeight } from './weight.js?v=20261109h';
+import { createWeightUI, fkg } from './weight-ui.js?v=20261109h';
+import { createCostUI } from './cost-ui.js?v=20261109h';
+import { planReport as weldReport } from './welds.js?v=20261109h';
+import { altCons as weldAltCons } from './weld-ui.js?v=20261109h';
+import { groupKey } from './cutopt.js?v=20261109h';
+import { createAssemblyUI } from './assembly-ui.js?v=20261109h';
 
 const APP_VER = '20261108o'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -60,12 +61,13 @@ const cp = { n: 3, dx: 40, dy: 0, dz: 0, cn: 6, ang: 360, touched: false, shape:
 
 const hist = new History();
 let weldPlan = null;   // Akıllı Kaynak Planlama: { welds, set, symbols, ver }
-const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan });
+let asmAnswers = {};   // Montaj planı: kullanıcının bildirdiği bağlantı türleri { 'a-b': 'kaynak' | 'cıvata' | ... }
+const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan, asm: asmAnswers });
 // "Tek parça" ağları (üçgen verisi) geri al geçmişine girmesin diye parçada yalnızca anahtar (mk) durur, veri burada tutulur.
 // Kaydederken (otomatik kayıt, proje) veri de dosyaya yazılır.
 const meshStore = new Map();
 function snapshotSave() {
-  const o = { parts, sel, nextId, welds: weldPlan };
+  const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers };
   const ks = [...new Set(parts.filter((q) => q.mk && meshStore.has(q.mk)).map((q) => q.mk))];
   if (ks.length) { o.meshes = {}; ks.forEach((k) => { o.meshes[k] = meshStore.get(k); }); }
   return JSON.stringify(o);
@@ -73,7 +75,7 @@ function snapshotSave() {
 function restore(s) {
   const o = JSON.parse(s);
   if (o.meshes) for (const k of Object.keys(o.meshes)) meshStore.set(k, o.meshes[k]);
-  parts = o.parts; sel = o.sel; nextId = o.nextId; weldPlan = o.welds || null;
+  parts = o.parts; sel = o.sel; nextId = o.nextId; weldPlan = o.welds || null; asmAnswers = o.asm && typeof o.asm === 'object' ? o.asm : {};
   cleanLinks(parts);
   if (!parts.find((p) => p.id === sel)) sel = parts[0].id;
 }
@@ -401,11 +403,12 @@ function updateLabelScales() {
 }
 renderer.setAnimationLoop((now) => {
   if (anim.playing) animTick(now);
+  if (asmUI) asmUI.tick(now);
   controls.update();
   updateInfinite();
   updateLabelScales();
   renderer.render(scene, camera);
-  if (modelMesh && settings.edges !== false && !edgesBroken) drawEdges();
+  if (modelMesh && settings.edges !== false && !edgesBroken && modelGroup.visible) drawEdges();
 });
 
 function fit(box, dirOverride) {
@@ -779,6 +782,7 @@ function rebuild(refit) {
     lastClean = clean;
     rebuildCount++;
     if (typeof scheduleWeightMarker === 'function') scheduleWeightMarker();
+    if (asmUI && asmUI.active) { asmUI.invalidate(); if (tab === 'asm') setTimeout(renderPanel, 0); }
 
     let materials = matFor(vis[0].color);
     if (clean.groups.length) {
@@ -940,7 +944,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['wgt', 'Ağırlık'], ['cost', 'Maliyet'], ['mfg', 'Üretim'], ['weld', 'Kaynak']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['wgt', 'Ağırlık'], ['cost', 'Maliyet'], ['mfg', 'Üretim'], ['weld', 'Kaynak'], ['asm', 'Montaj planı']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -1159,7 +1163,7 @@ function renderPanel() {
         row('Ağırlık merkezi', mp.centroid ? 'X ' + fmtNum(toUnit(mp.centroid[0], settings.unit), 1) + '  Y ' + fmtNum(toUnit(mp.centroid[1], settings.unit), 1) + '  Z ' + fmtNum(toUnit(mp.centroid[2], settings.unit), 1) : '-') +
         row('Genel ölçü', lenText(sz.x) + ' × ' + lenText(sz.z) + ' × ' + lenText(sz.y));
     }
-    body += '<div class="lbl h">Ağırlık ve maliyet</div>' + btn('⚖ Parça parça ağırlık, ağırlık merkezi, denge, kaldırma', 'wg-go') + btn('₺ Üretim maliyeti (hammadde, işçilik, makine, adet)', 'cs-go') +
+    body += '<div class="lbl h">Ağırlık ve maliyet</div>' + btn('⚖ Parça parça ağırlık, ağırlık merkezi, denge, kaldırma', 'wg-go') + btn('₺ Üretim maliyeti (hammadde, işçilik, makine, adet)', 'cs-go') + btn('🧩 Montaj sırası ve patlatılmış görünüm', 'as-go-tab') +
       '<div class="lbl h">Üretim</div>' + btn('🏭 Üretimi analiz et (çakışma, montaj, kaynak)', 'mfg-go') + btn('✂ Akıllı kesim optimizasyonu (profil boy / fire / maliyet)', 'cut-opt') +
       '<div class="lbl h">Dışa aktar</div>' + btn('📋 Parça listesi (CSV)', 'bom-csv') + btn('📐 DXF (ön / yan / üst)', 'dxf-out') +
       btn('🧊 STEP (SolidWorks, Fusion, FreeCAD)', 'step-out') + btn('🖨 3MF (3B yazıcı)', 'mf-out');
@@ -1170,6 +1174,9 @@ function renderPanel() {
   } else if (tab === 'wgt') {
     body = weightUI.html();
     hint = 'Ağırlık her parçanın kendi malzemesi (Dayanım sekmesinde ya da burada seçilir) ve gerçek 3B hacmiyle hesaplanır. Kırmızı-beyaz küre ağırlık merkezidir; kesik çizgi zemine izdüşümü, yeşil / turuncu / kırmızı çizgi destek alanıdır. Model döndürülünce işaret de modelle birlikte döner; parça değişince yeniden hesaplanır.';
+  } else if (tab === 'asm') {
+    body = asmUI.html();
+    hint = 'Montaj planı gerçek parça konumlarıyla çalışır. Parça türü adından, standart ölçüden ya da şeklinden tanınır; bilinmeyen bağlantılar sorulur, tahmin edilmez. Patlatılmış görünümde parçalar takılma yönünde uzaklaşır, yönleri korunur.';
   } else if (tab === 'weld') {
     body = weldUI.html();
     hint = 'Kaynak planı: bulunan birleşimler öneridir, sen onaylarsın. Renkler: turuncu köşe, kırmızı alın, mor T kaynağı; soluk = onaylanmamış öneri, sarı = seçili. Sarf ve süre değerleri tahminidir; kaynak ölçüsü ve dayanımı mühendis onayı gerektirir.';
@@ -1709,6 +1716,77 @@ const costUI = createCostUI({
   name: () => projName || 'model',
 });
 
+/* ---- Akıllı Montaj Sırası ve 3B Patlatılmış Görünüm ---- */
+// parçalar: kendi katısı (sonraki parçalar ve delikler düşülmüş, Ağırlık ile aynı) + oyuk silindirler (delik ekseni için)
+let asmItemsCache = { key: null, items: null };
+function asmModel() {
+  if (asmItemsCache.key !== rebuildCount) asmItemsCache = { key: rebuildCount, items: lastBrushes.length ? weightItems() : [] };
+  const solids = asmItemsCache.items.map((it) => ({ id: it.id, name: it.name, type: it.type, op: 'add', tris: it.tris, p: it.p, material: it.material }));
+  const holes = lastBrushes.filter(({ p }) => parts.indexOf(p) > 0 && p.op === 'sub').map(({ p, geo }) => ({ id: p.id, name: partName(p, parts.indexOf(p)), type: p.type, op: 'sub', tris: geoTris(geo), p }));
+  const mates = [];
+  for (const A of parts) for (const m of A.mates || []) mates.push([A.id, m.b, m.t]);
+  return { parts: [...solids, ...holes], welds: weldPlan ? weldPlan.welds || [] : [], mates, mateErr };
+}
+const asmGroup = new THREE.Group();
+asmGroup.visible = false;
+scene.add(asmGroup);
+const ASM_MAT = {
+  placed: new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.25, roughness: 0.55 }),
+  active: new THREE.MeshStandardMaterial({ color: 0xf97316, metalness: 0.2, roughness: 0.5, emissive: 0x7c2d12, emissiveIntensity: 0.35 }),
+  ghost: new THREE.MeshStandardMaterial({ color: 0x64748b, transparent: true, opacity: 0.14, depthWrite: false }),
+  sel: new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.2, roughness: 0.45, emissive: 0x713f12, emissiveIntensity: 0.4 }),
+};
+function asmClear() { asmGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); asmGroup.clear(); }
+function asmEnter(res) {
+  asmClear();
+  const items = asmItemsCache.items || [];
+  const edgeM = new THREE.LineBasicMaterial({ color: 0x0b1220 });
+  for (const it of items) {
+    if (!it.tris || it.tris.length < 9) continue;
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(it.tris, 3)); g.computeVertexNormals();
+    const node = new THREE.Group(); node.userData.id = it.id;
+    const mesh = new THREE.Mesh(g, ASM_MAT.placed); mesh.userData.id = it.id; node.add(mesh);
+    try { const eg = new THREE.EdgesGeometry(g, 30); const ln = new THREE.LineSegments(eg, edgeM); ln.userData.edge = true; node.add(ln); } catch (e) { /* kenar çizgisi olmadan */ }
+    asmGroup.add(node);
+  }
+  asmGroup.visible = true; modelGroup.visible = false; ovl.visible = false; wgtGroup.visible = false;
+}
+function asmLeave() { asmClear(); asmGroup.visible = false; modelGroup.visible = true; ovl.visible = true; wgtGroup.visible = true; }
+function asmApply(st, selId) {
+  for (const node of asmGroup.children) {
+    const s = st.get(node.userData.id) || { off: [0, 0, 0], mode: 'placed' };
+    node.position.set(s.off[0], s.off[1], s.off[2]);
+    const mesh = node.children[0], ln = node.children[1];
+    mesh.material = node.userData.id === selId ? ASM_MAT.sel : ASM_MAT[s.mode] || ASM_MAT.placed;
+    mesh.renderOrder = s.mode === 'ghost' ? 2 : 0;
+    if (ln) ln.visible = s.mode !== 'ghost';
+  }
+}
+function asmTap(cx, cy) {
+  setRay(cx, cy);
+  const meshes = asmGroup.children.filter((n) => n.children[0].material !== ASM_MAT.ghost).map((n) => n.children[0]);
+  const hit = raycaster.intersectObjects(meshes, false)[0];
+  asmUI.select(hit ? hit.object.userData.id : null);
+}
+var asmUI = createAssemblyUI({   // var: yeniden çizim modül yüklenirken çağrılırsa henüz tanımsız olabilir
+  model: asmModel,
+  size: () => (lastClean ? lastClean.boundingBox.getSize(new THREE.Vector3()).length() : 500),
+  getAnswers: () => asmAnswers,
+  setAnswers: (o) => { asmAnswers = o; scheduleSave(); },
+  enter: asmEnter,
+  leave: asmLeave,
+  apply: asmApply,
+  focus(ids) {
+    const box = new THREE.Box3();
+    for (const n of asmGroup.children) if (ids.includes(n.userData.id)) box.expandByObject(n);
+    if (!box.isEmpty()) fit(box.clone().expandByScalar(box.getSize(new THREE.Vector3()).length() * 0.4));
+  },
+  render: () => { if (tab === 'asm') renderPanel(); },
+  toast,
+  name: () => projName || 'model',
+  snapshot: shot3D,
+});
+
 // projedeki bütün profil iskeletlerinin kesim listesi → kesim optimizasyonu girdisi
 const MAT_SHORT = { celik: 'Çelik', paslanmaz: 'Paslanmaz', aluminyum: 'Alüminyum', al6061: 'Alüminyum', pirinc: 'Pirinç', bakir: 'Bakır', titanyum: 'Titanyum' };
 function cadCutPieces() {
@@ -1916,6 +1994,7 @@ function onTap(cx, cy) {
   if (tab === 'edge') { edgeTap(cx, cy); return; }
   if (tab === 'mate') { mateTap(cx, cy); return; }
   if (tab === 'link' && linkPick) { linkTap(cx, cy); return; }
+  if (asmUI.active) { asmTap(cx, cy); return; }
   const hit = pickAt(cx, cy);
   if (hit && hit.part.id !== sel) {
     sel = hit.part.id;
@@ -2409,6 +2488,7 @@ document.addEventListener('change', (e) => {
   if (el.dataset && el.dataset.wf) { weldUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.wg) { weightUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.cf) { costUI.input(el, 'change'); return; }
+  if (el.dataset && el.dataset.as) { asmUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.link === 'parent') setParent(cur(), el.value === '' ? null : Number(el.value));
 });
 
@@ -3115,12 +3195,14 @@ document.addEventListener('click', (e) => {
   if (act === 'wg-go') { tab = 'wgt'; renderPanel(); return; }
   if (act && act.startsWith('wg-') && weightUI.act(act)) return;
   if (act === 'cs-go') { tab = 'cost'; renderPanel(); return; }
+  if (act === 'as-go-tab') { tab = 'asm'; renderPanel(); asmUI.start(); return; }
+  if (act && act.startsWith('as-') && asmUI.act(act)) return;
   if (act && act.startsWith('cs-') && costUI.act(act)) return;
   if (!act) return;
   const p = cur();
 
   if (act.startsWith('add-')) { addPart(act.slice(4), 'add'); return; }
-  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate' && tab !== 'link') clearFace();
+  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'asm' && asmUI.active) asmUI.stop(); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate' && tab !== 'link') clearFace();
     linkPick = false;
     if (tab !== 'mate') { mate.a = null; mate.b = null; }
     if (tab !== 'edge') edgeSels = []; renderPanel(); return; }
@@ -3224,7 +3306,7 @@ document.addEventListener('click', (e) => {
   if (act === 'dlg-save') { saveProject(($('pname').value || '').trim() || 'model'); renderDialog(); return; }
   if (act === 'dlg-new') {
     commit();
-    parts = freshParts(); sel = 1; nextId = 2; projName = 'model'; weldPlan = null;
+    parts = freshParts(); sel = 1; nextId = 2; projName = 'model'; weldPlan = null; asmAnswers = {};
     closeDialog(); refreshAll(true);
     return;
   }
@@ -3284,6 +3366,7 @@ document.addEventListener('input', (e) => {
   if (d.wf) { weldUI.input(el, 'input'); return; }
   if (d.wg) { if (d.wg === 'mat') weightUI.input(el, 'change'); return; }
   if (d.cf) return;   // maliyet girdileri değişince (change) işlenir
+  if (d.as) { asmUI.input(el, 'input'); return; }
   if (d.s) {
     section.pos = el.valueAsNumber;
     applySection();
@@ -3430,7 +3513,7 @@ function loadExample(key) {
   const ex = buildExample(key);
   if (!ex) return;
   commit();
-  parts = ex.parts; nextId = ex.nextId; sel = ex.sel; projName = ex.name; weldPlan = null;
+  parts = ex.parts; nextId = ex.nextId; sel = ex.sel; projName = ex.name; weldPlan = null; asmAnswers = {};
   cleanLinks(parts);
   if (ex.anim) Object.assign(anim.cfg, ex.anim);
   tab = 'dims';

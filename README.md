@@ -90,6 +90,17 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **Akıllı maliyet optimizasyonu (kural tabanlı, doğrulanabilir hesaplar):** fiyatı girilmiş aynı türdeki malzemelere geçiş (dayanımı düşükse "doğrulama gerekir"), daha büyük partide birim maliyet, plaka gibi parçada bloktan CNC yerine lazer kesim, dönel parçada CNC yerine torna, kaynak yöntemi karşılaştırması, talaş oranı yüksek parçalar, kendine ait hacmi olmayan gereksiz parça, profil ve sac firesi; "mevcut maliyet → önerilerle → tahmini tasarruf"
 - **📄 PDF maliyet raporu:** bütün kalemler, işlemler, adet tablosu, öneriler ve hesaplama varsayımları
 
+**🧩 Akıllı Montaj Sırası ve 3B Patlatılmış Görünüm (Montaj planı sekmesi, ya da Hesap → Montaj sırası)**
+- **Tek dokunuş:** "▶ MONTAJ SIRASINI BAŞLAT" — parçalar tanınır, bağlantılar bulunur, sıra çıkarılır, 3B görünüm açılır
+- **Parça tanıma:** önce parça adından (cıvata, somun, rondela, pim, mil, rulman, flanş, burç, kapak, plaka…), sonra standart ölçüden (60xx / 62xx / 63xx rulman, ISO 7089 rondela), sonra şekilden (ince uzun silindir → cıvata / mil, yassı disk → flanş); kaynağı (isim / ölçü / şekil / tür) her parçada yazılır, şekilden tanıma "tahmin" olarak gösterilir
+- **Bağlantılar:** Kaynak sekmesinde onaylanan kaynaklar (birlikte hareket eden grup), Montaj eşleşmeleri, delikler (delik ekseninin geçtiği parçalar = cıvatalı bağlantı, sıkma boyu gerçek kalınlıktan). Birbirine değen ama bağlantısı modelde olmayan parçalar **kullanıcıya sorulur** (kaynak / cıvata / geçme / yok); cevaplar projeye kaydedilir, tahmin edilmez
+- **Montaj sırası:** gerçek geometriyle sökme analizi — her turda altı ana yönden biriyle hiçbir parçaya çarpmadan çıkabilen en üstteki birim sökülür; sökme sırasının tersi montaj sırasıdır. Delikteki cıvata çıkmadan geçtiği parçalar sökülemez. Hiçbir yönde çıkamayan parçalar "fiziksel olarak mümkün olmayan montaj" olarak gösterilir
+- **3B patlatılmış görünüm:** her parça kendi takılma ekseni boyunca, gerçek konumundan uzaklaşır (yönü değişmez); miktar kaydırıcıyla ayarlanır; döndür / yakınlaştır; parçaya dokununca bilgisi (tanıma, adım, boyut, hacim, bağlantılar, sorunlar) açılır
+- **Adım adım animasyon:** ⏮ baştan, ◀ önceki, ▶ / ⏸ oynat-durdur, ▶▶ sonraki; takılan parça turuncu, yerindekiler gri, sıradakiler soluk
+- **Bağlantı elemanları:** her delik için ISO 273 geçiş deliğinden M ölçüsü (kılavuz deliğinden dişli bağlantı), cıvata boyu (sıkma + 2 rondela + somun + diş payı, standart boya yuvarlanmış), rondela ve somun; modelde çizili cıvata varsa "mevcut", yoksa "EKSİK", delik çapı tabloda yoksa "ölçü belirlenemedi" (ölçü uydurulmaz)
+- **Montaj kontrolü:** çakışan parçalar, delik eksenine göre eğik duran cıvata / pim (yanlış yön), cıvata başı ya da somun tarafı başka parçayla kapalı (erişilemeyen nokta), sağlanamayan eşleşmeler, imkânsız montaj
+- **📄 PDF montaj raporu:** patlatılmış görünüm, montaj talimatı (adım adım, her adımda sıkılacak elemanlar), parça listesi, bağlantı elemanı listesi, sorunlar, cevap bekleyen bağlantılar
+
 **⚖ Akıllı Ağırlık ve Ağırlık Merkezi (Ağırlık sekmesi, ya da Hesap → Ağırlık)**
 - Her parça kendi malzemesiyle (Çelik, Paslanmaz, Alüminyum, Bakır, Pirinç, Titanyum, PLA / ABS / PETG / Naylon, ahşaplar) ya da parçaya girilen **özel yoğunlukla** hesaplanır: kütle = gerçek 3B hacim × yoğunluk. Malzemesi seçilmeyen parçalar genel malzemeyle hesaplanır ve bu yazılır; geçersiz yoğunlukta parça toplama katılmaz (uydurma yok)
 - Hacim gerçek geometriden: her parçanın kendine ait katısı = parça − sıralamada kendinden sonraki parçalar (CSG). Böylece oyuklar düşülür, iç içe hacim iki kez sayılmaz; içi boş profil yalnızca et kalınlığıyla sayılır. Ayrım yapılamazsa parça "tahmini" diye işaretlenir
@@ -216,6 +227,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - Kesit görünümünde kesilen yüzey turuncu "iç yüz" olarak gösterilir (gerçek dolu kesit yüzeyi değil)
 - Renkli parçalarda oyuğun iç duvarı tabanın rengini alır
 - Çok sayıda parçada (kırk üstü dizi vb.) birleştirme yavaşlar
+- Montaj sırası yalnızca altı ana eksen yönünde takmayı dener (döndürerek / eğik takma, esnek parça, anahtar boşluğu yaklaşık); vida dişi modellenmez, cıvata ölçüsü delik çapından bulunur
 
 ## Dosyalar
 
@@ -225,6 +237,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - `logic.js` — test edilebilir mantık: parça varsayılanları, geri al geçmişi, STL yazıcı, sesli komut çözücü, birimler, kroki dönüşümleri (yay, yuvarlak köşe), kopya / ayna / dizi, pah geometrisi, teknik resim yerleşimi ve PDF yazıcı
 - `photo2d.js`, `photoimport.js` — fotoğraftan çizim: görüntü işleme (eşik, inceltme, yol takibi, çizgi / yay / daire uydurma) ve ekranı
 - `cad2d.js`, `cad2d-geom.js` — 2B çizim modu ve saf geometrisi (kesişim, kırp, uzat, ofset, radyus, DXF)
+- `assembly.js`, `assembly-ui.js` — montaj sırası: parça tanıma, delik → cıvata, sökme analizi, patlatma / animasyon, PDF
 - `tests/` — testler: `node tests/logic.test.mjs`, `node tests/sketch.test.mjs`, `node tests/cad2d.test.mjs`, `node tests/photo2d.test.mjs`, `node tests/examples.test.mjs`, `node tests/export3d.test.mjs`
 - `App.js`, `viewerHtml.js`, `package.json` — eski React Native / Expo sürümü (2. aşama; güncellenmedi)
 
