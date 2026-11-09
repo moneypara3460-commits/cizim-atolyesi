@@ -13,15 +13,17 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261109e';
-import { openSketch } from './sketch.js?v=20261109e';
-import { to3MF, toSTEP } from './export3d.js?v=20261109e';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109e';
-import { openCad2D } from './cad2d.js?v=20261109e';
-import { openCutOpt } from './cutopt-ui.js?v=20261109e';
-import { createMfg } from './mfg-ui.js?v=20261109e';
-import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261109e';
-import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261109e';
+} from './logic.js?v=20261109f';
+import { openSketch } from './sketch.js?v=20261109f';
+import { to3MF, toSTEP } from './export3d.js?v=20261109f';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109f';
+import { openCad2D } from './cad2d.js?v=20261109f';
+import { openCutOpt } from './cutopt-ui.js?v=20261109f';
+import { createMfg } from './mfg-ui.js?v=20261109f';
+import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261109f';
+import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261109f';
+import { analyzeWeight } from './weight.js?v=20261109f';
+import { createWeightUI, fkg } from './weight-ui.js?v=20261109f';
 
 const APP_VER = '20261108o'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -385,11 +387,13 @@ resize();
 const labelSprites = [];
 const msrSprites = [];
 const weldSprites = [];
+const wgtSprites = [];
 function updateLabelScales() {
   const k = 2 * Math.tan(camera.fov * RAD / 2) * 0.045;
   for (const s of labelSprites) s.scale.set(k * s.userData.aspect, k, 1);
   for (const s of msrSprites) s.scale.set(k * s.userData.aspect, k, 1);
   for (const s of weldSprites) s.scale.set(k * 0.8 * s.userData.aspect, k * 0.8, 1);
+  for (const s of wgtSprites) s.scale.set(k * 0.8 * s.userData.aspect, k * 0.8, 1);
 }
 renderer.setAnimationLoop((now) => {
   if (anim.playing) animTick(now);
@@ -770,6 +774,7 @@ function rebuild(refit) {
     clean.computeBoundingBox();
     lastClean = clean;
     rebuildCount++;
+    if (typeof scheduleWeightMarker === 'function') scheduleWeightMarker();
 
     let materials = matFor(vis[0].color);
     if (clean.groups.length) {
@@ -931,7 +936,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['mfg', 'Üretim'], ['weld', 'Kaynak']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['wgt', 'Ağırlık'], ['mfg', 'Üretim'], ['weld', 'Kaynak']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -1150,10 +1155,14 @@ function renderPanel() {
         row('Ağırlık merkezi', mp.centroid ? 'X ' + fmtNum(toUnit(mp.centroid[0], settings.unit), 1) + '  Y ' + fmtNum(toUnit(mp.centroid[1], settings.unit), 1) + '  Z ' + fmtNum(toUnit(mp.centroid[2], settings.unit), 1) : '-') +
         row('Genel ölçü', lenText(sz.x) + ' × ' + lenText(sz.z) + ' × ' + lenText(sz.y));
     }
-    body += '<div class="lbl h">Üretim</div>' + btn('🏭 Üretimi analiz et (çakışma, montaj, kaynak)', 'mfg-go') + btn('✂ Akıllı kesim optimizasyonu (profil boy / fire / maliyet)', 'cut-opt') +
+    body += '<div class="lbl h">Ağırlık</div>' + btn('⚖ Parça parça ağırlık, ağırlık merkezi, denge, kaldırma', 'wg-go') +
+      '<div class="lbl h">Üretim</div>' + btn('🏭 Üretimi analiz et (çakışma, montaj, kaynak)', 'mfg-go') + btn('✂ Akıllı kesim optimizasyonu (profil boy / fire / maliyet)', 'cut-opt') +
       '<div class="lbl h">Dışa aktar</div>' + btn('📋 Parça listesi (CSV)', 'bom-csv') + btn('📐 DXF (ön / yan / üst)', 'dxf-out') +
       btn('🧊 STEP (SolidWorks, Fusion, FreeCAD)', 'step-out') + btn('🖨 3MF (3B yazıcı)', 'mf-out');
     hint = 'STEP yüzeyli (üçgen yüzlü) katı olarak yazılır: CAD programında açılır, ölçülür, montaja eklenir; ama yüzleri düzgün eğri değil, parametrik özellik ağacı yoktur. Kapalı olmayan modeller yüzey olarak gider. 3MF, Cura / PrusaSlicer / Bambu Studio içindir. Ağırlık tam dolu (içi dolu) katı için hesaplanır; 3B yazıcıda dolgu oranı ve duvar kalınlığı gerçek ağırlığı düşürür. DXF: AutoCAD, FreeCAD gibi programlarda açılır; gizli çizgiler ayrı katmandadır.';
+  } else if (tab === 'wgt') {
+    body = weightUI.html();
+    hint = 'Ağırlık her parçanın kendi malzemesi (Dayanım sekmesinde ya da burada seçilir) ve gerçek 3B hacmiyle hesaplanır. Kırmızı-beyaz küre ağırlık merkezidir; kesik çizgi zemine izdüşümü, yeşil / turuncu / kırmızı çizgi destek alanıdır. Model döndürülünce işaret de modelle birlikte döner; parça değişince yeniden hesaplanır.';
   } else if (tab === 'weld') {
     body = weldUI.html();
     hint = 'Kaynak planı: bulunan birleşimler öneridir, sen onaylarsın. Renkler: turuncu köşe, kırmızı alın, mor T kaynağı; soluk = onaylanmamış öneri, sarı = seçili. Sarf ve süre değerleri tahminidir; kaynak ölçüsü ve dayanımı mühendis onayı gerektirir.';
@@ -1212,6 +1221,7 @@ function renderPanel() {
   $('tabbody').innerHTML = body;
   $('tabbody').classList.add('grid'); // tüm sekmelerde düğmeler okunur boyutta, satıra en fazla 2 tane
   if (typeof weldGroup !== 'undefined') { weldGroup.visible = tab === 'weld'; if (tab === 'weld') drawWelds(); }
+  if (typeof wgtGroup !== 'undefined') drawWeightMarker();
   $('tabhint').textContent = hint;
   $('b-move').classList.toggle('on', settings.move);
 }
@@ -1524,6 +1534,126 @@ const weldUI = createWeldUI({
   bbox: () => (lastClean && lastClean.boundingBox ? { min: lastClean.boundingBox.min.toArray(), max: lastClean.boundingBox.max.toArray() } : null),
   version: () => rebuildCount,
   openSheet: () => makeSheet(false),
+  snapshot: shot3D,
+});
+
+/* ---- Akıllı Ağırlık ve Ağırlık Merkezi ---- */
+// her parçanın kendine ait katısı: parça − (sıralamada kendinden sonra gelen bütün parçalar). Birleştirme sırayla yapıldığı için
+// bir noktadaki malzeme, o noktayı kapsayan son parçaya aittir; böylece oyuklar düşülür, iç içe hacim iki kez sayılmaz.
+function weightItems() {
+  const B = lastBrushes.map(({ p, geo }) => { if (!geo.boundingBox) geo.computeBoundingBox(); return { p, geo, sub: parts.indexOf(p) > 0 && p.op === 'sub', box: geo.boundingBox }; });
+  const keep = evaluator.useGroups;
+  evaluator.useGroups = false;
+  const items = [];
+  try {
+    B.forEach((b, i) => {
+      if (b.sub) return;
+      let tris, exact = true;
+      try {
+        const later = B.slice(i + 1).filter((o) => o.box.intersectsBox(b.box));
+        if (!later.length) tris = geoTris(b.geo);
+        else {
+          let res = new Brush(b.geo.clone()); res.updateMatrixWorld();
+          for (const o of later) {
+            const ob = new Brush(o.geo.clone()); ob.updateMatrixWorld();
+            const nx = evaluator.evaluate(res, ob, SUBTRACTION);
+            res.geometry.dispose(); ob.geometry.dispose();
+            res = nx; res.updateMatrixWorld();
+          }
+          tris = geoTris(res.geometry); res.geometry.dispose();
+        }
+      } catch (err) { tris = geoTris(b.geo); exact = false; }
+      const m = partMat(b.p), custom = Number(b.p.rho) > 0 ? Number(b.p.rho) : null;
+      items.push({ id: b.p.id, name: partName(b.p, parts.indexOf(b.p)), type: b.p.type, p: b.p, tris, exact, material: { id: m.id, name: m.name, rho: m.rho, kind: m.kind }, rho: custom ?? m.rho, rhoSrc: custom != null ? 'özel' : b.p.mat ? 'malzeme' : 'varsayılan' });
+    });
+  } finally { evaluator.useGroups = keep; }
+  return items;
+}
+let wgtCache = { key: null, res: null };
+function weightCompute() {
+  const key = rebuildCount + '|' + (settings.mat || '') + '|' + parts.map((q) => q.id + ':' + (q.mat || '') + ':' + (q.rho || '')).join(',');
+  if (wgtCache.key !== key) wgtCache = { key, res: lastBrushes.length ? analyzeWeight(weightItems()) : null };
+  return wgtCache.res;
+}
+const wgtGroup = new THREE.Group();
+scene.add(wgtGroup);
+const wgtShowLift = { on: false };
+let wgtTimer = 0;
+function scheduleWeightMarker() { clearTimeout(wgtTimer); if (tab === 'wgt' || settings.cogShow) wgtTimer = setTimeout(drawWeightMarker, 250); }
+function drawWeightMarker() {
+  wgtGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); });
+  wgtGroup.clear();
+  wgtSprites.length = 0;
+  if (!(tab === 'wgt' || settings.cogShow) || !lastClean) return;
+  let R;
+  try { R = weightCompute(); } catch (err) { return; }
+  if (!R || !R.total.com) return;
+  const c = new THREE.Vector3(...R.total.com), size = lastClean.boundingBox.getSize(new THREE.Vector3()).length();
+  const r = Math.max(4, size * 0.022);
+  // ağırlık merkezi sembolü: dörtte bir boyalı küre (kırmızı / beyaz), her zaman önde
+  const red = new THREE.MeshBasicMaterial({ color: 0xdc2626, depthTest: false, depthWrite: false });
+  const white = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, depthWrite: false });
+  for (let k = 0; k < 4; k++) for (let tq = 0; tq < 2; tq++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 6, k * Math.PI / 2, Math.PI / 2, tq * Math.PI / 2, Math.PI / 2), (k + tq) % 2 ? red : white);
+    m.position.copy(c); m.renderOrder = 1001; wgtGroup.add(m);
+  }
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 1.05, r * 0.08, 6, 32), new THREE.MeshBasicMaterial({ color: 0x111827, depthTest: false }));
+  ring.position.copy(c); ring.renderOrder = 1002; wgtGroup.add(ring);
+  const lbl = textSprite('AM · ' + fkg(R.total.kg));
+  lbl.position.copy(c).add(new THREE.Vector3(0, r * 2.2, 0)); wgtGroup.add(lbl); wgtSprites.push(lbl);
+  const Bl = R.balance;
+  if (Bl) {
+    const floorY = Bl.ymin + 0.5;
+    const dl = new THREE.Line(new THREE.BufferGeometry().setFromPoints([c, new THREE.Vector3(c.x, floorY, c.z)]), new THREE.LineDashedMaterial({ color: 0xdc2626, dashSize: r * 0.8, gapSize: r * 0.5, depthTest: false }));
+    dl.computeLineDistances(); dl.renderOrder = 1000; wgtGroup.add(dl);
+    const cr = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(c.x - r, floorY, c.z), new THREE.Vector3(c.x + r, floorY, c.z), new THREE.Vector3(c.x, floorY, c.z - r), new THREE.Vector3(c.x, floorY, c.z + r)]), new THREE.LineBasicMaterial({ color: 0xdc2626, depthTest: false }));
+    cr.renderOrder = 1000; wgtGroup.add(cr);
+    if (Bl.hull.length >= 2) {
+      const col = { ok: 0x22c55e, care: 0xeab308, high: 0xf97316, tips: 0xef4444, line: 0xef4444 }[Bl.status] || 0x22c55e;
+      const hp = Bl.hull.map((q) => new THREE.Vector3(q[0], floorY, q[1]));
+      const hl = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(hp), new THREE.LineBasicMaterial({ color: col, depthTest: false }));
+      hl.renderOrder = 1000; wgtGroup.add(hl);
+    }
+    if (Bl.feet.length > 1 && Bl.feet.length <= 12) for (const f of Bl.feet) { const sp = textSprite(fkg(f.kg)); sp.position.set(f.c[0], floorY, f.c[1]); wgtGroup.add(sp); wgtSprites.push(sp); }
+  }
+  const L = R.lift;
+  if (wgtShowLift.on && L) {
+    const hook = new THREE.Vector3(c.x, L.points[0].y + L.legs[0].hookHeight, c.z);
+    const ym = new THREE.MeshBasicMaterial({ color: 0xfacc15, depthTest: false });
+    const segs = [];
+    for (const q of L.points) {
+      const pnt = new THREE.Vector3(q.x, q.y, q.z);
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(r * 0.6, r * 1.4, 12), ym);
+      cone.rotation.x = Math.PI; cone.position.copy(pnt).add(new THREE.Vector3(0, r * 0.7, 0)); cone.renderOrder = 1001; wgtGroup.add(cone);
+      segs.push(pnt, hook);
+      const sp = textSprite(fkg(q.kg)); sp.position.copy(pnt).add(new THREE.Vector3(0, r * 2, 0)); wgtGroup.add(sp); wgtSprites.push(sp);
+    }
+    const sl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(segs), new THREE.LineBasicMaterial({ color: 0xfacc15, depthTest: false }));
+    sl.renderOrder = 1000; wgtGroup.add(sl);
+  }
+  updateLabelScales();
+}
+const weightUI = createWeightUI({
+  compute: weightCompute,
+  materials: MATERIALS,
+  partMat(id) { const q = parts.find((x) => x.id === id) || {}; const m = partMat(q); return { id: m.id, custom: Number(q.rho) > 0 ? Number(q.rho) : null, src: Number(q.rho) > 0 ? 'özel' : q.mat ? 'malzeme' : 'varsayılan' }; },
+  setMat(id, mid) { const q = parts.find((x) => x.id === id); if (!q) return; commit(); q.mat = mid; scheduleSave(); renderPanel(); },
+  setRho(id, v) { const q = parts.find((x) => x.id === id); if (!q) return; commit(); if (v == null) delete q.rho; else q.rho = v; scheduleSave(); renderPanel(); },
+  focusPart(id) {
+    const b = lastBrushes.find((x) => x.p.id === id);
+    if (!b) return;
+    sel = id; refreshOverlays();
+    if (!b.geo.boundingBox) b.geo.computeBoundingBox();
+    fit(b.geo.boundingBox.clone().expandByScalar(b.geo.boundingBox.getSize(new THREE.Vector3()).length() * 0.3));
+    renderPanel();
+  },
+  get show3D() { return !!settings.cogShow; },
+  set show3D(v) { settings.cogShow = !!v; saveSettings(); },
+  get showLift() { return wgtShowLift.on; },
+  set showLift(v) { wgtShowLift.on = !!v; },
+  render: () => { if (tab === 'wgt') renderPanel(); else drawWeightMarker(); },
+  toast,
+  name: () => projName || 'model',
   snapshot: shot3D,
 });
 
@@ -2225,6 +2355,7 @@ function linkTap(cx, cy) {
 document.addEventListener('change', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.wf) { weldUI.input(el, 'change'); return; }
+  if (el.dataset && el.dataset.wg) { weightUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.link === 'parent') setParent(cur(), el.value === '' ? null : Number(el.value));
 });
 
@@ -2928,6 +3059,8 @@ document.addEventListener('click', (e) => {
   if (act === 'mfg-go') { tab = 'mfg'; renderPanel(); mfg.run(); return; }
   if (act && act.startsWith('mfg-') && mfg.act(act)) return;
   if (act && act.startsWith('wd-') && weldUI.act(act)) return;
+  if (act === 'wg-go') { tab = 'wgt'; renderPanel(); return; }
+  if (act && act.startsWith('wg-') && weightUI.act(act)) return;
   if (!act) return;
   const p = cur();
 
@@ -3094,6 +3227,7 @@ document.addEventListener('input', (e) => {
   const el = e.target;
   const d = el.dataset || {};
   if (d.wf) { weldUI.input(el, 'input'); return; }
+  if (d.wg) { if (d.wg === 'mat') weightUI.input(el, 'change'); return; }
   if (d.s) {
     section.pos = el.valueAsNumber;
     applySection();
