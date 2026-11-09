@@ -12,18 +12,22 @@ import {
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
-  sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit,
-} from './logic.js?v=20261109f';
-import { openSketch } from './sketch.js?v=20261109f';
-import { to3MF, toSTEP } from './export3d.js?v=20261109f';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109f';
-import { openCad2D } from './cad2d.js?v=20261109f';
-import { openCutOpt } from './cutopt-ui.js?v=20261109f';
-import { createMfg } from './mfg-ui.js?v=20261109f';
-import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261109f';
-import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261109f';
-import { analyzeWeight } from './weight.js?v=20261109f';
-import { createWeightUI, fkg } from './weight-ui.js?v=20261109f';
+  sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
+} from './logic.js?v=20261109g';
+import { openSketch } from './sketch.js?v=20261109g';
+import { to3MF, toSTEP } from './export3d.js?v=20261109g';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109g';
+import { openCad2D } from './cad2d.js?v=20261109g';
+import { openCutOpt } from './cutopt-ui.js?v=20261109g';
+import { createMfg } from './mfg-ui.js?v=20261109g';
+import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261109g';
+import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261109g';
+import { analyzeWeight } from './weight.js?v=20261109g';
+import { createWeightUI, fkg } from './weight-ui.js?v=20261109g';
+import { createCostUI } from './cost-ui.js?v=20261109g';
+import { planReport as weldReport } from './welds.js?v=20261109g';
+import { altCons as weldAltCons } from './weld-ui.js?v=20261109g';
+import { groupKey } from './cutopt.js?v=20261109g';
 
 const APP_VER = '20261108o'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -936,7 +940,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['wgt', 'Ağırlık'], ['mfg', 'Üretim'], ['weld', 'Kaynak']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['wgt', 'Ağırlık'], ['cost', 'Maliyet'], ['mfg', 'Üretim'], ['weld', 'Kaynak']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -1155,11 +1159,14 @@ function renderPanel() {
         row('Ağırlık merkezi', mp.centroid ? 'X ' + fmtNum(toUnit(mp.centroid[0], settings.unit), 1) + '  Y ' + fmtNum(toUnit(mp.centroid[1], settings.unit), 1) + '  Z ' + fmtNum(toUnit(mp.centroid[2], settings.unit), 1) : '-') +
         row('Genel ölçü', lenText(sz.x) + ' × ' + lenText(sz.z) + ' × ' + lenText(sz.y));
     }
-    body += '<div class="lbl h">Ağırlık</div>' + btn('⚖ Parça parça ağırlık, ağırlık merkezi, denge, kaldırma', 'wg-go') +
+    body += '<div class="lbl h">Ağırlık ve maliyet</div>' + btn('⚖ Parça parça ağırlık, ağırlık merkezi, denge, kaldırma', 'wg-go') + btn('₺ Üretim maliyeti (hammadde, işçilik, makine, adet)', 'cs-go') +
       '<div class="lbl h">Üretim</div>' + btn('🏭 Üretimi analiz et (çakışma, montaj, kaynak)', 'mfg-go') + btn('✂ Akıllı kesim optimizasyonu (profil boy / fire / maliyet)', 'cut-opt') +
       '<div class="lbl h">Dışa aktar</div>' + btn('📋 Parça listesi (CSV)', 'bom-csv') + btn('📐 DXF (ön / yan / üst)', 'dxf-out') +
       btn('🧊 STEP (SolidWorks, Fusion, FreeCAD)', 'step-out') + btn('🖨 3MF (3B yazıcı)', 'mf-out');
     hint = 'STEP yüzeyli (üçgen yüzlü) katı olarak yazılır: CAD programında açılır, ölçülür, montaja eklenir; ama yüzleri düzgün eğri değil, parametrik özellik ağacı yoktur. Kapalı olmayan modeller yüzey olarak gider. 3MF, Cura / PrusaSlicer / Bambu Studio içindir. Ağırlık tam dolu (içi dolu) katı için hesaplanır; 3B yazıcıda dolgu oranı ve duvar kalınlığı gerçek ağırlığı düşürür. DXF: AutoCAD, FreeCAD gibi programlarda açılır; gizli çizgiler ayrı katmandadır.';
+  } else if (tab === 'cost') {
+    body = costUI.html();
+    hint = 'Maliyet: miktarlar ve süreler modelden hesaplanır, FİYATLARI SEN GİRERSİN (uygulama piyasa fiyatı kullanmaz). Fiyatlar ve saat ücretleri bu cihazda saklanır, her projede kullanılır. Malzemeyi parça başına Ağırlık ya da Dayanım sekmesinden seç; kaynak süresi Kaynak sekmesindeki onaylı plandan gelir.';
   } else if (tab === 'wgt') {
     body = weightUI.html();
     hint = 'Ağırlık her parçanın kendi malzemesi (Dayanım sekmesinde ya da burada seçilir) ve gerçek 3B hacmiyle hesaplanır. Kırmızı-beyaz küre ağırlık merkezidir; kesik çizgi zemine izdüşümü, yeşil / turuncu / kırmızı çizgi destek alanıdır. Model döndürülünce işaret de modelle birlikte döner; parça değişince yeniden hesaplanır.';
@@ -1655,6 +1662,51 @@ const weightUI = createWeightUI({
   toast,
   name: () => projName || 'model',
   snapshot: shot3D,
+});
+
+/* ---- Akıllı Üretim Maliyeti: modelden miktarlar ---- */
+function costModel() {
+  const R = weightCompute();
+  if (!R) return { parts: [] };
+  const num = (v) => Math.max(Number(v) || 0, 0);
+  const out = { parts: [], sheets: [], profiles: [], holes: [], weld: null, cutCfg: {} };
+  for (const r of R.parts) {
+    const q = parts.find((x) => x.id === r.id);
+    if (!q) continue;
+    const m = matById(r.material.id);
+    let stock;
+    if (q.type === 'box') stock = { kind: 'block', dims: [num(q.w), num(q.l), num(q.h)] };
+    else if (q.type === 'cylinder' || q.type === 'cone') stock = { kind: 'bar', D: Math.max(num(q.d), q.type === 'cone' ? num(q.d2) : 0), H: num(q.h) };
+    else if (q.type === 'sphere') stock = { kind: 'bar', D: num(q.d), H: num(q.d) };
+    else if (q.type === 'tube') stock = { kind: 'pipe', D: num(q.d), Di: num(q.di), H: num(q.h) };
+    else if (q.type === 'frame') stock = { kind: 'profile' };
+    else if (q.type === 'sheet') { const c = sheetCalc(q); stock = { kind: 'sheet', flatL: c.flatL, W: c.W, T: c.T }; out.sheets.push({ id: q.id, name: r.name, T: c.T, flatL: c.flatL, W: c.W, bends: c.bends.length }); }
+    else { const b = lastBrushes.find((x) => x.p.id === q.id); if (b) { if (!b.geo.boundingBox) b.geo.computeBoundingBox(); const sz = b.geo.boundingBox.getSize(new THREE.Vector3()); stock = { kind: 'bbox', dims: [sz.x, sz.z, sz.y] }; } }
+    out.parts.push({ id: r.id, name: r.name, type: r.type, cat: r.cat, kg: r.kg || 0, rho: r.rho, material: { id: m.id, name: m.name, rho: r.rho, kind: m.kind, sy: m.sy }, stock });
+    if (q.type === 'frame') {
+      const c = frameCalc(q), mm = partMat(q), matName = MAT_SHORT[mm.id] || mm.name, key = groupKey(c.pr.name, matName), rho = Number(q.rho) > 0 ? Number(q.rho) : mm.rho;
+      for (const g of c.cut) out.profiles.push({ key, profile: c.pr.name, matName, matId: mm.id, label: r.name + ' · ' + g.role, len: g.len, qty: g.qty, kgPerM: profileArea(c.pr) * rho / 1000 });
+    }
+  }
+  // delikler: oyuk silindirler
+  const hm = new Map();
+  parts.forEach((q, i) => { if (i > 0 && q.op === 'sub' && q.type === 'cylinder' && !q.hidden) { const k = Math.round(num(q.d) * 10) / 10; const o = hm.get(k) || { d: k, depth: 0, count: 0 }; o.count++; o.depth = Math.max(o.depth, num(q.h)); hm.set(k, o); } });
+  out.holes = [...hm.values()];
+  // kaynak: onaylı plan
+  if (weldPlan && (weldPlan.welds || []).some((w) => w.status === 'approved')) {
+    const rep = weldReport(weldPlan.welds, weldPlan.set), c0 = rep.cons;
+    const alt = weldAltCons(weldPlan);
+    out.weld = { approvedN: rep.approved, connLen: rep.connLen, workMin: rep.workMin, wireKg: c0.reduce((s, c) => s + (c.wireM != null || c.rodM != null ? c.needG / 1000 : 0), 0), electrodes: c0.reduce((s, c) => s + (c.electrodes || 0), 0), gasL: c0.reduce((s, c) => s + (c.gasL || 0), 0), alt: alt ? { name: alt.name, workMin: alt.workMin } : null, unsized: rep.unknown.length };
+  }
+  try { const co = JSON.parse(localStorage.getItem('cizim:cutopt') || '{}'); out.cutCfg = { ...(co.set || {}), prices: co.prices || {} }; } catch (e) { /* */ }
+  return out;
+}
+const costUI = createCostUI({
+  model: costModel,
+  materials: MATERIALS.map((m) => ({ id: m.id, name: m.name, rho: m.rho, kind: m.kind, sy: m.sy })),
+  render: () => { if (tab === 'cost') renderPanel(); },
+  toast,
+  name: () => projName || 'model',
 });
 
 // projedeki bütün profil iskeletlerinin kesim listesi → kesim optimizasyonu girdisi
@@ -2356,6 +2408,7 @@ document.addEventListener('change', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.wf) { weldUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.wg) { weightUI.input(el, 'change'); return; }
+  if (el.dataset && el.dataset.cf) { costUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.link === 'parent') setParent(cur(), el.value === '' ? null : Number(el.value));
 });
 
@@ -3061,6 +3114,8 @@ document.addEventListener('click', (e) => {
   if (act && act.startsWith('wd-') && weldUI.act(act)) return;
   if (act === 'wg-go') { tab = 'wgt'; renderPanel(); return; }
   if (act && act.startsWith('wg-') && weightUI.act(act)) return;
+  if (act === 'cs-go') { tab = 'cost'; renderPanel(); return; }
+  if (act && act.startsWith('cs-') && costUI.act(act)) return;
   if (!act) return;
   const p = cur();
 
@@ -3228,6 +3283,7 @@ document.addEventListener('input', (e) => {
   const d = el.dataset || {};
   if (d.wf) { weldUI.input(el, 'input'); return; }
   if (d.wg) { if (d.wg === 'mat') weightUI.input(el, 'change'); return; }
+  if (d.cf) return;   // maliyet girdileri değişince (change) işlenir
   if (d.s) {
     section.pos = el.valueAsNumber;
     applySection();
