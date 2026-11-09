@@ -90,6 +90,21 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **Akıllı maliyet optimizasyonu (kural tabanlı, doğrulanabilir hesaplar):** fiyatı girilmiş aynı türdeki malzemelere geçiş (dayanımı düşükse "doğrulama gerekir"), daha büyük partide birim maliyet, plaka gibi parçada bloktan CNC yerine lazer kesim, dönel parçada CNC yerine torna, kaynak yöntemi karşılaştırması, talaş oranı yüksek parçalar, kendine ait hacmi olmayan gereksiz parça, profil ve sac firesi; "mevcut maliyet → önerilerle → tahmini tasarruf"
 - **📄 PDF maliyet raporu:** bütün kalemler, işlemler, adet tablosu, öneriler ve hesaplama varsayımları
 
+**🔮 Geleceğimi Göster — sanal test ortamı (🔮 Gelecek sekmesi, ya da Hesap → Geleceğimi göster)**
+- **Akış:** tasarımı bitir → ölçüler → her parçanın malzemesini seç → **✓ Tasarımımı onayla** → **🔮 GELECEĞİMİ GÖSTER** açılır. Onaydan sonra tasarım değişirse yeniden onay ister. Tasarım test ortamına kopyalanır; orijinal hiçbir zaman değiştirilmez
+- **Gerçek sonlu eleman analizi (FEA):** katı geometri küp elemanlara (voxel) bölünür; 8 düğümlü uyumsuz modlu hekzahedral eleman (eğilmede kilitlenmez), doğrusal-elastik, çok katmanlı (multigrid) ön koşullu eşlenik gradyan çözücü, arka plan iş parçacığında (Worker). Eleman boyu ölçülerle hizalanır (kalınlık yuvarlama hatası olmasın). Ağ: Hızlı / Normal / İnce
+- **Kurulum:** sabitleme (yüz seç ya da 3B modelde dokun), yükler (N ya da kg, 6 yön, yüze ya da dokunulan noktaya), öz ağırlık
+- **Dayanım:** von Mises gerilmesi, güvenlik katsayısı (akma / σ), en büyük yer değiştirme, boy/sehim, denge kontrolü (mesnet tepkisi = yük), kritik bölgeler (3B'de işaretli), tekillik ayrımı (yük / mesnet çevresi hariç değer + tepe değer), ağ yakınsama kontrolü
+- **3B:** gerilme ya da yer değiştirme renk haritası, hesaplanan şekil değişiminin animasyonu (abartma oranı yazılı), test öncesi / sonrası / karşılaştırma
+- **Titreşim:** ilk 3 doğal frekans (alt uzay yinelemesi), girilen frekansla oran, dinamik büyütme, rezonans uyarısı, mod şekli animasyonu
+- **Sıcaklık:** serbest termal genleşme, sabitlemeler genleşmeyi engellerse ısıl gerilme (FEA, farklı malzemeler dahil), malzeme sıcaklık sınırları; çelik (EN 1993-1-2) ve 6061-T6 için sıcaklıkta dayanım düşüşü — verisi olmayan malzemede sonuç uydurulmaz
+- **Ömür (yaklaşık):** yorulma (Shigley S-N, Marin yüzey katsayısı, Goodman), günlük tekrar girilirse yıl aralığı (saçılma ×3), aşınma (Archard, katsayı aralığıyla); kullanım sıklığı girilmezse süre iddia edilmez
+- **Tasarımını geliştir:** daha dayanıklı (kritik bölgeye malzeme katmanı), daha hafif (yük taşımayan malzemeyi çıkar, yük yolu korunur), malzeme alternatifleri (doğrusal süperpozisyon; Maliyet sekmesindeki fiyatlarla ekonomik karşılaştırma). Her alternatif yeniden FEA ile doğrulanır, ayrı kopya olarak saklanır, STL indirilebilir
+- **🤖 Akıllı test asistanı:** her öneri "neden" ve "öneri" ile
+- **📄 PDF test raporu:** tasarım, malzemeler, kuvvetler, koşullar, gerilme / deformasyon, kritik bölgeler, güvenlik katsayısı, titreşim / sıcaklık / ömür, öneriler, alternatifler, doğrulama tablosu
+- **Doğrulama (`tests/fea.test.mjs`):** konsol kiriş sehim %0,1 ve gerilme %1,4, eksenel çubuk, öz ağırlık %0,4, ısıl uzama %1,2, 1. doğal frekans %0,2, denge, iki malzemeli çubuk, multigrid = Jacobi, ağ hizalama
+- **Sınırlar:** akma sonrası davranış, burkulma, temas / cıvata ön yükü, kaynak dikişi, darbe, sıcaklık dağılımı hesaplanmaz; ince sac / ince cidarlı profiller küp ağda iyi temsil edilmeyebilir (uyarı verilir). Sonuçlar profesyonel mühendislik onayının yerine geçmez
+
 **🧩 Akıllı Montaj Sırası ve 3B Patlatılmış Görünüm (Montaj planı sekmesi, ya da Hesap → Montaj sırası)**
 - **Tek dokunuş:** "▶ MONTAJ SIRASINI BAŞLAT" — parçalar tanınır, bağlantılar bulunur, sıra çıkarılır, 3B görünüm açılır
 - **Parça tanıma:** önce parça adından (cıvata, somun, rondela, pim, mil, rulman, flanş, burç, kapak, plaka…), sonra standart ölçüden (60xx / 62xx / 63xx rulman, ISO 7089 rondela), sonra şekilden (ince uzun silindir → cıvata / mil, yassı disk → flanş); kaynağı (isim / ölçü / şekil / tür) her parçada yazılır, şekilden tanıma "tahmin" olarak gösterilir
@@ -237,6 +252,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - `logic.js` — test edilebilir mantık: parça varsayılanları, geri al geçmişi, STL yazıcı, sesli komut çözücü, birimler, kroki dönüşümleri (yay, yuvarlak köşe), kopya / ayna / dizi, pah geometrisi, teknik resim yerleşimi ve PDF yazıcı
 - `photo2d.js`, `photoimport.js` — fotoğraftan çizim: görüntü işleme (eşik, inceltme, yol takibi, çizgi / yay / daire uydurma) ve ekranı
 - `cad2d.js`, `cad2d-geom.js` — 2B çizim modu ve saf geometrisi (kesişim, kırp, uzat, ofset, radyus, DXF)
+- `fea.js`, `fea-worker.js`, `sim-ui.js` — Geleceğimi Göster: sonlu eleman çözücü (voxel H8, multigrid), modal, ısıl, yorulma / aşınma, alternatifler, arayüz ve PDF
 - `assembly.js`, `assembly-ui.js` — montaj sırası: parça tanıma, delik → cıvata, sökme analizi, patlatma / animasyon, PDF
 - `tests/` — testler: `node tests/logic.test.mjs`, `node tests/sketch.test.mjs`, `node tests/cad2d.test.mjs`, `node tests/photo2d.test.mjs`, `node tests/examples.test.mjs`, `node tests/export3d.test.mjs`
 - `App.js`, `viewerHtml.js`, `package.json` — eski React Native / Expo sürümü (2. aşama; güncellenmedi)

@@ -9,7 +9,7 @@
 //    EN KÜÇÜK birim sökülür; sökme sırasının tersi montaj sırasıdır. Takılma yönü = sökme yönünün tersi. Sökülemeyenler "mümkün değil".
 // 4) Patlatma: her birim sökme yönünde, montaj sırasındaki yerine göre uzaklaştırılır (yalnız öteleme; parçaların yönü korunur).
 
-import { Mesh, blocks, interference, minDistance, holeAxis, AXIS_NAME } from './mfgcheck.js?v=20261109h';
+import { Mesh, blocks, interference, minDistance, holeAxis, AXIS_NAME } from './mfgcheck.js?v=20261109i';
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
