@@ -1,14 +1,17 @@
 // Tekstil ve Moda çalışma alanı — arayüz (Aşama 1: ortak proje altyapısı).
 // Hesap ve doğrulama tx/model.js'te; burada yalnız gösterim ve düzenleme.
 // Makine ve Mühendislik alanının hiçbir dosyasını içe aktarmaz.
-import * as M from './model.js?v=20261112d';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112d';
-import { TEMPLATES, VIEWS } from './drawing.js?v=20261112d';
-import { openSketchEditor } from './sketch-ui.js?v=20261112d';
-import { SETS, defaultParams } from './woven/blocks.js?v=20261112d';
-import { openPatternEditor } from './woven/pattern-ui.js?v=20261112d';
-import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112d';
-import { sizeTable as gradeTable } from './woven/grade.js?v=20261112d';
+import * as M from './model.js?v=20261112e';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112e';
+import { TEMPLATES, VIEWS } from './drawing.js?v=20261112e';
+import { openSketchEditor } from './sketch-ui.js?v=20261112e';
+import { SETS, defaultParams } from './woven/blocks.js?v=20261112e';
+import { openPatternEditor } from './woven/pattern-ui.js?v=20261112e';
+import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112e';
+import { sizeTable as gradeTable } from './woven/grade.js?v=20261112e';
+import { TEMPLATES as KTPL, validateChart } from './knit/chart.js?v=20261112e';
+import { KNIT_PIECES, gradeKnit, widthOf } from './knit/shape.js?v=20261112e';
+import { openChartEditor } from './knit/chart-ui.js?v=20261112e';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -74,15 +77,15 @@ async function renderHome() {
 }
 
 /* ---------- proje ---------- */
-const TABS = [['col', 'Koleksiyon'], ['draw', 'Teknik çizim'], ['pat', 'Kalıp'], ['colors', 'Renkler'], ['sizes', 'Bedenler'], ['mats', 'Malzemeler'], ['tp', 'Föy'], ['val', 'Doğrulama'], ['revs', 'Revizyonlar'], ['tools', 'Dal araçları']];
+const TABS = [['col', 'Koleksiyon'], ['draw', 'Teknik çizim'], ['pat', 'Kalıp'], ['knit', 'Örgü'], ['colors', 'Renkler'], ['sizes', 'Bedenler'], ['mats', 'Malzemeler'], ['tp', 'Föy'], ['val', 'Doğrulama'], ['revs', 'Revizyonlar'], ['tools', 'Dal araçları']];
 function render() {
   if (S.view === 'home') return renderHome();
   const p = S.p, T = M.PROJECT_TYPES[p.type];
   const issues = M.validate(p), nErr = issues.filter((x) => x.level === 'hata').length;
   $('top').querySelector('h1').textContent = p.name;
-  const tabs = TABS.filter(([k]) => k !== 'pat' || p.woven).map(([k, l]) => `<button data-a="tab" data-v="${k}" class="${S.tab === k ? 'on' : ''}">${l}${k === 'val' && issues.length ? ` (${nErr ? '⛔' + nErr : '⚠' + issues.length})` : ''}</button>`).join('');
-  if (S.tab === 'pat' && !p.woven) S.tab = 'col';
-  const body = { col: tabCollection, draw: tabDrawings, pat: tabPatterns, colors: tabColors, sizes: tabSizes, mats: tabMaterials, tp: tabTechpack, val: () => tabValidation(issues), revs: tabRevisions, tools: tabTools }[S.tab]();
+  const tabs = TABS.filter(([k]) => (k !== 'pat' || p.woven) && (k !== 'knit' || p.knit)).map(([k, l]) => `<button data-a="tab" data-v="${k}" class="${S.tab === k ? 'on' : ''}">${l}${k === 'val' && issues.length ? ` (${nErr ? '⛔' + nErr : '⚠' + issues.length})` : ''}</button>`).join('');
+  if ((S.tab === 'pat' && !p.woven) || (S.tab === 'knit' && !p.knit)) S.tab = 'col';
+  const body = { col: tabCollection, draw: tabDrawings, pat: tabPatterns, knit: tabKnit, colors: tabColors, sizes: tabSizes, mats: tabMaterials, tp: tabTechpack, val: () => tabValidation(issues), revs: tabRevisions, tools: tabTools }[S.tab]();
   $('main').innerHTML = `
   <div class="row noprint">
     <button data-a="home">← Projeler</button>
@@ -203,6 +206,51 @@ function tabPatterns() {
     <div class="small">Editörde "Yeni parça" ile köşe / eğri noktalarına dokunarak parça çizilir.</div></div>`;
   return h;
 }
+function tabKnit() {
+  const p = S.p, K = p.knit, prods = p.collection.products.filter((x) => x.branch === 'knit'), yarns = p.library.materials.filter((m) => m.kind === 'yarn');
+  let h = `<div class="card"><h3>Numuneler (gauge)</h3><div class="small">Bütün ilmek / sıra hesapları numuneye dayanır. Numuneyi yıkayıp kurutduktan sonra 10 cm'deki ilmek ve sıra sayısını ölç; yıkanmamış numune "uyarı" verir.</div>
+    ${K.swatches.map((s, i) => `<div class="row"><label class="f"><span>Ad</span><input data-f="knit.swatches.${i}.name" value="${esc(s.name)}"></label>
+      <label class="f"><span>İplik</span><select data-f="knit.swatches.${i}.yarn" data-t="ref"><option value="">—</option>${yarns.map((y) => `<option value="${y.id}" ${y.id === s.yarn ? 'selected' : ''}>${esc(y.name)}</option>`).join('')}</select></label>
+      <label class="f"><span>İlmek / 10 cm</span><input data-f="knit.swatches.${i}.st10" data-t="num" inputmode="decimal" value="${num(s.st10)}"></label>
+      <label class="f"><span>Sıra / 10 cm</span><input data-f="knit.swatches.${i}.row10" data-t="num" inputmode="decimal" value="${num(s.row10)}"></label>
+      <label class="small"><input type="checkbox" data-a="sw-wash" data-i="${i}" ${s.washed ? 'checked' : ''}> yıkanmış</label></div>`).join('') || '<div class="small">Numune yok.</div>'}
+    <div class="row noprint"><label class="f"><span>Ad</span><input id="ns-name" placeholder="ör. Merinos düz"></label><label class="f"><span>İlmek / 10 cm</span><input id="ns-st" inputmode="decimal" placeholder="ör. 28"></label><label class="f"><span>Sıra / 10 cm</span><input id="ns-row" inputmode="decimal" placeholder="ör. 38"></label><button class="ok" data-a="add-swatch">+ Numune</button></div></div>`;
+  h += `<div class="card"><h3>Örgü desenleri</h3><div class="row noprint"><label class="f"><span>Başlangıç</span><select id="nk-tpl">${Object.entries(KTPL).map(([k, t]) => `<option value="${k}">${esc(t.label)}</option>`).join('')}</select></label><label class="f"><span>Ad</span><input id="nk-name"></label><button class="ok" data-a="add-chart">Oluştur ve aç</button></div>
+    ${K.charts.map((c, i) => { const v = validateChart(c), e = v.filter((x) => x.level === 'hata').length; return `<div class="row"><span style="flex:3 1 160px"><b>${esc(c.name)}</b><div class="small">${c.w} ilmek × ${c.h} sıra${c.repeat ? ` · tekrar ${c.repeat.w}×${c.repeat.h}` : ''}${c.palette.length > 1 ? ` · ${c.palette.length} renk` : ''} · ${e ? `⛔ ${e} hata` : v.length ? `⚠ ${v.length} uyarı` : '✅'}</div></span><button class="on" data-a="open-chart" data-i="${i}">Aç</button><button class="danger" data-a="del-chart" data-i="${i}">${S.delArm === c.id ? 'Emin misin?' : 'Sil'}</button></div>`; }).join('') || '<div class="small">Desen yok.</div>'}</div>`;
+  const kind = S.kpKind && KNIT_PIECES[S.kpKind] ? S.kpKind : 'beden';
+  h += `<div class="card noprint"><h3>Triko parçası (ilmek hesabı)</h3><div class="row">
+    <label class="f"><span>Parça</span><select id="kp-kind">${Object.entries(KNIT_PIECES).map(([k, v]) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>
+    <label class="f"><span>Ürün</span><select id="kp-prod">${prods.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}<option value="">— bağlı değil —</option></select></label>
+    <label class="f"><span>Beden</span><input id="kp-size" placeholder="ör. M"></label>
+    <label class="f"><span>Numune</span><select id="kp-sw">${K.swatches.map((s) => `<option value="${s.id}">${esc(s.name)} (${num(s.st10)} / ${num(s.row10)})</option>`).join('')}</select></label>
+    <label class="f"><span>Desen (tekrar korunur)</span><select id="kp-ch"><option value="">— yok —</option>${K.charts.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
+    <label class="f"><span>Ribana</span><select id="kp-rib"><option value="rib11">1×1</option><option value="rib22">2×2</option></select></label></div>
+    <div class="row">${Object.entries(KNIT_PIECES[kind].params).map(([k, [lbl, v]]) => `<label class="f"><span>${esc(lbl)} (cm)</span><input data-kp="${k}" inputmode="decimal" value="${num(v / 10)}"></label>`).join('')}</div>
+    <div class="row"><button class="ok" data-a="add-kpiece" ${K.swatches.length ? '' : 'disabled'}>Hesapla ve ekle</button></div>${K.swatches.length ? '' : '<div class="small">Önce numune ekle.</div>'}</div>`;
+  K.pieces.forEach((pc, i) => {
+    let r = null, err = ''; try { r = M.knitCompute(p, pc); } catch (e) { err = e.message; }
+    const pr = p.collection.products.find((x) => x.id === pc.product), sw = K.swatches.find((x) => x.id === pc.swatch);
+    h += `<div class="card"><h3><span class="sp">${esc(pc.name)}${pr ? ' · ' + esc(pr.name) : ''}${pc.size ? ' · Beden ' + esc(pc.size) : ''}</span><button class="danger" data-a="del-kpiece" data-i="${i}">${S.delArm === pc.id ? 'Emin misin?' : 'Sil'}</button></h3>`;
+    if (err) h += `<div class="issue hata">⛔ ${esc(err)}</div>`;
+    else {
+      h += `<div class="small">Numune ${esc(sw.name)}: ${num(sw.st10)} ilmek × ${num(sw.row10)} sıra / 10 cm${sw.washed ? '' : ' · ⚠ yıkanmamış'} · ilmek sayısı ${r.mult} ve 2 kenar ilmeğine uyduruldu</div>
+        <div class="row"><b>Başlangıç: ${r.castOn} ilmek</b><b>${r.rows} sıra</b>${r.end ? `<b>Sonda: ${r.end} ilmek</b>` : ''}<span class="small">Genişlik farkı ${r.widthDiff >= 0 ? '+' : ''}${num(r.widthDiff / 10, 2)} cm</span></div>
+        <table>${r.plan.map((x) => `<tr><td class="small">${x.from}–${x.to}. sıra</td><td>${esc(x.text)}</td></tr>`).join('')}</table>`;
+      const tb = p.sizeTables.find((t) => t.measures['Göğüs çevresi'] && t.sizes.includes(pc.size));
+      if (tb && pc.kind !== 'atki') {
+        const ch = pc.chart ? K.charts.find((c) => c.id === pc.chart) : null;
+        const gr = gradeKnit(pc.kind, pc.params, sw, tb, tb.sizes, { rep: ch ? (ch.repeat ? ch.repeat.w : ch.w) : 1, ribRep: pc.rib === 'rib22' ? 4 : 2, edge: 1, base: pc.size });
+        h += `<div class="small" style="margin-top:6px">Bedenlere göre (${esc(tb.name)}, göğüs çevresinden; desen tekrarı korunur):</div><div class="scroll"><table><tr><th></th>${gr.map((g) => `<th>${esc(g.size)}</th>`).join('')}</tr>
+          <tr><td>Başlangıç ilmeği</td>${gr.map((g) => `<td>${g.ok ? g.castOn : '⛔'}</td>`).join('')}</tr>${pc.kind === 'kol' ? `<tr><td>Pazu ilmeği</td>${gr.map((g) => `<td>${g.ok ? g.end : '—'}</td>`).join('')}</tr>` : ''}
+          <tr><td>Genişlik (cm)</td>${gr.map((g) => `<td>${g.ok ? num(widthOf(g.end || g.castOn, sw) / 10) : '—'}</td>`).join('')}</tr></table></div>`;
+      }
+    }
+    h += '</div>';
+  });
+  return h;
+}
+function openChart(i) { const p = S.p, ch = p.knit.charts[i]; openChartEditor(ch, { toast, meta: { project: p.name }, onChange: (closed) => { dirty(); if (closed) render(); } }); }
+
 function gradeForm(pid, base) {
   const p = S.p, tbls = p.sizeTables.filter((t) => t.sizes.includes(base));
   if (!tbls.length) return `<div class="issue uyarı">"${esc(base || '—')}" bedeni hiçbir beden tablosunda yok. Bedenler sekmesinde bu bedeni içeren bir tablo oluştur (kişiye özel ölçü için tabloya kişinin adıyla bir sütun ekle).</div>`;
@@ -334,8 +382,8 @@ function tabTools() {
   const br = M.PROJECT_TYPES[S.p.type].branches;
   const rows = [];
   if (br.includes('woven')) rows.push(['Dokuma / Konfeksiyon', [['Kumaş yerleşimi ve kesim planı', 7], ['3B giysi', 9]]]);
-  if (br.includes('knit')) rows.push(['Triko / Örgü', [ ['İlmek ve örgü deseni (düz, ters, ribana, saç örgüsü, jakar)', 5], ['Numune, ilmek / sıra yoğunluğu', 5], ['Bedene göre ilmek sayıları', 4], ['Makine profili ve üretim çıktısı', 8], ['3B triko', 9]]]);
-  return `<div class="card">✅ Teknik çizim (Aşama 2): "Teknik çizim" sekmesi.${br.includes('woven') ? ' ✅ Dokuma kalıbı (Aşama 3) ve beden yayma / grading (Aşama 4): "Kalıp" sekmesi.' : ''}</div><div class="small">Aşağıdaki araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
+  if (br.includes('knit')) rows.push(['Triko / Örgü', [['Makine profili ve üretim çıktısı', 8], ['3B triko', 9]]]);
+  return `<div class="card">✅ Teknik çizim (Aşama 2): "Teknik çizim" sekmesi.${br.includes('woven') ? ' ✅ Dokuma kalıbı (Aşama 3) ve beden yayma / grading (Aşama 4): "Kalıp" sekmesi.' : ''}${br.includes('knit') ? ' ✅ Örgü deseni, numune ve ilmek hesabı (Aşama 5): "Örgü" sekmesi.' : ''}</div><div class="small">Aşağıdaki araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
     rows.map(([t, items]) => `<div class="card"><h3>${t}</h3>${items.map(([n, a]) => `<div class="row"><span>${esc(n)}</span><span class="badge" style="flex:0 0 auto">Henüz yok · Aşama ${a}</span></div>`).join('')}</div>`).join('');
 }
 
@@ -371,6 +419,7 @@ document.addEventListener('change', (e) => {
   if (el.id === 'pt-set') { S.patSet = el.value; return render(); }
   if (el.id === 'pt-table') { S.patTable = el.value; S.patSize = null; return render(); }
   if (el.id === 'pt-size') { S.patSize = el.value; return render(); }
+  if (el.id === 'kp-kind') { S.kpKind = el.value; return render(); }
   if (el.id === 'gr-table') { S.gradeTable = el.value; S.gradeSizes = null; return render(); }
   if (el.dataset.aRename !== undefined) {
     const t = S.p.sizeTables[+el.dataset.aRename], nm = el.value.trim(), old = el.dataset.old;
@@ -391,7 +440,7 @@ document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-a]');
   if (!b) return;
   const a = b.dataset.a, p = S.p, i = +b.dataset.i;
-  if (!['del', 'del-prod', 'del-sketch', 'del-pattern'].includes(a)) S.delArm = null;
+  if (!['del', 'del-prod', 'del-sketch', 'del-pattern', 'del-chart', 'del-kpiece'].includes(a)) S.delArm = null;
   try {
     switch (a) {
       // tür seçimi yerinde güncellenir (yeniden çizim yok: yazılan proje adı kaybolmaz)
@@ -448,6 +497,17 @@ document.addEventListener('click', async (e) => {
         const product = $('pt-prod').value || null;
         M.addPatternSet(p, set, params, { product, size }); dirty(); render(); openPattern(product, size); return;
       }
+      case 'add-swatch': M.addSwatch(p, { name: $('ns-name').value, st10: parseNum($('ns-st').value), row10: parseNum($('ns-row').value) }); break;
+      case 'sw-wash': p.knit.swatches[i].washed = b.checked; dirty(); return;
+      case 'add-chart': { const ch = M.addChart(p, $('nk-tpl').value, $('nk-name').value); dirty(); render(); openChart(p.knit.charts.indexOf(ch)); return; }
+      case 'open-chart': openChart(i); return;
+      case 'del-chart': { const c = p.knit.charts[i]; if (p.knit.pieces.some((x) => x.chart === c.id)) throw new Error('Bu desen bir triko parçasında kullanılıyor'); if (S.delArm !== c.id) { S.delArm = c.id; return render(); } p.knit.charts.splice(i, 1); S.delArm = null; break; }
+      case 'add-kpiece': {
+        const kind = $('kp-kind').value, params = {};
+        for (const inp of document.querySelectorAll('[data-kp]')) { const v = parseNum(inp.value); if (v == null || Number.isNaN(v) || v <= 0) throw new Error(KNIT_PIECES[kind].params[inp.dataset.kp][0] + ': geçerli bir cm değeri gir'); params[inp.dataset.kp] = Math.round(v * 100) / 10; }
+        M.addKnitPiece(p, { kind, params, swatch: $('kp-sw').value, chart: $('kp-ch').value || null, rib: $('kp-rib').value, product: $('kp-prod').value || null, size: $('kp-size').value.trim() }); break;
+      }
+      case 'del-kpiece': { const pc = p.knit.pieces[i]; if (S.delArm !== pc.id) { S.delArm = pc.id; return render(); } p.knit.pieces.splice(i, 1); S.delArm = null; break; }
       case 'grade-open': S.gradeKey = S.gradeKey === b.dataset.v ? null : b.dataset.v; S.gradeSizes = null; S.gradeResult = null; return render();
       case 'grade-close': S.gradeKey = null; return render();
       case 'gr-size': {

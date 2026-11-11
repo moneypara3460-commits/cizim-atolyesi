@@ -5,7 +5,7 @@
 //             edges:[{ name, segs:[...], allow, corner }], notches:[{ edge, at, kind }],
 //             darts:[{ a, b, apex }], marks:[{ kind, p, label }], lines:[{ path, kind }] }
 // fold: kumaş katına gelen kenarın indeksi (o kenara pay eklenmez, kesim katlı yapılır).
-import * as C from '../curve.js?v=20261112d';
+import * as C from '../curve.js?v=20261112e';
 
 export const CORNERS = { miter: 'Sivri (uzatma)', square: 'Dik (bloklu)', bevel: 'Pah (düz bağla)' };
 export const NOTCH_KINDS = { tek: 'Tek çıt', 'çift': 'Çift çıt', T: 'T çıt' };

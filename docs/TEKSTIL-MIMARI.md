@@ -94,7 +94,7 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | 2 | Teknik moda çizimi: `curve.js`, ön / arka / yan, simetri, katman, ölçü; dokuma ve triko şablonları; detay kütüphanesi; PNG, vektör PDF / SVG | Eğri uzunluğu analitikle ±0,01 mm; simetri tam; PDF ölçeği 1:1 | ✅ (12.11.2026) — bkz. bölüm 7 |
 | 3 | Dokuma kalıbı: parça, pens, çıt, dikiş payı (seçili kenar / tüm çevre, köşe türleri), böl, birleştir, döndür, aynala, kontur ve eğri doğrulama | Referans kalıplarda pay alanı / çevresi analitikle eşleşir; öz-kesişim yakalanır | ✅ (12.11.2026) — bkz. bölüm 8 |
 | 4 | Beden ve grading: nokta bazlı grading, kişiye özel ölçü altyapısı, bütünlük kontrolü; trikoda bedene göre ilmek / sıra sayıları | Bedenler arası fark kurala tam eşit; dikiş hattı eşleşmesi raporlanır | ✅ dokuma (12.11.2026) — bkz. bölüm 9; triko ilmek sayıları Aşama 5 ile |
-| 5 | Triko desen ve ilmek: ilmek sözlüğü, ızgara, düz / ters / ribana / saç örgüsü / jakar, tekrar, renk raporu, numune ve gauge, sıra bazlı eksiltme / artırma | Ribana ve saç örgüsü kuralları; gauge dönüşümü elle hesapla tam; eksiltme tablosu hedef ölçüye ±1 ilmek; desteklenmeyen yapıda açık uyarı | Yok |
+| 5 | Triko desen ve ilmek: ilmek sözlüğü, ızgara, düz / ters / ribana / saç örgüsü / jakar, tekrar, renk raporu, numune ve gauge, sıra bazlı eksiltme / artırma | Ribana ve saç örgüsü kuralları; gauge dönüşümü elle hesapla tam; eksiltme tablosu hedef ölçüye ±1 ilmek; desteklenmeyen yapıda açık uyarı | ✅ (12.11.2026) — bkz. bölüm 10 |
 | 6 | Kumaş, iplik, aksesuar kütüphanesi (ayrıntılı); iplik numarası dönüşümleri; tüketim, gramaj, maliyet | Nm / Ne / tex / dtex dönüşümleri tam; numunesiz sonuç "tahmini" | Kısmi: kart yapısı, birimler, "tahmini" işareti, malzeme maliyeti Aşama 1'de var |
 | 7 | Kumaş yerleşimi ve kesim optimizasyonu | Kısıt ihlali sıfır; verim alt sınırla raporlanır | Yok |
 | 8 | Triko makine profilleri ve üretim çıktısı | Doğrulanamayan makine için çıktı yok, gerekçe yazılı (risk 12) | Yok |
@@ -125,6 +125,9 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | `tests/tx-pattern.test.mjs` | Yeni (Aşama 3) | 14 Node testi |
 | `tx/woven/grade.js` | Yeni (Aşama 4) | Kural tabanlı grading, blok ölçüsünden kural, orantılı kural, beden karşılaştırma tablosu |
 | `tests/tx-grade.test.mjs` | Yeni (Aşama 4) | 8 Node testi |
+| `tx/knit/chart.js`, `tx/knit/shape.js` | Yeni (Aşama 5) | İlmek sözlüğü, şema, doğrulama, tekrar, yazılı talimat, CSV; numune, ölçü ↔ ilmek, şekillendirme dağılımı, parça hesabı, bedenler |
+| `tx/knit/chart-export.js`, `tx/knit/chart-ui.js` | Yeni (Aşama 5) | Şema çizimi (tuval / PNG, çok sayfalı A4 PDF), şema editörü |
+| `tests/tx-knit.test.mjs` | Yeni (Aşama 5) | 11 Node testi |
 | `tests/e2e/run.mjs` | Değişti | W (çalışma alanı) ve T (tekstil) senaryoları; makine senaryoları seçim ekranını atlamak için `cizim:workspace = makine` ile başlar |
 
 Yeni dış bağımlılık yok: tarayıcının kendi IndexedDB'si kullanılır. Three.js tekstil tarafında Aşama 9'a kadar yüklenmez.
@@ -366,3 +369,59 @@ Kurallar iki kaynaktan gelir:
 - **Ölçü kapsamı.** Bloklar beden tablosundan yalnız göğüs, bel ve kalça çevresini alır. Boy ölçüleri (giysi boyu, kol boyu) tabloda olsa bile blok parametresine bağlanmadıkça değişmez; karşılaştırma tablosunda görünür.
 - **Kural düzenleme.** Kurallar elle tek tek düzenlenemiyor (kural tablosu ekranı yok). Kaynak: blok ölçüsü ya da oran.
 - **Triko.** Trikoda bedene göre ilmek / sıra sayıları, örgü deseni gelince (Aşama 5) eklenecek.
+
+## 10. Aşama 5 raporu: triko desen ve ilmek sistemi (12.11.2026)
+
+**Çalışanlar.** "Örgü" sekmesi, triko ve karma projelerde.
+- **Numune (gauge).** 10 cm'deki ilmek / sıra, iplik bağlantısı, yıkandı işareti; yıkanmamış numune uyarı verir.
+- **Örgü şeması editörü** (tam ekran, telefon önce).
+  - İlmekler:
+    - Düz, ters, askı, atlama.
+    - Delik (+1), sağa / sola eksiltme (−1), "ilmek yok" (şekil dışı).
+    - Saç örgüsü: 1/1, 2/2, 3/3, sola ve sağa.
+  - Çalışma:
+    - Fırça (dokun / sürükle), alan doldur, tekrar alanı, sıra bilgisi, kaydır, iki parmakla yakınlaştır, geri al.
+    - Renk paleti (jakar).
+    - Boyut değiştirme.
+  - Sıra 1 altta, ilmek 1 sağda; 10'luk kalın çizgiler.
+- **Hazır desenler (9).** Düz, ters, ribana 1×1 ve 2×2, saç örgüsü 2/2 ve 3/3, jakar baklava, ajur, askılı.
+- **Kontrol.**
+  - Hata: desteklenmeyen ilmek kodu, eksik ya da başsız saç örgüsü.
+  - Uyarı:
+    - Delik / eksiltme dengesizliği (sıra ilmek sayısı değişiyor).
+    - Jakarda uzun atlama ipliği (varsayılan en çok 7 ilmek).
+    - Sırada 2'den fazla renk (makine jakarı gerekir).
+    - 4'ten fazla üst üste askı.
+    - Uzun atlama ilmeği.
+- **Tekrarla alan doldurma.** Ortalanır; kenarda bölünen saç örgüsü düz ilmeğe çevrilir ve sayılır.
+- **Çıktılar.**
+  - Şema PDF: A4; semboller, renkler, sıra / ilmek numaraları, açıklama, tekrar çerçevesi. Büyük şema sayfalara bölünür.
+  - PNG ve CSV.
+  - Yazılı talimat: gidiş-dönüş; çift sıralar arka yüzden, düz ve ters yer değiştirir; ardışık ilmekler gruplanır.
+- **Triko parçası hesabı.** Beden (düşük omuz), kol (manşetten koltuğa artırma), atkı.
+  - Ölçü (cm) → ilmek / sıra. İlmek sayısı desen tekrarına, ribana tekrarına ve 2 kenar ilmeğine uyacak en yakın sayıya yuvarlanır; gerçek genişlik farkı yazılır.
+  - Sıra sıra plan: ribana, düz, yaka ortası / omuzlar. Kolda "her a. sırada 1 artır × p, her a+1. sırada × q" eşit dağıtımı.
+- **Bedenlere göre ilmek sayıları.** Beden tablosundaki göğüs çevresinden; tekrar her bedende korunur.
+
+**Doğrulama** (`tests/tx-knit.test.mjs`, 11 test).
+- **Desen kuralları.** Ribana dizilişleri ve ajur sıra dengesi doğru; saç örgüsü kuralları (sığmama, üstüne yazınca temizleme, eksik / başsız) çalışıyor; bütün uyarılar tetikleniyor.
+- **Tekrar ve talimat.** Tekrar periyodikliği tutuyor. Talimatta arka yüz çevrimi doğru.
+- **Ölçü ↔ ilmek.** 28 ilmek / 10 cm'de 52 cm = 145,6 ilmek → tekrar 8 + 2 kenarla 146 ilmek (52,14 cm). Ters dönüşüm tam.
+- **Şekillendirme dağılımı.** 5 durumda toplam ve sıra tam, aralık farkı ≤ 1.
+- **Parça hesabı.** Beden ilmek sayısı hedefe ±1. Kolda başlangıç + 2 × artırma = pazu ilmeği.
+- **Bedenler.** İlmek sayısı göğüsle artıyor, tekrar her bedende korunuyor.
+- **Çıktılar ve model.** PDF yapısı geçerli, büyük şema çok sayfalı. Projede dal ve ürün kuralları çalışıyor; kayıt gidiş-dönüş tam.
+- **Tarayıcı testi.** Dokunarak ters ilmek, saç örgüsü, delik → uyarı → eksiltmeyle dengeleme; jakar rengiyle uzun atlama uyarısı → geri al; tekrar alanı; PDF / talimat / CSV indirildi; 2×2 ribanalı parça 12'nin katı + 2 ilmek; yenileme sonrası kayıtlı; doğrulama temiz.
+
+**Testte bulunup düzeltilen hatalar:**
+- **Saç örgüsü sembolü.** Komşu hücre boyamasının altında kalıyordu.
+- **Yaka hesabı.** Düşük omuzlu bedende yanlış hesaplanıyordu: omuz parametresi bedenle çelişiyordu.
+- **Askı uyarısı.** Askı dizisinin gerçek boyunu değil, eşiği aşan ilk değeri yazıyordu.
+
+**Sınırlar:**
+- **Kol.** Takma kol (kol oyuğunda eksiltme ve kol başı şekillendirme) yok; yalnız düşük omuz.
+- **Yaka.** Yaka eğrisi sıra sıra eksiltilmiyor: "ortadaki X ilmek kapatılır" düzeyinde.
+- **Ölçüler.** Bedenlere göre hesap yalnız göğüs çevresinden; boy ve kol boyu bedene bağlı değil.
+- **İlmek türleri.** Brioche, plaka (intarsia), çift yataklı özel yapılar desteklenmiyor; kod görülürse hata verilir.
+- **Tüketim ve gramaj.** İplik tüketimi ve gramaj Aşama 6'da.
+- **Makine programı.** Makineye özgü program yok (Aşama 8); yazılı talimat elle ya da genel kullanım içindir.

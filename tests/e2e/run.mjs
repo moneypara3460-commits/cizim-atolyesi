@@ -439,7 +439,7 @@ await TX('Tekstil: triko projesi yalnız triko araçlarını gösterir; dal ara�
   expect(kinds.includes('İplik') && !kinds.includes('Kumaş'), 'triko malzemeleri: ' + kinds);
   await A(page, 'tab', '[data-v="tools"]');
   const tl = await txBody(page);
-  expect(/Triko \/ Örgü/.test(tl) && !/Dokuma \/ Konfeksiyon\n/.test(tl) && (tl.match(/Henüz yok/g) || []).length >= 5, 'dal araçları');
+  expect(/Triko \/ Örgü/.test(tl) && !/Dokuma \/ Konfeksiyon\n/.test(tl) && (tl.match(/Henüz yok/g) || []).length >= 2 && /Örgü deseni, numune ve ilmek hesabı/.test(tl), 'dal araçları');
   await A(page, 'tab', '[data-v="col"]'); await A(page, 'add-prod');
   const d = await download(page, () => A(page, 'export'));
   const j = JSON.parse(d.text); expect(j.kind === 'cizim.textile' && j.type === 'knit' && j.collection.products.length === 1, 'JSON içeriği');
@@ -617,6 +617,48 @@ await TX('Tekstil grading: M bedeni gömlek bloğu 6 bedene yayılır, sonuç ve
   expect(((await page.locator('#pkx .pane').innerText()).match(/✅/g) || []).length === 7, 'L bedeninde 7 eşleşme tutuyor');
   await page.locator('#pkx [data-k="close"]').click();
   await A(page, 'tab', '[data-v="val"]'); expect(await page.locator('.issue.hata').count() === 0, 'doğrulama temiz');
+});
+
+await TX('Tekstil triko: numune, desen editöründe dokunarak boyama / saç örgüsü / jakar rengi, kontrol uyarıları, PDF / talimat / CSV, ilmek hesabı ve bedenler, kaydet ve aç', async ({ page }) => {
+  await A(page, 'type', '[data-v="knit"]'); await page.waitForSelector('[data-a="type"][data-v="knit"].on');
+  await page.fill('#np-name', 'Triko E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await A(page, 'add-prod');
+  await A(page, 'tab', '[data-v="sizes"]'); await A(page, 'add-size-ex');
+  await A(page, 'tab', '[data-v="knit"]');
+  await page.fill('#ns-name', 'Merinos'); await page.fill('#ns-st', '28'); await page.fill('#ns-row', '38'); await A(page, 'add-swatch');
+  await A(page, 'sw-wash');
+  await page.selectOption('#nk-tpl', 'duz'); await page.fill('#nk-name', 'Deneme'); await A(page, 'add-chart'); await page.waitForSelector('#kcx canvas');
+  const K = (k, v) => page.locator(`#kcx [data-k="${k}"]${v != null ? `[data-v="${v}"]` : ''}`).first().click();
+  const cell = async (x, y) => { const q = await page.evaluate(([a, b]) => document.getElementById('kcx').api.cell(a, b), [x, y]); await page.touchscreen.tap(q[0], q[1]); };
+  const pane = () => page.locator('#kcx .pane').innerText();
+  // ters ilmek boya, saç örgüsü koy, delik ekle (dengesiz) → uyarı, sonra eksiltme ile dengele
+  await K('stitch', 'p'); await cell(0, 0); await cell(11, 0);
+  await K('stitch', 'c4R'); await cell(4, 5);
+  expect(/Saç örgüleri tam/.test(await pane()), 'saç örgüsü geçerli');
+  await K('stitch', 'yo'); await cell(2, 2);
+  expect(/Sıra 3: ilmek sayısı \+1/.test(await pane()), 'delik uyarısı');
+  await K('stitch', 'k2t'); await cell(3, 2);
+  expect(!/Sıra 3: ilmek sayısı/.test(await pane()), 'eksiltme ile dengelendi');
+  // jakar rengi: uzun atlama uyarısı
+  await K('add-color'); await cell(0, 8); await cell(11, 8);
+  expect(/rengi 10 ilmek atlıyor/.test(await pane()), 'uzun atlama uyarısı: ' + (await pane()).slice(0, 300));
+  await K('undo'); expect(!/ilmek atlıyor/.test(await pane()), 'geri al');
+  // tekrar alanı ve boyut
+  await K('tool', 'repeat'); await cell(0, 0); await cell(5, 5);
+  expect(/Tekrar: 6 ilmek × 6 sıra/.test(await pane()), 'tekrar alanı');
+  const pdf = await download(page, () => K('pdf')); expect(/^%PDF-1\.4/.test(pdf.text) && /%%EOF/.test(pdf.text), 'şema PDF');
+  const txt = await download(page, () => K('txt')); expect(/^1\. sıra \(ön yüz, sağdan sola\): 1 ters( \(Ana renk\))?, 10 düz( \(Ana renk\))?, 1 ters/.test(txt.text), 'talimat: ' + txt.text.split('\n')[0]);
+  const csv = await download(page, () => K('csv')); expect(csv.text.split('\n')[1].startsWith('12;'), 'CSV');
+  await K('close');
+  // parça: 2×2 ribanalı beden, desen tekrarı 6 → ilmek sayısı 12'nin katı + 2
+  await page.selectOption('#kp-ch', { index: 1 }); await page.selectOption('#kp-rib', 'rib22'); await page.fill('#kp-size', 'M'); await A(page, 'add-kpiece');
+  await page.waitForFunction(() => /Başlangıç: \d+ ilmek/.test(document.querySelector('#main').innerText));
+  const b = await txBody(page), n = +b.match(/Başlangıç: (\d+) ilmek/)[1];
+  expect((n - 2) % 12 === 0 && Math.abs(n - 145.6) <= 6, 'ilmek sayısı tekrara uydu: ' + n);
+  expect(/Bedenlere göre/.test(b) && /Başlangıç ilmeği/.test(b), 'beden tablosu');
+  await page.waitForTimeout(600); await page.reload(); await A(page, 'open'); await A(page, 'tab', '[data-v="knit"]');
+  expect(new RegExp(`Başlangıç: ${n} ilmek`).test(await txBody(page)) && /12 ilmek × 12 sıra · tekrar 6×6/.test(await txBody(page)), 'kaydedildi');
+  await A(page, 'tab', '[data-v="val"]'); expect(await page.locator('.issue.hata').count() === 0, 'doğrulamada hata yok');
 });
 
 await TX('Tekstil ↔ Makine ayrılığı: tekstil kaydı makine projelerine yazmaz; makine projeleri tekstil listesinde görünmez', async ({ page }) => {

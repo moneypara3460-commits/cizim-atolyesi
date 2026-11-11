@@ -1,6 +1,6 @@
 // Bağımlılıksız küçük vektör PDF yazıcı. Koordinatlar mm (içeride pt'ye çevrilir: 1 mm = 72 / 25,4 pt).
 // Yazı tipi: PDF'in yerleşik Helvetica'sı; Türkçe harfler (ğ Ğ ş Ş ı İ) özel kodlamayla (Differences) eşlenir.
-import * as C from './curve.js?v=20261112d';
+import * as C from './curve.js?v=20261112e';
 
 export const PT = 72 / 25.4;
 // WinAnsi dışındaki Türkçe glifler → kullanılmayan kodlar
@@ -43,6 +43,7 @@ export function pdfDoc() {
         dash(arr) { ops.push(arr && arr.length ? '[' + arr.map((v) => f2(v * PT)).join(' ') + '] 0 d' : '[] 0 d'); },
         color(r, g, b) { ops.push(`${f2(r)} ${f2(g)} ${f2(b)} RG ${f2(r)} ${f2(g)} ${f2(b)} rg`); },
         line(x1, y1, x2, y2) { ops.push(P(x1, y1) + ' m ' + P(x2, y2) + ' l S'); },
+        fillRect(x, y, w, h, r, g, b) { ops.push(`${f2(r)} ${f2(g)} ${f2(b)} rg ${P(x, y)} ${f2(w * PT)} ${f2(h * PT)} re f 0 0 0 rg`); },
         rect(x, y, w, h) { ops.push(`${P(x, y)} ${f2(w * PT)} ${f2(h * PT)} re S`); },
         circle(x, y, r, fill = false) { const p = C.circlePath([x, y], r); pg.path(p, (q) => q, fill); },
         // yol: f dünya → kağıt (mm)

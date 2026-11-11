@@ -1,7 +1,7 @@
 // Tekstil projeleri deposu: tarayıcıda IndexedDB ("cizim-tx"), testlerde bellek.
 // Makine projelerinden (localStorage) tamamen ayrıdır; biri diğerini okumaz, yazmaz.
 // Her "revizyon kaydet" projenin tam kopyasını saklar (proje başına son MAX_REVS); otomatik kayıt revizyon açmaz.
-import { migrate, isValid, validate } from './model.js?v=20261112d';
+import { migrate, isValid, validate } from './model.js?v=20261112e';
 
 export const MAX_REVS = 30;
 

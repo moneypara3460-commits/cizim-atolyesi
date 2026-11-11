@@ -4,10 +4,12 @@
 // Dokuma / konfeksiyon ve triko ayrı alt şemalardır (woven, knit); yalnız koleksiyon, ürün, renk, beden,
 // malzeme, föy ve revizyon ortaktır. Bkz. docs/TEKSTIL-MIMARI.md
 
-import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112d';
-import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112d';
-import { buildSet } from './woven/blocks.js?v=20261112d';
-import { gradeGroup } from './woven/grade.js?v=20261112d';
+import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112e';
+import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112e';
+import { buildSet } from './woven/blocks.js?v=20261112e';
+import { gradeGroup } from './woven/grade.js?v=20261112e';
+import { fromTemplate, validateChart } from './knit/chart.js?v=20261112e';
+import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112e';
 
 export const KIND = 'cizim.textile';
 export const SCHEMA = 1;
@@ -187,6 +189,35 @@ export function gradeProduct(p, { product = null, base, table: tableId, sizes, m
   return { report: r.report, sizes: targets, table: table.name, source: table.source };
 }
 
+// Triko (Aşama 5): numune, desen, parça
+export function addSwatch(p, { name, yarn = null, stitch = 'Düz örgü', st10, row10, washed = false, loopLen = null }) {
+  if (!p.knit) throw new Error('Bu proje türünde triko yok');
+  const s = { id: nid(p, 'n'), name: str(name) || 'Numune', yarn, stitch: str(stitch), st10, row10, washed: !!washed, loopLen };
+  const e = validateSwatch(s); if (e.length) throw new Error(e.join('; '));
+  p.knit.swatches.push(s); return s;
+}
+export function addChart(p, template = 'duz', name = '') {
+  if (!p.knit) throw new Error('Bu proje türünde triko yok');
+  const ch = fromTemplate(template, { id: nid(p, 'd') }); if (str(name)) ch.name = str(name);
+  p.knit.charts.push(ch); return ch;
+}
+export function addKnitPiece(p, { kind, params = {}, swatch, chart = null, rib = 'rib11', product = null, size = '', name = '' }) {
+  if (!p.knit) throw new Error('Bu proje türünde triko yok');
+  if (!KNIT_PIECES[kind]) throw new Error('Bilinmeyen triko parçası: ' + kind);
+  const pr = product ? p.collection.products.find((x) => x.id === product) : null;
+  if (product && (!pr || pr.branch !== 'knit')) throw new Error('Triko parçası yalnız triko ürününe bağlanır');
+  if (!p.knit.swatches.some((s) => s.id === swatch)) throw new Error('Numune seçilmedi');
+  const o = {}; for (const [k, [, v]] of Object.entries(KNIT_PIECES[kind].params)) o[k] = params[k] ?? v;
+  const pc = { id: nid(p, 'tp'), name: str(name) || KNIT_PIECES[kind].label.split(' (')[0], kind, params: o, swatch, chart, rib, product, size };
+  knitCompute(p, pc);   // hata varsa eklenmez
+  p.knit.pieces.push(pc); return pc;
+}
+export function knitCompute(p, pc) {
+  const s = p.knit.swatches.find((x) => x.id === pc.swatch); if (!s) throw new Error('Numune silinmiş');
+  const ch = pc.chart ? p.knit.charts.find((x) => x.id === pc.chart) : null;
+  return computePiece(pc.kind, pc.params, s, { rep: ch ? (ch.repeat ? ch.repeat.w : ch.w) : 1, ribRep: pc.rib === 'rib22' ? 4 : 2, edge: 1 });
+}
+
 /* ---------- doğrulama ---------- */
 // Dönen dizi: { level: 'hata' | 'uyarı', where, msg }. Hata varsa proje "geçersiz", uyarı bilgi amaçlı.
 export function validate(p) {
@@ -263,6 +294,16 @@ export function validate(p) {
     if (!pr.sizes.length) W(w, 'Beden seçilmemiş');
   }
   const prodIds = new Set((p.collection?.products || []).map((x) => x.id));
+  if (p.knit) {
+    for (const s of p.knit.swatches || []) { uniq(s.id, 'Numune'); for (const m of validateSwatch(s)) E('Numune ' + s.name, m); if (!s.washed) W('Numune ' + s.name, 'Yıkanmamış numune: yıkama sonrası ölçü değişebilir'); }
+    for (const ch of p.knit.charts || []) { uniq(ch.id, 'Desen'); out.push(...validateChart(ch)); }
+    for (const pc of p.knit.pieces || []) {
+      uniq(pc.id, 'Triko parçası');
+      try { knitCompute(p, pc); } catch (e) { E('Triko parçası ' + pc.name, e.message); }
+      if (pc.chart && !(p.knit.charts || []).some((c) => c.id === pc.chart)) E('Triko parçası ' + pc.name, 'Desen silinmiş');
+      if (pc.product && !prodIds.has(pc.product)) E('Triko parçası ' + pc.name, 'Bağlı olduğu ürün silinmiş');
+    }
+  }
   if (p.woven) {
     for (const pc of p.woven.pieces || []) {
       uniq(pc.id, 'Kalıp');
