@@ -4,7 +4,7 @@
 //   draw = { mode:'extrude'|'revolve', plane:'top'|'front', pts:[[u,v],...] (mm), h }
 //   top  : u = X, v = Z (ekranda aşağı = +Z)     front: u = X, v = Y (ekranda yukarı = +Y)
 //   revolve: her zaman 'front'; dönme ekseni u = 0 çizgisidir, çizim eksenin sağına yapılır.
-import { fmtNum, snap, circlePts, rectPts, bboxPts, polyArea, arcPoints, roundedRectPts, pointInPoly, solveCons, freedom, CONS_LABEL } from './logic.js?v=20261109k';
+import { fmtNum, snap, circlePts, rectPts, bboxPts, polyArea, arcPoints, roundedRectPts, pointInPoly, solveCons, freedom, CONS_LABEL } from './logic.js?v=20261111a';
 
 let cssDone = false;
 const CSS = `

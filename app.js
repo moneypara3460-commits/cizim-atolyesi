@@ -13,28 +13,28 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
-} from './logic.js?v=20261109k';
-import { openSketch } from './sketch.js?v=20261109k';
-import { to3MF, toSTEP } from './export3d.js?v=20261109k';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261109k';
-import { openCad2D } from './cad2d.js?v=20261109k';
-import { openCutOpt } from './cutopt-ui.js?v=20261109k';
-import { createMfg } from './mfg-ui.js?v=20261109k';
-import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261109k';
-import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261109k';
-import { analyzeWeight } from './weight.js?v=20261109k';
-import { createWeightUI, fkg } from './weight-ui.js?v=20261109k';
-import { createCostUI } from './cost-ui.js?v=20261109k';
-import { planReport as weldReport } from './welds.js?v=20261109k';
-import { altCons as weldAltCons } from './weld-ui.js?v=20261109k';
-import { groupKey } from './cutopt.js?v=20261109k';
-import { createAssemblyUI } from './assembly-ui.js?v=20261109k';
-import { createSimUI } from './sim-ui.js?v=20261109k';
-import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261109k';
-import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261109k';
-import { createCamUI } from './cam-ui.js?v=20261109k';
+} from './logic.js?v=20261111a';
+import { openSketch } from './sketch.js?v=20261111a';
+import { to3MF, toSTEP } from './export3d.js?v=20261111a';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261111a';
+import { openCad2D } from './cad2d.js?v=20261111a';
+import { openCutOpt } from './cutopt-ui.js?v=20261111a';
+import { createMfg } from './mfg-ui.js?v=20261111a';
+import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261111a';
+import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261111a';
+import { analyzeWeight } from './weight.js?v=20261111a';
+import { createWeightUI, fkg } from './weight-ui.js?v=20261111a';
+import { createCostUI } from './cost-ui.js?v=20261111a';
+import { planReport as weldReport } from './welds.js?v=20261111a';
+import { altCons as weldAltCons } from './weld-ui.js?v=20261111a';
+import { groupKey } from './cutopt.js?v=20261111a';
+import { createAssemblyUI } from './assembly-ui.js?v=20261111a';
+import { createSimUI } from './sim-ui.js?v=20261111a';
+import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261111a';
+import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261111a';
+import { createCamUI } from './cam-ui.js?v=20261111a';
 
-const APP_VER = '20261108o'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261111a'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -47,6 +47,10 @@ const freshParts = () => [
 ];
 let parts = freshParts();
 let sel = 1;
+// boş alana dokununca seçim kaldırılır: selOff = seçimi kaldırılan parçanın id'si (sel değişince kendiliğinden geçersiz olur).
+// sel değeri korunur (cur() eski davranışla çalışmaya devam eder); yalnızca vurgu ve parça paneli gizlenir.
+let selOff = null;
+const hasSel = () => !(selOff != null && selOff === sel) && parts.some((p) => p.id === sel);
 let nextId = 2;
 let projName = 'model';
 let tab = 'dims';
@@ -81,7 +85,7 @@ function snapshotSave() {
 function restore(s) {
   const o = JSON.parse(s);
   if (o.meshes) for (const k of Object.keys(o.meshes)) meshStore.set(k, o.meshes[k]);
-  parts = o.parts; sel = o.sel; nextId = o.nextId; weldPlan = o.welds || null; asmAnswers = o.asm && typeof o.asm === 'object' ? o.asm : {}; simData = o.sim && typeof o.sim === 'object' ? o.sim : null; mechData = o.mech && Array.isArray(o.mech.cs) ? o.mech : { cs: [], motor: null };
+  parts = o.parts; selOff = null; sel = o.sel; nextId = o.nextId; weldPlan = o.welds || null; asmAnswers = o.asm && typeof o.asm === 'object' ? o.asm : {}; simData = o.sim && typeof o.sim === 'object' ? o.sim : null; mechData = o.mech && Array.isArray(o.mech.cs) ? o.mech : { cs: [], motor: null };
   cleanLinks(parts);
   if (!parts.find((p) => p.id === sel)) sel = parts[0].id;
 }
@@ -896,7 +900,7 @@ function refreshOverlays() {
   pickMeshes = [];
   const p0 = cur();
   for (const { p, geo } of lastBrushes) {
-    const isSel = p.id === p0.id;
+    const isSel = hasSel() && p.id === p0.id;
     const isSub = p.op === 'sub' && parts.indexOf(p) > 0;
     let pick;
     if (isSub && (isSel || !p.aux)) {
@@ -929,7 +933,7 @@ function refreshOverlays() {
   }
   // ölçü etiketleri
   if (settings.dim === 'model' && lastClean) addDimLines(ovl, lastClean.boundingBox);
-  else if (settings.dim === 'part') {
+  else if (settings.dim === 'part' && hasSel()) {
     const b = partBBox(p0.id);
     if (b) addDimLines(ovl, b);
   }
@@ -1002,7 +1006,7 @@ const partName = (q, i) => q.name || (i + 1) + '. ' + TYPE_LABEL[q.type];
 function renderChips() {
   const p = cur();
   $('chips').innerHTML = parts.map((q, i) =>
-    `<button class="chip${q.op === 'sub' && i > 0 ? ' sub' : ''}${q.id === p.id ? ' on' : ''}"${q.hidden ? ' style="opacity:.45"' : ''} data-sel="${q.id}">` +
+    `<button class="chip${q.op === 'sub' && i > 0 ? ' sub' : ''}${q.id === p.id && hasSel() ? ' on' : ''}"${q.hidden ? ' style="opacity:.45"' : ''} data-sel="${q.id}">` +
     `${esc(partName(q, i))}${i > 0 && q.op === 'sub' ? ' (oyuk)' : ''}${q.hidden ? ' ⊘' : ''}${q.parent != null && !q.aux ? ' 🔗' : ''}${bendWarnings(q).length ? ' ⚠' : ''}</button>`).join('');
 }
 
@@ -1015,7 +1019,11 @@ function renderPanel() {
   const opBtns = idx > 0 ? btn('Birleştir', 'op-add', p.op === 'add') + btn('Oyuk aç', 'op-sub', p.op === 'sub') : '';
   const snapBtns = SNAPS.map((v) => btn(v === 0 ? 'Yapışma yok' : 'Yapış ' + fmtNum(toUnit(v, settings.unit), 3), 'snap-' + v, settings.snap === v)).join('');
 
-  if (tab === 'type') {
+  // seçim kaldırılmışken parçaya ait sekmeler parça verisi göstermez
+  if (!hasSel() && ['dims', 'type', 'pos', 'rot', 'copy', 'shell', 'part'].includes(tab)) {
+    body = '<div class="lbl" style="flex:1 0 100%">Seçili parça yok. Modelde bir parçaya ya da yukarıdaki parça listesinden birine dokun.</div>';
+    hint = 'Boş alana dokununca seçim kaldırılır; diğer sekmeler (Yüz, Kenar, Görünüm, Hesap…) tüm modelle çalışmaya devam eder.';
+  } else if (tab === 'type') {
     body = p.type === 'frame'
       ? '<div class="lbl h">İskelet</div>' + [['table', 'Masa iskeleti'], ['box', 'Kutu çerçeve'], ['shelf', 'Raf / sehpa'], ['rect', 'Pano çerçeve']].map(([k, l]) => btn(l, 'frt-' + k, p.fr === k)).join('') +
         `<label class="f w2" style="flex:1 0 100%"><span>Profil</span><select data-pf="1">${Object.entries(PROFILES).map(([k, v]) => `<option value="${k}"${p.pf === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>` +
@@ -1297,7 +1305,7 @@ function addPart(type, op, dims) {
   if (dims) Object.assign(p, dims);
   if (type === 'frame') p.y = 0;   // iskelet yere otursun
   parts.push(p);
-  sel = p.id;
+  selOff = null; sel = p.id;
   refreshAll(type === 'frame');
   return p;
 }
@@ -1307,7 +1315,7 @@ function removeCur() {
   commit();
   parts.splice(parts.indexOf(cur()), 1);
   cleanLinks(parts);
-  sel = parts[0].id;
+  selOff = null; sel = parts[0].id;
   refreshAll();
   return true;
 }
@@ -1346,7 +1354,7 @@ function newSketch() {
     commit();
     const p = Object.assign(newPart(nextId++, 'box', 'add', null), sketchFromDraw(draw));
     parts.push(p);
-    sel = p.id;
+    selOff = null; sel = p.id;
     refreshAll(true);
     toast('Kroki parça olarak eklendi');
   });
@@ -1358,7 +1366,7 @@ function open2D() {
       const p = Object.assign(newPart(nextId++, 'box', 'add', null), sketchFromDraw(draw));
       p.name = '2B çizimden';
       parts.push(p);
-      sel = p.id;
+      selOff = null; sel = p.id;
       refreshAll(true);
       toast('2B çizim 3B parçaya çevrildi');
     },
@@ -1391,7 +1399,7 @@ function addCopies(list, msgText) {
   commit();
   for (const q of list) parts.push(q);
   nextId = Math.max(...list.map((q) => q.id)) + 1;
-  sel = list[0].id;
+  selOff = null; sel = list[0].id;
   refreshAll();
   toast(msgText || list.length + ' parça eklendi');
 }
@@ -1498,7 +1506,7 @@ function mfgMark(x) {
 const mfg = createMfg({
   getModel: mfgModel,
   mark: mfgMark,
-  selectPart(id) { if (parts.some((q) => q.id === id)) { sel = id; refreshOverlays(); renderPanel(); toast('Parça seçildi: düzenlemek için Ölçü / Konum sekmesine geç'); } },
+  selectPart(id) { if (parts.some((q) => q.id === id)) { selOff = null; sel = id; refreshOverlays(); renderPanel(); toast('Parça seçildi: düzenlemek için Ölçü / Konum sekmesine geç'); } },
   render: () => { if (tab === 'mfg') renderPanel(); },
   toast,
   name: () => projName || 'model',
@@ -1677,7 +1685,7 @@ const weightUI = createWeightUI({
   focusPart(id) {
     const b = lastBrushes.find((x) => x.p.id === id);
     if (!b) return;
-    sel = id; refreshOverlays();
+    selOff = null; sel = id; refreshOverlays();
     if (!b.geo.boundingBox) b.geo.computeBoundingBox();
     fit(b.geo.boundingBox.clone().expandByScalar(b.geo.boundingBox.getSize(new THREE.Vector3()).length() * 0.3));
     renderPanel();
@@ -2095,7 +2103,7 @@ function bakeAll() {
   meshStore.set(key, packed);
   const m = { id: nextId++, type: 'mesh', op: 'add', ...DEFAULTS, x: cx, y: bb.min.y, z: cz, h: Math.max(bb.max.y - bb.min.y, 0.001), mk: key, name: projName && projName !== 'model' ? projName : 'Tek parça' };
   if (vis[0] && vis[0].color) m.color = vis[0].color;
-  parts = [m]; sel = m.id;
+  parts = [m]; selOff = null; sel = m.id;
   tab = 'part';
   refreshAll();
   toast('Tek parça oldu' + (colors.size > 1 ? ' (tek renk)' : '') + (dropped ? ' · ' + dropped + ' gizli parça atıldı' : ''));
@@ -2161,7 +2169,8 @@ view.addEventListener('pointerdown', (e) => {
   tap = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false };
   if (settings.move && !measure.on) {
     const hit = pickAt(e.clientX, e.clientY);
-    if (hit && hit.part.id === sel) startDrag(e, hit);
+    if (!hasSel()) { /* seçim yokken parça sürüklenmez, sahne döner */ }
+    else if (hit && hit.part.id === sel) startDrag(e, hit);
     else {
       // seçili parça başka bir parçanın içinde kalıp görünmeyebilir (kutu içinde kutu, oyuk); yine de üzerinden tutup sürüklenebilsin
       setRay(e.clientX, e.clientY);
@@ -2217,8 +2226,13 @@ function onTap(cx, cy) {
   if (simUI.active) { simTap(cx, cy); return; }
   if (asmUI.active) { asmTap(cx, cy); return; }
   const hit = pickAt(cx, cy);
-  if (hit && hit.part.id !== sel) {
-    sel = hit.part.id;
+  if (hit && (hit.part.id !== sel || !hasSel())) {
+    selOff = null; sel = hit.part.id;
+    renderPanel();
+    refreshOverlays();
+  } else if (!hit && hasSel() && document.elementFromPoint(cx, cy) === renderer.domElement) {
+    // 3B görüntüde hiçbir parçaya denk gelmeyen boş noktaya dokunuldu: seçimi kaldır
+    selOff = sel;
     renderPanel();
     refreshOverlays();
   }
@@ -2384,7 +2398,7 @@ function faceFeature(op) {
     parts.push(p);
     last = p;
   }
-  sel = last.id;
+  selOff = null; sel = last.id;
   clearFace();
   refreshAll();
   toast((op === 'sub' ? 'Delik açıldı' : 'Çıkıntı eklendi') + (offs.length > 1 ? ' (' + offs.length + ' adet)' : ''));
@@ -2405,7 +2419,7 @@ function faceSketch(op) {
       commit();
       const p = Object.assign(newPart(nextId++, 'box', op, null), sk, { h: op === 'sub' ? h + 1 : h + 0.5 }, t);
       parts.push(p);
-      sel = p.id;
+      selOff = null; sel = p.id;
       clearFace();
       refreshAll();
       toast(op === 'sub' ? 'Kroki oyuk olarak açıldı' : 'Kroki çıkıntı olarak eklendi');
@@ -2559,7 +2573,7 @@ function edgeFeature(kind) {
     }
   }
   for (const q of list) parts.push(q);
-  sel = list[0].id;
+  selOff = null; sel = list[0].id;
   edgeSels = [];
   disposeOverlay(faceGroup);
   refreshAll();
@@ -2598,7 +2612,7 @@ function shellFeature() {
   }
   commit();
   parts.push(cut);
-  sel = cut.id;
+  selOff = null; sel = cut.id;
   refreshAll();
   toast('Kabuk yapıldı. Not: iç boşluk, sonraki parçalarla çakışmaz; ondan önceki parçaları da keser.');
 }
@@ -2952,7 +2966,7 @@ function addGear(base) {
   commit();
   const p = Object.assign(newPart(nextId++, 'box', 'add', null), { type: 'sketch', mode: 'extrude', plane: 'top', h: 10, x: 0, y: 0, z: 0, gear: true, gm: 2, gz: 20, gb: 10 }, base || {});
   regenGear(p);
-  parts.push(p); sel = p.id; refreshAll(true);
+  parts.push(p); selOff = null; sel = p.id; refreshAll(true);
   toast('Dişli eklendi: modül ve diş sayısı Ölçü sekmesinden değişir');
   return p;
 }
@@ -2984,7 +2998,7 @@ function addGearPair() {
       mechData.cs.push({ id: Date.now(), t: 'gear', a: g.id, b: q.id, z1: g.gz, z2: z2 }); linked = true;
     }
   }
-  sel = q.id; refreshAll(true);
+  selOff = null; sel = q.id; refreshAll(true);
   toast(linked ? 'Eş dişli eklendi ve dişli bağıntısı kuruldu: birini döndür, öteki kavrar' : 'Eş dişli eklendi (eksen mesafesi ' + fmtNum(a, 2) + ' mm). Döndürmek için ikisini de Bağ sekmesinde bir gövdeye menteşeyle bağla, sonra Hareket → Mekanizma\'dan dişli bağıntısı ekle.');
 }
 function mechPanel() {
@@ -3226,7 +3240,7 @@ function mateAdd() {
   (A.mates = A.mates || []).push(m);
   mate.a = mate.b = null;
   disposeOverlay(faceGroup);
-  sel = A.id;
+  selOff = null; sel = A.id;
   refreshAll();
   toast(mateErr > 1e-2 ? 'Eşleşme eklendi ama diğerleriyle çelişiyor' : 'Eşleşme eklendi');
 }
@@ -3247,7 +3261,7 @@ function mateApply() {
     A.x = r4(np.x); A.y = r4(np.y); A.z = r4(np.z);
     [A.rx, A.ry, A.rz] = quatToEulerXYZ([newQ.x, newQ.y, newQ.z, newQ.w]);
   });
-  sel = A.id;
+  selOff = null; sel = A.id;
   mate.a = mate.b = null;
   disposeOverlay(faceGroup);
   refreshAll();
@@ -3622,7 +3636,7 @@ document.addEventListener('click', (e) => {
   if (!t) return;
   if (t.closest('#sk')) return; // kroki editörü kendi düğmelerini yönetir
 
-  if (t.dataset.sel) { sel = Number(t.dataset.sel); renderPanel(); refreshOverlays(); return; }
+  if (t.dataset.sel) { selOff = null; sel = Number(t.dataset.sel); renderPanel(); refreshOverlays(); return; }
   if (t.dataset.color !== undefined) { commit(); cur().color = t.dataset.color || undefined; refreshAll(); return; }
   if (t.dataset.open) {
     const all = loadProjects(), pr = all[t.dataset.open];
@@ -3749,7 +3763,7 @@ document.addEventListener('click', (e) => {
   if (act === 'op-add') { commit(); p.op = 'add'; refreshAll(); return; }
   if (act === 'op-sub') { commit(); p.op = 'sub'; refreshAll(); return; }
   if (act === 'fit') { fit(lastClean ? lastClean.boundingBox : null); return; }
-  if (act === 'del') { removeCur(); return; }
+  if (act === 'del') { if (!hasSel()) { toast('Önce silinecek parçayı seç'); return; } removeCur(); return; }
   if (act === 'undo') { doUndo(); return; }
   if (act === 'redo') { doRedo(); return; }
   if (act === 'stl') { exportSTL(); return; }
@@ -3761,7 +3775,7 @@ document.addEventListener('click', (e) => {
   if (act === 'dlg-save') { saveProject(($('pname').value || '').trim() || 'model'); renderDialog(); return; }
   if (act === 'dlg-new') {
     commit();
-    parts = freshParts(); sel = 1; nextId = 2; projName = 'model'; weldPlan = null; asmAnswers = {}; simData = null; mechData = { cs: [], motor: null };
+    parts = freshParts(); selOff = null; sel = 1; nextId = 2; projName = 'model'; weldPlan = null; asmAnswers = {}; simData = null; mechData = { cs: [], motor: null };
     closeDialog(); refreshAll(true);
     return;
   }
@@ -3932,7 +3946,7 @@ function applyCommands(cmds, heard) {
       case 'fit': fit(lastClean ? lastClean.boundingBox : null); break;
       case 'export': exportSTL(); return;
       case 'save': saveProject(projName || 'model'); return;
-      case 'delete': ok = removeCur(); break;
+      case 'delete': ok = hasSel() ? removeCur() : (toast('Önce silinecek parçayı seç'), false); break;
       case 'add': addPart(c.type, c.op, c.dims); break;
       case 'set': commit(); if (POSE_KEYS.includes(c.key)) carry(cur(), () => { cur()[c.key] = c.value; }); else cur()[c.key] = c.value; refreshAll(); break;
       case 'rotate': commit(); carry(cur(), () => { cur()['r' + c.axis] = c.deg; }); refreshAll(); break;
@@ -3974,7 +3988,7 @@ function loadExample(key) {
   const ex = buildExample(key);
   if (!ex) return;
   commit();
-  parts = ex.parts; nextId = ex.nextId; sel = ex.sel; projName = ex.name; weldPlan = null; asmAnswers = {}; simData = null; mechData = { cs: [], motor: null };
+  parts = ex.parts; nextId = ex.nextId; selOff = null; sel = ex.sel; projName = ex.name; weldPlan = null; asmAnswers = {}; simData = null; mechData = { cs: [], motor: null };
   cleanLinks(parts);
   if (ex.anim) Object.assign(anim.cfg, ex.anim);
   tab = 'dims';
