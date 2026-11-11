@@ -95,7 +95,7 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | 3 | Dokuma kalıbı: parça, pens, çıt, dikiş payı (seçili kenar / tüm çevre, köşe türleri), böl, birleştir, döndür, aynala, kontur ve eğri doğrulama | Referans kalıplarda pay alanı / çevresi analitikle eşleşir; öz-kesişim yakalanır | ✅ (12.11.2026) — bkz. bölüm 8 |
 | 4 | Beden ve grading: nokta bazlı grading, kişiye özel ölçü altyapısı, bütünlük kontrolü; trikoda bedene göre ilmek / sıra sayıları | Bedenler arası fark kurala tam eşit; dikiş hattı eşleşmesi raporlanır | ✅ dokuma (12.11.2026) — bkz. bölüm 9; triko ilmek sayıları Aşama 5 ile |
 | 5 | Triko desen ve ilmek: ilmek sözlüğü, ızgara, düz / ters / ribana / saç örgüsü / jakar, tekrar, renk raporu, numune ve gauge, sıra bazlı eksiltme / artırma | Ribana ve saç örgüsü kuralları; gauge dönüşümü elle hesapla tam; eksiltme tablosu hedef ölçüye ±1 ilmek; desteklenmeyen yapıda açık uyarı | ✅ (12.11.2026) — bkz. bölüm 10 |
-| 6 | Kumaş, iplik, aksesuar kütüphanesi (ayrıntılı); iplik numarası dönüşümleri; tüketim, gramaj, maliyet | Nm / Ne / tex / dtex dönüşümleri tam; numunesiz sonuç "tahmini" | Kısmi: kart yapısı, birimler, "tahmini" işareti, malzeme maliyeti Aşama 1'de var |
+| 6 | Kumaş, iplik, aksesuar kütüphanesi (ayrıntılı); iplik numarası dönüşümleri; tüketim, gramaj, maliyet | Nm / Ne / tex / dtex dönüşümleri tam; numunesiz sonuç "tahmini" | ✅ (12.11.2026) — bkz. bölüm 11 |
 | 7 | Kumaş yerleşimi ve kesim optimizasyonu | Kısıt ihlali sıfır; verim alt sınırla raporlanır | Yok |
 | 8 | Triko makine profilleri ve üretim çıktısı | Doğrulanamayan makine için çıktı yok, gerekçe yazılı (risk 12) | Yok |
 | 9 | 3B giysi ve kumaş / örgü simülasyonu | Önizleme ve fizik ayrı adlandırılır; çözücü analitik testlerle doğrulanır | Yok |
@@ -128,6 +128,8 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | `tx/knit/chart.js`, `tx/knit/shape.js` | Yeni (Aşama 5) | İlmek sözlüğü, şema, doğrulama, tekrar, yazılı talimat, CSV; numune, ölçü ↔ ilmek, şekillendirme dağılımı, parça hesabı, bedenler |
 | `tx/knit/chart-export.js`, `tx/knit/chart-ui.js` | Yeni (Aşama 5) | Şema çizimi (tuval / PNG, çok sayfalı A4 PDF), şema editörü |
 | `tests/tx-knit.test.mjs` | Yeni (Aşama 5) | 11 Node testi |
+| `tx/materials.js` | Yeni (Aşama 6) | Numara dönüşümleri, hazır kartlar, dokuma kumaş tüketimi, triko ilmek toplamı / ilmek boyu / gramaj |
+| `tests/tx-materials.test.mjs` | Yeni (Aşama 6) | 7 Node testi |
 | `tests/e2e/run.mjs` | Değişti | W (çalışma alanı) ve T (tekstil) senaryoları; makine senaryoları seçim ekranını atlamak için `cizim:workspace = makine` ile başlar |
 
 Yeni dış bağımlılık yok: tarayıcının kendi IndexedDB'si kullanılır. Three.js tekstil tarafında Aşama 9'a kadar yüklenmez.
@@ -425,3 +427,37 @@ Kurallar iki kaynaktan gelir:
 - **İlmek türleri.** Brioche, plaka (intarsia), çift yataklı özel yapılar desteklenmiyor; kod görülürse hata verilir.
 - **Tüketim ve gramaj.** İplik tüketimi ve gramaj Aşama 6'da.
 - **Makine programı.** Makineye özgü program yok (Aşama 8); yazılı talimat elle ya da genel kullanım içindir.
+
+## 11. Aşama 6 raporu: kumaş, iplik, aksesuar kütüphanesi; tüketim, gramaj, maliyet (12.11.2026)
+
+**Çalışanlar.**
+- **Hazır kartlar.** 8 kumaş, 5 iplik, 6 aksesuar; piyasadaki tipik değerler. Sayısal alanlar "tahmini" işaretli gelir; tedarikçi kartıyla değiştirilmeli.
+- **İplik numarası dönüşümü.** tex, dtex, denye, Nm, Ne (pamuk); katlı iplikte sonuç numara (büküm kısalması hariç) ve m/g. Malzeme kartında gösterilir.
+- **Dokuma kumaş tüketimi.** Kalıp parçalarından:
+  - Kesim alanı (pay dahil) × adet; katlı kesilen parça 2 kat.
+  - Çekme oranıyla büyütme; kumaş eni ve yerleşim verimiyle metre (varsayılan %80, gerçek yerleşim Aşama 7'de) + %3 kesim kaybı.
+  - Kumaş gramajıyla tüketilen ve giysideki kumaş ağırlığı.
+  - Ana kumaş ve astar ayrı.
+- **Triko iplik tüketimi.** Parça planından tam ilmek sayısı (kolda artırmalar sıra sıra toplanır) × ilmek boyu × tex + %5 kayıp. İlmek boyunun kaynağı, öncelik sırasıyla:
+  1. Numunede ölçülen.
+  2. Tartılan numune (ağırlık, ilmek × sıra).
+  3. Numune sıklığından geometrik tahmin (Munden, düz örgü, ks ≈ 19, "tahmini").
+- **Uyumluluk uyarısı.** Sıkılık faktörü (√tex / ilmek boyu) 1,0–2,0 dışındaysa numune ile iplik numarası uyumsuz uyarısı verilir.
+- **Föyde "Tüketim ve malzeme maliyeti".** Bedene göre tüketim ve maliyet. Elle girilen miktar varsa o, yoksa hesaplanan miktar kullanılır ve "tahmini" işaretlenir. Varsayımlar yazılı. Eksik bağlar (ürüne kumaş / iplik bağlanmamış) hata olarak gösterilir.
+
+**Doğrulama** (`tests/tx-materials.test.mjs`, 7 test):
+- **Numara dönüşümleri.** Kesin; 25 sistem çifti gidiş-dönüşü 1e-9.
+- **Hazır kartlar.** Geçerli.
+- **Kumaş tüketimi.** Dikdörtgende analitik metre; çekme çarpanı 1 / ((1 − s₁)(1 − s₂)); katlı parça 2 kat.
+- **İlmek toplamı.** Kol ve beden kapalı biçimle aynı.
+- **Gramaj.** = ilmek × boy × tex; tartılan numune kendi ağırlığını verir.
+- **Ürün düzeyi.** Gömlek metresi makul aralıkta (1–2,5 m) ve maliyet = metre × fiyat; elle girilen miktar önceliklidir. Kazak gramı ve kg maliyeti tam.
+- **Tarayıcı testi.**
+  - Hazır karttan poplin ve merinos eklenir, Nm 2/28 dönüşümü doğru.
+  - Fiyatlar girilir, kalıp ve triko parçası eklenir.
+  - Föyde gömlek kumaş metresi, varsayımlar, kazak iplik gramı ve uyumsuz numune uyarısı görünür.
+
+**Sınırlar:**
+- **Kumaş metresi.** Yerleşim yapılmadan önce varsayılan verimle hesaplanır (Aşama 7'de gerçek yerleşim gelecek).
+- **İlmek boyu tahmini.** Düz örgü katsayısıyla yapılır; ribana / saç örgüsü bölümleri için ayrı katsayı yok. Doğru gramaj için numunede ilmek boyunu ölç ya da numuneyi tart.
+- **Kapsam dışı.** Aksesuar tüketimi (düğme adedi, fermuar boyu) otomatik hesaplanmaz; elle girilir. Stok düşümü / sipariş yok, alanlar kayıt amaçlıdır.

@@ -1,17 +1,18 @@
 // Tekstil ve Moda çalışma alanı — arayüz (Aşama 1: ortak proje altyapısı).
 // Hesap ve doğrulama tx/model.js'te; burada yalnız gösterim ve düzenleme.
 // Makine ve Mühendislik alanının hiçbir dosyasını içe aktarmaz.
-import * as M from './model.js?v=20261112e';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112e';
-import { TEMPLATES, VIEWS } from './drawing.js?v=20261112e';
-import { openSketchEditor } from './sketch-ui.js?v=20261112e';
-import { SETS, defaultParams } from './woven/blocks.js?v=20261112e';
-import { openPatternEditor } from './woven/pattern-ui.js?v=20261112e';
-import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112e';
-import { sizeTable as gradeTable } from './woven/grade.js?v=20261112e';
-import { TEMPLATES as KTPL, validateChart } from './knit/chart.js?v=20261112e';
-import { KNIT_PIECES, gradeKnit, widthOf } from './knit/shape.js?v=20261112e';
-import { openChartEditor } from './knit/chart-ui.js?v=20261112e';
+import * as M from './model.js?v=20261112f';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112f';
+import { TEMPLATES, VIEWS } from './drawing.js?v=20261112f';
+import { openSketchEditor } from './sketch-ui.js?v=20261112f';
+import { SETS, defaultParams } from './woven/blocks.js?v=20261112f';
+import { openPatternEditor } from './woven/pattern-ui.js?v=20261112f';
+import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112f';
+import { sizeTable as gradeTable } from './woven/grade.js?v=20261112f';
+import { TEMPLATES as KTPL, validateChart } from './knit/chart.js?v=20261112f';
+import { KNIT_PIECES, gradeKnit, widthOf } from './knit/shape.js?v=20261112f';
+import { openChartEditor } from './knit/chart-ui.js?v=20261112f';
+import { PRESETS, allCounts } from './materials.js?v=20261112f';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -213,7 +214,11 @@ function tabKnit() {
       <label class="f"><span>İplik</span><select data-f="knit.swatches.${i}.yarn" data-t="ref"><option value="">—</option>${yarns.map((y) => `<option value="${y.id}" ${y.id === s.yarn ? 'selected' : ''}>${esc(y.name)}</option>`).join('')}</select></label>
       <label class="f"><span>İlmek / 10 cm</span><input data-f="knit.swatches.${i}.st10" data-t="num" inputmode="decimal" value="${num(s.st10)}"></label>
       <label class="f"><span>Sıra / 10 cm</span><input data-f="knit.swatches.${i}.row10" data-t="num" inputmode="decimal" value="${num(s.row10)}"></label>
-      <label class="small"><input type="checkbox" data-a="sw-wash" data-i="${i}" ${s.washed ? 'checked' : ''}> yıkanmış</label></div>`).join('') || '<div class="small">Numune yok.</div>'}
+      <label class="small"><input type="checkbox" data-a="sw-wash" data-i="${i}" ${s.washed ? 'checked' : ''}> yıkanmış</label></div>
+      <div class="row"><label class="f"><span>İlmek boyu (mm, ölçülen)</span><input data-f="knit.swatches.${i}.loopLen" data-t="num" inputmode="decimal" value="${num(s.loopLen, 2)}" placeholder="bilinmiyor"></label>
+      <label class="f"><span>Numune ağırlığı (g)</span><input data-f="knit.swatches.${i}.weightG" data-t="num" inputmode="decimal" value="${num(s.weightG, 2)}" placeholder="—"></label>
+      <label class="f"><span>Tartılan numune ilmek</span><input data-f="knit.swatches.${i}.wSt" data-t="num" inputmode="numeric" value="${num(s.wSt, 0)}" placeholder="—"></label>
+      <label class="f"><span>… sıra</span><input data-f="knit.swatches.${i}.wRows" data-t="num" inputmode="numeric" value="${num(s.wRows, 0)}" placeholder="—"></label></div>`).join('') || '<div class="small">Numune yok.</div>'}
     <div class="row noprint"><label class="f"><span>Ad</span><input id="ns-name" placeholder="ör. Merinos düz"></label><label class="f"><span>İlmek / 10 cm</span><input id="ns-st" inputmode="decimal" placeholder="ör. 28"></label><label class="f"><span>Sıra / 10 cm</span><input id="ns-row" inputmode="decimal" placeholder="ör. 38"></label><button class="ok" data-a="add-swatch">+ Numune</button></div></div>`;
   h += `<div class="card"><h3>Örgü desenleri</h3><div class="row noprint"><label class="f"><span>Başlangıç</span><select id="nk-tpl">${Object.entries(KTPL).map(([k, t]) => `<option value="${k}">${esc(t.label)}</option>`).join('')}</select></label><label class="f"><span>Ad</span><input id="nk-name"></label><button class="ok" data-a="add-chart">Oluştur ve aç</button></div>
     ${K.charts.map((c, i) => { const v = validateChart(c), e = v.filter((x) => x.level === 'hata').length; return `<div class="row"><span style="flex:3 1 160px"><b>${esc(c.name)}</b><div class="small">${c.w} ilmek × ${c.h} sıra${c.repeat ? ` · tekrar ${c.repeat.w}×${c.repeat.h}` : ''}${c.palette.length > 1 ? ` · ${c.palette.length} renk` : ''} · ${e ? `⛔ ${e} hata` : v.length ? `⚠ ${v.length} uyarı` : '✅'}</div></span><button class="on" data-a="open-chart" data-i="${i}">Aç</button><button class="danger" data-a="del-chart" data-i="${i}">${S.delArm === c.id ? 'Emin misin?' : 'Sil'}</button></div>`; }).join('') || '<div class="small">Desen yok.</div>'}</div>`;
@@ -319,7 +324,9 @@ function tabMaterials() {
   let h = `<div class="card noprint"><h3>Malzeme ekle</h3><div class="row">
     <select id="nm-kind">${kinds.map(([k, K]) => `<option value="${k}">${K.label}</option>`).join('')}</select>
     <input id="nm-name" placeholder="ad (ör. Poplin %100 pamuk)"><button class="ok" data-a="add-mat">Ekle</button></div>
-    <div class="small">Bilmediğin değeri boş bırak (uydurulmaz). Değer ölçülmediyse "tahmini" işaretle; hesaplarda ve föyde öyle gösterilir.</div></div>`;
+    <div class="small">Bilmediğin değeri boş bırak (uydurulmaz). Değer ölçülmediyse "tahmini" işaretle; hesaplarda ve föyde öyle gösterilir.</div>
+    <div class="row"><select id="nm-preset">${kinds.map(([k, K]) => `<optgroup label="${K.label}">${PRESETS[k].map((x, j) => `<option value="${k}:${j}">${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}</select><button data-a="add-preset">+ Hazır karttan</button></div>
+    <div class="small">Hazır kartlar piyasadaki tipik değerlerdir ve "tahmini" işaretli gelir; tedarikçinin teknik kartıyla değiştir.</div></div>`;
   p.library.materials.forEach((m, i) => {
     const K = M.MATERIAL_KINDS[m.kind], f = `library.materials.${i}`;
     h += `<div class="card"><h3><span class="badge">${K.label}</span><span class="sp">${esc(m.name)}</span><button class="danger" data-a="del-mat" data-i="${i}">Sil</button></h3>
@@ -337,7 +344,7 @@ function tabMaterials() {
           : `<input data-f="${f}.props.${k}" data-t="${cm ? 'cm' : 'num'}" value="${v == null ? '' : num(cm ? v / 10 : v, 3)}" inputmode="decimal" placeholder="bilinmiyor">`;
         const estBox = kind === 'num' || kind === 'pct' || kind === 'int' ? `<label class="small"><input type="checkbox" data-a="est" data-i="${i}" data-v="${k}" ${est ? 'checked' : ''}> tahmini</label>` : '';
         return `<label class="f"><span>${esc(lbl)}${u ? ' (' + u + ')' : ''}</span>${inp}${estBox}</label>`;
-      }).join('')}</div></div>`;
+      }).join('')}</div>${m.kind === 'yarn' && m.props.count > 0 && m.props.countSystem ? (() => { try { const c = allCounts(m.props.count, m.props.countSystem, m.props.ply || 1); return `<div class="small">Sonuç numara${c.ply > 1 ? ` (${c.ply} kat, büküm kısalması hariç)` : ''}: ${num(c.tex, 1)} tex · ${num(c.dtex, 0)} dtex · ${num(c.den, 0)} den · Nm ${num(c.Nm, 2)} · Ne ${num(c.Ne, 2)} · ${num(1000 / c.tex, 1)} m/g</div>`; } catch (e) { return ''; } })() : ''}</div>`;
   });
   return h + (p.library.materials.length ? '' : '<div class="small">Malzeme yok.</div>');
 }
@@ -359,6 +366,10 @@ function tabTechpack() {
   <div class="card"><h3>Ölçü tablosu (cm)</h3>${mt ? `<div class="small">${esc(mt.name)} — kaynak: ${esc(mt.source) || '⚠ yazılmamış'}</div><div class="scroll"><table><tr><th></th>${mt.sizes.map((z) => `<th>${esc(z)}</th>`).join('')}</tr>${Object.entries(mt.measures).map(([k, row]) => `<tr><td>${esc(k)}</td>${mt.sizes.map((z) => `<td>${row[z] == null ? '—' : num(row[z] / 10)}</td>`).join('')}</tr>`).join('')}</table></div>` : '<span class="small">Beden tablosu seçilmemiş</span>'}</div>
   <div class="card"><h3>Malzeme listesi</h3><table><tr><th>Malzeme</th><th>Tür</th><th>Kullanım</th><th>Miktar</th></tr>${s.materials.map((m) => `<tr><td>${esc(m.name)}${m.estimated.length ? ' <span class="badge">tahmini değer var</span>' : ''}</td><td>${m.kind}</td><td>${ROLE[m.role] || m.role}</td><td>${m.qty == null ? 'bilinmiyor' : num(m.qty, 3) + ' ' + m.unit}</td></tr>`).join('')}</table>
     <div class="small" style="margin-top:6px">Malzeme maliyeti: ${num(s.cost.total, 2)}${s.cost.complete ? '' : ' — <b>eksik</b>: ' + esc(s.cost.missing.join(', '))}. İşçilik ve genel giderler bu aşamada yok (Aşama 10).</div></div>
+  ${s.consumption && (Object.keys(s.consumption.sizes).length || s.consumption.errors.length) ? `<div class="card"><h3>Tüketim ve malzeme maliyeti (bedene göre, hesaplanan)</h3>
+    ${s.consumption.errors.map((e) => `<div class="issue hata">⛔ ${esc(e)}</div>`).join('')}
+    <div class="scroll"><table><tr><th>Beden</th><th>Malzeme</th><th>Tüketim</th><th>Maliyet</th></tr>${Object.entries(s.consumption.sizes).map(([z, mats]) => Object.values(mats).map((c, k) => `<tr><td>${k ? '' : esc(z || '—')}</td><td>${esc(c.name)}${c.estimated ? ' <span class="badge">tahmini</span>' : ''}</td><td>${c.grams != null ? `${num(c.grams, 0)} g (${num(c.lengthM, 0)} m iplik, ${c.stitches} ilmek)` : `${num(c.detail.lengthM, 2)} m kumaş · kesim alanı ${num(c.detail.cutArea / 1e6, 2)} m²${c.detail.weightG ? ` · ${num(c.detail.weightG, 0)} g` : ''}`}</td><td>${k ? '' : (() => { const mc = s.consumption.cost[z]; return mc ? `${num(mc.total, 2)}${mc.complete ? '' : ' <b>eksik</b>'}` : '—'; })()}</td></tr>`).join('')).join('')}</table></div>
+    <div class="small">Varsayımlar: ${esc(s.consumption.notes.join(' · '))}. Ürüne elle girilen miktar varsa o kullanılır; yoksa bu hesap.</div></div>` : ''}
   <div class="card"><h3>Varyantlar (${s.variants.length})</h3><div class="small">${s.variants.map((v) => esc(v.sku)).join(' · ')}</div></div>
   <div class="card"><h3>Üretim notları</h3><textarea data-f="collection.products.${i}.techpack.notes" rows="4">${esc(pr.techpack.notes)}</textarea></div>
   ${s.issues.length ? `<div class="card"><h3>Bu ürünün sorunları</h3>${s.issues.map((x) => `<div class="issue ${x.level}">${x.level === 'hata' ? '⛔' : '⚠'} ${esc(x.msg)}</div>`).join('')}</div>` : ''}`;
@@ -545,6 +556,7 @@ document.addEventListener('click', async (e) => {
       case 'add-meas': { const nm = $('nm-' + i).value.trim(); const t = p.sizeTables[i]; if (!nm) return toast('Ölçü adı yaz'); if (nm in t.measures) return toast('Bu ölçü zaten var'); t.measures[nm] = {}; break; }
       case 'del-meas': delete p.sizeTables[i].measures[b.dataset.v]; break;
       case 'add-mat': M.addMaterial(p, $('nm-kind').value, { name: $('nm-name').value }); break;
+      case 'add-preset': { const [k, j] = $('nm-preset').value.split(':'); M.addPresetMaterial(p, k, +j); break; }
       case 'del-mat': {
         const m = p.library.materials[i], users = p.collection.products.filter((pr) => pr.materials.some((l) => l.mat === m.id));
         if (users.length) { toast('Bu malzeme ' + users.map((u) => u.name).join(', ') + ' ürününde kullanılıyor; önce üründen kaldır'); return; }

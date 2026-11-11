@@ -4,12 +4,13 @@
 // Dokuma / konfeksiyon ve triko ayrı alt şemalardır (woven, knit); yalnız koleksiyon, ürün, renk, beden,
 // malzeme, föy ve revizyon ortaktır. Bkz. docs/TEKSTIL-MIMARI.md
 
-import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112e';
-import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112e';
-import { buildSet } from './woven/blocks.js?v=20261112e';
-import { gradeGroup } from './woven/grade.js?v=20261112e';
-import { fromTemplate, validateChart } from './knit/chart.js?v=20261112e';
-import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112e';
+import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112f';
+import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112f';
+import { buildSet } from './woven/blocks.js?v=20261112f';
+import { gradeGroup } from './woven/grade.js?v=20261112f';
+import { fromTemplate, validateChart } from './knit/chart.js?v=20261112f';
+import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112f';
+import { PRESETS, presetEstimated, wovenConsumption, knitStitchTotal, yarnConsumption } from './materials.js?v=20261112f';
 
 export const KIND = 'cizim.textile';
 export const SCHEMA = 1;
@@ -218,6 +219,47 @@ export function knitCompute(p, pc) {
   return computePiece(pc.kind, pc.params, s, { rep: ch ? (ch.repeat ? ch.repeat.w : ch.w) : 1, ribRep: pc.rib === 'rib22' ? 4 : 2, edge: 1 });
 }
 
+// Hazır karttan malzeme (Aşama 6): değerler "örnek", sayısal alanlar tahmini işaretli
+export function addPresetMaterial(p, kind, i) {
+  const pr = PRESETS[kind]?.[i]; if (!pr) throw new Error('Hazır kart yok');
+  return addMaterial(p, kind, { name: pr.name, props: { ...pr.props }, estimated: presetEstimated(kind, pr.props) });
+}
+// Ürün tüketimi (beden bazında): dokumada kalıptan kumaş metresi, trikoda parçalardan iplik gramı.
+// Dönüş: { sizes: { [beden]: { [malzemeId]: { qty (fiyat biriminde), detail } } }, notes, errors }
+export function productConsumption(p, productId, opts = {}) {
+  const pr = p.collection.products.find((x) => x.id === productId); if (!pr) return null;
+  const out = { sizes: {}, notes: [], errors: [] };
+  const linkOf = (role, kind) => pr.materials.find((l) => l.role === role && p.library.materials.find((m) => m.id === l.mat)?.kind === kind);
+  if (pr.branch === 'woven' && p.woven) {
+    const by = {}; for (const pc of p.woven.pieces.filter((x) => x.product === productId)) (by[pc.size ?? ''] = by[pc.size ?? ''] || []).push(pc);
+    for (const [z, pcs] of Object.entries(by)) for (const [fab, role] of [['ana', 'ana'], ['astar', 'astar']]) {
+      const list = pcs.filter((x) => x.fabric === fab); if (!list.length) continue;
+      const l = linkOf(role, 'fabric'); if (!l) { out.errors.push(`${z || '—'}: "${fab}" kumaşlı parça var ama ürüne ${role} kumaş bağlı değil`); continue; }
+      const m = p.library.materials.find((x) => x.id === l.mat);
+      try { const c = wovenConsumption(list, m, opts); (out.sizes[z] = out.sizes[z] || {})[m.id] = { qty: m.priceUnit === 'm' ? c.lengthM : m.priceUnit === 'm²' ? c.lengthM * m.props.width / 1000 : m.priceUnit === 'kg' && c.weightG ? c.weightG / 1000 : null, unit: m.priceUnit, detail: c, name: m.name, estimated: true }; for (const n of c.notes) if (!out.notes.includes(n)) out.notes.push(n); }
+      catch (e) { out.errors.push(`${z || '—'}: ${e.message}`); }
+    }
+  }
+  if (pr.branch === 'knit' && p.knit) {
+    const l = linkOf('ana', 'yarn'), m = l && p.library.materials.find((x) => x.id === l.mat);
+    const by = {}; for (const pc of p.knit.pieces.filter((x) => x.product === productId)) (by[pc.size ?? ''] = by[pc.size ?? ''] || []).push(pc);
+    if (Object.keys(by).length && !m) out.errors.push('Triko parçası var ama ürüne ana iplik bağlı değil');
+    for (const [z, pcs] of Object.entries(by)) {
+      if (!m) break;
+      let grams = 0, lengthM = 0, est = false, stitches = 0; const warns = new Set(), methods = new Set();
+      for (const pc of pcs) {
+        try { const r = knitCompute(p, pc), n = knitStitchTotal(r), sw = p.knit.swatches.find((x) => x.id === pc.swatch), c = yarnConsumption(n, m, sw); grams += c.gramsWithWaste; lengthM += c.lengthM; stitches += n; est = est || c.estimated; if (c.warn) warns.add(c.warn); methods.add(c.method); }
+        catch (e) { out.errors.push(`${z || '—'} ${pc.name}: ${e.message}`); }
+      }
+      (out.sizes[z] = out.sizes[z] || {})[m.id] = { qty: m.priceUnit === 'kg' ? grams / 1000 : m.priceUnit === 'adet' ? null : null, unit: m.priceUnit, grams, lengthM, stitches, name: m.name, estimated: est, detail: { methods: [...methods], warns: [...warns] } };
+      for (const w of warns) if (!out.notes.includes(w)) out.notes.push(w);
+      for (const w of methods) if (!out.notes.includes(w)) out.notes.push(w);
+    }
+    if (Object.keys(out.sizes).length) out.notes.push('%5 iplik kaybı eklendi; parça ölçüleri düz örgü ilmek sayısına göre');
+  }
+  return out;
+}
+
 /* ---------- doğrulama ---------- */
 // Dönen dizi: { level: 'hata' | 'uyarı', where, msg }. Hata varsa proje "geçersiz", uyarı bilgi amaçlı.
 export function validate(p) {
@@ -334,15 +376,18 @@ export function variants(p, productId) {
   return cs.flatMap((c) => ss.map((s) => ({ color: c, size: s, sku: [pr.modelCode || pr.id, c && (p.library.colors.find((x) => x.id === c)?.code || c), s].filter(Boolean).join('-') })));
 }
 // Malzeme maliyeti: yalnız miktarı VE fiyatı bilinen satırlar toplanır; eksikler ayrıca listelenir (uydurulmaz).
-export function materialCost(p, productId) {
+// computed: productConsumption(...).sizes[beden] — elle girilmemiş miktar için hesaplanan tüketim kullanılır (işaretli)
+export function materialCost(p, productId, computed = null) {
   const pr = p.collection.products.find((x) => x.id === productId);
   if (!pr) return null;
   let sum = 0; const missing = [], lines = [];
   for (const l of pr.materials) {
     const m = p.library.materials.find((x) => x.id === l.mat);
     if (!m) continue;
-    if (l.qty == null || m.price == null) { missing.push(m.name + (l.qty == null ? ' (miktar yok)' : ' (fiyat yok)')); continue; }
-    const c = l.qty * m.price; sum += c; lines.push({ name: m.name, qty: l.qty, unit: m.priceUnit, price: m.price, cost: c });
+    const auto = l.qty == null && computed?.[m.id]?.qty != null ? computed[m.id] : null;
+    const qty = l.qty ?? auto?.qty ?? null;
+    if (qty == null || m.price == null) { missing.push(m.name + (qty == null ? ' (miktar yok)' : ' (fiyat yok)')); continue; }
+    const c = qty * m.price; sum += c; lines.push({ name: m.name, qty, unit: m.priceUnit, price: m.price, cost: c, computed: !!auto, estimated: !!auto?.estimated || (m.estimated || []).length > 0 });
   }
   return { total: sum, lines, missing, complete: !missing.length };
 }
@@ -356,6 +401,7 @@ export function techpackSummary(p, productId) {
     sizeTable: t ? { name: t.name, source: t.source, sizes: pr.sizes, measures: Object.fromEntries(Object.entries(t.measures).map(([k, row]) => [k, Object.fromEntries(pr.sizes.map((s) => [s, row[s] ?? null]))])) } : null,
     materials: pr.materials.map((l) => { const m = p.library.materials.find((x) => x.id === l.mat); return m && { name: m.name, kind: MATERIAL_KINDS[m.kind].label, role: l.role, qty: l.qty, unit: m.priceUnit, estimated: m.estimated }; }).filter(Boolean),
     variants: variants(p, productId), cost: materialCost(p, productId), notes: pr.techpack.notes,
+    consumption: (() => { const c = productConsumption(p, productId); if (!c) return null; return { ...c, cost: Object.fromEntries(Object.entries(c.sizes).map(([z, v]) => [z, materialCost(p, productId, v)])) }; })(),
     issues: validate(p).filter((x) => x.where === 'Ürün ' + pr.name),
   };
 }

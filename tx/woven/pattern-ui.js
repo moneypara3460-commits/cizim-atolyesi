@@ -1,8 +1,8 @@
 // Kalıp editörü (dokuma / konfeksiyon). Tam ekran; bir ürün + beden grubunun parçalarını gösterir.
 // Geometri tx/woven/pattern.js'te; burada yalnız etkileşim.
-import * as C from '../curve.js?v=20261112e';
-import * as P from './pattern.js?v=20261112e';
-import * as X from './pattern-export.js?v=20261112e';
+import * as C from '../curve.js?v=20261112f';
+import * as P from './pattern.js?v=20261112f';
+import * as X from './pattern-export.js?v=20261112f';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cm = (mm, d = 1) => (Math.round(mm * 10 ** d / 10) / 10 ** d).toFixed(d).replace('.', ',');

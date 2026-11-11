@@ -661,6 +661,30 @@ await TX('Tekstil triko: numune, desen editöründe dokunarak boyama / saç örg
   await A(page, 'tab', '[data-v="val"]'); expect(await page.locator('.issue.hata').count() === 0, 'doğrulamada hata yok');
 });
 
+await TX('Tekstil malzeme / tüketim: hazır kart (poplin, merinos), numara dönüşümü, kalıptan kumaş metresi, trikodan iplik gramı, bedene göre maliyet föyde', async ({ page }) => {
+  await A(page, 'type', '[data-v="mixed"]'); await page.waitForSelector('[data-a="type"][data-v="mixed"].on');
+  await page.fill('#np-name', 'Tüketim E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await page.selectOption('#ap-branch', 'woven'); await page.selectOption('#ap-type', 'gomlek'); await A(page, 'add-prod');
+  await page.selectOption('#ap-branch', 'knit'); await page.selectOption('#ap-type', 'kazak'); await A(page, 'add-prod');
+  await A(page, 'tab', '[data-v="mats"]');
+  await page.selectOption('#nm-preset', 'fabric:0'); await A(page, 'add-preset');
+  await page.selectOption('#nm-preset', 'yarn:0'); await A(page, 'add-preset');
+  expect(/71,4 tex · 714 dtex · 643 den · Nm 14 · Ne 8,27/.test(await txBody(page)), 'Nm 2/28 dönüşümü');
+  for (const [i, v] of [[0, '120'], [1, '900']]) { await page.fill(`[data-f="library.materials.${i}.price"]`, v); await page.locator(`[data-f="library.materials.${i}.price"]`).dispatchEvent('change'); }
+  await A(page, 'tab', '[data-v="col"]');
+  await A(page, 'link', '[data-i="0"]'); await A(page, 'link', '[data-i="1"]');
+  await A(page, 'tab', '[data-v="pat"]'); await page.fill('#pt-size-free', 'M'); await A(page, 'add-pattern'); await page.waitForSelector('#pkx canvas'); await page.locator('#pkx [data-k="close"]').click();
+  await A(page, 'tab', '[data-v="knit"]'); await page.fill('#ns-name', 'N'); await page.fill('#ns-st', '28'); await page.fill('#ns-row', '38'); await A(page, 'add-swatch');
+  await page.fill('#kp-size', 'M'); await A(page, 'add-kpiece');
+  await A(page, 'tab', '[data-v="tp"]');
+  let b = await txBody(page);
+  const m = b.match(/([\d,]+) m kumaş/); expect(m && +m[1].replace(',', '.') > 1 && +m[1].replace(',', '.') < 2.5, 'gömlek kumaş metresi: ' + (m && m[1]));
+  expect(/tahmini/.test(b) && /yerleşim verimi %80 varsayıldı/.test(b), 'varsayımlar yazılı');
+  await page.selectOption('#fp-sel', { index: 1 }); await page.waitForFunction(() => /Teknik föy · Kazak/.test(document.querySelector('#main').innerText));
+  b = await txBody(page);
+  expect(/\d+ g \(\d+ m iplik, \d+ ilmek\)/.test(b) && /sıkılık faktörü/.test(b), 'iplik gramı ve uyumsuz numune uyarısı');
+});
+
 await TX('Tekstil ↔ Makine ayrılığı: tekstil kaydı makine projelerine yazmaz; makine projeleri tekstil listesinde görünmez', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('cizim:projects', JSON.stringify({ mak: { data: '{}', at: 1 } })));
   await A(page, 'type', '[data-v="woven"]'); await page.waitForSelector('[data-a="type"][data-v="woven"].on'); await page.fill('#np-name', 'Ayrı'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
