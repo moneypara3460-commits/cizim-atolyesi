@@ -394,6 +394,8 @@ export function solveStatic(fe, mats, bc, opt = {}) {
     for (const n of ns) { for (let k = 0; k < 3; k++) f[n * 3 + k] += per * df[k]; loadN.push(n); }
     for (let k = 0; k < 3; k++) Fapp[k] += L.F * df[k];
   }
+  // düğüm kuvvetleri (basınç / moment yüklerinin eşdeğeri, fea2.js üretir): [{ n, f: [x, y, z] }]
+  for (const q of bc.nodal || []) { for (let k = 0; k < 3; k++) { f[q.n * 3 + k] += q.f[k]; Fapp[k] += q.f[k]; } loadN.push(q.n); }
   let W = 0;
   if (bc.gravity) {
     for (let e = 0; e < fe.ne; e++) { const m = G[fe.elMat[e]], w = m.rho * 1e-6 * G_ACC * fe.h ** 3; W += w; for (let a = 0; a < 8; a++) f[fe.elN[e * 8 + a] * 3 + 1] -= w / 8; }
@@ -454,7 +456,9 @@ export function solveModal(fe, mats, bc, opt = {}) {
   let mg = null; if (opt.mg !== false && fe.origin && fe.ne > 800) { try { mg = buildMG(fe, G, fixed); } catch (e) { mg = null; } }
   // başlangıç: üç eksende yerçekimi benzeri kütle dağılımı + bir burulma vektörü
   const c = [0, 0, 0]; let mt = 0; for (let n = 0; n < fe.nn; n++) { const m = M[n * 3]; mt += m; for (let k = 0; k < 3; k++) c[k] += m * fe.xyz[n * 3 + k]; } c.forEach((v, k) => { c[k] = v / mt; });
-  let X = Array.from({ length: p }, (_, j) => { const v = new Float64Array(nd); for (let n = 0; n < fe.nn; n++) { if (j < 3) v[n * 3 + j] = 1; else { const dx = fe.xyz[n * 3] - c[0], dz = fe.xyz[n * 3 + 2] - c[2], dy = fe.xyz[n * 3 + 1] - c[1]; v[n * 3] = -dy + dz * 0.3; v[n * 3 + 1] = dx; v[n * 3 + 2] = -dx * 0.3 + dy * 0.2; } } for (let i = 0; i < nd; i++) if (fixed[i]) v[i] = 0; return v; });
+  // j ≥ 4: farklı dalga sayılı düşük frekanslı biçimler (vektörler doğrusal bağımsız olsun; çok mod istendiğinde gerekli)
+  const bbm = [0, 1, 2].map((k) => { let a = Infinity, b = -Infinity; for (let n = 0; n < fe.nn; n++) { a = Math.min(a, fe.xyz[n * 3 + k]); b = Math.max(b, fe.xyz[n * 3 + k]); } return [a, (b - a) || 1]; });
+  let X = Array.from({ length: p }, (_, j) => { const v = new Float64Array(nd); for (let n = 0; n < fe.nn; n++) { if (j < 3) v[n * 3 + j] = 1; else if (j > 3) { const q = j - 4, ax = q % 3, w = 1 + (q / 3 | 0); for (let k = 0; k < 3; k++) { const s = (fe.xyz[n * 3 + k] - bbm[k][0]) / bbm[k][1]; v[n * 3 + ax] += Math.sin(w * Math.PI * s + k + q) * (k === ax ? 0.3 : 1); } } else { const dx = fe.xyz[n * 3] - c[0], dz = fe.xyz[n * 3 + 2] - c[2], dy = fe.xyz[n * 3 + 1] - c[1]; v[n * 3] = -dy + dz * 0.3; v[n * 3 + 1] = dx; v[n * 3 + 2] = -dx * 0.3 + dy * 0.2; } } for (let i = 0; i < nd; i++) if (fixed[i]) v[i] = 0; return v; });
   const Xb = Array.from({ length: p }, () => new Float64Array(nd));
   let lam = null, it = 0, conv = false, iters = 0;
   for (; it < (opt.maxIter || 20); it++) {
@@ -665,3 +669,6 @@ export function materialSwap(caseF, caseG, m0, m1) {
 // RLE (proje kaydı için)
 export function rle(mat) { const out = []; let v = mat[0], n = 0; for (let i = 0; i < mat.length; i++) { if (mat[i] === v) n++; else { out.push(v, n); v = mat[i]; n = 1; } } out.push(v, n); return out; }
 export function unrle(a, N) { const m = new Int8Array(N); let p = 0; for (let i = 0; i < a.length; i += 2) { m.fill(a[i], p, p + a[i + 1]); p += a[i + 1]; } return m; }
+
+// fea2.js (gelişmiş analizler) için iç yapı taşları — davranış değişmez, yalnız dışa açılır
+export const _internal = { matGroups, matvec, diagK, pcg, buildMG, floating, stresses, invert, jacobiEig, NAT, dNat };

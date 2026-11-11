@@ -27,7 +27,7 @@ function world() {
   const canvas = { tag: 'canvas' }, uiButton = { tag: 'button' };
   const W = {
     parts: [{ id: 1 }, { id: 2 }, { id: 3 }], sel: 1, selOff: null, tab: 'dims',
-    measure: { on: false }, simUI: { active: false }, asmUI: { active: false }, linkPick: false, drag: null, tap: null,
+    measure: { on: false }, simUI: { active: false }, asmUI: { active: false }, femUI: { active: false, picking: false }, linkPick: false, drag: null, tap: null,
     renderer: { domElement: canvas },
     hitAt: new Map(),          // "x,y" -> parça id (modelde dokunulan parça)
     elAt: new Map(),           // "x,y" -> ekrandaki öğe (varsayılan: tuval)
@@ -37,7 +37,7 @@ function world() {
     pickAt: (x, y) => { const id = W.hitAt.get(x + ',' + y); return id ? { part: W.parts.find((p) => p.id === id) } : null; },
     renderPanel: () => W.calls.push('panel'), refreshOverlays: () => W.calls.push('ovl'),
     measureTap: () => W.calls.push('measure'), faceTap: () => W.calls.push('face'), edgeTap: () => W.calls.push('edge'),
-    mateTap: () => W.calls.push('mate'), linkTap: () => W.calls.push('link'), simTap: () => W.calls.push('sim'), asmTap: () => W.calls.push('asm'),
+    mateTap: () => W.calls.push('mate'), linkTap: () => W.calls.push('link'), simTap: () => W.calls.push('sim'), asmTap: () => W.calls.push('asm'), femTap: () => W.calls.push('fem'),
     endDrag: () => {}, cur: () => W.parts.find((p) => p.id === W.sel) || W.parts[0],
     partName: (q, i) => 'P' + (i + 1), esc: (s) => s, bendWarnings: () => [],
     $: () => ({ set innerHTML(v) { W.chips = v; } }),
@@ -113,7 +113,7 @@ t('özel araç modları kendi akışında kalır (boş alan seçimi kaldırmaz)'
   for (const [setup, want] of [
     [(W) => { W.measure.on = true; }, 'measure'], [(W) => { W.tab = 'face'; }, 'face'], [(W) => { W.tab = 'edge'; }, 'edge'],
     [(W) => { W.tab = 'mate'; }, 'mate'], [(W) => { W.tab = 'link'; W.linkPick = true; }, 'link'],
-    [(W) => { W.simUI.active = true; }, 'sim'], [(W) => { W.asmUI.active = true; }, 'asm'],
+    [(W) => { W.simUI.active = true; }, 'sim'], [(W) => { W.asmUI.active = true; }, 'asm'], [(W) => { W.femUI.active = true; W.femUI.picking = true; }, 'fem'],
   ]) {
     const { W, api } = world();
     setup(W);

@@ -131,6 +131,17 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **Kontrolcüler:** Fanuc 30i/31i-B5 (G43.4 TCP), Siemens 840D sl (TRAORI), LinuxCNC (makine koordinatı, G93), Fanuc / Haas 4. eksen ve Mach3 / Mach4 (G93); GRBL döner eksen için reddedilir. TCP'siz kontrolcüye eş zamanlı 5 eksen kodu üretilmez. Örnek programlar: `docs/cnc5-ornekler/` (`node tools/gen_cnc5_samples.mjs`)
 - **Doğrulanmadı:** hiçbir post gerçek bir makinede denenmedi; program başlığında yazar. İlk çalıştırma kumanda simülasyonu, tek blok ve düşük ilerlemeyle, yetkin operatör kontrolünde yapılmalı
 
+**📐 Mühendislik analizi (📐 Analiz sekmesi, ya da Hesap → Mühendislik analizi)**
+- Akış: analiz türü → birim sistemi (SI-mm, SI-m, ABD) → malzeme (kaynaklı kütüphane + özel malzeme) → ağ yoğunluğu → mesnet / yük / ısıl sınırlar → çöz → sonuç ağacı → rapor. Kurulum ve sonuç özetleri projeyle kaydedilir; geometri, malzeme, yük ya da ağ değişince eski sonuç "ESKİ" olarak işaretlenir
+- **Yapısal statik:** kuvvet (yüzey / nokta), basınç, moment (en küçük normlu düğüm kuvvetleriyle tam moment), öz ağırlık; yer değiştirme, von Mises, kullanım oranı, emniyet katsayısı (akma varsa; mesnet / yük komşuluğu hariç, tekil gerilme uyarısıyla), mesnet tepkisi ve denge hatası
+- **Modal:** doğal frekanslar (Hz) ve mod şekilleri (toplanmış kütle, alt uzay yinelemesi)
+- **Termal:** kararlı durum (sabit sıcaklık, ısı akısı, taşınım, hacimsel ısı; enerji dengesi) ve zamana bağlı (geri Euler)
+- **Doğrusal burkulma:** geometrik rijitlik K_G ile özdeğer; kritik yük katsayıları ve modlar (ideal geometri uyarısıyla)
+- **Desteklenmeyen (açıkça):** doğrusal olmayan malzeme / büyük şekil değişimi, temas ve cıvatalı bağlantı. Montaj parçaları ortak düğümlerle TAM YAPIŞIK bağlanır
+- **Ağ:** küp elemanlar (kaba / orta / ince / çok ince), parça başına hacim hatası, ince kesit ve kaba ağ uyarıları, 3 ağlı yakınsama çalışması
+- **Doğrulama:** `tests/fea2.test.mjs` analitik referanslar (çekme çubuğu, ankastre kiriş kuvvet + moment, modal 1. ve 2. frekans, ısı iletimi doğrusal / üretim / taşınım, levha soğuması, Euler burkulması), birimler, hata durumları, yakınsama. Ölçülen hatalar rapora yazılır
+- Görsel büyütme her zaman yazılır ("×N büyütüldü, gerçek en büyük yer değiştirme …"); mod şekilleri birimsizdir
+
 **🔮 Geleceğimi Göster — sanal test ortamı (🔮 Gelecek sekmesi, ya da Hesap → Geleceğimi göster)**
 - **Akış:** tasarımı bitir → ölçüler → her parçanın malzemesini seç → **✓ Tasarımımı onayla** → **🔮 GELECEĞİMİ GÖSTER** açılır. Onaydan sonra tasarım değişirse yeniden onay ister. Tasarım test ortamına kopyalanır; orijinal hiçbir zaman değiştirilmez
 - **Gerçek sonlu eleman analizi (FEA):** katı geometri küp elemanlara (voxel) bölünür; 8 düğümlü uyumsuz modlu hekzahedral eleman (eğilmede kilitlenmez), doğrusal-elastik, çok katmanlı (multigrid) ön koşullu eşlenik gradyan çözücü, arka plan iş parçacığında (Worker). Eleman boyu ölçülerle hizalanır (kalınlık yuvarlama hatası olmasın). Ağ: Hızlı / Normal / İnce
@@ -296,6 +307,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - `cad2d.js`, `cad2d-geom.js` — 2B çizim modu ve saf geometrisi (kesişim, kırp, uzat, ofset, radyus, DXF)
 - `cam.js`, `cam-ui.js` — CNC: yükseklik haritası, uzaklık alanı, takım yolları, simülasyon, G-kodu, iş kartı
 - `mech.js` — evolvent dişli profili, mekanizma bağıntıları
+- `fea2.js`, `fem-run.js`, `fem-worker.js`, `fem-ui.js` — mühendislik analizi: basınç / moment yükleri, termal (kararlı / geçici), doğrusal burkulma, malzeme kütüphanesi, birimler, ağ kalitesi, yakınsama, Analiz sekmesi
 - `kin.js`, `cam5.js`, `coll5.js`, `post5.js`, `cam5-run.js`, `cam5-worker.js`, `cam5-ui.js` — 4 / 5 eksen CNC: kinematik, stratejiler, çarpışma, voksel simülasyon, son işlemciler, arayüz
 - `occt.js`, `occt-ops.js`, `occt-worker.js`, `occt-ui.js` — OCCT B-Rep köprüsü (katı kurma, Boolean, yuvarlama / pah, doğrulama, STEP / IGES, Three.js'e üçgenleme, CAM için topoloji), işçi ve B-Rep sekmesi; `vendor/` — üçüncü taraf WebAssembly kütüphaneleri (bkz. `vendor/README.md`)
 - `fea.js`, `fea-worker.js`, `sim-ui.js` — Geleceğimi Göster: sonlu eleman çözücü (voxel H8, multigrid), modal, ısıl, yorulma / aşınma, alternatifler, arayüz ve PDF

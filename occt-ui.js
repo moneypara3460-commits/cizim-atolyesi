@@ -2,7 +2,7 @@
 // api: { descs() → [parça tanımı], parts() → [{id, name, desc}], selected() → {id, name, desc} | null,
 //        meshVolume() → mm³ | null, draw(view), clear(), addPart(part, name, hideIds), toast(m), render(),
 //        saveText(text, name), pickFile(accept) → Promise<File|null>, name() }
-const V = '20261111c';
+const V = '20261111d';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 1) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));
 const FT = { Plane: 'düzlem', Cylinder: 'silindir', Cone: 'koni', Sphere: 'küre', Torus: 'torus', BSplineSurface: 'serbest (B-spline)', BezierSurface: 'Bezier', SurfaceOfRevolution: 'dönel', SurfaceOfExtrusion: 'çekme', OffsetSurface: 'ofset', OtherSurface: 'diğer' };

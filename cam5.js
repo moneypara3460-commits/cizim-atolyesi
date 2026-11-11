@@ -4,8 +4,8 @@
 //
 // Ortak takım yolu verisi (CL): { p:[x,y,z] takım ucu, v:[i,j,k] takım ekseni, k:'r'|'f'|'p', f: ilerleme mm/dk, op: işlem sırası }
 // İş parçası çerçevesi (W): makine gibi Z yukarı, iş sıfırı orijinde (bkz. kin.js). Simülasyon, çarpışma ve G-kodu aynı CL dizisini kullanır.
-import * as C from './cam.js?v=20261111c';
-import * as K from './kin.js?v=20261111c';
+import * as C from './cam.js?v=20261111d';
+import * as K from './kin.js?v=20261111d';
 
 const { dot, cross, add, sub, mul, norm, unit, rot } = K;
 const Z = [0, 0, 1];

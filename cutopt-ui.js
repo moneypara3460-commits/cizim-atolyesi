@@ -1,7 +1,7 @@
 // Akıllı kesim optimizasyonu ekranı (tam ekran). Kullanım: openCutOpt({ fromCad: () => parçalar, name, onClose })
 // fromCad dönüşü: [{ profile, material, t, label, len, qty }]  (iskelet parçalarının kesim listesi)
-import { PROFILES } from './logic.js?v=20261111c';
-import { optimizeCuts, groupKey, remnantChanges, cutPlanRows, pdfFromJpegs, EXTRA_PROFILES, CUT_DEFAULTS } from './cutopt.js?v=20261111c';
+import { PROFILES } from './logic.js?v=20261111d';
+import { optimizeCuts, groupKey, remnantChanges, cutPlanRows, pdfFromJpegs, EXTRA_PROFILES, CUT_DEFAULTS } from './cutopt.js?v=20261111d';
 
 const KEY = 'cizim:cutopt';
 const MATS = ['Çelik', 'Paslanmaz', 'Alüminyum', 'Galvaniz', 'Pirinç'];

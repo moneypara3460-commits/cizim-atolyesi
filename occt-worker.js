@@ -1,8 +1,8 @@
 // OCCT işçisi: B-Rep hesapları ana iş parçacığını (ekranı) kilitlemesin diye burada çalışır.
 // Mesaj: { id, op, args }  ->  { id, ok, res } | { id, ok: false, err }
 import Module from './vendor/occt/replicad_single.js';
-import { initOCCT } from './occt.js?v=20261111c';
-import { runOp } from './occt-ops.js?v=20261111c';
+import { initOCCT } from './occt.js?v=20261111d';
+import { runOp } from './occt-ops.js?v=20261111d';
 
 let K = null, IG = null;
 const ready = (async () => { K = await initOCCT(Module, { print: () => {}, printErr: () => {} }); return K; })();

@@ -1,9 +1,9 @@
 // "🔮 Geleceğimi Göster" — sanal test ortamı arayüzü (Gelecek sekmesi).
 // api: { info() → { parts:[{id,name,matId,matName,chosen}], size:[x,y,z], kg }, hash(), items() → [{id,name,tris,matId}], materials,
 //        setMat(id, matId), getSim(), setSim(o), draw(spec), enter(), leave(), focus(p, r), render(), toast(m), name(), snapshot(), prices() }
-import * as F from './fea.js?v=20261111c';
-import { pdfFromJpegs } from './cutopt.js?v=20261111c';
-import { toSTLBinary } from './logic.js?v=20261111c';
+import * as F from './fea.js?v=20261111d';
+import { pdfFromJpegs } from './cutopt.js?v=20261111d';
+import { toSTLBinary } from './logic.js?v=20261111d';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 1) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));
@@ -38,7 +38,7 @@ export function createSimUI(api) {
     if (W === false) return null;
     if (W) return W;
     try {
-      W = new Worker(new URL('./fea-worker.js?v=20261111c', import.meta.url), { type: 'module' });
+      W = new Worker(new URL('./fea-worker.js?v=20261111d', import.meta.url), { type: 'module' });
       W.onmessage = (ev) => { const m = ev.data, p = pend.get(m.id); if (!p) return; if (m.progress) { p.prog && p.prog(m.progress.it, m.progress.res); return; } pend.delete(m.id); m.error ? p.res({ error: 'exc', text: m.error }) : p.res(m.result); };
       W.onerror = () => { W = false; for (const [id, p] of pend) { pend.delete(id); inline(p.cmd, p.a, p.prog).then(p.res); } };
     } catch (e) { W = false; }
