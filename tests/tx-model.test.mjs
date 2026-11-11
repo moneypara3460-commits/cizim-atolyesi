@@ -144,7 +144,7 @@ t('10. Göç ve bozuk dosya: tekstil olmayan / bozuk / daha yeni şema reddedili
 
 t('11. Makine projeleri ile ayrılık: tekstil modülleri makine dosyalarını içe aktarmaz', async () => {
   const fs = await import('node:fs');
-  for (const f of ['tx/model.js', 'tx/store.js']) {
+  for (const f of fs.readdirSync(new URL('../tx/', import.meta.url)).filter((x) => x.endsWith('.js')).map((x) => 'tx/' + x)) {
     const src = fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
     const imps = [...src.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
     assert.ok(imps.every((i) => i.startsWith('./')), f + ' yalnız tx/ içinden içe aktarır: ' + imps);

@@ -455,6 +455,62 @@ await TX('Tekstil: triko projesi yalnız triko araçlarını gösterir; dal ara�
   await A(page, 'del'); await page.waitForFunction(() => document.querySelectorAll('[data-a="open"]').length === 1);
 });
 
+await TX('Tekstil teknik çizim: gömlek şablonu, simetrik çizgi, eğri, ölçü, yazı, detay, seçim / taşıma, geri al, katman, PNG / SVG / PDF, kaydet ve yeniden aç', async ({ page }) => {
+  await page.fill('#np-name', 'Çizim E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await page.selectOption('#ap-type', 'gomlek'); await page.fill('#ap-code', 'GM-9'); await A(page, 'add-prod');
+  await A(page, 'tab', '[data-v="draw"]'); await A(page, 'add-sketch');
+  await page.waitForSelector('#skx canvas');
+  const K = (k, v) => page.locator(`#skx [data-k="${k}"]${v ? `[data-v="${v}"]` : ''}`).first().click();
+  expect(await page.locator('#skx-tpl').inputValue() === 'gomlek', 'ürün türüne uygun şablon seçili');
+  await page.fill('#skx [data-tp="chestW"]', '55'); await K('apply-tpl');
+  await page.waitForFunction(() => /Göğüs/.test(document.querySelector('#skx .pane').innerText));
+  expect(/Göğüs genişliği.*\n?.*55/.test(await page.locator('#skx .pane').innerText()), 'ölçü tablosunda 55 cm');
+  const box = await page.locator('#skx canvas').boundingBox();
+  const tap = (fx, fy) => page.touchscreen.tap(box.x + box.width * fx, box.y + box.height * fy);
+  // simetrik çizgi (sayıyla iki nokta)
+  await K('tog', 'sym'); await K('tool', 'line');
+  for (const [x, y] of [['5', '30'], ['20', '30']]) { await page.fill('#skx-x', x); await page.fill('#skx-y', y); await K('add-pt'); }
+  await K('finish'); await K('tool', 'sel');
+  expect(/Uzunluk: 15 cm \(her yarı\)/.test(await page.locator('#skx .pane').innerText()), 'çizgi seçili, uzunluk 15 cm');
+  await K('tog', 'sym');
+  // eğri (dokunarak)
+  await K('tool', 'curve'); for (const [x, y] of [[0.3, 0.75], [0.5, 0.8], [0.7, 0.75]]) await tap(x, y); await K('finish');
+  // ölçü, yazı, detay
+  await K('tool', 'dim'); await tap(0.25, 0.85); await tap(0.75, 0.85);
+  await K('tool', 'text'); await page.fill('#skx-text', 'Çift dikiş 6 mm'); await page.locator('#skx-text').dispatchEvent('change'); await tap(0.6, 0.2);
+  await K('tool', 'detail'); await K('pick-detail', 'cep-yama'); await tap(0.35, 0.5);
+  // seç ve sayıyla kaydır, geri al / ileri al
+  await K('tool', 'sel');
+  expect(/1 seçili/.test(await page.locator('#skx .st').innerText()), 'yeni detay seçili');
+  await page.fill('#skx-dx', '2'); await K('move');
+  const undoOn = await page.locator('#skx [data-k="undo"]').isEnabled(); expect(undoOn, 'geri al etkin');
+  await K('undo'); await K('redo');
+  // boş alana dokun: seçim kalkar, şablon / katman / çıktı paneli görünür
+  await tap(0.97, 0.03); await page.waitForSelector('#skx [data-k="lay-add"]');
+  await K('lay-add'); expect((await page.locator('#skx [data-k="lay-act"]').count()) === 3, 'üç katman (şablon, çizim, yeni)');
+  // çıktılar
+  const svg = await download(page, () => K('svg'));
+  expect(/width="[\d.]+mm"/.test(svg.text) && /Çift dikiş 6 mm/.test(svg.text) && /Göğüs 55,0 cm/.test(svg.text), 'SVG');
+  const pdf = await download(page, () => K('pdf'));
+  expect(/^%PDF-1\.4/.test(pdf.text) && /\(\\326l\\347ek 1:10\)/.test(pdf.text) && /%%EOF/.test(pdf.text), 'PDF ölçek 1:10');
+  const png = await download(page, () => K('png'));
+  expect(png.size > 5000 && png.text.slice(1, 4) === 'PNG', 'PNG ' + png.size);
+  // arka görünüşe geç; kapat; yenile; aç
+  await K('view', 'back'); await K('close');
+  await page.waitForFunction(() => /Ön \d+ · Arka \d+/.test(document.querySelector('#main').innerText));
+  const c1 = (await txBody(page)).match(/Ön (\d+) · Arka (\d+)/);
+  await page.waitForTimeout(600); await page.reload(); await A(page, 'open'); await A(page, 'tab', '[data-v="draw"]');
+  const c2 = (await txBody(page)).match(/Ön (\d+) · Arka (\d+)/);
+  expect(c1 && c2 && c1[0] === c2[0] && +c1[1] >= 18, 'çizim kaydedildi: ' + (c1 && c1[0]) + ' / ' + (c2 && c2[0]));
+  await A(page, 'open-sketch'); await page.waitForSelector('#skx canvas');
+  expect(await page.locator('#skx [data-k="apply-tpl"]').innerText() === 'Şablonu yeniden uygula', 'şablon bilgisi korundu');
+  // şablonu yeniden uygulamak kullanıcının çizdiklerini silmez (onlar "Çizim" katmanında)
+  await page.fill('#skx [data-tp="length"]', '80'); await K('apply-tpl'); await K('close');
+  await page.waitForFunction(() => /Ön \d+ · Arka \d+/.test(document.querySelector('#main').innerText));
+  const c3 = (await txBody(page)).match(/Ön (\d+) · Arka (\d+)/);
+  expect(c3[0] === c2[0], 'yeniden uygulamada öğe kaybı yok: ' + c3[0] + ' / ' + c2[0]);
+});
+
 await TX('Tekstil ↔ Makine ayrılığı: tekstil kaydı makine projelerine yazmaz; makine projeleri tekstil listesinde görünmez', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('cizim:projects', JSON.stringify({ mak: { data: '{}', at: 1 } })));
   await A(page, 'type', '[data-v="woven"]'); await page.fill('#np-name', 'Ayrı'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');

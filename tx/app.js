@@ -1,8 +1,10 @@
 // Tekstil ve Moda çalışma alanı — arayüz (Aşama 1: ortak proje altyapısı).
 // Hesap ve doğrulama tx/model.js'te; burada yalnız gösterim ve düzenleme.
 // Makine ve Mühendislik alanının hiçbir dosyasını içe aktarmaz.
-import * as M from './model.js?v=20261112a';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112a';
+import * as M from './model.js?v=20261112b';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112b';
+import { TEMPLATES, VIEWS } from './drawing.js?v=20261112b';
+import { openSketchEditor } from './sketch-ui.js?v=20261112b';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -67,14 +69,14 @@ async function renderHome() {
 }
 
 /* ---------- proje ---------- */
-const TABS = [['col', 'Koleksiyon'], ['colors', 'Renkler'], ['sizes', 'Bedenler'], ['mats', 'Malzemeler'], ['tp', 'Föy'], ['val', 'Doğrulama'], ['revs', 'Revizyonlar'], ['tools', 'Dal araçları']];
+const TABS = [['col', 'Koleksiyon'], ['draw', 'Teknik çizim'], ['colors', 'Renkler'], ['sizes', 'Bedenler'], ['mats', 'Malzemeler'], ['tp', 'Föy'], ['val', 'Doğrulama'], ['revs', 'Revizyonlar'], ['tools', 'Dal araçları']];
 function render() {
   if (S.view === 'home') return renderHome();
   const p = S.p, T = M.PROJECT_TYPES[p.type];
   const issues = M.validate(p), nErr = issues.filter((x) => x.level === 'hata').length;
   $('top').querySelector('h1').textContent = p.name;
   const tabs = TABS.map(([k, l]) => `<button data-a="tab" data-v="${k}" class="${S.tab === k ? 'on' : ''}">${l}${k === 'val' && issues.length ? ` (${nErr ? '⛔' + nErr : '⚠' + issues.length})` : ''}</button>`).join('');
-  const body = { col: tabCollection, colors: tabColors, sizes: tabSizes, mats: tabMaterials, tp: tabTechpack, val: () => tabValidation(issues), revs: tabRevisions, tools: tabTools }[S.tab]();
+  const body = { col: tabCollection, draw: tabDrawings, colors: tabColors, sizes: tabSizes, mats: tabMaterials, tp: tabTechpack, val: () => tabValidation(issues), revs: tabRevisions, tools: tabTools }[S.tab]();
   $('main').innerHTML = `
   <div class="row noprint">
     <button data-a="home">← Projeler</button>
@@ -134,6 +136,31 @@ function tabCollection() {
     </div>`;
   });
   return h;
+}
+
+function tabDrawings() {
+  const p = S.p, prs = p.collection.products;
+  let h = `<div class="card noprint"><h3>Yeni teknik çizim</h3><div class="row">
+    <label class="f"><span>Ürün</span><select id="nd-prod">${prs.map((x) => `<option value="${x.id}">${esc(x.name)} (${M.BRANCHES[x.branch]})</option>`).join('')}<option value="">— ürüne bağlı değil —</option></select></label>
+    <label class="f"><span>Ad</span><input id="nd-name" placeholder="boş: ürün adı"></label><button class="ok" data-a="add-sketch">Oluştur ve aç</button></div>
+    <div class="small">Ön, arka ve yan görünüş; çizgi, eğri, nokta, ölçü, yazı, simetri, hizalama, katman, detay kütüphanesi ve giysi şablonları. Çıktı: PNG, SVG (1:1 mm), PDF föy sayfası.</div></div>`;
+  if (!p.sketches.length) return h + '<div class="small">Henüz teknik çizim yok.</div>';
+  p.sketches.forEach((sk, i) => {
+    const pr = prs.find((x) => x.id === sk.product);
+    const counts = Object.entries(VIEWS).map(([v, l]) => [l, sk.views[v].layers.reduce((a, L) => a + L.ents.length, 0)]).filter(([, n]) => n).map(([l, n]) => `${l} ${n}`).join(' · ');
+    h += `<div class="card"><h3><span class="badge ${sk.branch}">${M.BRANCHES[sk.branch]}</span><span class="sp">${esc(sk.name)}</span>
+      <button class="on" data-a="open-sketch" data-i="${i}">Aç</button><button class="danger" data-a="del-sketch" data-i="${i}">${S.delArm === sk.id ? 'Emin misin?' : 'Sil'}</button></h3>
+      <div class="small">${pr ? 'Ürün: ' + esc(pr.name) : sk.product ? '⚠ ürün silinmiş' : 'Ürüne bağlı değil'}${sk.template ? ' · Şablon: ' + esc(TEMPLATES[sk.template.type]?.label) : ''} · ${counts || 'boş'}</div></div>`;
+  });
+  return h;
+}
+function openSketch(i) {
+  const p = S.p, sk = p.sketches[i], pr = p.collection.products.find((x) => x.id === sk.product);
+  openSketchEditor(sk, {
+    toast, sizeTables: p.sizeTables, productType: pr?.type,
+    meta: { project: p.name, collection: [p.collection.brand, p.collection.season].filter(Boolean).join(' · '), product: pr?.name, code: pr?.modelCode, branch: M.BRANCHES[sk.branch], rev: p.rev },
+    onChange: (closed) => { dirty(); if (closed) render(); },
+  });
 }
 
 function tabColors() {
@@ -238,9 +265,9 @@ function tabRevisions() {
 function tabTools() {
   const br = M.PROJECT_TYPES[S.p.type].branches;
   const rows = [];
-  if (br.includes('woven')) rows.push(['Dokuma / Konfeksiyon', [['Teknik giysi çizimi', 2], ['2B kalıp, dikiş payı, pens, çıt', 3], ['Beden büyütme (grading)', 4], ['Kumaş yerleşimi ve kesim planı', 7], ['3B giysi', 9]]]);
-  if (br.includes('knit')) rows.push(['Triko / Örgü', [['Teknik triko çizimi', 2], ['İlmek ve örgü deseni (düz, ters, ribana, saç örgüsü, jakar)', 5], ['Numune, ilmek / sıra yoğunluğu', 5], ['Bedene göre ilmek sayıları', 4], ['Makine profili ve üretim çıktısı', 8], ['3B triko', 9]]]);
-  return `<div class="small">Bu araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
+  if (br.includes('woven')) rows.push(['Dokuma / Konfeksiyon', [ ['2B kalıp, dikiş payı, pens, çıt', 3], ['Beden büyütme (grading)', 4], ['Kumaş yerleşimi ve kesim planı', 7], ['3B giysi', 9]]]);
+  if (br.includes('knit')) rows.push(['Triko / Örgü', [ ['İlmek ve örgü deseni (düz, ters, ribana, saç örgüsü, jakar)', 5], ['Numune, ilmek / sıra yoğunluğu', 5], ['Bedene göre ilmek sayıları', 4], ['Makine profili ve üretim çıktısı', 8], ['3B triko', 9]]]);
+  return `<div class="card">✅ Teknik çizim (Aşama 2) kullanılabilir: "Teknik çizim" sekmesi.</div><div class="small">Aşağıdaki araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
     rows.map(([t, items]) => `<div class="card"><h3>${t}</h3>${items.map(([n, a]) => `<div class="row"><span>${esc(n)}</span><span class="badge" style="flex:0 0 auto">Henüz yok · Aşama ${a}</span></div>`).join('')}</div>`).join('');
 }
 
@@ -292,7 +319,7 @@ document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-a]');
   if (!b) return;
   const a = b.dataset.a, p = S.p, i = +b.dataset.i;
-  if (a !== 'del' && a !== 'del-prod') S.delArm = null;
+  if (a !== 'del' && a !== 'del-prod' && a !== 'del-sketch') S.delArm = null;
   try {
     switch (a) {
       case 'type': S.newType = b.dataset.v; return render();
@@ -338,6 +365,9 @@ document.addEventListener('click', async (e) => {
       }
       case 'link': M.linkMaterial(p, p.collection.products[i].id, $('lk-mat-' + i).value, $('lk-role-' + i).value, null); break;
       case 'unlink': p.collection.products[i].materials.splice(+b.dataset.j, 1); break;
+      case 'add-sketch': { const sk = M.addSketch(p, { name: $('nd-name').value, product: $('nd-prod').value || null }); dirty(); render(); openSketch(p.sketches.indexOf(sk)); return; }
+      case 'open-sketch': openSketch(i); return;
+      case 'del-sketch': { const sk = p.sketches[i]; if (S.delArm !== sk.id) { S.delArm = sk.id; return render(); } p.sketches.splice(i, 1); S.delArm = null; break; }
       case 'add-color': M.addColor(p, { name: $('nc-name').value, code: $('nc-code').value, hex: $('nc-hex').value }); break;
       case 'del-color': {
         const c = p.library.colors[i]; let n = 0;

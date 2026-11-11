@@ -91,7 +91,7 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 |---|---|---|---|
 | 0 | Mimari, veri modeli, riskler (bu belge) | — | ✅ |
 | 1 | Ortak tekstil proje altyapısı: çalışma alanı seçimi, `tekstil.html`, proje türleri (dokuma / triko / karma), koleksiyon, ürün, renk, beden tablosu, malzeme (kumaş / iplik / aksesuar), föy temeli, dal bazlı doğrulama, IndexedDB kaydı, revizyon, JSON dışa / içe aktarma, şema göçü | Bkz. bölüm 6 | ✅ (12.11.2026) |
-| 2 | Teknik moda çizimi: `curve.js`, ön / arka / yan, simetri, katman, ölçü; dokuma ve triko şablonları; detay kütüphanesi; PNG, vektör PDF / SVG | Eğri uzunluğu analitikle ±0,01 mm; simetri tam; PDF ölçeği 1:1 | Yok |
+| 2 | Teknik moda çizimi: `curve.js`, ön / arka / yan, simetri, katman, ölçü; dokuma ve triko şablonları; detay kütüphanesi; PNG, vektör PDF / SVG | Eğri uzunluğu analitikle ±0,01 mm; simetri tam; PDF ölçeği 1:1 | ✅ (12.11.2026) — bkz. bölüm 7 |
 | 3 | Dokuma kalıbı: parça, pens, çıt, dikiş payı (seçili kenar / tüm çevre, köşe türleri), böl, birleştir, döndür, aynala, kontur ve eğri doğrulama | Referans kalıplarda pay alanı / çevresi analitikle eşleşir; öz-kesişim yakalanır | Yok |
 | 4 | Beden ve grading: nokta bazlı grading, kişiye özel ölçü altyapısı, bütünlük kontrolü; trikoda bedene göre ilmek / sıra sayıları | Bedenler arası fark kurala tam eşit; dikiş hattı eşleşmesi raporlanır | Yok (tablo altyapısı Aşama 1'de var) |
 | 5 | Triko desen ve ilmek: ilmek sözlüğü, ızgara, düz / ters / ribana / saç örgüsü / jakar, tekrar, renk raporu, numune ve gauge, sıra bazlı eksiltme / artırma | Ribana ve saç örgüsü kuralları; gauge dönüşümü elle hesapla tam; eksiltme tablosu hedef ölçüye ±1 ilmek; desteklenmeyen yapıda açık uyarı | Yok |
@@ -113,6 +113,11 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | `ws.js` | Yeni | Çalışma alanı seçim ekranı ve Projeler penceresine "Tekstil ve Moda" bağlantısı |
 | `index.html` | **Değişti (1 satır)** | `ws.js` yüklenir. `app.js` ve diğer makine dosyaları değişmedi |
 | `tests/tx-model.test.mjs` | Yeni | 11 Node testi |
+| `tx/curve.js` | Yeni (Aşama 2) | Kübik Bezier / Catmull-Rom, yay uzunluğu (Gauss–Legendre), bölme, en yakın nokta, düzleştirme, aynalama |
+| `tx/drawing.js` | Yeni (Aşama 2) | Çizim modeli: görünüş, katman, varlıklar, simetri, hizalama, isabet / yakalama, doğrulama, 13 şablon, 15 detay |
+| `tx/export2d.js`, `tx/pdf.js` | Yeni (Aşama 2) | SVG (1 birim = 1 mm), bağımlılıksız vektör PDF (standart ölçekler, başlık bloğu, ölçü tablosu), tuval / PNG |
+| `tx/sketch-ui.js` | Yeni (Aşama 2) | Tam ekran çizim editörü |
+| `tests/tx-drawing.test.mjs` | Yeni (Aşama 2) | 14 Node testi |
 | `tests/e2e/run.mjs` | Değişti | W (çalışma alanı) ve T (tekstil) senaryoları; makine senaryoları seçim ekranını atlamak için `cizim:workspace = makine` ile başlar |
 
 Yeni dış bağımlılık yok: tarayıcının kendi IndexedDB'si kullanılır. Three.js tekstil tarafında Aşama 9'a kadar yüklenmez.
@@ -176,3 +181,70 @@ Birleşik prompt bu belgenin önerdiği yapıyı onayladı: tek "Tekstil ve Moda
 **Testte bulunup düzeltilen 2 hata:**
 - Ana sayfada proje türü seçilirken yazılan proje adı siliniyordu.
 - Çok hızlı geçişte proje ekranının üstüne eski ana sayfa çiziliyordu.
+
+## 7. Aşama 2 raporu: teknik moda çizimi (12.11.2026)
+
+**Çalışanlar** (kodla ve testle):
+- **Teknik çizim sekmesi.** Ürüne bağlı ya da bağımsız çizim oluşturulur. Çizimin dalı ürünün dalıdır.
+- **Görünüşler ve araçlar.** Ön, arka ve yan görünüş var. Araçlar:
+  - Seç, çizgi, düzgün eğri (Catmull-Rom → kübik Bezier), nokta, ölçü (gerçek uzunluk, cm), açıklama yazısı, detay.
+  - Simetri: eksene göre tam aynalı çizim.
+  - Yakalama: köşelere ve orta eksene; isteğe bağlı 5 mm ızgara.
+  - Çoklu seçim; hizalama (sol, sağ, üst, alt, ortalar, eksene ortala).
+  - Kaydırma (sürükleyerek ya da sayıyla), 15° döndürme, aynalı kopya.
+  - Çizgi türü (düz / dikiş / noktalı / katlama) ve kalınlık.
+  - Sayıyla nokta girişi; geri al / ileri al.
+- **Katmanlar.** Ekle, adlandır, göster / gizle, kilitle, sil. Yeni öğeler şablon dışındaki katmana eklenir; bu yüzden şablonu yeniden uygulamak kullanıcının çizdiklerini silmez.
+- **Şablonlar (13).**
+  - Dokuma: tişört, gömlek, ceket, mont, elbise, pantolon, etek.
+  - Triko: kazak, süveter, hırka, yelek, atkı, bere.
+  - Ölçüleri cm ile düzenlenir. Beden tablosundan göğüs / bel / basen önerilir; bu öneri bolluk payı ekler ve yaklaşıktır, kullanıcı kontrol eder.
+  - Ön görünüşe ölçü çizgileri eklenir.
+- **Detay kütüphanesi (15).** Düğme, fermuar, düğme patı, gömlek yakası, polo yaka, bisiklet ve V yaka ribanası, manşet, yama / sivri / kapaklı / fileto cep, kemer köprüsü, ribana bandı, saç örgüsü işareti.
+- **Çıktılar.**
+  - PNG.
+  - SVG: 1 birim = 1 mm, gerçek boyut.
+  - Vektör PDF: A4 / A3, standart ölçekler (1:1, 1:2, 1:2,5, 1:5, 1:10, 1:20), başlık bloğu, 50 mm kontrol çubuğu, ölçü tablosu. Tablo sığmazsa ikinci sayfaya geçer. Türkçe harfler PDF'in yerleşik yazı tipiyle doğru çıkar.
+- **Kayıt.** Çizim, projeyle birlikte kaydedilir, revizyona ve JSON yedeğe girer.
+
+**Doğrulama ve toleranslar** (`tests/tx-drawing.test.mjs`, 14 test):
+
+| Konu | Referans | Tolerans |
+|---|---|---|
+| Eğri uzunluğu | Parabol kapalı formülü | ±0,01 mm hedef, ölçülen < 1e-6 mm |
+| Bezier çember uzunluğu | 2πr | ±%0,03 (bilinen yaklaşım hatası) |
+| Düzleştirme sapması | — | ≤ 0,05 mm |
+| Bölme ve uzunluk konumu | — | 1e-7 mm |
+| Catmull-Rom | Noktalardan geçiş ve C1 süreklilik | 1e-9 |
+| En yakın nokta | — | 1e-6 mm |
+| Simetri | Aynalı noktalar x → -x | Tam eşitlik |
+| Şablon ölçü çizgileri | Parametreler | 1e-9 mm |
+| SVG | width / height (mm) = viewBox | — |
+| PDF ölçeği | 1:1'de 100 mm çizgi = 283,465 pt; 1:5'te 20 mm | 0,01 pt |
+| PDF yapısı | xref ofsetleri | — |
+
+PDF ayrıca `qpdf --check` ile denetlendi ve `pdftotext` / `pdftoppm` ile açıldı: hata yok, Türkçe metin doğru.
+
+**Tarayıcı testi** (telefon emülasyonu, Chromium) — sırasıyla:
+1. Gömlek şablonu uygulanır.
+2. Sayıyla simetrik çizgi çizilir; uzunluk 15 cm.
+3. Dokunarak eğri, ölçü, yazı ve detay eklenir; seçilir, sayıyla kaydırılır.
+4. Geri al / ileri al, katman ekle.
+5. SVG, PDF (1:10) ve PNG indirilir.
+6. Sayfa yenilenir, çizim yeniden açılır; öğe sayıları aynıdır.
+7. Şablon yeniden uygulanır; öğe kaybı olmaz.
+
+Masaüstü ve tablet görünümüne ekran görüntüsüyle bakıldı. Gerçek cihazda denenmedi.
+
+**Testte bulunup düzeltilen hatalar:**
+- Yeni öğeler "Şablon" katmanına eklenebiliyordu; şablon yeniden uygulanınca silinirdi.
+- V yaka ribanası yaka çizgisini kesiyordu.
+- PDF yazı boyları ve yerleşimi bozuktu.
+- Ölçü yazısı tuvalde çizginin üstüne biniyordu.
+
+**Sınırlar:**
+- Şablonlar teknik çizimdir (flat), kalıp değildir. Ölçüler düz serilmiş giysinin ölçüleridir. Kalıp Aşama 3'te.
+- Detaylar kütüphane şeklidir; tek tek düzenlemek için aynalı kopya / taşıma / döndürme / ölçek var. Detayı çizgilere "açma" yok.
+- Eğri noktalarını sonradan tek tek düzenleme (kontrol noktası tutamaçları) yok: eğri silinip yeniden çizilir ya da taşınır / döndürülür.
+- PDF'te yazı genişliği yaklaşık hesaplanır (ortalama harf genişliği); ölçü yazısının ortalanması birkaç mm kayabilir. Geometri ve ölçek kesindir.
+- DXF teknik çizim çıktısı bilerek yok: plan, DXF'in kalıp için katman / ölçek kurallarıyla (Aşama 3 / 8 dosya alışverişi) sunulmasını istiyor.

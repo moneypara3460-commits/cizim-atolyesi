@@ -4,6 +4,8 @@
 // Dokuma / konfeksiyon ve triko ayrı alt şemalardır (woven, knit); yalnız koleksiyon, ürün, renk, beden,
 // malzeme, föy ve revizyon ortaktır. Bkz. docs/TEKSTIL-MIMARI.md
 
+import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112b';
+
 export const KIND = 'cizim.textile';
 export const SCHEMA = 1;
 
@@ -134,6 +136,15 @@ function materialRuleError(pr, m, role) {
   return '';
 }
 
+// Teknik çizim (Aşama 2): ürüne bağlı ya da bağımsız
+export function addSketch(p, { name, product = null } = {}) {
+  const pr = product ? p.collection.products.find((x) => x.id === product) : null;
+  if (product && !pr) throw new Error('Ürün bulunamadı');
+  const branch = pr ? pr.branch : PROJECT_TYPES[p.type].branches[0];
+  const sk = createSketch({ id: nid(p, 'k'), name: str(name) || (pr ? pr.name + ' teknik çizimi' : 'Teknik çizim'), product, branch });
+  p.sketches.push(sk); return sk;
+}
+
 /* ---------- doğrulama ---------- */
 // Dönen dizi: { level: 'hata' | 'uyarı', where, msg }. Hata varsa proje "geçersiz", uyarı bilgi amaçlı.
 export function validate(p) {
@@ -208,6 +219,13 @@ export function validate(p) {
     if (!main) W(w, pr.branch === 'knit' ? 'Ana iplik seçilmemiş' : 'Ana kumaş seçilmemiş');
     if (!pr.colors.length) W(w, 'Renk seçilmemiş');
     if (!pr.sizes.length) W(w, 'Beden seçilmemiş');
+  }
+  const prodIds = new Set((p.collection?.products || []).map((x) => x.id));
+  for (const sk of p.sketches || []) {
+    uniq(sk.id, 'Çizim');
+    out.push(...validateSketch(sk));
+    if (sk.product && !prodIds.has(sk.product)) E('Çizim ' + sk.name, 'Bağlı olduğu ürün silinmiş');
+    if (sk.template && TEMPLATES[sk.template.type] && TEMPLATES[sk.template.type].branch !== sk.branch) W('Çizim ' + sk.name, `${TEMPLATES[sk.template.type].label} şablonu ${BRANCHES[TEMPLATES[sk.template.type].branch]} dalına ait; ürün ${BRANCHES[sk.branch]}`);
   }
   return out;
 }
