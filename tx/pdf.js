@@ -1,6 +1,6 @@
 // Bağımlılıksız küçük vektör PDF yazıcı. Koordinatlar mm (içeride pt'ye çevrilir: 1 mm = 72 / 25,4 pt).
 // Yazı tipi: PDF'in yerleşik Helvetica'sı; Türkçe harfler (ğ Ğ ş Ş ı İ) özel kodlamayla (Differences) eşlenir.
-import * as C from './curve.js?v=20261112b';
+import * as C from './curve.js?v=20261112c';
 
 export const PT = 72 / 25.4;
 // WinAnsi dışındaki Türkçe glifler → kullanılmayan kodlar
@@ -36,6 +36,9 @@ export function pdfDoc() {
       const P = (x, y) => f2(x * PT) + ' ' + f2(y * PT);
       const pg = {
         w: wmm, h: hmm, ops,
+        save() { ops.push('q'); },
+        restore() { ops.push('Q'); },
+        clipRect(x, y, w, h) { ops.push(`${P(x, y)} ${f2(w * PT)} ${f2(h * PT)} re W n`); },
         lineWidth(mm) { ops.push(f2(mm * PT) + ' w'); },
         dash(arr) { ops.push(arr && arr.length ? '[' + arr.map((v) => f2(v * PT)).join(' ') + '] 0 d' : '[] 0 d'); },
         color(r, g, b) { ops.push(`${f2(r)} ${f2(g)} ${f2(b)} RG ${f2(r)} ${f2(g)} ${f2(b)} rg`); },

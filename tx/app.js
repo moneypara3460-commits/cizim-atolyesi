@@ -1,10 +1,13 @@
 // Tekstil ve Moda çalışma alanı — arayüz (Aşama 1: ortak proje altyapısı).
 // Hesap ve doğrulama tx/model.js'te; burada yalnız gösterim ve düzenleme.
 // Makine ve Mühendislik alanının hiçbir dosyasını içe aktarmaz.
-import * as M from './model.js?v=20261112b';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112b';
-import { TEMPLATES, VIEWS } from './drawing.js?v=20261112b';
-import { openSketchEditor } from './sketch-ui.js?v=20261112b';
+import * as M from './model.js?v=20261112c';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112c';
+import { TEMPLATES, VIEWS } from './drawing.js?v=20261112c';
+import { openSketchEditor } from './sketch-ui.js?v=20261112c';
+import { SETS, defaultParams } from './woven/blocks.js?v=20261112c';
+import { openPatternEditor } from './woven/pattern-ui.js?v=20261112c';
+import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112c';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -35,11 +38,12 @@ function dirty() {
 async function flush() { if (saveT) { clearTimeout(saveT); saveT = null; if (S.p) await store.put(S.p); } }
 
 /* ---------- ana sayfa ---------- */
+const TYPE_DESC = { mixed: 'Dokuma ve triko ürünleri aynı koleksiyonda; her ürün kendi dalının kurallarıyla doğrulanır.', knit: 'Kazak, hırka, süveter, yelek, atkı, bere… İplik ve örgü araçları öne çıkar.', woven: 'Gömlek, pantolon, ceket, elbise, etek, mont… Kumaş ve kalıp araçları öne çıkar.' };
 async function renderHome() {
   const list = await store.list();
   if (S.view !== 'home') return;   // beklerken projeye geçildiyse eski ana sayfayı çizme
   const T = M.PROJECT_TYPES;
-  // yeniden çizimde yazılmış alanlar kaybolmasın
+  // yeniden çizimde yazılmış alanlar kaybolmasın (bekleme bittikten sonra, çizimden hemen önce okunur)
   const keep = Object.fromEntries(['np-name', 'np-season', 'np-brand'].map((k) => [k, $(k)?.value || '']));
   $('top').querySelector('h1').textContent = '🧵 Tekstil ve Moda';
   $('saved').textContent = '';
@@ -48,7 +52,7 @@ async function renderHome() {
   <div class="card">
     <h3>Yeni proje</h3>
     <div class="row typesel">${Object.entries(T).map(([k, v]) => `<button data-a="type" data-v="${k}" class="${S.newType === k ? 'on' : ''}">${esc(v.label)}</button>`).join('')}</div>
-    <div class="small">${S.newType === 'mixed' ? 'Dokuma ve triko ürünleri aynı koleksiyonda; her ürün kendi dalının kurallarıyla doğrulanır.' : S.newType === 'knit' ? 'Kazak, hırka, süveter, yelek, atkı, bere… İplik ve örgü araçları öne çıkar.' : 'Gömlek, pantolon, ceket, elbise, etek, mont… Kumaş ve kalıp araçları öne çıkar.'}</div>
+    <div class="small" id="np-desc">${TYPE_DESC[S.newType]}</div>
     <div class="row">
       <label class="f"><span>Proje adı</span><input id="np-name" placeholder="ör. Yaz 2027 gömlekleri"></label>
       <label class="f"><span>Sezon</span><input id="np-season" placeholder="ör. YZ27"></label>
@@ -69,14 +73,15 @@ async function renderHome() {
 }
 
 /* ---------- proje ---------- */
-const TABS = [['col', 'Koleksiyon'], ['draw', 'Teknik çizim'], ['colors', 'Renkler'], ['sizes', 'Bedenler'], ['mats', 'Malzemeler'], ['tp', 'Föy'], ['val', 'Doğrulama'], ['revs', 'Revizyonlar'], ['tools', 'Dal araçları']];
+const TABS = [['col', 'Koleksiyon'], ['draw', 'Teknik çizim'], ['pat', 'Kalıp'], ['colors', 'Renkler'], ['sizes', 'Bedenler'], ['mats', 'Malzemeler'], ['tp', 'Föy'], ['val', 'Doğrulama'], ['revs', 'Revizyonlar'], ['tools', 'Dal araçları']];
 function render() {
   if (S.view === 'home') return renderHome();
   const p = S.p, T = M.PROJECT_TYPES[p.type];
   const issues = M.validate(p), nErr = issues.filter((x) => x.level === 'hata').length;
   $('top').querySelector('h1').textContent = p.name;
-  const tabs = TABS.map(([k, l]) => `<button data-a="tab" data-v="${k}" class="${S.tab === k ? 'on' : ''}">${l}${k === 'val' && issues.length ? ` (${nErr ? '⛔' + nErr : '⚠' + issues.length})` : ''}</button>`).join('');
-  const body = { col: tabCollection, draw: tabDrawings, colors: tabColors, sizes: tabSizes, mats: tabMaterials, tp: tabTechpack, val: () => tabValidation(issues), revs: tabRevisions, tools: tabTools }[S.tab]();
+  const tabs = TABS.filter(([k]) => k !== 'pat' || p.woven).map(([k, l]) => `<button data-a="tab" data-v="${k}" class="${S.tab === k ? 'on' : ''}">${l}${k === 'val' && issues.length ? ` (${nErr ? '⛔' + nErr : '⚠' + issues.length})` : ''}</button>`).join('');
+  if (S.tab === 'pat' && !p.woven) S.tab = 'col';
+  const body = { col: tabCollection, draw: tabDrawings, pat: tabPatterns, colors: tabColors, sizes: tabSizes, mats: tabMaterials, tp: tabTechpack, val: () => tabValidation(issues), revs: tabRevisions, tools: tabTools }[S.tab]();
   $('main').innerHTML = `
   <div class="row noprint">
     <button data-a="home">← Projeler</button>
@@ -161,6 +166,44 @@ function openSketch(i) {
     meta: { project: p.name, collection: [p.collection.brand, p.collection.season].filter(Boolean).join(' · '), product: pr?.name, code: pr?.modelCode, branch: M.BRANCHES[sk.branch], rev: p.rev },
     onChange: (closed) => { dirty(); if (closed) render(); },
   });
+}
+
+function tabPatterns() {
+  const p = S.p, prods = p.collection.products.filter((x) => x.branch === 'woven');
+  const set = S.patSet && SETS[S.patSet] ? S.patSet : 'gomlek';
+  const tbl = p.sizeTables.find((t) => t.id === S.patTable) || null;
+  const size = tbl && tbl.sizes.includes(S.patSize) ? S.patSize : tbl ? tbl.sizes[Math.floor(tbl.sizes.length / 2)] : '';
+  const meas = tbl ? Object.fromEntries(Object.entries(tbl.measures).map(([k, row]) => [k, row[size]])) : {};
+  const prm = defaultParams(set, meas);
+  let h = `<div class="card noprint"><h3>Temel kalıp bloğu oluştur</h3><div class="row">
+    <label class="f"><span>Takım</span><select id="pt-set">${Object.entries(SETS).map(([k, v]) => `<option value="${k}" ${k === set ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>
+    <label class="f"><span>Ürün</span><select id="pt-prod">${prods.map((x) => `<option value="${x.id}">${esc(x.name)}${x.modelCode ? ' (' + esc(x.modelCode) + ')' : ''}</option>`).join('')}<option value="">— ürüne bağlı değil —</option></select></label>
+    <label class="f"><span>Beden tablosu</span><select id="pt-table"><option value="">— yok (varsayılan ölçüler) —</option>${p.sizeTables.map((t) => `<option value="${t.id}" ${tbl && t.id === tbl.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+    ${tbl ? `<label class="f"><span>Beden</span><select id="pt-size">${tbl.sizes.map((z) => `<option ${z === size ? 'selected' : ''}>${esc(z)}</option>`).join('')}</select></label>` : `<label class="f"><span>Beden adı</span><input id="pt-size-free" placeholder="ör. M"></label>`}</div>
+    <div class="row">${Object.entries(SETS[set].params).map(([k, [lbl, , src]]) => `<label class="f"><span>${esc(lbl)} (cm)${src && Number.isFinite(meas[src]) ? ' · tablodan' : ''}</span><input data-pt="${k}" inputmode="decimal" value="${num(prm[k] / 10)}"></label>`).join('')}</div>
+    <div class="row"><button class="ok" data-a="add-pattern">Oluştur ve aç</button></div>
+    <div class="small">Basitleştirilmiş temel bloklardır: ölçülerden çizilir, dikiş eşleşmeleri (kol başı ↔ kol oyuğu bolluğu, yan dikiş, omuz, yaka, kemer) otomatik kontrol edilir. Seri üretimden önce prova ile doğrulanmalı.</div></div>`;
+  const groups = new Map();
+  for (const pc of p.woven.pieces) { const key = (pc.product ?? '') + '|' + (pc.size ?? ''); if (!groups.has(key)) groups.set(key, []); groups.get(key).push(pc); }
+  if (!groups.size) h += '<div class="small">Henüz kalıp yok. Blok oluştur ya da boş bir grup açıp parçayı kendin çiz.</div>';
+  for (const [key, pcs] of groups) {
+    const [pid, sz] = key.split('|'), pr = p.collection.products.find((x) => x.id === pid);
+    const ids = new Set(pcs.map((x) => x.id)), sms = p.woven.seams.filter((sm) => [...sm.a, ...sm.b].some((r) => ids.has(r.piece)));
+    const bad = pcs.filter((x) => validatePiece(x).some((i) => i.level === 'hata')).length, sBad = sms.filter((sm) => !seamCheck(p.woven.pieces, sm).ok).length;
+    let area = 0; for (const x of pcs) { try { area += measure(x).cutArea * x.qty; } catch (e) { /* */ } }
+    h += `<div class="card"><h3><span class="sp">${esc(pr ? pr.name : pid ? '⚠ silinmiş ürün' : 'Ürüne bağlı değil')}${sz ? ' · Beden ' + esc(sz) : ''}</span>
+      <button class="on" data-a="open-pattern" data-v="${esc(key)}">Aç</button><button class="danger" data-a="del-pattern" data-v="${esc(key)}">${S.delArm === 'pat:' + key ? 'Emin misin?' : 'Sil'}</button></h3>
+      <div class="small">${pcs.length} parça (${pcs.map((x) => esc(x.name)).join(', ')}) · toplam kesim alanı ${(area / 1e4).toFixed(1)} dm² (adetle)</div>
+      <div class="small">${bad ? `⛔ ${bad} parçada hata` : '✅ parçalar geçerli'} · ${sms.length ? (sBad ? `⛔ ${sBad} / ${sms.length} dikiş eşleşmesi tutmuyor` : `✅ ${sms.length} dikiş eşleşmesi tutuyor`) : 'dikiş eşleşmesi yok'}</div></div>`;
+  }
+  h += `<div class="card noprint"><h3>Boş kalıp grubu aç</h3><div class="row"><label class="f"><span>Ürün</span><select id="pe-prod">${prods.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}<option value="">— ürüne bağlı değil —</option></select></label><label class="f"><span>Beden</span><input id="pe-size" placeholder="ör. M"></label><button data-a="open-pattern-new">Aç</button></div>
+    <div class="small">Editörde "Yeni parça" ile köşe / eğri noktalarına dokunarak parça çizilir.</div></div>`;
+  return h;
+}
+function openPattern(product, size) {
+  const p = S.p, pr = p.collection.products.find((x) => x.id === product);
+  openPatternEditor(p, { product: product || null, size: size || '', title: (pr ? pr.name : 'Kalıp') + (size ? ' · ' + size : ''), toast,
+    meta: { project: p.name, product: pr?.name, size }, onChange: (closed) => { dirty(); if (closed) render(); } });
 }
 
 function tabColors() {
@@ -265,9 +308,9 @@ function tabRevisions() {
 function tabTools() {
   const br = M.PROJECT_TYPES[S.p.type].branches;
   const rows = [];
-  if (br.includes('woven')) rows.push(['Dokuma / Konfeksiyon', [ ['2B kalıp, dikiş payı, pens, çıt', 3], ['Beden büyütme (grading)', 4], ['Kumaş yerleşimi ve kesim planı', 7], ['3B giysi', 9]]]);
+  if (br.includes('woven')) rows.push(['Dokuma / Konfeksiyon', [['Beden büyütme (grading)', 4], ['Kumaş yerleşimi ve kesim planı', 7], ['3B giysi', 9]]]);
   if (br.includes('knit')) rows.push(['Triko / Örgü', [ ['İlmek ve örgü deseni (düz, ters, ribana, saç örgüsü, jakar)', 5], ['Numune, ilmek / sıra yoğunluğu', 5], ['Bedene göre ilmek sayıları', 4], ['Makine profili ve üretim çıktısı', 8], ['3B triko', 9]]]);
-  return `<div class="card">✅ Teknik çizim (Aşama 2) kullanılabilir: "Teknik çizim" sekmesi.</div><div class="small">Aşağıdaki araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
+  return `<div class="card">✅ Teknik çizim (Aşama 2): "Teknik çizim" sekmesi.${br.includes('woven') ? ' ✅ Dokuma kalıbı (Aşama 3): "Kalıp" sekmesi.' : ''}</div><div class="small">Aşağıdaki araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
     rows.map(([t, items]) => `<div class="card"><h3>${t}</h3>${items.map(([n, a]) => `<div class="row"><span>${esc(n)}</span><span class="badge" style="flex:0 0 auto">Henüz yok · Aşama ${a}</span></div>`).join('')}</div>`).join('');
 }
 
@@ -300,6 +343,9 @@ document.addEventListener('change', (e) => {
   const el = e.target;
   if (el.id === 'ap-branch') { S.addBranch = el.value; return render(); }
   if (el.id === 'fp-sel') { S.fp = el.value; return render(); }
+  if (el.id === 'pt-set') { S.patSet = el.value; return render(); }
+  if (el.id === 'pt-table') { S.patTable = el.value; S.patSize = null; return render(); }
+  if (el.id === 'pt-size') { S.patSize = el.value; return render(); }
   if (el.dataset.aRename !== undefined) {
     const t = S.p.sizeTables[+el.dataset.aRename], nm = el.value.trim(), old = el.dataset.old;
     if (nm && nm !== old && !(nm in t.measures)) { t.measures = Object.fromEntries(Object.entries(t.measures).map(([k, v]) => [k === old ? nm : k, v])); dirty(); }
@@ -319,10 +365,11 @@ document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-a]');
   if (!b) return;
   const a = b.dataset.a, p = S.p, i = +b.dataset.i;
-  if (a !== 'del' && a !== 'del-prod' && a !== 'del-sketch') S.delArm = null;
+  if (a !== 'del' && a !== 'del-prod' && a !== 'del-sketch' && a !== 'del-pattern') S.delArm = null;
   try {
     switch (a) {
-      case 'type': S.newType = b.dataset.v; return render();
+      // tür seçimi yerinde güncellenir (yeniden çizim yok: yazılan proje adı kaybolmaz)
+      case 'type': S.newType = b.dataset.v; document.querySelectorAll('[data-a="type"]').forEach((x) => x.classList.toggle('on', x.dataset.v === S.newType)); $('np-desc').textContent = TYPE_DESC[S.newType]; return;
       case 'create': {
         const np = M.createProject({ name: $('np-name').value, type: S.newType, season: $('np-season').value, brand: $('np-brand').value });
         await store.put(np);
@@ -368,6 +415,20 @@ document.addEventListener('click', async (e) => {
       case 'add-sketch': { const sk = M.addSketch(p, { name: $('nd-name').value, product: $('nd-prod').value || null }); dirty(); render(); openSketch(p.sketches.indexOf(sk)); return; }
       case 'open-sketch': openSketch(i); return;
       case 'del-sketch': { const sk = p.sketches[i]; if (S.delArm !== sk.id) { S.delArm = sk.id; return render(); } p.sketches.splice(i, 1); S.delArm = null; break; }
+      case 'add-pattern': {
+        const set = $('pt-set').value, params = {};
+        for (const inp of document.querySelectorAll('[data-pt]')) { const v = parseNum(inp.value); if (v == null || Number.isNaN(v) || v < 0) throw new Error(SETS[set].params[inp.dataset.pt][0] + ': geçerli bir cm değeri gir'); params[inp.dataset.pt] = Math.round(v * 100) / 10; }
+        const size = $('pt-size') ? $('pt-size').value : $('pt-size-free').value.trim();
+        const product = $('pt-prod').value || null;
+        M.addPatternSet(p, set, params, { product, size }); dirty(); render(); openPattern(product, size); return;
+      }
+      case 'open-pattern': { const [pid, sz] = b.dataset.v.split('|'); openPattern(pid, sz); return; }
+      case 'open-pattern-new': openPattern($('pe-prod').value, $('pe-size').value.trim()); return;
+      case 'del-pattern': {
+        const key = b.dataset.v; if (S.delArm !== 'pat:' + key) { S.delArm = 'pat:' + key; return render(); }
+        const [pid, sz] = key.split('|'), gone = new Set(p.woven.pieces.filter((x) => (x.product ?? '') === pid && (x.size ?? '') === sz).map((x) => x.id));
+        p.woven.pieces = p.woven.pieces.filter((x) => !gone.has(x.id)); p.woven.seams = p.woven.seams.filter((sm) => ![...sm.a, ...sm.b].some((r) => gone.has(r.piece))); S.delArm = null; break;
+      }
       case 'add-color': M.addColor(p, { name: $('nc-name').value, code: $('nc-code').value, hex: $('nc-hex').value }); break;
       case 'del-color': {
         const c = p.library.colors[i]; let n = 0;

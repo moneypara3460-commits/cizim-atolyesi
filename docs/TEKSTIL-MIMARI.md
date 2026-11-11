@@ -92,7 +92,7 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | 0 | Mimari, veri modeli, riskler (bu belge) | — | ✅ |
 | 1 | Ortak tekstil proje altyapısı: çalışma alanı seçimi, `tekstil.html`, proje türleri (dokuma / triko / karma), koleksiyon, ürün, renk, beden tablosu, malzeme (kumaş / iplik / aksesuar), föy temeli, dal bazlı doğrulama, IndexedDB kaydı, revizyon, JSON dışa / içe aktarma, şema göçü | Bkz. bölüm 6 | ✅ (12.11.2026) |
 | 2 | Teknik moda çizimi: `curve.js`, ön / arka / yan, simetri, katman, ölçü; dokuma ve triko şablonları; detay kütüphanesi; PNG, vektör PDF / SVG | Eğri uzunluğu analitikle ±0,01 mm; simetri tam; PDF ölçeği 1:1 | ✅ (12.11.2026) — bkz. bölüm 7 |
-| 3 | Dokuma kalıbı: parça, pens, çıt, dikiş payı (seçili kenar / tüm çevre, köşe türleri), böl, birleştir, döndür, aynala, kontur ve eğri doğrulama | Referans kalıplarda pay alanı / çevresi analitikle eşleşir; öz-kesişim yakalanır | Yok |
+| 3 | Dokuma kalıbı: parça, pens, çıt, dikiş payı (seçili kenar / tüm çevre, köşe türleri), böl, birleştir, döndür, aynala, kontur ve eğri doğrulama | Referans kalıplarda pay alanı / çevresi analitikle eşleşir; öz-kesişim yakalanır | ✅ (12.11.2026) — bkz. bölüm 8 |
 | 4 | Beden ve grading: nokta bazlı grading, kişiye özel ölçü altyapısı, bütünlük kontrolü; trikoda bedene göre ilmek / sıra sayıları | Bedenler arası fark kurala tam eşit; dikiş hattı eşleşmesi raporlanır | Yok (tablo altyapısı Aşama 1'de var) |
 | 5 | Triko desen ve ilmek: ilmek sözlüğü, ızgara, düz / ters / ribana / saç örgüsü / jakar, tekrar, renk raporu, numune ve gauge, sıra bazlı eksiltme / artırma | Ribana ve saç örgüsü kuralları; gauge dönüşümü elle hesapla tam; eksiltme tablosu hedef ölçüye ±1 ilmek; desteklenmeyen yapıda açık uyarı | Yok |
 | 6 | Kumaş, iplik, aksesuar kütüphanesi (ayrıntılı); iplik numarası dönüşümleri; tüketim, gramaj, maliyet | Nm / Ne / tex / dtex dönüşümleri tam; numunesiz sonuç "tahmini" | Kısmi: kart yapısı, birimler, "tahmini" işareti, malzeme maliyeti Aşama 1'de var |
@@ -118,6 +118,11 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | `tx/export2d.js`, `tx/pdf.js` | Yeni (Aşama 2) | SVG (1 birim = 1 mm), bağımlılıksız vektör PDF (standart ölçekler, başlık bloğu, ölçü tablosu), tuval / PNG |
 | `tx/sketch-ui.js` | Yeni (Aşama 2) | Tam ekran çizim editörü |
 | `tests/tx-drawing.test.mjs` | Yeni (Aşama 2) | 14 Node testi |
+| `tx/woven/pattern.js` | Yeni (Aşama 3) | Kalıp parçası ve kenar modeli, kenar bazında dikiş payı ve köşe türleri, çıt, pens, işaret, bölme, birleştirme, katı açma, dikiş eşleşmesi, doğrulama |
+| `tx/woven/blocks.js` | Yeni (Aşama 3) | Ölçüden temel bloklar: gömlek takımı (7 parça) ve düz etek takımı (3 parça), dikiş eşleşmeleriyle |
+| `tx/woven/pattern-export.js` | Yeni (Aşama 3) | Kalıp çizimi, SVG 1:1, 1:1 A4 / A3 döşemeli PDF |
+| `tx/woven/pattern-ui.js` | Yeni (Aşama 3) | Kalıp editörü |
+| `tests/tx-pattern.test.mjs` | Yeni (Aşama 3) | 14 Node testi |
 | `tests/e2e/run.mjs` | Değişti | W (çalışma alanı) ve T (tekstil) senaryoları; makine senaryoları seçim ekranını atlamak için `cizim:workspace = makine` ile başlar |
 
 Yeni dış bağımlılık yok: tarayıcının kendi IndexedDB'si kullanılır. Three.js tekstil tarafında Aşama 9'a kadar yüklenmez.
@@ -248,3 +253,81 @@ Masaüstü ve tablet görünümüne ekran görüntüsüyle bakıldı. Gerçek ci
 - Eğri noktalarını sonradan tek tek düzenleme (kontrol noktası tutamaçları) yok: eğri silinip yeniden çizilir ya da taşınır / döndürülür.
 - PDF'te yazı genişliği yaklaşık hesaplanır (ortalama harf genişliği); ölçü yazısının ortalanması birkaç mm kayabilir. Geometri ve ölçek kesindir.
 - DXF teknik çizim çıktısı bilerek yok: plan, DXF'in kalıp için katman / ölçek kurallarıyla (Aşama 3 / 8 dosya alışverişi) sunulmasını istiyor.
+
+## 8. Aşama 3 raporu: dokuma / konfeksiyon kalıp sistemi (12.11.2026)
+
+**Çalışanlar** (kodla ve testle):
+- **Kalıp sekmesi** (dokuma ve karma projelerde). Temel blok takımı oluşturulur; ölçüler beden tablosundaki bedenden (göğüs, bel, kalça) ya da elle cm olarak girilir. Parçalar ürün + beden grubuna bağlanır.
+- **Temel bloklar.**
+  - Gömlek takımı: ön beden (2,5 cm düğme patı, düğme yerleri), arka beden (katlı), kol, yaka ayağı, yaka, manşet, göğüs cebi.
+  - Düz etek takımı: ön ve arka (katlı, pensli), kemer.
+  - Kol başı eğrisi, kol oyuğu + bolluk olacak şekilde hesaplanır (ikiye bölme yöntemiyle).
+  - Takımın dikiş eşleşmeleri birlikte üretilir: omuz, yan dikiş, kol oyuğu ↔ kol başı, kol altı, yaka ↔ yaka ayağı ↔ yaka, kol ağzı ↔ manşet (pile), bel ↔ kemer (pens kapalı, kruvaze payıyla).
+- **Kalıp editörü** (tam ekran, telefon önce).
+  - Seçim: parçaya dokunma parçayı, seçili parçanın kenarına ikinci dokunuş kenarı seçer.
+  - Parça bilgileri: ad, kesim adedi, çift kes (biri ters), kumaş türü (ana / astar / tela / kontrast), kumaş katı kenarı, üretim notu.
+  - İşlemler: 90° / 180° döndür, ters çevir, düz boyu 90° çevir, katı aç (yarım kalıptan tam parça), çoğalt, sil, sürükleyerek taşı.
+  - Kenar bazında dikiş payı ve köşe türü: sivri (uzatma), dik (bloklu), pah. "Bütün kenarlara pay" da var.
+  - Kenar uzunluğu, pensli kenarda pens kapalı dikiş boyu.
+  - Araçlar: çıt (tek / çift / T; konumu cm ile düzeltilir), pens (ağız iki nokta + uç), işaret (delik, düğme, ilik, referans), bölme (iki nokta), birleştirme (iki parçanın eş kenarı), yeni parça (köşe / eğri noktaları, dokunarak ya da cm ile), dikiş eşleştirme (A + beklenen fark = B, tolerans).
+  - Geri al / ileri al.
+- **Doğrulama** (Doğrulama sekmesinde ve editörde):
+  - Kontur kapalı mı; dikiş hattı kendini kesiyor mu.
+  - Kenar içinde kırık (eğri sürekliliği; uyarı).
+  - Kumaş katı kenarı düz mü.
+  - Dikiş payının kesim hattı kendini kesiyor mu (iç bükey sıkı eğride pay > yarıçapsa oluşan düğüm otomatik kırpılır).
+  - Çıt kenar dışında mı; pens ucu parça içinde mi; pens bacakları eşit mi; düz boy çizgisi var mı.
+  - Adet, pay sınırları.
+  - Dikiş eşleşmesi sapması (beklenen farka göre).
+- **Çıktılar.**
+  - SVG: 1:1 mm.
+  - PDF: 1:1 A4 ya da A3 döşemeli. Kapakta açıklama, 10 × 10 cm kontrol karesi, sayfa haritası ve parça listesi (kesim alanlarıyla). Sayfalar satır-sütun numaralı, köşe işaretli; boş sayfalar atlanır. Kesim hattı kalın, dikiş hattı kesik, kat / katlama çizgi-nokta, düz boy oklu.
+
+**Doğrulama ve toleranslar** (`tests/tx-pattern.test.mjs`, 14 test):
+
+| Konu | Referans | Tolerans |
+|---|---|---|
+| Dikdörtgen | Kesim alanı (W+2s)(H+2s), çevre 2(W+H)+8s; köşe türleri; yön bağımsızlığı; etek payı; kat kenarı | 1e-6 mm² |
+| L parça (iç köşe) | Kesim alanı A + s·P + s²·(dış − iç köşe) | Tam |
+| Daire | π(r+s)² ve 2π(r+s) | ±%0,05 (Bezier çember yaklaşımı) |
+| Sivri köşe | Uzatma 6 × pay sınırı | — |
+| Sıkı iç bükey eğri | Kesim hattında öz-kesişim yok | — |
+| Çıt | Konumu ve yönü; ters çevirmede yeri | 1e-9 mm |
+| Pens | Kapalı dikiş boyu = kenar − ağız | 1e-9 mm |
+| Bölme | Alan korunur: dikdörtgende 1e-6, dairede %0,01 | Bkz. referans |
+| Bölme: çıtlar | Doğru parçada kalır | — |
+| Birleştirme | Alan toplamı | 1e-3 mm² |
+| Katı açma | Alan 2×, orta çizgiye simetri | 0,05 mm |
+| Gömlek ve etek blokları | Varsayılan ve değiştirilmiş ölçülerle bütün parçalar hatasız, bütün eşleşmeler tolerans içinde | — |
+| Kol başı | Kol oyuğu + bolluk | ±0,01 mm |
+| Etek beli | Pens kapalı bel toplamı = bel çevresi | 1e-6 mm |
+| PDF | Geçerli xref; kapak karesi 100 mm; döşemede 120 × 170 mm kesim çizgisi kağıtta aynı boyda | 0,01 pt |
+
+PDF ayrıca `qpdf --check` ile denetlendi ve `pdftoppm` ile açıldı.
+
+**Tarayıcı testleri** (telefon emülasyonu):
+1. Örnek beden tablosunun L bedeninden gömlek bloğu oluşturulur; 7 eşleşmenin hepsi tutar.
+2. Ön beden yan dikiş payı 2 cm yapılır, kesim alanı artar; çıt eklenir.
+3. Sayıyla 40 × 12 cm parça çizilir (4,80 dm², geçerli).
+4. PDF ve SVG indirilir; yenileme sonrası kalıp kaydedilmiş, Doğrulama sekmesinde hata yok.
+5. Etek bloğuna dokunarak ikinci pens eklenir: bel eşleşmesi tam 3,00 cm sapmayla bozulur, geri alınınca düzelir.
+6. Kemer dokunarak bölünür ve aynı kenardan geri birleştirilir: alan aynı kalır.
+7. Dokunarak elle dikiş eşleşmesi eklenir.
+
+Gerçek cihazda denenmedi.
+
+**Testte bulunup düzeltilen hatalar:**
+- **Birleştirme aracı** (değişken tanımlanmadan önce kullanılıyordu, dokunuş sessizce düşüyordu). İki parçanın ortak kenarında ikinci parça da seçilemiyordu.
+- **Proje oluşturma.** Tür değiştirilirken yazılan proje adı bazen kayboluyordu; tür seçimi artık sayfayı yeniden çizmiyor.
+- **Arka yaka bloğu.** Eğri, 1 cm pay için fazla keskindi; eğri yumuşatıldı ve iç bükey düğüm kırpma eklendi.
+- **Etek.** Ön / arka yan dikişleri 2,7 mm tutmuyordu; eşitlendi.
+- **Kendini kesen dikiş hattı.** "alan sıfır" olarak raporlanıyordu; artık doğru uyarı veriliyor.
+- **Kesim hattı.** Doğru üstündeki gereksiz noktalar temizlendi.
+
+**Sınırlar:**
+- **Bloklar basitleştirilmiş temel kalıptır.** Endüstri kalıp sistemlerinin (ör. Müller, Aldrich) birebir uygulaması değil; prova olmadan seri üretime alınmamalı. Pantolon, ceket, elbise ve mont blokları henüz yok (bu türler için teknik çizim şablonu var).
+- **Köşe türlerinde "ayna köşe"** (katlanan payın köşesi) yok: sivri, dik ve pah var.
+- **Kenar düzenleme.** Kenarlar sonradan nokta nokta düzenlenemez (eğri tutamaçları yok); parça böl / birleştir / yeniden çiz ile değiştirilir.
+- **Birleştirme ve eşleşmeler.** Birleştirme sonrası aynı doğru üzerindeki iki kenar tek kenara indirilmez. Bölme / birleştirme / katı açma, o parçanın dikiş eşleşmelerini kaldırır; yeniden eşlenmesi gerekir.
+- **Pens.** Ağzı dikiş hattında işaretlenir; pens kapatılmış biçim (pens "katlanmış" kalıp kenarı) çizilmez.
+- **Kapsam dışı (sonraki aşamalar).** Grading (Aşama 4), yerleşim (Aşama 7), DXF-AAMA (dosya alışverişi).

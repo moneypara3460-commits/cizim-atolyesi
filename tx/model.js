@@ -4,7 +4,9 @@
 // Dokuma / konfeksiyon ve triko ayrı alt şemalardır (woven, knit); yalnız koleksiyon, ürün, renk, beden,
 // malzeme, föy ve revizyon ortaktır. Bkz. docs/TEKSTIL-MIMARI.md
 
-import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112b';
+import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112c';
+import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112c';
+import { buildSet } from './woven/blocks.js?v=20261112c';
 
 export const KIND = 'cizim.textile';
 export const SCHEMA = 1;
@@ -76,7 +78,7 @@ export function createProject({ name, type, season = '', brand = '', now = Date.
   return p;
 }
 // Dal özel alanları: sonraki aşamalarda doldurulur (kalıp, yerleşim / örgü deseni, numune, makine profili)
-function emptyBranch(b) { return b === 'woven' ? { pieces: [], markers: [] } : { swatches: [], charts: [], pieces: [], machines: [] }; }
+function emptyBranch(b) { return b === 'woven' ? { pieces: [], markers: [], seams: [] } : { swatches: [], charts: [], pieces: [], machines: [] }; }
 const nid = (p, pre) => pre + p.nextId++;
 
 export function addColor(p, { name, code = '', hex = '#888888' }) {
@@ -143,6 +145,23 @@ export function addSketch(p, { name, product = null } = {}) {
   const branch = pr ? pr.branch : PROJECT_TYPES[p.type].branches[0];
   const sk = createSketch({ id: nid(p, 'k'), name: str(name) || (pr ? pr.name + ' teknik çizimi' : 'Teknik çizim'), product, branch });
   p.sketches.push(sk); return sk;
+}
+
+// Kalıp (Aşama 3, dokuma): blok takımı ya da serbest parça
+export function addPatternSet(p, set, params, { product = null, size = '' } = {}) {
+  if (!p.woven) throw new Error('Bu proje türünde dokuma kalıbı yok');
+  const pr = product ? p.collection.products.find((x) => x.id === product) : null;
+  if (product && (!pr || pr.branch !== 'woven')) throw new Error('Kalıp yalnız dokuma / konfeksiyon ürününe bağlanır');
+  const r = buildSet(set, params, { idPrefix: nid(p, 'w') + '-', product, size });
+  p.woven.pieces.push(...r.pieces); p.woven.seams.push(...r.seams);
+  return r;
+}
+export function addPiece(p, { name, points, allow = 10, product = null, size = '' }) {
+  if (!p.woven) throw new Error('Bu proje türünde dokuma kalıbı yok');
+  const pc = makePiece({ id: nid(p, 'w'), name: str(name) || 'Parça', product, size, edges: edgesFromPoints(points, allow) });
+  const xs = points.map((q) => q.p[0]), ys = points.map((q) => q.p[1]), cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  pc.grain = [[cx, Math.min(...ys) + (Math.max(...ys) - Math.min(...ys)) * 0.25], [cx, Math.min(...ys) + (Math.max(...ys) - Math.min(...ys)) * 0.75]];
+  p.woven.pieces.push(pc); return pc;
 }
 
 /* ---------- doğrulama ---------- */
@@ -221,6 +240,18 @@ export function validate(p) {
     if (!pr.sizes.length) W(w, 'Beden seçilmemiş');
   }
   const prodIds = new Set((p.collection?.products || []).map((x) => x.id));
+  if (p.woven) {
+    for (const pc of p.woven.pieces || []) {
+      uniq(pc.id, 'Kalıp');
+      out.push(...validatePiece(pc));
+      if (pc.product && !prodIds.has(pc.product)) E('Kalıp ' + pc.name, 'Bağlı olduğu ürün silinmiş');
+    }
+    for (const sm of p.woven.seams || []) {
+      const r = seamCheck(p.woven.pieces, sm);
+      if (r.missing) E('Dikiş eşleşmesi ' + sm.name, 'Eşleşmedeki parça ya da kenar bulunamadı');
+      else if (!r.ok) E('Dikiş eşleşmesi ' + sm.name, `Boylar tutmuyor: ${(r.A / 10).toFixed(1)} → ${(r.B / 10).toFixed(1)} cm, beklenen fark ${((sm.ease || 0) / 10).toFixed(1)} cm, sapma ${(r.diff / 10).toFixed(2)} cm (tolerans ${((sm.tol ?? 2) / 10).toFixed(1)} cm)`);
+    }
+  }
   for (const sk of p.sketches || []) {
     uniq(sk.id, 'Çizim');
     out.push(...validateSketch(sk));
@@ -280,6 +311,7 @@ export function migrate(raw) {
     p.revisions = p.revisions || []; p.sketches = p.sketches || [];
     p.schema = 1;
   }
+  if (p.woven && !Array.isArray(p.woven.seams)) p.woven.seams = [];
   p.rev = Number.isInteger(p.rev) ? p.rev : 0;
   if (!Number.isInteger(p.nextId)) {
     const all = [...(p.library?.colors || []), ...(p.library?.materials || []), ...(p.sizeTables || []), ...(p.collection?.products || [])];

@@ -374,7 +374,7 @@ const A = (page, a, extra = '') => page.locator(`[data-a="${a}"]${extra}`).first
 const txBody = (page) => page.locator('#main').innerText();
 
 await TX('Tekstil: karma koleksiyon — gömlek (dokuma) + kazak (triko), renk, örnek beden tablosu, kumaş / iplik / aksesuar, dal kuralı, föy, revizyon, yenile, aç', async ({ page }) => {
-  await A(page, 'type', '[data-v="mixed"]');
+  await A(page, 'type', '[data-v="mixed"]'); await page.waitForSelector('[data-a="type"][data-v="mixed"].on');
   await page.fill('#np-name', 'E2E Kış'); await page.fill('#np-season', 'KŞ27'); await A(page, 'create');
   await page.waitForSelector('[data-a="add-prod"]');
   // renk
@@ -429,7 +429,7 @@ await TX('Tekstil: karma koleksiyon — gömlek (dokuma) + kazak (triko), renk, 
 });
 
 await TX('Tekstil: triko projesi yalnız triko araçlarını gösterir; dal araçları "henüz yok" diye işaretli; JSON dışa aktar → içe aktar yeni proje olarak gelir; bozuk JSON reddedilir', async ({ page }) => {
-  await A(page, 'type', '[data-v="knit"]'); await page.fill('#np-name', 'Triko 1'); await A(page, 'create');
+  await A(page, 'type', '[data-v="knit"]'); await page.waitForSelector('[data-a="type"][data-v="knit"].on'); await page.fill('#np-name', 'Triko 1'); await A(page, 'create');
   await page.waitForSelector('[data-a="add-prod"]');
   expect(await page.locator('#ap-branch').count() === 0, 'tek dal: dal seçimi yok');
   const types = await page.locator('#ap-type option').allInnerTexts();
@@ -511,9 +511,91 @@ await TX('Tekstil teknik çizim: gömlek şablonu, simetrik çizgi, eğri, ölç
   expect(c3[0] === c2[0], 'yeniden uygulamada öğe kaybı yok: ' + c3[0] + ' / ' + c2[0]);
 });
 
+await TX('Tekstil kalıp: beden tablosundan gömlek bloğu, 7 dikiş eşleşmesi tutar, kenar payı / çıt, sayıyla yeni parça, 1:1 PDF ve SVG, kaydet ve yeniden aç', async ({ page }) => {
+  await page.fill('#np-name', 'Kalıp E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await page.selectOption('#ap-type', 'gomlek'); await A(page, 'add-prod');
+  await A(page, 'tab', '[data-v="sizes"]'); await A(page, 'add-size-ex');
+  await A(page, 'tab', '[data-v="pat"]'); await page.selectOption('#pt-table', { index: 1 }); await page.waitForSelector('#pt-size');
+  await page.selectOption('#pt-size', 'L');
+  expect(await page.locator('[data-pt="chest"]').inputValue() === '100', 'göğüs çevresi tablodan (L = 100 cm)');
+  await A(page, 'add-pattern'); await page.waitForSelector('#pkx canvas');
+  const K = (k, v) => page.locator(`#pkx [data-k="${k}"]${v != null ? `[data-v="${v}"]` : ''}`).first().click();
+  const pane = () => page.locator('#pkx .pane').innerText();
+  expect(((await pane()).match(/✅/g) || []).length === 7 && !/⛔/.test(await pane()), 'yedi eşleşme tutuyor');
+  // ön bedeni seç (kenar listesinden), yan dikiş payını 2 cm yap, ortasına çıt
+  const box = await page.locator('#pkx canvas').boundingBox();
+  await page.touchscreen.tap(box.x + box.width * 0.17, box.y + box.height * 0.5);
+  await page.waitForFunction(() => /Kesim adedi/.test(document.querySelector('#pkx .pane').innerText));
+  expect(await page.locator('#pkx [data-p="name"]').inputValue() === 'Ön beden', 'ön beden seçili');
+  const before = (await pane()).match(/kesim alanı ([\d,]+) dm²/)[1];
+  await K('edge', 3); await page.fill('#pkx [data-e="allow"]', '2'); await page.locator('#pkx [data-e="allow"]').dispatchEvent('change');
+  await K('notch-mid'); expect(await page.locator('#pkx [data-n]').count() === 1, 'çıt eklendi');
+  await K('unedge'); const after = (await pane()).match(/kesim alanı ([\d,]+) dm²/)[1];
+  expect(parseFloat(after.replace(',', '.')) > parseFloat(before.replace(',', '.')), `pay artınca kesim alanı arttı ${before} → ${after}`);
+  // yeni parça: sayıyla 4 köşe (roba benzeri dikdörtgen 40 × 12 cm)
+  await K('tool', 'new');
+  for (const [x, y] of [['0', '-30'], ['40', '-30'], ['40', '-18'], ['0', '-18']]) { await page.fill('#pk-x', x); await page.fill('#pk-y', y); await K('new-pt'); }
+  await page.fill('#pk-name', 'Roba'); await K('new-finish');
+  await page.waitForFunction(() => /Kesim adedi/.test(document.querySelector('#pkx .pane').innerText));
+  expect(/Dikiş alanı 4,80 dm²/.test(await pane()) && /Kontur kapalı/.test(await pane()), 'yeni parça 40 × 12 = 4,80 dm², geçerli');
+  // geri al / ileri al
+  await K('undo'); await K('redo');
+  // çıktılar (seçimi kaldır → grup paneli)
+  await page.touchscreen.tap(box.x + box.width * 0.98, box.y + box.height * 0.02);
+  await page.waitForSelector('#pkx [data-k="pdf"]');
+  const pdf = await download(page, () => K('pdf'));
+  expect(/^%PDF-1\.4/.test(pdf.text) && /%%EOF/.test(pdf.text) && /10 × 10 cm kontrol karesi/.test(pdf.text.replace(/\\327/g, '×')), 'PDF');
+  expect(/\d+ sayfa/.test(await page.locator('#toast').innerText()), 'sayfa sayısı bildirildi');
+  const svg = await download(page, () => K('svg')); expect(/width="[\d.]+mm"/.test(svg.text) && /Roba/.test(svg.text), 'SVG');
+  await K('close');
+  await page.waitForFunction(() => /8 parça/.test(document.querySelector('#main').innerText));
+  expect(/✅ parçalar geçerli/.test(await txBody(page)) && /✅ 7 dikiş eşleşmesi tutuyor/.test(await txBody(page)), 'grup özeti');
+  await page.waitForTimeout(600); await page.reload(); await A(page, 'open'); await A(page, 'tab', '[data-v="pat"]');
+  expect(/8 parça/.test(await txBody(page)) && /Beden L/.test(await txBody(page)), 'kalıp kaydedildi');
+  await A(page, 'tab', '[data-v="val"]'); expect(await page.locator('.issue.hata').count() === 0, 'doğrulamada hata yok');
+});
+
+await TX('Tekstil kalıp araçları (dokunarak): etek bloğuna pens ekle → bel eşleşmesi bozulur, geri al; kemeri böl ve geri birleştir (alan korunur); dikiş eşle', async ({ page }) => {
+  await page.fill('#np-name', 'Etek E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await page.selectOption('#ap-type', 'etek'); await A(page, 'add-prod');
+  await A(page, 'tab', '[data-v="pat"]'); await page.selectOption('#pt-set', 'etek'); await page.waitForSelector('[data-pt="waist"]');
+  await page.fill('#pt-size-free', 'M'); await A(page, 'add-pattern'); await page.waitForSelector('#pkx canvas');
+  const K = (k, v) => page.locator(`#pkx [data-k="${k}"]${v != null ? `[data-v="${v}"]` : ''}`).first().click();
+  const pane = () => page.locator('#pkx .pane').innerText();
+  const tapW = async (p) => { const q = await page.evaluate((w) => document.getElementById('pkx').api.toScreen(w), p); await page.touchscreen.tap(q[0], q[1]); };
+  const pieces = () => page.evaluate(() => document.getElementById('pkx').api.pieces().map((pc) => ({ name: pc.name, darts: pc.darts.length, edges: pc.edges.map((e) => [e.segs[0].a, e.segs.at(-1).b, e.name]) })));
+  expect(((await pane()).match(/✅/g) || []).length === 2, 'iki eşleşme tutuyor');
+  // ön bel çizgisi y = 60, x 60 … 60 + 205; pens ağzı 30–45 mm, ucu 80 mm aşağıda
+  await K('tool', 'dart'); await tapW([90, 60]); await tapW([105, 60]); await tapW([97.5, 140]);
+  expect((await pieces()).find((p) => p.name === 'Etek ön').darts === 2, 'ikinci pens eklendi');
+  await K('tool', 'sel'); { const bx = await page.locator('#pkx canvas').boundingBox(); await page.touchscreen.tap(bx.x + bx.width - 4, bx.y + 4); }
+  await page.waitForSelector('#pkx [data-k="pdf"]');
+  expect(/⛔/.test(await pane()) && /sapma -?3,00 cm/.test(await pane()), 'pens ağzı 2 × 1,5 cm bel eşleşmesini bozdu: ' + (await pane()).match(/sapma [^\n]*/g));
+  await K('undo'); expect(!/⛔/.test(await pane()), 'geri alınınca tutuyor');
+  // kemer: (60, 780) – (810, 860); x = 435'ten böl
+  await tapW([435, 800]); await page.waitForFunction(() => /Kemer/.test(document.querySelector('#pkx [data-p="name"]')?.value || ''));
+  const area0 = (await pane()).match(/Dikiş alanı ([\d,]+) dm²/)[1];
+  await K('tool', 'split'); await tapW([435, 740]); await tapW([435, 900]);
+  let ps = await pieces(); expect(ps.length === 4 && ps.filter((p) => /Kemer/.test(p.name)).length === 2, 'kemer ikiye bölündü');
+  // birleştir: bölme kenarına iki kez dokun (önce bir parçanın, sonra diğerinin kenarı)
+  await K('tool', 'merge'); await tapW([435, 820]); await tapW([435, 820]);
+  ps = await pieces(); expect(ps.length === 3, 'yeniden tek kemer: ' + ps.map((p) => p.name).join(', '));
+  await K('tool', 'sel'); await tapW([200, 820]);
+  await page.waitForFunction(() => /Kemer/.test(document.querySelector('#pkx [data-p="name"]')?.value || ''));
+  expect((await pane()).match(/Dikiş alanı ([\d,]+) dm²/)[1] === area0, 'alan korundu ' + area0);
+  // dikiş eşle: etek ön yan dikiş ↔ etek arka yan dikiş (yeni eşleşme)
+  const ed = (await pieces()); const fr = ed.find((p) => p.name === 'Etek ön').edges[1], bk = ed.find((p) => p.name === 'Etek arka').edges[1];
+  const mid = (e) => [(e[0][0] + e[1][0]) / 2, (e[0][1] + e[1][1]) / 2 + 150];
+  await K('tool', 'seam'); await tapW(mid(fr)); await K('side', 'b'); await tapW(mid(bk));
+  await page.fill('#pk-sname', 'Yan dikiş (elle)'); await K('seam-save');
+  await page.waitForFunction(() => /Yan dikiş \(elle\)/.test(document.querySelector('#pkx .pane').innerText));
+  expect(((await pane()).match(/✅/g) || []).length === 2 && /Yan dikiş \(elle\)/.test(await pane()), 'elle eşleşme eklendi (kemer bölünüp birleşince eski bel eşleşmesi kaldırıldı)');
+  await K('close');
+});
+
 await TX('Tekstil ↔ Makine ayrılığı: tekstil kaydı makine projelerine yazmaz; makine projeleri tekstil listesinde görünmez', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('cizim:projects', JSON.stringify({ mak: { data: '{}', at: 1 } })));
-  await A(page, 'type', '[data-v="woven"]'); await page.fill('#np-name', 'Ayrı'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await A(page, 'type', '[data-v="woven"]'); await page.waitForSelector('[data-a="type"][data-v="woven"].on'); await page.fill('#np-name', 'Ayrı'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
   await A(page, 'add-prod'); await page.fill('#rev-note', 'x'); await A(page, 'commit'); await A(page, 'home');
   const st = await page.evaluate(() => ({ p: localStorage.getItem('cizim:projects'), keys: Object.keys(localStorage) }));
   expect(st.p === JSON.stringify({ mak: { data: '{}', at: 1 } }), 'makine projeleri değişmedi');
