@@ -1,8 +1,8 @@
 // Akıllı Üretilebilirlik Kontrolü — "Üretim" sekmesinin arayüzü.
 // app.js sekme gövdesini html() ile alır, data-act="mfg-..." düğmelerini act() ile buraya yollar.
 // api: { getModel(), mark(issue|null), selectPart(id), render(), toast(m), name(), snapshot()?, openCutOpt() }
-import { analyzeModel } from './mfgcheck.js?v=20261111a';
-import { pdfFromJpegs } from './cutopt.js?v=20261111a';
+import { analyzeModel } from './mfgcheck.js?v=20261111b';
+import { pdfFromJpegs } from './cutopt.js?v=20261111b';
 
 const SEV = { crit: { dot: '🔴', name: 'KRİTİK', col: '#ef4444', bg: '#3b0d0d' }, warn: { dot: '🟠', name: 'UYARI', col: '#f59e0b', bg: '#3a2506' }, tip: { dot: '🟢', name: 'ÖNERİ', col: '#22c55e', bg: '#052e1a' } };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

@@ -6,35 +6,36 @@ import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Brush, Evaluator, ADDITION, SUBTRACTION } from 'three-bvh-csg';
 import { MeshBVH } from 'three-mesh-bvh';
 import {
-  TYPE_LABEL, DEFAULTS, heightOf, newPart, History, toSTLBinary, parseVoice,
+  TYPE_LABEL, DEFAULTS, heightOf, signedVolume, newPart, History, toSTLBinary, parseVoice,
   UNITS, toUnit, fromUnit, fmtNum, snap, dist3,
   sketchFromDraw, sketchToDraw, revolveProfile, chamferBoxPoints, cylinderProfile, circlePts,
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
-} from './logic.js?v=20261111a';
-import { openSketch } from './sketch.js?v=20261111a';
-import { to3MF, toSTEP } from './export3d.js?v=20261111a';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261111a';
-import { openCad2D } from './cad2d.js?v=20261111a';
-import { openCutOpt } from './cutopt-ui.js?v=20261111a';
-import { createMfg } from './mfg-ui.js?v=20261111a';
-import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261111a';
-import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261111a';
-import { analyzeWeight } from './weight.js?v=20261111a';
-import { createWeightUI, fkg } from './weight-ui.js?v=20261111a';
-import { createCostUI } from './cost-ui.js?v=20261111a';
-import { planReport as weldReport } from './welds.js?v=20261111a';
-import { altCons as weldAltCons } from './weld-ui.js?v=20261111a';
-import { groupKey } from './cutopt.js?v=20261111a';
-import { createAssemblyUI } from './assembly-ui.js?v=20261111a';
-import { createSimUI } from './sim-ui.js?v=20261111a';
-import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261111a';
-import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261111a';
-import { createCamUI } from './cam-ui.js?v=20261111a';
+} from './logic.js?v=20261111b';
+import { openSketch } from './sketch.js?v=20261111b';
+import { to3MF, toSTEP } from './export3d.js?v=20261111b';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261111b';
+import { openCad2D } from './cad2d.js?v=20261111b';
+import { openCutOpt } from './cutopt-ui.js?v=20261111b';
+import { createMfg } from './mfg-ui.js?v=20261111b';
+import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261111b';
+import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261111b';
+import { analyzeWeight } from './weight.js?v=20261111b';
+import { createWeightUI, fkg } from './weight-ui.js?v=20261111b';
+import { createCostUI } from './cost-ui.js?v=20261111b';
+import { planReport as weldReport } from './welds.js?v=20261111b';
+import { altCons as weldAltCons } from './weld-ui.js?v=20261111b';
+import { groupKey } from './cutopt.js?v=20261111b';
+import { createAssemblyUI } from './assembly-ui.js?v=20261111b';
+import { createSimUI } from './sim-ui.js?v=20261111b';
+import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261111b';
+import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261111b';
+import { createCamUI } from './cam-ui.js?v=20261111b';
+import { createOcctUI } from './occt-ui.js?v=20261111b';
 
-const APP_VER = '20261111a'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261111b'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -78,7 +79,7 @@ const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan, asm
 const meshStore = new Map();
 function snapshotSave() {
   const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData };
-  const ks = [...new Set(parts.filter((q) => q.mk && meshStore.has(q.mk)).map((q) => q.mk))];
+  const ks = [...new Set(parts.flatMap((q) => [q.mk, q.bk]).filter((k) => k && meshStore.has(k)))];   // bk: OCCT B-Rep metni
   if (ks.length) { o.meshes = {}; ks.forEach((k) => { o.meshes[k] = meshStore.get(k); }); }
   return JSON.stringify(o);
 }
@@ -799,6 +800,7 @@ function rebuild(refit) {
     if (typeof scheduleWeightMarker === 'function') scheduleWeightMarker();
     if (simUI && simUI.active) { simUI.invalidate(); if (tab === 'sim') setTimeout(renderPanel, 0); }
     if (camUI && camUI.active) { camUI.invalidate(); if (tab === 'cam') setTimeout(renderPanel, 0); }
+    if (typeof occtUI !== 'undefined' && occtUI && occtUI.active) { occtUI.invalidate(); if (tab === 'occt') setTimeout(renderPanel, 0); }
     if (asmUI && asmUI.active) { asmUI.invalidate(); if (tab === 'asm') setTimeout(renderPanel, 0); }
 
     let materials = matFor(vis[0].color);
@@ -961,7 +963,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['wgt', 'Ağırlık'], ['cost', 'Maliyet'], ['mfg', 'Üretim'], ['weld', 'Kaynak'], ['asm', 'Montaj planı'], ['sim', '🔮 Gelecek'], ['cam', '⚙ CNC']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['wgt', 'Ağırlık'], ['cost', 'Maliyet'], ['mfg', 'Üretim'], ['weld', 'Kaynak'], ['asm', 'Montaj planı'], ['sim', '🔮 Gelecek'], ['cam', '⚙ CNC'], ['occt', '🧱 B-Rep']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -1186,7 +1188,7 @@ function renderPanel() {
         row('Ağırlık merkezi', mp.centroid ? 'X ' + fmtNum(toUnit(mp.centroid[0], settings.unit), 1) + '  Y ' + fmtNum(toUnit(mp.centroid[1], settings.unit), 1) + '  Z ' + fmtNum(toUnit(mp.centroid[2], settings.unit), 1) : '-') +
         row('Genel ölçü', lenText(sz.x) + ' × ' + lenText(sz.z) + ' × ' + lenText(sz.y));
     }
-    body += '<div class="lbl h">Ağırlık ve maliyet</div>' + btn('⚖ Parça parça ağırlık, ağırlık merkezi, denge, kaldırma', 'wg-go') + btn('₺ Üretim maliyeti (hammadde, işçilik, makine, adet)', 'cs-go') + btn('🧩 Montaj sırası ve patlatılmış görünüm', 'as-go-tab') + btn('🔮 Geleceğimi göster (sanal dayanım, titreşim, sıcaklık, ömür testi)', 'sm-go-tab') + btn('⚙ CNC freze: takım yolu ve G-kodu', 'cn-go-tab') +
+    body += '<div class="lbl h">Ağırlık ve maliyet</div>' + btn('⚖ Parça parça ağırlık, ağırlık merkezi, denge, kaldırma', 'wg-go') + btn('₺ Üretim maliyeti (hammadde, işçilik, makine, adet)', 'cs-go') + btn('🧩 Montaj sırası ve patlatılmış görünüm', 'as-go-tab') + btn('🔮 Geleceğimi göster (sanal dayanım, titreşim, sıcaklık, ömür testi)', 'sm-go-tab') + btn('⚙ CNC freze: takım yolu ve G-kodu', 'cn-go-tab') + btn('🧱 B-Rep (OCCT): hassas boolean, yuvarlama, STEP / IGES', 'oc-go-tab') +
       '<div class="lbl h">Üretim</div>' + btn('🏭 Üretimi analiz et (çakışma, montaj, kaynak)', 'mfg-go') + btn('✂ Akıllı kesim optimizasyonu (profil boy / fire / maliyet)', 'cut-opt') +
       '<div class="lbl h">Dışa aktar</div>' + btn('📋 Parça listesi (CSV)', 'bom-csv') + btn('📐 DXF (ön / yan / üst)', 'dxf-out') +
       btn('🧊 STEP (SolidWorks, Fusion, FreeCAD)', 'step-out') + btn('🖨 3MF (3B yazıcı)', 'mf-out');
@@ -1200,6 +1202,9 @@ function renderPanel() {
   } else if (tab === 'cam') {
     body = camUI.html();
     hint = 'CNC: takım yolları modelin üstten görünen yüzeyinden hesaplanır (3 eksen). Kesme değerleri başlangıç değeridir; ilk parçada makinede düşük ilerlemeyle dene. Program çalıştırmadan önce kumandada simülasyonla kontrol et.';
+  } else if (tab === 'occt') {
+    body = occtUI.html();
+    hint = 'B-Rep: model Open CASCADE (OCCT) çekirdeğiyle tam yüzeyli katı olarak kurulur. Boolean, yuvarlama ve pah sonucu yeni bir parça olur (Geri al ile döner). STEP dışa aktarma tam geometriyi yazar (SolidWorks, Fusion, FreeCAD, CAM programları açar).';
   } else if (tab === 'sim') {
     body = simUI.html();
     hint = 'Geleceğimi Göster: tasarım küp elemanlara bölünüp gerçek sonlu eleman analiziyle (doğrusal-elastik) test edilir; renkler ve şekil değişimi hesaplanan sonuçtan çizilir. Yorulma, aşınma ve yüksek sıcaklık değerleri yaklaşık tahmindir. Sonuçlar profesyonel mühendislik onayının yerine geçmez.';
@@ -2015,6 +2020,69 @@ var camUI = createCamUI({   // var: yeniden çizim modül yüklenirken çağrıl
   date: () => new Date().toLocaleDateString('tr-TR'),
 });
 
+/* ---- 🧱 B-Rep (OCCT) ---- */
+const occtGroup = new THREE.Group(); scene.add(occtGroup);
+const occtState = { hid: false };
+function occtClear() {
+  occtGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+  occtGroup.clear();
+  if (occtState.hid) { modelGroup.visible = true; ovl.visible = true; occtState.hid = false; }
+}
+// OCCT ağını Three.js'te göster (model gizlenir; yüzler OCCT yüzlerine göre gruplu, kenarlar gerçek B-Rep kenarları)
+function occtDraw(v) {
+  occtClear();
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(v.positions, 3));
+  if (v.normals && v.normals.length === v.positions.length) g.setAttribute('normal', new THREE.BufferAttribute(v.normals, 3)); else g.computeVertexNormals();
+  g.setIndex(new THREE.BufferAttribute(v.index, 1));
+  const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x5eead4, metalness: 0.15, roughness: 0.55, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
+  occtGroup.add(mesh);
+  if (v.lines && v.lines.length) {
+    const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(v.lines, 3));
+    occtGroup.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x0f172a })));
+  }
+  modelGroup.visible = false; ovl.visible = false; occtState.hid = true;
+}
+const OCCT_PRIM = { box: ['w', 'h', 'l', 'r', 'c', 'tp'], cylinder: ['d', 'h', 'r', 'c', 'tp'], sphere: ['d'], cone: ['d', 'd2', 'h', 'r', 'c'], tube: ['d', 'di', 'h', 'r', 'c'] };
+// parça -> OCCT tanımı: temel katılar tam, OCCT'den gelenler B-Rep metniyle, diğerleri dünya koordinatında üçgen listesi
+function occtDesc(p) {
+  const place0 = { x: pos(p.x), y: pos(p.y), z: pos(p.z), rx: pos(p.rx), ry: pos(p.ry), rz: pos(p.rz) };
+  const base = { name: partName(p, parts.indexOf(p)), op: parts.indexOf(p) > 0 && p.op === 'sub' ? 'sub' : 'add' };
+  if (p.bk && meshStore.has(p.bk)) return { ...base, ...place0, type: 'brep', brep: meshStore.get(p.bk) };
+  const f = OCCT_PRIM[p.type];
+  if (f) { const d = { ...base, ...place0, type: p.type }; for (const k of f) d[k] = ['r', 'c', 'tp', 'di', 'd2'].includes(k) ? pos(p[k]) : clamp(p[k]); return d; }
+  const g = place(baseGeo(p), p, partHeight(p));
+  const t = geoTris(g); g.dispose();
+  return { ...base, type: 'tris', pos: t };
+}
+var occtUI = createOcctUI({   // var: yeniden çizim sırasında çağrılırsa henüz tanımsız olabilir
+  descs: () => parts.filter((q) => !q.hidden).map(occtDesc),
+  parts: () => parts.filter((q) => !q.hidden).map((q) => ({ id: q.id, name: partName(q, parts.indexOf(q)), get desc() { return occtDesc(q); } })),
+  selected: () => (hasSel() ? { id: cur().id, name: partName(cur(), parts.indexOf(cur())), get desc() { return occtDesc(cur()); } } : null),
+  meshVolume: () => (lastClean ? Math.abs(signedVolume(geoTris(lastClean))) : null),
+  draw: occtDraw,
+  clear: occtClear,
+  addPart(r, name, hideIds) {
+    commit();
+    const key = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    meshStore.set(key, packMesh(r.tris.pos, r.tris.nor));
+    const m = { id: nextId++, type: 'mesh', op: 'add', ...DEFAULTS, x: r.x, y: r.y, z: r.z, h: r.h, mk: key, name };
+    if (r.brep) { const bk = 'b' + key.slice(1); meshStore.set(bk, r.brep); m.bk = bk; }
+    for (const q of parts) if (hideIds.includes(q.id)) q.hidden = true;
+    parts.push(m); selOff = null; sel = m.id;
+    refreshAll(true);
+  },
+  toast,
+  render: () => { if (tab === 'occt') renderPanel(); },
+  saveText: (text, name) => saveBlob(new Blob([text], { type: 'application/step' }), name),
+  pickFile: (accept) => new Promise((res) => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = accept;
+    inp.onchange = () => res(inp.files && inp.files[0] ? inp.files[0] : null);
+    inp.click();
+  }),
+  name: () => (projName || 'model').replace(/[^\w\-çğıöşüÇĞİÖŞÜ ]+/g, '_'),
+});
+
 // projedeki bütün profil iskeletlerinin kesim listesi → kesim optimizasyonu girdisi
 const MAT_SHORT = { celik: 'Çelik', paslanmaz: 'Paslanmaz', aluminyum: 'Alüminyum', al6061: 'Alüminyum', pirinc: 'Pirinç', bakir: 'Bakır', titanyum: 'Titanyum' };
 function cadCutPieces() {
@@ -2735,6 +2803,7 @@ document.addEventListener('change', (e) => {
   if (el.dataset && el.dataset.cf) { costUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.as) { asmUI.input(el, 'change'); return; }
   if (el.dataset && (el.dataset.cs || el.dataset.cn || el.dataset.ct || el.dataset.co)) { camUI.input(el, 'change'); return; }
+  if (el.dataset && el.dataset.oc) { occtUI.input(el); return; }
   if (el.dataset && (el.dataset.sm || el.dataset.sf || el.dataset.sp || el.dataset.sv || el.dataset.st || el.dataset.sl2)) { simUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.link === 'parent') setParent(cur(), el.value === '' ? null : Number(el.value));
 });
@@ -3660,6 +3729,8 @@ document.addEventListener('click', (e) => {
   if (act === 'cs-go') { tab = 'cost'; renderPanel(); return; }
   if (act === 'sm-go-tab') { tab = 'sim'; renderPanel(); return; }
   if (act === 'cn-go-tab') { tab = 'cam'; renderPanel(); return; }
+  if (act === 'oc-go-tab') { tab = 'occt'; renderPanel(); return; }
+  if (act && act.startsWith('oc-') && occtUI.act(act)) return;
   if (act && act.startsWith('cn-') && camUI.act(act)) return;
   if (act && act.startsWith('sm-') && simUI.act(act)) return;
   if (act === 'as-go-tab') { tab = 'asm'; renderPanel(); asmUI.start(); return; }
@@ -3671,7 +3742,7 @@ document.addEventListener('click', (e) => {
   if (act === 'add-gear') { addGear(); return; }
   if (act.startsWith('mc-')) { mechAct(act); return; }
   if (act.startsWith('add-')) { addPart(act.slice(4), 'add'); return; }
-  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'asm' && asmUI.active) asmUI.stop(); if (tab !== 'sim' && simUI.active) simUI.exit(); if (tab !== 'cam') camUI.leave(); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate' && tab !== 'link') clearFace();
+  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'asm' && asmUI.active) asmUI.stop(); if (tab !== 'sim' && simUI.active) simUI.exit(); if (tab !== 'cam') camUI.leave(); if (tab !== 'occt') occtUI.leave(); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate' && tab !== 'link') clearFace();
     linkPick = false;
     if (tab !== 'mate') { mate.a = null; mate.b = null; }
     if (tab !== 'edge') edgeSels = []; renderPanel(); return; }

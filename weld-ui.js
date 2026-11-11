@@ -1,8 +1,8 @@
 // Akıllı Kaynak Planlama — "Kaynak" sekmesi arayüzü.
 // api: { getModel(), getPlan(), setPlan(p), commit(), changed(), render(), focus(w|null), toast(m), name(), parts(), bbox(), version(), openSheet(), snapshot()? }
-import { detectWelds, mergePlan, setSide, actualLen, planReport, weldSequence, weldSummary, weldAccess, labelOf, fmtMM, WELD_TYPES, SIDES, METHODS, WELD_DEFAULTS, SEQ_TIPS } from './welds.js?v=20261111a';
-import { Mesh, minDistance } from './mfgcheck.js?v=20261111a';
-import { pdfFromJpegs } from './cutopt.js?v=20261111a';
+import { detectWelds, mergePlan, setSide, actualLen, planReport, weldSequence, weldSummary, weldAccess, labelOf, fmtMM, WELD_TYPES, SIDES, METHODS, WELD_DEFAULTS, SEQ_TIPS } from './welds.js?v=20261111b';
+import { Mesh, minDistance } from './mfgcheck.js?v=20261111b';
+import { pdfFromJpegs } from './cutopt.js?v=20261111b';
 
 const TCOL = { kose: '#f97316', alin: '#ef4444', t: '#a855f7' };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

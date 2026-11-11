@@ -109,6 +109,18 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **Motor:** döner eklem + devir (d/dk); bağlı eklemlerin devri / kayma hızı yazılır; motorla sürekli çalıştırma ve 1 tur video
 - **Çarpışma kontrolü:** motor bir tur (36 konum) ya da oynatma hareketi (24 konum) boyunca hareket eden parçalar birbirine giriyor mu (gerçek hacim kesişimi; değen yüzeyler sayılmaz); konum, parça çifti, batma derinliği; dokununca o konum ve bölge gösterilir
 
+**🧱 B-Rep — Open CASCADE (OCCT) geometri motoru (🧱 B-Rep sekmesi, ya da Hesap → B-Rep)**
+- Gerçek OCCT kullanılır: Open CASCADE Technology'nin WebAssembly derlemesi (`vendor/occt`, replicad-opencascadejs, LGPL 2.1). Ayrı bir işçide (Web Worker) çalışır, ekran donmaz; ilk işlemde bir kez indirilir (10–25 MB), sonra tarayıcı önbelleğinden gelir. Sunucu gerekmez
+- **Model → B-Rep:** kutu, silindir, küre, koni, boru (yuvarlama, pah, eğim dahil) analitik yüzeyli tam katı olarak kurulur; kroki, süpürme, loft, sac, iskelet ve ağ parçaları ekrandaki üçgen ağdan dikilerek katıya çevrilir (yüzeyler düzlemsel üçgen, 20 000 üçgen sınırı). Parçalar uygulamadaki sırayla birleştirilir / oyulur
+- **Doğrulama:** BRepCheck ile geçerlilik, katı / kabuk / yüz / kenar / köşe sayısı, tam hacim (ekrandaki ağ hacmiyle karşılaştırma), açık ağ ve ters yönlü katı uyarısı; **🩺 Doğrula ve onar** (ShapeFix)
+- **Boolean:** iki parça seçilip hassas birleştirme (A + B), çıkarma (A − B), kesişim (A ∩ B); sonuç yeni parça olur, A ve B gizlenir
+- **Yuvarlama / pah:** seçili parçanın tüm / üst / alt / dikey / dairesel kenarlarına; geçersiz sonuç (yarıçap fazla büyük) reddedilir
+- OCCT ile üretilen parçalar B-Rep metniyle projede saklanır (`bk`), taşınıp döndürülünce sonraki işlemlerde tam geometriyle kullanılır; ekranda Three.js ağı olarak görünür (eski sürümler bu parçayı normal ağ parçası olarak açar)
+- **Görüntü köprüsü:** OCCT üçgenlemesi (yüz grupları + gerçek B-Rep kenar çizgileri) Three.js'te "OCCT görüntüsü" olarak gösterilir
+- **CAM verisi:** yüz türleri (düzlem, silindir, koni, torus, B-spline), kenar türleri, silindirik yüzlerin çapı ve ekseni, eksenlere dik düzlem sayısı
+- **Dosya:** STEP dışa aktarma (tam B-Rep, AP214) ve içe aktarma; IGES içe aktarma (occt-import-js; yüzeyler üçgenlenip katıya dikilir). **IGES dışa aktarma yok:** kullanılan OCCT derlemesinde IGES yazıcısı bulunmuyor (özel derleme gerekir)
+- Sınırlar: koni / torus yüzlerinin ayrıntılı parametreleri bu derlemede okunamıyor (yalnız türü); tek tek kenar seçerek yuvarlama henüz yok (kenar grupları var); büyük modellerde telefonda işlem birkaç saniye sürebilir
+
 **🔮 Geleceğimi Göster — sanal test ortamı (🔮 Gelecek sekmesi, ya da Hesap → Geleceğimi göster)**
 - **Akış:** tasarımı bitir → ölçüler → her parçanın malzemesini seç → **✓ Tasarımımı onayla** → **🔮 GELECEĞİMİ GÖSTER** açılır. Onaydan sonra tasarım değişirse yeniden onay ister. Tasarım test ortamına kopyalanır; orijinal hiçbir zaman değiştirilmez
 - **Gerçek sonlu eleman analizi (FEA):** katı geometri küp elemanlara (voxel) bölünür; 8 düğümlü uyumsuz modlu hekzahedral eleman (eğilmede kilitlenmez), doğrusal-elastik, çok katmanlı (multigrid) ön koşullu eşlenik gradyan çözücü, arka plan iş parçacığında (Worker). Eleman boyu ölçülerle hizalanır (kalınlık yuvarlama hatası olmasın). Ağ: Hızlı / Normal / İnce
@@ -274,6 +286,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - `cad2d.js`, `cad2d-geom.js` — 2B çizim modu ve saf geometrisi (kesişim, kırp, uzat, ofset, radyus, DXF)
 - `cam.js`, `cam-ui.js` — CNC: yükseklik haritası, uzaklık alanı, takım yolları, simülasyon, G-kodu, iş kartı
 - `mech.js` — evolvent dişli profili, mekanizma bağıntıları
+- `occt.js`, `occt-ops.js`, `occt-worker.js`, `occt-ui.js` — OCCT B-Rep köprüsü (katı kurma, Boolean, yuvarlama / pah, doğrulama, STEP / IGES, Three.js'e üçgenleme, CAM için topoloji), işçi ve B-Rep sekmesi; `vendor/` — üçüncü taraf WebAssembly kütüphaneleri (bkz. `vendor/README.md`)
 - `fea.js`, `fea-worker.js`, `sim-ui.js` — Geleceğimi Göster: sonlu eleman çözücü (voxel H8, multigrid), modal, ısıl, yorulma / aşınma, alternatifler, arayüz ve PDF
 - `assembly.js`, `assembly-ui.js` — montaj sırası: parça tanıma, delik → cıvata, sökme analizi, patlatma / animasyon, PDF
 - `tests/` — testler: `node tests/logic.test.mjs`, `node tests/sketch.test.mjs`, `node tests/cad2d.test.mjs`, `node tests/photo2d.test.mjs`, `node tests/examples.test.mjs`, `node tests/export3d.test.mjs`

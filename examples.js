@@ -1,6 +1,6 @@
 // Hazır örnek projeler: tek dokunuşla yüklenir, özellikleri denemek ve öğrenmek için.
 // buildExample(key) -> { parts, nextId, sel, name, tip, anim? }
-import { newPart } from './logic.js?v=20261111a';
+import { newPart } from './logic.js?v=20261111b';
 
 export const EXAMPLES = [
   { key: 'braket', name: 'L braket', icon: '📐', about: 'Kutu + delikler, pah ve yuvarlama. Teknik resim ve Dayanım için iyi örnek.' },
