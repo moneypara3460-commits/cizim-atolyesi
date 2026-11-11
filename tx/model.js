@@ -4,9 +4,10 @@
 // Dokuma / konfeksiyon ve triko ayrı alt şemalardır (woven, knit); yalnız koleksiyon, ürün, renk, beden,
 // malzeme, föy ve revizyon ortaktır. Bkz. docs/TEKSTIL-MIMARI.md
 
-import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112c';
-import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112c';
-import { buildSet } from './woven/blocks.js?v=20261112c';
+import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112d';
+import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112d';
+import { buildSet } from './woven/blocks.js?v=20261112d';
+import { gradeGroup } from './woven/grade.js?v=20261112d';
 
 export const KIND = 'cizim.textile';
 export const SCHEMA = 1;
@@ -162,6 +163,28 @@ export function addPiece(p, { name, points, allow = 10, product = null, size = '
   const xs = points.map((q) => q.p[0]), ys = points.map((q) => q.p[1]), cx = (Math.min(...xs) + Math.max(...xs)) / 2;
   pc.grain = [[cx, Math.min(...ys) + (Math.max(...ys) - Math.min(...ys)) * 0.25], [cx, Math.min(...ys) + (Math.max(...ys) - Math.min(...ys)) * 0.75]];
   p.woven.pieces.push(pc); return pc;
+}
+
+// Grading (Aşama 4): ürün + temel beden grubunu tablodaki hedef bedenlere yayar.
+// Hedef bedendeki mevcut parçalar (aynı ürün) yenileriyle değiştirilir. Dönüş: rapor
+export function gradeProduct(p, { product = null, base, table: tableId, sizes, method = 'auto', wMeasure, hMeasure }) {
+  if (!p.woven) throw new Error('Bu proje türünde dokuma kalıbı yok');
+  const table = p.sizeTables.find((t) => t.id === tableId); if (!table) throw new Error('Beden tablosu seçilmedi');
+  if (!table.source || !String(table.source).trim()) throw new Error('Beden tablosunun kaynağı yazılmamış: önce kaynağı belirt');
+  const same = (pc) => (pc.product ?? null) === (product ?? null);
+  const pieces = p.woven.pieces.filter((pc) => same(pc) && (pc.size ?? '') === base);
+  if (!pieces.length) throw new Error('Temel bedende kalıp yok: ' + base);
+  const ids = new Set(pieces.map((x) => x.id));
+  const seams = p.woven.seams.filter((sm) => [...sm.a, ...sm.b].every((r) => ids.has(r.piece)));
+  const targets = sizes.filter((z) => z !== base);
+  const r = gradeGroup(pieces, seams, { table, base, sizes: targets, method, wMeasure, hMeasure });
+  for (const z of targets) {
+    const gone = new Set(p.woven.pieces.filter((pc) => same(pc) && pc.size === z).map((pc) => pc.id));
+    p.woven.pieces = p.woven.pieces.filter((pc) => !gone.has(pc.id));
+    p.woven.seams = p.woven.seams.filter((sm) => ![...sm.a, ...sm.b].some((x) => gone.has(x.piece)));
+    p.woven.pieces.push(...r.groups[z].pieces); p.woven.seams.push(...r.groups[z].seams);
+  }
+  return { report: r.report, sizes: targets, table: table.name, source: table.source };
 }
 
 /* ---------- doğrulama ---------- */

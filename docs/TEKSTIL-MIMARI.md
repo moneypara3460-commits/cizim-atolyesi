@@ -93,7 +93,7 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | 1 | Ortak tekstil proje altyapısı: çalışma alanı seçimi, `tekstil.html`, proje türleri (dokuma / triko / karma), koleksiyon, ürün, renk, beden tablosu, malzeme (kumaş / iplik / aksesuar), föy temeli, dal bazlı doğrulama, IndexedDB kaydı, revizyon, JSON dışa / içe aktarma, şema göçü | Bkz. bölüm 6 | ✅ (12.11.2026) |
 | 2 | Teknik moda çizimi: `curve.js`, ön / arka / yan, simetri, katman, ölçü; dokuma ve triko şablonları; detay kütüphanesi; PNG, vektör PDF / SVG | Eğri uzunluğu analitikle ±0,01 mm; simetri tam; PDF ölçeği 1:1 | ✅ (12.11.2026) — bkz. bölüm 7 |
 | 3 | Dokuma kalıbı: parça, pens, çıt, dikiş payı (seçili kenar / tüm çevre, köşe türleri), böl, birleştir, döndür, aynala, kontur ve eğri doğrulama | Referans kalıplarda pay alanı / çevresi analitikle eşleşir; öz-kesişim yakalanır | ✅ (12.11.2026) — bkz. bölüm 8 |
-| 4 | Beden ve grading: nokta bazlı grading, kişiye özel ölçü altyapısı, bütünlük kontrolü; trikoda bedene göre ilmek / sıra sayıları | Bedenler arası fark kurala tam eşit; dikiş hattı eşleşmesi raporlanır | Yok (tablo altyapısı Aşama 1'de var) |
+| 4 | Beden ve grading: nokta bazlı grading, kişiye özel ölçü altyapısı, bütünlük kontrolü; trikoda bedene göre ilmek / sıra sayıları | Bedenler arası fark kurala tam eşit; dikiş hattı eşleşmesi raporlanır | ✅ dokuma (12.11.2026) — bkz. bölüm 9; triko ilmek sayıları Aşama 5 ile |
 | 5 | Triko desen ve ilmek: ilmek sözlüğü, ızgara, düz / ters / ribana / saç örgüsü / jakar, tekrar, renk raporu, numune ve gauge, sıra bazlı eksiltme / artırma | Ribana ve saç örgüsü kuralları; gauge dönüşümü elle hesapla tam; eksiltme tablosu hedef ölçüye ±1 ilmek; desteklenmeyen yapıda açık uyarı | Yok |
 | 6 | Kumaş, iplik, aksesuar kütüphanesi (ayrıntılı); iplik numarası dönüşümleri; tüketim, gramaj, maliyet | Nm / Ne / tex / dtex dönüşümleri tam; numunesiz sonuç "tahmini" | Kısmi: kart yapısı, birimler, "tahmini" işareti, malzeme maliyeti Aşama 1'de var |
 | 7 | Kumaş yerleşimi ve kesim optimizasyonu | Kısıt ihlali sıfır; verim alt sınırla raporlanır | Yok |
@@ -123,6 +123,8 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | `tx/woven/pattern-export.js` | Yeni (Aşama 3) | Kalıp çizimi, SVG 1:1, 1:1 A4 / A3 döşemeli PDF |
 | `tx/woven/pattern-ui.js` | Yeni (Aşama 3) | Kalıp editörü |
 | `tests/tx-pattern.test.mjs` | Yeni (Aşama 3) | 14 Node testi |
+| `tx/woven/grade.js` | Yeni (Aşama 4) | Kural tabanlı grading, blok ölçüsünden kural, orantılı kural, beden karşılaştırma tablosu |
+| `tests/tx-grade.test.mjs` | Yeni (Aşama 4) | 8 Node testi |
 | `tests/e2e/run.mjs` | Değişti | W (çalışma alanı) ve T (tekstil) senaryoları; makine senaryoları seçim ekranını atlamak için `cizim:workspace = makine` ile başlar |
 
 Yeni dış bağımlılık yok: tarayıcının kendi IndexedDB'si kullanılır. Three.js tekstil tarafında Aşama 9'a kadar yüklenmez.
@@ -331,3 +333,36 @@ Gerçek cihazda denenmedi.
 - **Birleştirme ve eşleşmeler.** Birleştirme sonrası aynı doğru üzerindeki iki kenar tek kenara indirilmez. Bölme / birleştirme / katı açma, o parçanın dikiş eşleşmelerini kaldırır; yeniden eşlenmesi gerekir.
 - **Pens.** Ağzı dikiş hattında işaretlenir; pens kapatılmış biçim (pens "katlanmış" kalıp kenarı) çizilmez.
 - **Kapsam dışı (sonraki aşamalar).** Grading (Aşama 4), yerleşim (Aşama 7), DXF-AAMA (dosya alışverişi).
+
+## 9. Aşama 4 raporu: beden ve grading (12.11.2026)
+
+**Yöntem: kural tabanlı grading.** Temel bedendeki her köşeye hedef beden için kaydırma (Δx, Δy) verilir. Kenar içindeki eğri noktaları, iki uçtaki kaydırmanın yay uzunluğuna göre karışımıyla taşınır. Çıtlar kenar boyuyla orantılı kayar. Pens genişliği sabit kalır, yalnız yeri kayar. Pay, köşe türü, kat kenarı, adet ve notlar aynen taşınır.
+
+Kurallar iki kaynaktan gelir:
+- **Blok parçası.** Blok, hedef bedenin tablodaki ölçüleriyle yeniden çizilir; köşe farkları kural olur. Kullanıcı parçanın biçimini değiştirmediyse (yalnız taşıdıysa) eğriler de hedef bedenin bloğundan aynen alınır. Böylece kol başı bolluğu her bedende tam tutar. Biçim değiştiyse eğriler esnetilir; dikiş eşleşmesi yine kontrol edilir.
+- **Diğer parçalar: orantılı.** Seçilen en ve boy ölçüsünün oranıyla ölçeklenir; düz boy çizgisinin ortası sabit kalır.
+
+**Arayüz.**
+- Kalıp sekmesinde her grupta "📐 Bedenlere yay" var: tablo, hedef bedenler, yöntem, orantılı ölçüler seçilir.
+- Sonuçta her beden için hata ya da uyarı gösterilir ve parça × ölçü × beden karşılaştırma tablosu çıkar (genişlik, boy, adlandırılmış kenar boyları).
+- Hedef bedendeki eski kalıp değiştirilir, yinelenmez.
+- Editörde "◫ Beden yuvası" aynı ürünün bütün bedenlerini üst üste renkli gösterir.
+- Kaynağı yazılmamış tablo reddedilir.
+- **Kişiye özel ölçü:** beden tablosuna kişinin adıyla bir sütun eklenip o "bedene" yayılır.
+
+**Doğrulama** (`tests/tx-grade.test.mjs`, 8 test):
+- **Blok ile birebir aynılık.** Gömlek ve etek, 6 bedende: yayılan kalıbın köşeleri, o bedenin ölçüsüyle doğrudan çizilen blokla aynı (1e-9 mm).
+- **Gömlek.** Bedenler arası arka yarı genişlik farkı = göğüs farkı / 4 (tam). Kol başı her bedende kol oyuğu + 1 cm (±0,01 mm). Bütün eşleşmeler tutar.
+- **Etek ve kişiye özel ölçü.** Etekte pens kapalı bel toplamı kişinin bel ölçüsüne eşit (1e-6 mm).
+- **Orantılı grading.** En / boy oranları tam.
+- **Taşınan düzenlemeler.** Taşınmış ve düzenlenmiş parçada çıt, pay ve not taşınır. Biçimi değiştirilmiş parçada eşleşmeler tolerans içinde kalır.
+- **Tarayıcı testi.** M bedeninden 5 bedene yayma; karşılaştırma tablosunda arka genişlik 25–30 cm; L bedeninde 7 eşleşme tutar; beden yuvası açılır; Doğrulama sekmesi temiz.
+
+**Testte bulunup düzeltilen hatalar:**
+- **Etek beli.** Pens ağzı kenarla birlikte esniyordu, bel eşleşmesi 3,8–7,6 mm kayıyordu.
+- **Kol başı.** Yalnız esnetilen kol başı eğrisinde bolluk büyük bedende 1,19 cm çıkıyordu.
+
+**Sınırlar:**
+- **Ölçü kapsamı.** Bloklar beden tablosundan yalnız göğüs, bel ve kalça çevresini alır. Boy ölçüleri (giysi boyu, kol boyu) tabloda olsa bile blok parametresine bağlanmadıkça değişmez; karşılaştırma tablosunda görünür.
+- **Kural düzenleme.** Kurallar elle tek tek düzenlenemiyor (kural tablosu ekranı yok). Kaynak: blok ölçüsü ya da oran.
+- **Triko.** Trikoda bedene göre ilmek / sıra sayıları, örgü deseni gelince (Aşama 5) eklenecek.

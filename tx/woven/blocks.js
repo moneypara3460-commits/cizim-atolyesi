@@ -1,8 +1,8 @@
 // Temel kalıp blokları (dokuma / konfeksiyon). Ölçüden basitleştirilmiş çizim yöntemi; mm, y aşağı.
 // UYARI: Bunlar başlangıç bloklarıdır (temel kalıp). Prova ile doğrulanmadan seri üretime alınmamalı.
 // Her takım, parçalarla birlikte dikiş eşleşmelerini (seams) de üretir: kol başı ↔ kol oyuğu, yan dikiş, omuz, yaka, kemer…
-import * as C from '../curve.js?v=20261112c';
-import * as P from './pattern.js?v=20261112c';
+import * as C from '../curve.js?v=20261112d';
+import * as P from './pattern.js?v=20261112d';
 
 const L = C.line, Q = C.cubic;
 const edge = (name, segs, allow = 10, corner = 'miter') => ({ name, segs: Array.isArray(segs) ? segs : [segs], allow, corner });
@@ -137,7 +137,7 @@ export function buildSet(set, params, { idPrefix = '', product = null, size = ''
   for (const [k, [lbl, v]] of Object.entries(S.params)) { const x = params?.[k] ?? v; if (!Number.isFinite(x) || x < 0 || (x === 0 && !['capEase', 'pleat', 'overlap', 'hipEase'].includes(k))) throw new Error(`${lbl} geçersiz: ${x}`); o[k] = x; }
   const r = S.build(o);
   const ids = {};
-  r.pieces.forEach((pc, i) => { const nid = idPrefix + 'pc' + (i + 1); ids[pc.id] = nid; pc.id = nid; pc.product = product; pc.size = size; });
+  r.pieces.forEach((pc, i) => { const nid = idPrefix + 'pc' + (i + 1); ids[pc.id] = nid; pc.id = nid; pc.product = product; pc.size = size; pc.block = { set, params: { ...o }, index: i }; });
   r.seams = r.seams.map((sm, i) => ({ id: idPrefix + 'sm' + (i + 1), ...sm, a: sm.a.map((x) => ({ ...x, piece: ids[x.piece] })), b: sm.b.map((x) => ({ ...x, piece: ids[x.piece] })) }));
   r.params = o;
   return r;

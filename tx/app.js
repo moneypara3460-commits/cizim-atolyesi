@@ -1,13 +1,14 @@
 // Tekstil ve Moda çalışma alanı — arayüz (Aşama 1: ortak proje altyapısı).
 // Hesap ve doğrulama tx/model.js'te; burada yalnız gösterim ve düzenleme.
 // Makine ve Mühendislik alanının hiçbir dosyasını içe aktarmaz.
-import * as M from './model.js?v=20261112c';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112c';
-import { TEMPLATES, VIEWS } from './drawing.js?v=20261112c';
-import { openSketchEditor } from './sketch-ui.js?v=20261112c';
-import { SETS, defaultParams } from './woven/blocks.js?v=20261112c';
-import { openPatternEditor } from './woven/pattern-ui.js?v=20261112c';
-import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112c';
+import * as M from './model.js?v=20261112d';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112d';
+import { TEMPLATES, VIEWS } from './drawing.js?v=20261112d';
+import { openSketchEditor } from './sketch-ui.js?v=20261112d';
+import { SETS, defaultParams } from './woven/blocks.js?v=20261112d';
+import { openPatternEditor } from './woven/pattern-ui.js?v=20261112d';
+import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112d';
+import { sizeTable as gradeTable } from './woven/grade.js?v=20261112d';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -194,11 +195,35 @@ function tabPatterns() {
     h += `<div class="card"><h3><span class="sp">${esc(pr ? pr.name : pid ? '⚠ silinmiş ürün' : 'Ürüne bağlı değil')}${sz ? ' · Beden ' + esc(sz) : ''}</span>
       <button class="on" data-a="open-pattern" data-v="${esc(key)}">Aç</button><button class="danger" data-a="del-pattern" data-v="${esc(key)}">${S.delArm === 'pat:' + key ? 'Emin misin?' : 'Sil'}</button></h3>
       <div class="small">${pcs.length} parça (${pcs.map((x) => esc(x.name)).join(', ')}) · toplam kesim alanı ${(area / 1e4).toFixed(1)} dm² (adetle)</div>
-      <div class="small">${bad ? `⛔ ${bad} parçada hata` : '✅ parçalar geçerli'} · ${sms.length ? (sBad ? `⛔ ${sBad} / ${sms.length} dikiş eşleşmesi tutmuyor` : `✅ ${sms.length} dikiş eşleşmesi tutuyor`) : 'dikiş eşleşmesi yok'}</div></div>`;
+      <div class="small">${bad ? `⛔ ${bad} parçada hata` : '✅ parçalar geçerli'} · ${sms.length ? (sBad ? `⛔ ${sBad} / ${sms.length} dikiş eşleşmesi tutmuyor` : `✅ ${sms.length} dikiş eşleşmesi tutuyor`) : 'dikiş eşleşmesi yok'}${pcs[0].gradedFrom ? ` · ${esc(pcs[0].gradedFrom.base)} bedeninden yayıldı (${esc(pcs[0].gradedFrom.how)})` : ''}</div>
+      ${pcs[0].gradedFrom ? '' : `<div class="row noprint"><button data-a="grade-open" data-v="${esc(key)}">📐 Bedenlere yay (grading)</button></div>`}
+      ${S.gradeKey === key ? gradeForm(pid, sz) : ''}</div>`;
   }
   h += `<div class="card noprint"><h3>Boş kalıp grubu aç</h3><div class="row"><label class="f"><span>Ürün</span><select id="pe-prod">${prods.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}<option value="">— ürüne bağlı değil —</option></select></label><label class="f"><span>Beden</span><input id="pe-size" placeholder="ör. M"></label><button data-a="open-pattern-new">Aç</button></div>
     <div class="small">Editörde "Yeni parça" ile köşe / eğri noktalarına dokunarak parça çizilir.</div></div>`;
   return h;
+}
+function gradeForm(pid, base) {
+  const p = S.p, tbls = p.sizeTables.filter((t) => t.sizes.includes(base));
+  if (!tbls.length) return `<div class="issue uyarı">"${esc(base || '—')}" bedeni hiçbir beden tablosunda yok. Bedenler sekmesinde bu bedeni içeren bir tablo oluştur (kişiye özel ölçü için tabloya kişinin adıyla bir sütun ekle).</div>`;
+  const t = tbls.find((x) => x.id === S.gradeTable) || tbls[0], meas = Object.keys(t.measures);
+  const tg = S.gradeSizes || t.sizes.filter((z) => z !== base);
+  let h = `<div class="card" style="background:#0b1730"><div class="row"><label class="f"><span>Beden tablosu</span><select id="gr-table">${tbls.map((x) => `<option value="${x.id}" ${x.id === t.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
+    <label class="f"><span>Yöntem</span><select id="gr-method"><option value="auto">Blok parçası: ölçüden kural; diğerleri orantılı</option><option value="proportional">Hepsi orantılı (en / boy ölçüsü)</option></select></label></div>
+    <div class="small">Kaynak: ${esc(t.source) || '⚠ yazılmamış'} · temel beden <b>${esc(base)}</b></div>
+    <div class="small">Hedef bedenler</div><div class="chips">${t.sizes.filter((z) => z !== base).map((z) => `<button data-a="gr-size" data-v="${esc(z)}" class="${tg.includes(z) ? 'on' : ''}">${esc(z)}</button>`).join('')}</div>
+    <div class="row"><label class="f"><span>Orantılı: en ölçüsü</span><select id="gr-w">${meas.map((m) => `<option ${m === 'Göğüs çevresi' ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></label>
+    <label class="f"><span>Orantılı: boy ölçüsü</span><select id="gr-h"><option value="">— boy değişmesin —</option>${meas.map((m) => `<option>${esc(m)}</option>`).join('')}</select></label></div>
+    <div class="row"><button class="ok" data-a="grade-run" data-v="${esc(pid)}|${esc(base)}">Yay</button><button data-a="grade-close">Kapat</button></div>
+    <div class="small">Hedef bedendeki mevcut kalıplar (bu ürün) yenisiyle değiştirilir. Temel bedendeki pay, çıt, pens, işaret ve notlar taşınır; pens genişliği sabit kalır. Tek evrensel beden standardı yoktur: kullanılan tablo yukarıda.</div>`;
+  if (S.gradeResult && S.gradeResult.key === pid + '|' + base) {
+    const R = S.gradeResult, sizesAll = [base, ...R.sizes], by = {};
+    for (const z of sizesAll) by[z] = p.woven.pieces.filter((pc) => (pc.product ?? '') === pid && pc.size === z);
+    const tb = gradeTable(by);
+    h += `<h3 style="margin-top:8px">Sonuç</h3>${R.report.length ? R.report.map((x) => `<div class="issue ${x.level}">${x.level === 'hata' ? '⛔' : '⚠'} ${esc(x.size)} · ${esc(x.piece)}: ${esc(x.msg)}</div>`).join('') : '<div class="small">✅ Bütün bedenlerde parçalar geçerli, dikiş eşleşmeleri tutuyor.</div>'}
+      <div class="scroll"><table><tr><th>Parça</th><th>Ölçü (cm)</th>${tb.sizes.map((z) => `<th>${esc(z)}</th>`).join('')}</tr>${tb.rows.map((r) => `<tr><td>${esc(r.piece)}</td><td>${esc(r.item)}</td>${r.vals.map((v) => `<td>${v == null ? '—' : num(v / 10)}</td>`).join('')}</tr>`).join('')}</table></div>`;
+  }
+  return h + '</div>';
 }
 function openPattern(product, size) {
   const p = S.p, pr = p.collection.products.find((x) => x.id === product);
@@ -308,9 +333,9 @@ function tabRevisions() {
 function tabTools() {
   const br = M.PROJECT_TYPES[S.p.type].branches;
   const rows = [];
-  if (br.includes('woven')) rows.push(['Dokuma / Konfeksiyon', [['Beden büyütme (grading)', 4], ['Kumaş yerleşimi ve kesim planı', 7], ['3B giysi', 9]]]);
+  if (br.includes('woven')) rows.push(['Dokuma / Konfeksiyon', [['Kumaş yerleşimi ve kesim planı', 7], ['3B giysi', 9]]]);
   if (br.includes('knit')) rows.push(['Triko / Örgü', [ ['İlmek ve örgü deseni (düz, ters, ribana, saç örgüsü, jakar)', 5], ['Numune, ilmek / sıra yoğunluğu', 5], ['Bedene göre ilmek sayıları', 4], ['Makine profili ve üretim çıktısı', 8], ['3B triko', 9]]]);
-  return `<div class="card">✅ Teknik çizim (Aşama 2): "Teknik çizim" sekmesi.${br.includes('woven') ? ' ✅ Dokuma kalıbı (Aşama 3): "Kalıp" sekmesi.' : ''}</div><div class="small">Aşağıdaki araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
+  return `<div class="card">✅ Teknik çizim (Aşama 2): "Teknik çizim" sekmesi.${br.includes('woven') ? ' ✅ Dokuma kalıbı (Aşama 3) ve beden yayma / grading (Aşama 4): "Kalıp" sekmesi.' : ''}</div><div class="small">Aşağıdaki araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
     rows.map(([t, items]) => `<div class="card"><h3>${t}</h3>${items.map(([n, a]) => `<div class="row"><span>${esc(n)}</span><span class="badge" style="flex:0 0 auto">Henüz yok · Aşama ${a}</span></div>`).join('')}</div>`).join('');
 }
 
@@ -346,6 +371,7 @@ document.addEventListener('change', (e) => {
   if (el.id === 'pt-set') { S.patSet = el.value; return render(); }
   if (el.id === 'pt-table') { S.patTable = el.value; S.patSize = null; return render(); }
   if (el.id === 'pt-size') { S.patSize = el.value; return render(); }
+  if (el.id === 'gr-table') { S.gradeTable = el.value; S.gradeSizes = null; return render(); }
   if (el.dataset.aRename !== undefined) {
     const t = S.p.sizeTables[+el.dataset.aRename], nm = el.value.trim(), old = el.dataset.old;
     if (nm && nm !== old && !(nm in t.measures)) { t.measures = Object.fromEntries(Object.entries(t.measures).map(([k, v]) => [k === old ? nm : k, v])); dirty(); }
@@ -365,7 +391,7 @@ document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-a]');
   if (!b) return;
   const a = b.dataset.a, p = S.p, i = +b.dataset.i;
-  if (a !== 'del' && a !== 'del-prod' && a !== 'del-sketch' && a !== 'del-pattern') S.delArm = null;
+  if (!['del', 'del-prod', 'del-sketch', 'del-pattern'].includes(a)) S.delArm = null;
   try {
     switch (a) {
       // tür seçimi yerinde güncellenir (yeniden çizim yok: yazılan proje adı kaybolmaz)
@@ -421,6 +447,20 @@ document.addEventListener('click', async (e) => {
         const size = $('pt-size') ? $('pt-size').value : $('pt-size-free').value.trim();
         const product = $('pt-prod').value || null;
         M.addPatternSet(p, set, params, { product, size }); dirty(); render(); openPattern(product, size); return;
+      }
+      case 'grade-open': S.gradeKey = S.gradeKey === b.dataset.v ? null : b.dataset.v; S.gradeSizes = null; S.gradeResult = null; return render();
+      case 'grade-close': S.gradeKey = null; return render();
+      case 'gr-size': {
+        const [, base] = S.gradeKey.split('|'), t = p.sizeTables.find((x) => x.id === ($('gr-table')?.value)) ;
+        const cur = S.gradeSizes || t.sizes.filter((z) => z !== base), v = b.dataset.v;
+        S.gradeSizes = cur.includes(v) ? cur.filter((z) => z !== v) : [...cur, v]; return render();
+      }
+      case 'grade-run': {
+        const [pid, base] = b.dataset.v.split('|'), t = p.sizeTables.find((x) => x.id === $('gr-table').value);
+        const sizes = (S.gradeSizes || t.sizes.filter((z) => z !== base)).filter((z) => t.sizes.includes(z));
+        if (!sizes.length) throw new Error('Hedef beden seç');
+        const r = M.gradeProduct(p, { product: pid || null, base, table: t.id, sizes, method: $('gr-method').value, wMeasure: $('gr-w').value, hMeasure: $('gr-h').value || '__yok__' });
+        S.gradeResult = { key: pid + '|' + base, ...r }; dirty(); toast(`${r.sizes.length} beden üretildi${r.report.some((x) => x.level === 'hata') ? ' — hatalar var' : ''}`); return render();
       }
       case 'open-pattern': { const [pid, sz] = b.dataset.v.split('|'); openPattern(pid, sz); return; }
       case 'open-pattern-new': openPattern($('pe-prod').value, $('pe-size').value.trim()); return;

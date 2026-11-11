@@ -1,8 +1,8 @@
 // Kalıp editörü (dokuma / konfeksiyon). Tam ekran; bir ürün + beden grubunun parçalarını gösterir.
 // Geometri tx/woven/pattern.js'te; burada yalnız etkileşim.
-import * as C from '../curve.js?v=20261112c';
-import * as P from './pattern.js?v=20261112c';
-import * as X from './pattern-export.js?v=20261112c';
+import * as C from '../curve.js?v=20261112d';
+import * as P from './pattern.js?v=20261112d';
+import * as X from './pattern-export.js?v=20261112d';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cm = (mm, d = 1) => (Math.round(mm * 10 ** d / 10) / 10 ** d).toFixed(d).replace('.', ',');
@@ -31,7 +31,7 @@ export function openPatternEditor(project, { product = null, size = '', title = 
     #pkx td input, #pkx td select { min-width: 60px; }
     #pkx tr.on td { background: #0c4a6e; }
   </style>
-  <div class="bar"><button data-k="close">✕ Kapat</button><b style="flex:1 0 auto;padding:0 6px;font-size:14px">${esc(title)}</b><button data-k="undo">↶</button><button data-k="redo">↷</button><button data-k="fit">Sığdır</button></div>
+  <div class="bar"><button data-k="close">✕ Kapat</button><b style="flex:1 0 auto;padding:0 6px;font-size:14px">${esc(title)}</b><button data-k="nest">◫ Beden yuvası</button><button data-k="undo">↶</button><button data-k="redo">↷</button><button data-k="fit">Sığdır</button></div>
   <div class="bar">${TOOLS.map(([k, l]) => `<button data-k="tool" data-v="${k}">${l}</button>`).join('')}</div>
   <div class="cv"><canvas></canvas><div class="st"></div></div>
   <div class="pane"></div>`;
@@ -64,6 +64,14 @@ export function openPatternEditor(project, { product = null, size = '', title = 
     for (let x = Math.floor(wx0 / step) * step; x <= wx1; x += step) { const s = toS([x, 0])[0]; ctx.moveTo(s, 0); ctx.lineTo(s, r.height); }
     for (let y = Math.floor(wy0 / step) * step; y <= wy1; y += step) { const s = toS([0, y])[1]; ctx.moveTo(0, s); ctx.lineTo(r.width, s); }
     ctx.stroke();
+    // beden yuvası: aynı ürünün diğer bedenleri (aynı kökenden yayıldıkları için üst üste oturur)
+    if (S.nest) {
+      const others = W.pieces.filter((pc) => (pc.product ?? null) === product && (pc.size ?? '') !== size), sz = [...new Set(others.map((pc) => pc.size))];
+      const cols = ['#ef4444', '#f59e0b', '#16a34a', '#8b5cf6', '#ec4899', '#0ea5e9', '#84cc16'];
+      ctx.lineWidth = 1.2;
+      for (const pc of others) { const pts = P.seamPolygon(pc, 0.5); ctx.strokeStyle = cols[sz.indexOf(pc.size) % cols.length]; ctx.beginPath(); pts.forEach((q, i) => (i ? ctx.lineTo(...toS(q)) : ctx.moveTo(...toS(q)))); ctx.closePath(); ctx.stroke(); }
+      ctx.font = '12px Helvetica, Arial, sans-serif'; sz.forEach((z, i) => { ctx.fillStyle = cols[i % cols.length]; ctx.fillText(z, 10 + i * 34, r.height - 10); });
+    }
     X.drawPiecesCanvas(ctx, group(), { k: S.k, ox: S.ox, oy: S.oy, sel: S.sel, selEdge: S.edge, issues: badSet() });
     // eşleşme seçimi vurgusu
     const hl = (refs, color) => { for (const r of refs) { const pc = W.pieces.find((q) => q.id === r.piece); if (!pc) continue; ctx.strokeStyle = color; ctx.lineWidth = 5; ctx.globalAlpha = 0.5; const e = pc.edges[r.edge]; ctx.beginPath(); ctx.moveTo(...toS(e.segs[0].a)); for (const s of e.segs) s.t === 'L' ? ctx.lineTo(...toS(s.b)) : ctx.bezierCurveTo(...toS(s.c1), ...toS(s.c2), ...toS(s.b)); ctx.stroke(); ctx.globalAlpha = 1; } };
@@ -219,6 +227,7 @@ export function openPatternEditor(project, { product = null, size = '', title = 
         case 'close': ro.disconnect(); root.remove(); onChange && onChange(true); return;
         case 'tool': S.tool = v; S.tmp = []; S.mergeA = null; if (v !== 'sel') S.edge = null; break;
         case 'fit': fit(); break;
+        case 'nest': S.nest = !S.nest; root.querySelector('[data-k="nest"]').classList.toggle('on', S.nest); if (!W.pieces.some((pc) => (pc.product ?? null) === product && (pc.size ?? '') !== size)) toast('Bu ürünün başka bedeni yok: önce Kalıp sekmesinde "Bedenlere yay"'); break;
         case 'undo': if (undo.length) { redo.push(snap()); restoreFrom(undo.pop()); changed(); } break;
         case 'redo': if (redo.length) { undo.push(snap()); restoreFrom(redo.pop()); changed(); } break;
         case 'cancel': S.tmp = []; S.mergeA = null; S.seamA = []; S.seamB = []; break;

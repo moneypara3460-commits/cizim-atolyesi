@@ -593,6 +593,32 @@ await TX('Tekstil kalıp araçları (dokunarak): etek bloğuna pens ekle → bel
   await K('close');
 });
 
+await TX('Tekstil grading: M bedeni gömlek bloğu 6 bedene yayılır, sonuç ve karşılaştırma tablosu, beden yuvası, doğrulama temiz', async ({ page }) => {
+  await page.fill('#np-name', 'Grading E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await page.selectOption('#ap-type', 'gomlek'); await A(page, 'add-prod');
+  await A(page, 'tab', '[data-v="sizes"]'); await A(page, 'add-size-ex');
+  await A(page, 'tab', '[data-v="pat"]'); await page.selectOption('#pt-table', { index: 1 }); await page.waitForSelector('#pt-size');
+  await page.selectOption('#pt-size', 'M'); await A(page, 'add-pattern'); await page.waitForSelector('#pkx canvas');
+  await page.locator('#pkx [data-k="close"]').click();
+  await A(page, 'grade-open'); await page.waitForSelector('[data-a="grade-run"]');
+  expect((await page.locator('[data-a="gr-size"].on').count()) === 5, 'beş hedef beden seçili');
+  await A(page, 'grade-run');
+  await page.waitForFunction(() => /Bütün bedenlerde parçalar geçerli/.test(document.querySelector('#main').innerText));
+  const b = await txBody(page);
+  const wr = await page.evaluate(() => [...document.querySelectorAll('#main tr')].map((r) => [...r.cells].map((c) => c.innerText)).find((c) => c[0] === 'Arka beden' && c[1] === 'Genişlik'));
+  expect(wr && wr.slice(2).join(' ') === '27 25 26 28 29 30', 'arka genişlik M, XS, S, L, XL, XXL (cm): ' + wr);
+  const cards = (b.match(/Beden (XS|S|M|L|XL|XXL)\b/g) || []).length;
+  expect(cards >= 6, 'altı beden grubu: ' + cards);
+  expect(/blok ölçüsünden \(eğriler yeniden çizildi\)/.test(b), 'yöntem yazılı');
+  // L grubunu aç, beden yuvası
+  await page.locator('[data-a="open-pattern"]').nth(3).click(); await page.waitForSelector('#pkx canvas');
+  await page.locator('#pkx [data-k="nest"]').click();
+  expect(await page.locator('#pkx [data-k="nest"].on').count() === 1, 'beden yuvası açık');
+  expect(((await page.locator('#pkx .pane').innerText()).match(/✅/g) || []).length === 7, 'L bedeninde 7 eşleşme tutuyor');
+  await page.locator('#pkx [data-k="close"]').click();
+  await A(page, 'tab', '[data-v="val"]'); expect(await page.locator('.issue.hata').count() === 0, 'doğrulama temiz');
+});
+
 await TX('Tekstil ↔ Makine ayrılığı: tekstil kaydı makine projelerine yazmaz; makine projeleri tekstil listesinde görünmez', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('cizim:projects', JSON.stringify({ mak: { data: '{}', at: 1 } })));
   await A(page, 'type', '[data-v="woven"]'); await page.waitForSelector('[data-a="type"][data-v="woven"].on'); await page.fill('#np-name', 'Ayrı'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
