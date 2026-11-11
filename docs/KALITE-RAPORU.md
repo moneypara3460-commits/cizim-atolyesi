@@ -12,7 +12,7 @@ Durumlar ayrı sayılmıştır, birbirine karıştırılmaz:
 | Node birim / entegrasyon (21 dosya) | 316 | 0 | 0 | 0 | 0 |
 | — bunun içinde gerçek OCCT WASM | 15 | 0 | 0 | 0 | 0 |
 | Tarayıcı uçtan uca (Chromium, emülasyon) | 17 | 0 | 0 | 1 (CNC torna) | 0 |
-| GitHub Actions CI | — | — | — | — | Bu oturumda GitHub'da çalıştırılmadı. İlk push'ta çalışacak, sonucu Actions sekmesinde. |
+| GitHub Actions CI (3 iş: birim, OCCT WASM, E2E) | 3 iş | 0 | 0 | — | 0 · E2E orada da 17 geçti, 1 blokeli (npm paketleriyle) |
 | Gerçek telefon / tablet | — | — | — | — | Yapılmadı (yalnız emülasyon) |
 
 ## 2. Özellik durum matrisi
@@ -107,7 +107,7 @@ E2E senaryolarında uygulama hatası, sayfa hatası ya da konsol hatası görül
 
 **Yayın öncesi kalan engeller ve riskler**:
 1. **Gerçek cihaz testi yapılmadı.** En az bir Android (Chrome) ve bir iPhone (Safari) ile E2E senaryoları elle denenmeli. Özellikle bellek (OCCT WASM, çok ince FEM ağı) ve dokunma hareketleri.
-2. **CI ilk kez GitHub'da çalışacak.** E2E işi npm paketlerini (three-mesh-bvh 0.6.0 derlemesi) kullanır. Yerelde git kopyasıyla denendi, npm paketiyle denenmedi. İlk çalıştırmanın sonucu kontrol edilmeli.
+2. CI'da ilk iki çalıştırma kurulum hatasıyla kırmızı oldu (npm klasör adı, three-bvh-csg eş bağımlılığı); düzeltildi, üç iş yeşil. Sayfanın kendisi kütüphaneleri hâlâ unpkg'den yükler: unpkg erişilemezse uygulama açılmaz (çevrimdışı kopya yok).
 3. **4/5 eksen G-kodu** hiçbir tezgâhta denenmedi. Kumanda simülasyonu ve tek blokla doğrulanmadan üretimde kullanılmamalı.
 4. **CNC torna** uygulanmadı.
 5. Analiz sonuçları doğrusal-elastik ve küp ağ ile hesaplanır. Mühendislik onayının yerine geçmez; uygulamada da yazıyor.
