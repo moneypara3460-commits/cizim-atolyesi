@@ -56,7 +56,7 @@ tx/
 ```
 Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (kesişim, DXF temel yazıcı, dönüşümler) ve `logic.js` içindeki yardımcılar (`fmtNum`, `esc`). Bunlarda tekstil için değişiklik gerekirse önce makine testleri çalıştırılır ve onay istenir.
 
-**Açılış seçimi:** `index.html`'de ilk açılışta iki büyük düğmeli bir seçim ekranı olur. Son seçim hatırlanır. Makine alanında araç çubuğuna "Tekstil'e geç", tekstilde "Makine'ye geç" eklenir. Makine koduna dokunan tek değişiklik budur (birkaç satır) ve E2E testiyle korunur.
+**Açılış seçimi:** `index.html` ilk açılışta iki büyük düğmeli seçim ekranı gösterir (`ws.js`); son seçim hatırlanır. Makine alanında Projeler (💾) penceresinde "Tekstil ve Moda" bağlantısı, tekstilde "⚙ Makine" düğmesi var. Makine tarafında değişen tek dosya `index.html` (bir satır); `app.js` değişmedi.
 
 ### Proje verisi (sürümlü, türlendirilmiş)
 
@@ -85,25 +85,44 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 - Sayısal giriş her araçta vardır, çünkü parmakla hassas nokta koymak zor. Makine 2B CAD'deki yaklaşımın aynısı.
 - Ağır hesaplar (yerleşim, grading kontrolü, 3B kumaş) Web Worker'da çalışır.
 
-## 3. Aşamaların Claude görevlerine bölünmesi
+## 3. Aşamalar ve testler (birleşik prompttaki numaralarla)
 
-| Görev | Dal | İçerik | Bitti sayılma ölçütü (test) |
+| Aşama | İçerik | Bitti sayılma ölçütü (test) | Durum |
 |---|---|---|---|
-| T0 (bu belge) | — | Mimari ve risk | Onay |
-| T1a | Ortak | Açılış seçimi, `tekstil.html`, proje türü seçimi (dokuma / triko / karma), `model.js` + `store.js` (IndexedDB, sürüm, göç), koleksiyon ve varyant iskeleti | Kaydet → yenile → aç aynı; eski şema göçü; makine E2E'si değişmeden geçer |
-| T1b | Ortak | `curve.js` ve teknik çizim: ön/arka/yan, simetri, katman, ölçü; tişört, gömlek, pantolon, etek, elbise, ceket, kazak, hırka şablonları; detay kütüphanesi; PNG, vektör PDF / SVG | Eğri uzunluğu analitikle ±0,01 mm; simetri tam; PDF ölçeği 1:1 |
-| T2 | Dokuma | Kalıp parçası, pens, çıt, dikiş payı (seçili kenar / tüm çevre, köşe türleri), böl, birleştir, döndür, aynala, kontur doğrulama, ölçü tablosu bağlantısı | Bilinen kalıplarda pay alanı ve çevresi analitikle eşleşir; öz-kesişim yakalanır |
-| T3 | Triko | İlmek sözlüğü, örgü deseni ızgarası (düz, ters, ribana, jakar, saç örgüsü), tekrar, numune / gauge, ölçü ↔ ilmek dönüşümü, sıra bazlı eksiltme / artırma ile parça kalıbı, desen PDF'i | 1×1 / 2×2 ribana ve saç örgüsü kuralları (çapraz genişliği, ön/arka yatak) doğrulanır; gauge dönüşümü elle hesapla tam; eksiltme tablosu hedef ölçüye ±1 ilmek |
-| T4 | Ortak + iki dal | Beden tabloları; dokumada nokta bazlı grading; trikoda bedene göre ilmek / sıra sayılarının gauge'dan yeniden hesabı | Bedenler arası fark kurala tam eşit; dikiş hattı eşleşmesi (kol ↔ kol oyuğu) raporlanır |
-| T5 | Ortak | Kumaş, iplik, aksesuar kütüphanesi; iplik numarası dönüşümleri | Nm / Ne / tex / dtex dönüşümleri tam; tahmini değerler işaretli |
-| T6 | Dokuma + triko | Dokuma: kumaş yerleşimi, verim / fire, kesim planı. Triko: iplik tüketimi ve ürün gramajı (ilmek boyu × ilmek sayısı × tex) | Dokuma: kısıt ihlali sıfır, verim alt sınırla raporlanır. Triko: bilinen numunede gramaj elle hesapla eşit; ilmek boyu ölçülmediyse sonuç "tahmini" |
-| T7 | Ortak | Teknik föy (dal bazlı sayfalar), malzeme listesi, maliyet, iş emri, revizyon | Föy projeden üretilir; revizyon geri alınabilir |
-| T8 | Dokuma + triko | Dosya alışverişi: kalıp DXF (AAMA / ASTM D6673), SVG, PDF; triko için makineden bağımsız çıktı (desen ızgarası PNG / CSV, sıra sıra talimat) | Gidiş-dönüşte ölçek ve eğri hatası < 0,1 mm |
-| T9 | Triko | Makineye özgü program çıktısı: yalnız biçimi açık ve doğrulanabilen makineler için, makine profili ve uyumluluk kontrolüyle | Bkz. risk 12; doğrulanamayan makine için çıktı düğmesi yok, gerekçe yazılı |
-| T10 | 3B | Dokuma: önizleme, sonra fiziksel kumaş çözücüsü. Triko: önizleme, sonra ayrı örgü parametreleriyle model | Önizleme ve fizik ayrı adlandırılır; çözücü analitik sarkma testleriyle doğrulanır |
-| T11 | Hepsi | Uçtan uca tekstil + triko testleri, kalite raporu | Kalite raporuna "Tekstil" bölümü |
+| 0 | Mimari, veri modeli, riskler (bu belge) | — | ✅ |
+| 1 | Ortak tekstil proje altyapısı: çalışma alanı seçimi, `tekstil.html`, proje türleri (dokuma / triko / karma), koleksiyon, ürün, renk, beden tablosu, malzeme (kumaş / iplik / aksesuar), föy temeli, dal bazlı doğrulama, IndexedDB kaydı, revizyon, JSON dışa / içe aktarma, şema göçü | Bkz. bölüm 6 | ✅ (12.11.2026) |
+| 2 | Teknik moda çizimi: `curve.js`, ön / arka / yan, simetri, katman, ölçü; dokuma ve triko şablonları; detay kütüphanesi; PNG, vektör PDF / SVG | Eğri uzunluğu analitikle ±0,01 mm; simetri tam; PDF ölçeği 1:1 | Yok |
+| 3 | Dokuma kalıbı: parça, pens, çıt, dikiş payı (seçili kenar / tüm çevre, köşe türleri), böl, birleştir, döndür, aynala, kontur ve eğri doğrulama | Referans kalıplarda pay alanı / çevresi analitikle eşleşir; öz-kesişim yakalanır | Yok |
+| 4 | Beden ve grading: nokta bazlı grading, kişiye özel ölçü altyapısı, bütünlük kontrolü; trikoda bedene göre ilmek / sıra sayıları | Bedenler arası fark kurala tam eşit; dikiş hattı eşleşmesi raporlanır | Yok (tablo altyapısı Aşama 1'de var) |
+| 5 | Triko desen ve ilmek: ilmek sözlüğü, ızgara, düz / ters / ribana / saç örgüsü / jakar, tekrar, renk raporu, numune ve gauge, sıra bazlı eksiltme / artırma | Ribana ve saç örgüsü kuralları; gauge dönüşümü elle hesapla tam; eksiltme tablosu hedef ölçüye ±1 ilmek; desteklenmeyen yapıda açık uyarı | Yok |
+| 6 | Kumaş, iplik, aksesuar kütüphanesi (ayrıntılı); iplik numarası dönüşümleri; tüketim, gramaj, maliyet | Nm / Ne / tex / dtex dönüşümleri tam; numunesiz sonuç "tahmini" | Kısmi: kart yapısı, birimler, "tahmini" işareti, malzeme maliyeti Aşama 1'de var |
+| 7 | Kumaş yerleşimi ve kesim optimizasyonu | Kısıt ihlali sıfır; verim alt sınırla raporlanır | Yok |
+| 8 | Triko makine profilleri ve üretim çıktısı | Doğrulanamayan makine için çıktı yok, gerekçe yazılı (risk 12) | Yok |
+| 9 | 3B giysi ve kumaş / örgü simülasyonu | Önizleme ve fizik ayrı adlandırılır; çözücü analitik testlerle doğrulanır | Yok |
+| 10 | Üretim föyü ve maliyet: işçilik, operasyon sırası, dikiş türü, vektör PDF | Föy projeden üretilir; maliyet varsayımları yazılı | Kısmi: föy özeti, varyant, malzeme maliyeti, tarayıcıdan yazdır / PDF Aşama 1'de var |
+| 11 | Uçtan uca tekstil testleri (promptta 1–14 numaralı liste), kalite raporu | Kalite raporuna "Tekstil" bölümü | Aşama 1 testleri var |
 
-Sıra, birleşik yapıdaki ilkeye uyar: ortak altyapı ve teknik çizim → dokuma kalıbı → triko desen ve ilmek → grading, malzeme ve tüketim → föy ve dosyalar → makine çıktısı → 3B.
+### Eklenen / değiştirilen dosyalar ve bağımlılıklar
+
+| Dosya | Durum | Not |
+|---|---|---|
+| `tekstil.html` | Yeni | Tekstil sayfası; makine sayfasıyla aynı tasarım dili (koyu tema, aynı düğme ve alan stilleri) |
+| `tx/model.js` | Yeni | Saf veri modeli, dal kuralları, doğrulama, varyant, malzeme maliyeti, föy özeti, şema göçü |
+| `tx/store.js` | Yeni | IndexedDB / bellek deposu, revizyon, JSON dışa / içe aktarma |
+| `tx/app.js` | Yeni | Tekstil arayüzü |
+| `ws.js` | Yeni | Çalışma alanı seçim ekranı ve Projeler penceresine "Tekstil ve Moda" bağlantısı |
+| `index.html` | **Değişti (1 satır)** | `ws.js` yüklenir. `app.js` ve diğer makine dosyaları değişmedi |
+| `tests/tx-model.test.mjs` | Yeni | 11 Node testi |
+| `tests/e2e/run.mjs` | Değişti | W (çalışma alanı) ve T (tekstil) senaryoları; makine senaryoları seçim ekranını atlamak için `cizim:workspace = makine` ile başlar |
+
+Yeni dış bağımlılık yok: tarayıcının kendi IndexedDB'si kullanılır. Three.js tekstil tarafında Aşama 9'a kadar yüklenmez.
+
+### Makine ve Mühendislik alanına etkisi
+
+- Makine kodu (`app.js` ve modülleri) değişmedi, tekstil modüllerini içe aktarmıyor. Tekstil de makine modüllerini içe aktarmıyor; bunu test 11 denetliyor.
+- **Görünen tek fark ilk açılış:** seçim ekranı. "Makine ve Mühendislik" seçilince uygulama eskisi gibi açılır ve seçim hatırlanır. Son seçim Tekstil ise ana adres tekstil sayfasına yönlenir; makineye `index.html?ws=makine` ya da tekstil sayfasındaki "⚙ Makine" düğmesiyle dönülür.
+- Makine projeleri (`localStorage`) ile tekstil projeleri (IndexedDB `cizim-tx`) ayrı yerde. E2E testi makine kaydının tekstil işlemlerinde değişmediğini doğrular.
+- Regresyon: 327 Node testi ve 21 tarayıcı testi geçti; CNC torna yine blokeli.
 
 ## 4. Riskler
 
@@ -126,9 +145,34 @@ Sıra, birleşik yapıdaki ilkeye uyar: ortak altyapı ve teknik çizim → doku
 | 15 | Dokuma ve trikoyu tek veri modeline zorlamak | Orta | Ayrı alt şemalar (`woven`, `knit`); yalnız ürün, renk, beden, maliyet, föy ortak. Karma koleksiyonda her ürün kendi dalının kurallarıyla doğrulanır. |
 | 16 | Triko 3B (ilmek düzeyi) simülasyonu telefonda çok ağır | Yüksek | Önce yüzey düzeyinde önizleme, örgüye özgü parametrelerle (esneme, kalınlık). İlmek düzeyi fizik yalnız doğrulanabilir bir çözücüyle ve gerekirse masaüstünde. |
 
-## 5. Onay gereken kararlar
+## 5. Kararlar
 
-1. Tekstil'in ayrı sayfa (`tekstil.html`) olarak yapılması ve açılışta seçim ekranı eklenmesi. Makine koduna dokunan tek değişiklik bu.
-2. Tekstil projelerinin IndexedDB'de, makine projelerinden ayrı saklanması.
-3. Dokuma ve triko için ortak üst şema ile ayrı alt şemalar (`woven`, `knit`).
-4. Görev sırası: T1a → T1b → T2 (dokuma) → T3 (triko) → T4 … (tablodaki gibi).
+Birleşik prompt bu belgenin önerdiği yapıyı onayladı: tek "Tekstil ve Moda" alanı, iki dal, ortak üst şema ve ayrı alt şemalar, aşamalı geliştirme. Aşama 1 bu kararlarla uygulandı.
+
+## 6. Aşama 1 raporu (12.11.2026)
+
+**Çalışanlar** (kodla ve testle):
+- Çalışma alanı seçimi, tekstil sayfası, makineye geri dönüş.
+- Proje türleri. Dokuma projesi yalnız dokuma ürünlerini ve kumaşı, triko projesi yalnız triko ürünlerini ve ipliği gösterir. Karma koleksiyonda iki dal birlikte bulunur ve her ürün kendi dalının kurallarıyla doğrulanır.
+- Koleksiyon: marka ve sezon. Ürün: ad, tür, model kodu, sezon, renk, beden tablosu, bedenler, malzeme ve kullanım rolü (ana / astar / yardımcı / aksesuar), ürün başına miktar.
+- Renk kütüphanesi.
+- Beden tabloları. Kaynak zorunlu; örnek tablo "standart değildir" diye işaretli. Ölçüler mm saklanır, cm gösterilir.
+- Malzeme kartları: kumaş, iplik, aksesuar. Bilinmeyen değer boş kalır, uydurulmaz. Ölçülmemiş değer "tahmini" işaretlenir. Fiyat, birim, tedarikçi ve stok alanları var.
+- Dal kuralları: dokuma ürününe iplik, triko ürününe kumaş ana malzeme olarak bağlanamaz; aksesuar ana malzeme olamaz.
+- Doğrulama listesi: hata ve uyarı ayrı.
+- Varyantlar (renk × beden, SKU kodu).
+- Malzeme maliyeti: yalnız miktarı ve fiyatı bilinen satırlar toplanır, eksikler adıyla listelenir.
+- Föy özeti ve tarayıcıdan yazdırma / PDF.
+- Otomatik kayıt (IndexedDB) ve revizyon kaydı (tam kopya, son 30). Eski revizyona dönüş yeni bir revizyon olarak kaydedilir.
+- JSON dışa / içe aktarma; içe aktarılan proje yeni kimlik alır. Bozuk veya daha yeni şemalı dosya reddedilir; eski şema yükseltilir.
+
+**Henüz olmayanlar:** teknik çizim, kalıp, grading, örgü deseni, ayrıntılı tüketim / gramaj, yerleşim, makine çıktısı, 3B, vektör PDF föy. "Dal araçları" sekmesinde hangi aşamada geleceği yazılı; hiçbiri çalışıyor gibi gösterilmez.
+
+**Testler:**
+- `tests/tx-model.test.mjs` (Node): 11 test, 11 geçti.
+- Tarayıcı (Chromium, telefon ve masaüstü emülasyonu): 4 senaryo (W ve 3 × T), 4 geçti. Gerçek telefonda denenmedi.
+- Makine regresyonu: 327 Node + 21 tarayıcı testi geçti, 1 blokeli (torna).
+
+**Testte bulunup düzeltilen 2 hata:**
+- Ana sayfada proje türü seçilirken yazılan proje adı siliniyordu.
+- Çok hızlı geçişte proje ekranının üstüne eski ana sayfa çiziliyordu.

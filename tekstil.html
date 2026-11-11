@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<title>Çizim Atölyesi · Tekstil ve Moda</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: #0f172a; color: #fff; font-family: system-ui, -apple-system, Roboto, sans-serif; }
+  #top { position: sticky; top: 0; z-index: 5; display: flex; gap: 6px; align-items: center; padding: 8px; background: #0f172a; border-bottom: 1px solid #1e293b; }
+  #top h1 { flex: 1; font-size: 16px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #main { max-width: 860px; margin: 0 auto; padding: 8px 8px 80px; }
+  button, .btn { font: inherit; color: #fff; background: #1e293b; border: 0; border-radius: 8px; padding: 9px 10px; font-weight: 600; font-size: 13px; text-decoration: none; display: inline-block; text-align: center; }
+  button.on { background: #0284c7; } button.ok { background: #047857; } button.danger { background: #7f1d1d; }
+  button:disabled { opacity: .35; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-end; margin: 6px 0; }
+  .row > * { flex: 1 1 120px; min-width: 0; }
+  .row > button { flex: 0 1 auto; }
+  label.f { display: block; flex: 1 1 140px; min-width: 0; }
+  label.f span { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 2px; }
+  input, select, textarea { width: 100%; font: inherit; font-size: 15px; color: #fff; background: #1e293b; border: 1px solid #1e293b; border-radius: 8px; padding: 7px 9px; }
+  input[type=checkbox] { width: auto; }
+  input[type=color] { padding: 2px; height: 36px; }
+  input.bad { border-color: #ef4444; }
+  .card { background: #111c33; border: 1px solid #1e293b; border-radius: 12px; padding: 10px; margin: 8px 0; }
+  .card h3 { margin: 0 0 6px; font-size: 15px; display: flex; gap: 6px; align-items: center; }
+  .card h3 .sp { flex: 1; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #334155; color: #cbd5e1; font-weight: 600; white-space: nowrap; }
+  .badge.woven { background: #1e3a8a; } .badge.knit { background: #6b21a8; } .badge.mixed { background: #0f766e; }
+  .tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid #1e293b; margin: 6px 0; }
+  .tabs button { flex: 0 0 auto; background: transparent; color: #94a3b8; border-radius: 0; border-bottom: 2px solid transparent; }
+  .tabs button.on { color: #fff; border-bottom-color: #38bdf8; }
+  .small { color: #94a3b8; font-size: 12.5px; line-height: 1.4; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chips button { padding: 7px 10px; font-size: 12.5px; }
+  .sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; vertical-align: -2px; border: 1px solid #475569; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border-bottom: 1px solid #1e293b; padding: 5px 4px; text-align: left; vertical-align: middle; }
+  th { color: #94a3b8; font-weight: 600; font-size: 12px; }
+  td input { padding: 5px 6px; font-size: 14px; min-width: 56px; }
+  .scroll { overflow-x: auto; }
+  .issue { padding: 6px 8px; border-radius: 8px; margin: 4px 0; font-size: 13px; }
+  .issue.hata { background: #450a0a; } .issue.uyarı { background: #422006; }
+  .typesel button { flex: 1 1 30%; padding: 14px 6px; white-space: normal; }
+  .home-big { display: flex; gap: 8px; flex-wrap: wrap; }
+  #toast { position: fixed; left: 10px; right: 10px; bottom: 12px; padding: 10px 12px; background: rgba(15,23,42,.95); border: 1px solid #334155; border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 20; }
+  #saved { font-size: 11px; color: #64748b; white-space: nowrap; }
+  @media print {
+    #top, .tabs, .noprint, #toast { display: none !important; }
+    html, body { background: #fff; color: #000; }
+    .card { background: #fff; border-color: #999; color: #000; }
+    th, td { border-color: #bbb; color: #000; } .small { color: #333; }
+  }
+</style>
+</head>
+<body>
+<div id="top">
+  <h1>🧵 Tekstil ve Moda</h1>
+  <span id="saved"></span>
+  <a class="btn" id="to-mech" href="index.html?ws=makine">⚙ Makine</a>
+</div>
+<div id="main"><div class="small" style="padding:20px">Yükleniyor…</div></div>
+<div id="toast"></div>
+<script type="module" src="./tx/app.js?v=20261112a"></script>
+</body>
+</html>

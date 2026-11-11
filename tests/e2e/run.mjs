@@ -11,7 +11,7 @@ const only = process.argv.slice(2);
 const R = createRunner('e2e');
 const { srv, url } = await startServer();
 const browser = await launch();
-const NO_GUIDE = () => { try { localStorage.setItem('cizim:guideSeen', '1'); } catch (e) { /* */ } };
+const NO_GUIDE = () => { try { localStorage.setItem('cizim:guideSeen', '1'); if (!localStorage.getItem('cizim:workspace')) localStorage.setItem('cizim:workspace', 'makine'); } catch (e) { /* */ } };
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, dpr: 2 };
 const DESK = { viewport: { width: 1366, height: 900 } };
 const perf = [];
@@ -337,6 +337,133 @@ await T('Performans: 40 parçalı model yeniden kurma süresi', 'P-Performans', 
   perf.push(['  son 5 ekleme ortalaması (40 parçalı modelde)', Math.round(each.slice(-5).reduce((a, b) => a + b) / 5), 'ms']);
   expect(await chips(page) >= 41, 'parçalar');
 });
+
+/* ---------- W. Çalışma alanı seçimi ---------- */
+await (async () => { if (only.length && !only.some((o) => 'W-Alan'.toLowerCase().startsWith(o.toLowerCase()))) return; await R.test('Çalışma alanı: ilk açılışta seçim ekranı; Makine seçilince mevcut uygulama açılır; seçim hatırlanır; Tekstil\'e geçip geri dönülür', async () => {
+  const a = await openApp(browser, url, { ...PHONE, init: () => { try { localStorage.setItem('cizim:guideSeen', '1'); } catch (e) { /* */ } } });
+  try {
+    await a.page.waitForSelector('#ws-pick', { timeout: 30000 });
+    await a.page.locator('#ws-pick [data-ws="makine"]').click();
+    await waitReady(a.page);
+    expect(await a.page.locator('#ws-pick').count() === 0, 'seçim kapandı');
+    expect(await chips(a.page) >= 1, 'makine uygulaması çalışıyor');
+    await a.page.reload(); await waitReady(a.page);
+    expect(await a.page.locator('#ws-pick').count() === 0, 'seçim hatırlandı');
+    await act(a.page, 'projects'); await a.page.locator('#ws-tx').click();
+    await a.page.waitForURL(/tekstil\.html/); await a.page.waitForSelector('[data-a="create"]');
+    // tekstil son seçim olunca ana sayfa tekstile yönlenir; ?ws=makine ile geri dönülür
+    await a.page.goto(url + 'index.html'); await a.page.waitForURL(/tekstil\.html/);
+    await a.page.locator('#to-mech').click(); await waitReady(a.page);
+    expect(/index\.html\?ws=makine/.test(a.page.url()) && await chips(a.page) >= 1, 'makineye dönüldü');
+    expect(!a.errors.length, 'sayfa hataları: ' + a.errors.join(' | '));
+  } catch (e) { e.shot = await shot(a.page, 'W_alan'); throw e; } finally { await close(a); }
+}, { area: 'W-Alan' }); })();
+
+/* ---------- T. Tekstil ve Moda (Aşama 1) ---------- */
+async function txApp(view = PHONE) {
+  const a = await openApp(browser, url, { ...view, path: 'tekstil.html' });
+  await a.page.waitForSelector('[data-a="create"]', { timeout: 30000 });
+  return a;
+}
+const TX = (title, fn, view) => { if (only.length && !only.some((o) => 'T-Tekstil'.toLowerCase().startsWith(o.toLowerCase()))) return; return R.test(title, async () => {
+  const a = await txApp(view);
+  try { await fn(a); expect(!a.errors.length, 'Sayfa hataları: ' + a.errors.slice(0, 3).join(' | ')); }
+  catch (e) { e.shot = await shot(a.page, 'T_' + title.slice(0, 40)); throw e; } finally { await close(a); }
+}, { area: 'T-Tekstil' }); };
+const A = (page, a, extra = '') => page.locator(`[data-a="${a}"]${extra}`).first().click();
+const txBody = (page) => page.locator('#main').innerText();
+
+await TX('Tekstil: karma koleksiyon — gömlek (dokuma) + kazak (triko), renk, örnek beden tablosu, kumaş / iplik / aksesuar, dal kuralı, föy, revizyon, yenile, aç', async ({ page }) => {
+  await A(page, 'type', '[data-v="mixed"]');
+  await page.fill('#np-name', 'E2E Kış'); await page.fill('#np-season', 'KŞ27'); await A(page, 'create');
+  await page.waitForSelector('[data-a="add-prod"]');
+  // renk
+  await A(page, 'tab', '[data-v="colors"]'); await page.fill('#nc-name', 'Lacivert'); await page.fill('#nc-code', 'LCV'); await A(page, 'add-color');
+  // beden
+  await A(page, 'tab', '[data-v="sizes"]'); await A(page, 'add-size-ex');
+  expect(/standart değildir/.test(await page.locator('[data-f="sizeTables.0.source"]').inputValue()), 'örnek tablo kaynağı');
+  const g = page.locator('[data-f="sizeTables.0.measures.G%C3%B6%C4%9F%C3%BCs%20%C3%A7evresi.M"]');
+  expect(await g.inputValue() === '96', 'M göğüs 96 cm (mm saklanır)');
+  await g.fill('98,5'); await g.dispatchEvent('change');
+  // malzemeler
+  await A(page, 'tab', '[data-v="mats"]');
+  for (const [k, n] of [['fabric', 'Poplin'], ['yarn', 'Merinos 2/28'], ['trim', 'Düğme 11 mm']]) { await page.selectOption('#nm-kind', k); await page.fill('#nm-name', n); await A(page, 'add-mat'); }
+  await page.fill('[data-f="library.materials.0.props.width"]', '150'); await page.locator('[data-f="library.materials.0.props.width"]').dispatchEvent('change');
+  await page.fill('[data-f="library.materials.0.price"]', '120'); await page.locator('[data-f="library.materials.0.price"]').dispatchEvent('change');
+  await page.fill('[data-f="library.materials.0.props.gsm"]', 'yüz'); await page.locator('[data-f="library.materials.0.props.gsm"]').dispatchEvent('change');
+  expect(/Sayı değil/.test(await page.locator('#toast').innerText()), 'geçersiz sayı uyarısı');
+  // ürünler
+  await A(page, 'tab', '[data-v="col"]');
+  await page.selectOption('#ap-branch', 'woven'); await page.selectOption('#ap-type', 'gomlek'); await page.fill('#ap-code', 'GM-1'); await A(page, 'add-prod');
+  await page.selectOption('#ap-branch', 'knit'); await page.selectOption('#ap-type', 'kazak'); await page.fill('#ap-code', 'KZ-1'); await A(page, 'add-prod');
+  // gömlek: renk, tablo, beden, kumaş
+  await A(page, 'tog-color', '[data-i="0"]');
+  await page.selectOption('[data-f="collection.products.0.sizeTable"]', { index: 1 });
+  for (const s of ['S', 'M', 'L']) await A(page, 'tog-size', `[data-i="0"][data-v="${s}"]`);
+  const opts = await page.locator('#lk-mat-0 option').allInnerTexts();
+  expect(opts.some((o) => /Poplin/.test(o)) && !opts.some((o) => /Merinos/.test(o)), 'gömleğe iplik önerilmez: ' + opts);
+  await page.selectOption('#lk-mat-0', { label: 'Poplin (Kumaş)' }); await A(page, 'link', '[data-i="0"]');
+  await page.fill('[data-f="collection.products.0.materials.0.qty"]', '1,6'); await page.locator('[data-f="collection.products.0.materials.0.qty"]').dispatchEvent('change');
+  const kopts = await page.locator('#lk-mat-1 option').allInnerTexts();
+  expect(kopts.some((o) => /Merinos/.test(o)) && !kopts.some((o) => /Poplin/.test(o)), 'kazağa kumaş önerilmez: ' + kopts);
+  expect(/3 varyant/.test(await txBody(page)), 'gömlek 1 renk × 3 beden');
+  // föy
+  await A(page, 'tab', '[data-v="tp"]');
+  const tp = await txBody(page);
+  expect(/Teknik föy · Gömlek/.test(tp) && /GM-1/.test(tp) && /98,5/.test(tp) && /1,6 m/.test(tp), 'föy içeriği');
+  expect(/Malzeme maliyeti: 192/.test(tp), 'maliyet 1,6 × 120 = 192');
+  // doğrulama: kazakta renk / beden / ana iplik uyarıları, hata yok (gsm geçersiz girişi null'a döndü)
+  await A(page, 'tab', '[data-v="val"]');
+  const v = await txBody(page);
+  expect(await page.locator('.issue.hata').count() === 0 && /Ana iplik seçilmemiş/.test(v), 'doğrulama: ' + v.slice(v.indexOf('Dal araçları'), 900).replace(/\n/g, ' / '));
+  // revizyon
+  await page.fill('#rev-note', 'ilk koleksiyon'); await A(page, 'commit');
+  await page.waitForFunction(() => /rev 1/.test(document.querySelector('#main').innerText));
+  await page.reload(); await page.waitForSelector('[data-a="open"]');
+  expect(/E2E Kış/.test(await txBody(page)) && /Karma Koleksiyon/.test(await txBody(page)), 'proje listede');
+  await A(page, 'open'); await page.waitForSelector('[data-a="add-prod"]');
+  const b2 = await txBody(page);
+  expect(/GM-1/.test(await page.locator('[data-f="collection.products.0.modelCode"]').inputValue()) && /KZ-1/.test(await page.locator('[data-f="collection.products.1.modelCode"]').inputValue()), 'ürünler korundu');
+  expect(/3 varyant/.test(b2), 'varyantlar korundu');
+  await A(page, 'tab', '[data-v="revs"]'); await page.waitForFunction(() => /ilk koleksiyon/.test(document.querySelector('#main').innerText));
+});
+
+await TX('Tekstil: triko projesi yalnız triko araçlarını gösterir; dal araçları "henüz yok" diye işaretli; JSON dışa aktar → içe aktar yeni proje olarak gelir; bozuk JSON reddedilir', async ({ page }) => {
+  await A(page, 'type', '[data-v="knit"]'); await page.fill('#np-name', 'Triko 1'); await A(page, 'create');
+  await page.waitForSelector('[data-a="add-prod"]');
+  expect(await page.locator('#ap-branch').count() === 0, 'tek dal: dal seçimi yok');
+  const types = await page.locator('#ap-type option').allInnerTexts();
+  expect(types.includes('Kazak') && !types.includes('Gömlek'), 'triko türleri: ' + types);
+  await A(page, 'tab', '[data-v="mats"]');
+  const kinds = await page.locator('#nm-kind option').allInnerTexts();
+  expect(kinds.includes('İplik') && !kinds.includes('Kumaş'), 'triko malzemeleri: ' + kinds);
+  await A(page, 'tab', '[data-v="tools"]');
+  const tl = await txBody(page);
+  expect(/Triko \/ Örgü/.test(tl) && !/Dokuma \/ Konfeksiyon\n/.test(tl) && (tl.match(/Henüz yok/g) || []).length >= 5, 'dal araçları');
+  await A(page, 'tab', '[data-v="col"]'); await A(page, 'add-prod');
+  const d = await download(page, () => A(page, 'export'));
+  const j = JSON.parse(d.text); expect(j.kind === 'cizim.textile' && j.type === 'knit' && j.collection.products.length === 1, 'JSON içeriği');
+  await A(page, 'home'); await page.waitForSelector('[data-a="import"]');
+  await choose(page, () => A(page, 'import'), tmp('t.json', d.text));
+  await page.waitForFunction(() => /içe aktarıldı/.test(document.querySelector('#main').innerText));
+  expect((await page.locator('[data-a="open"]').count()) === 2, 'iki proje');
+  await choose(page, () => A(page, 'import'), tmp('bozuk.json', '{"parts":[]}'));
+  await page.waitForFunction(() => /tekstil projesi değil/.test(document.querySelector('#toast').innerText));
+  expect((await page.locator('[data-a="open"]').count()) === 2, 'bozuk dosya proje eklemedi');
+  // silme iki dokunuş ister
+  await A(page, 'del'); expect((await page.locator('[data-a="open"]').count()) === 2, 'tek dokunuş silmez');
+  await A(page, 'del'); await page.waitForFunction(() => document.querySelectorAll('[data-a="open"]').length === 1);
+});
+
+await TX('Tekstil ↔ Makine ayrılığı: tekstil kaydı makine projelerine yazmaz; makine projeleri tekstil listesinde görünmez', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('cizim:projects', JSON.stringify({ mak: { data: '{}', at: 1 } })));
+  await A(page, 'type', '[data-v="woven"]'); await page.fill('#np-name', 'Ayrı'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await A(page, 'add-prod'); await page.fill('#rev-note', 'x'); await A(page, 'commit'); await A(page, 'home');
+  const st = await page.evaluate(() => ({ p: localStorage.getItem('cizim:projects'), keys: Object.keys(localStorage) }));
+  expect(st.p === JSON.stringify({ mak: { data: '{}', at: 1 } }), 'makine projeleri değişmedi');
+  expect(!st.keys.some((k) => /tx|tekstil/i.test(k) && k !== 'cizim:workspace'), 'tekstil localStorage kullanmıyor: ' + st.keys);
+  expect(!/mak\b/.test(await txBody(page)), 'makine projesi listede yok');
+}, { viewport: { width: 1366, height: 900 } });
 
 await browser.close(); srv.close();
 const sum = R.summary();
