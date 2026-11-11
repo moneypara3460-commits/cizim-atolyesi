@@ -13,29 +13,31 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
-} from './logic.js?v=20261111b';
-import { openSketch } from './sketch.js?v=20261111b';
-import { to3MF, toSTEP } from './export3d.js?v=20261111b';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261111b';
-import { openCad2D } from './cad2d.js?v=20261111b';
-import { openCutOpt } from './cutopt-ui.js?v=20261111b';
-import { createMfg } from './mfg-ui.js?v=20261111b';
-import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261111b';
-import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261111b';
-import { analyzeWeight } from './weight.js?v=20261111b';
-import { createWeightUI, fkg } from './weight-ui.js?v=20261111b';
-import { createCostUI } from './cost-ui.js?v=20261111b';
-import { planReport as weldReport } from './welds.js?v=20261111b';
-import { altCons as weldAltCons } from './weld-ui.js?v=20261111b';
-import { groupKey } from './cutopt.js?v=20261111b';
-import { createAssemblyUI } from './assembly-ui.js?v=20261111b';
-import { createSimUI } from './sim-ui.js?v=20261111b';
-import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261111b';
-import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261111b';
-import { createCamUI } from './cam-ui.js?v=20261111b';
-import { createOcctUI } from './occt-ui.js?v=20261111b';
+} from './logic.js?v=20261111c';
+import { openSketch } from './sketch.js?v=20261111c';
+import { to3MF, toSTEP } from './export3d.js?v=20261111c';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261111c';
+import { openCad2D } from './cad2d.js?v=20261111c';
+import { openCutOpt } from './cutopt-ui.js?v=20261111c';
+import { createMfg } from './mfg-ui.js?v=20261111c';
+import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261111c';
+import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261111c';
+import { analyzeWeight } from './weight.js?v=20261111c';
+import { createWeightUI, fkg } from './weight-ui.js?v=20261111c';
+import { createCostUI } from './cost-ui.js?v=20261111c';
+import { planReport as weldReport } from './welds.js?v=20261111c';
+import { altCons as weldAltCons } from './weld-ui.js?v=20261111c';
+import { groupKey } from './cutopt.js?v=20261111c';
+import { createAssemblyUI } from './assembly-ui.js?v=20261111c';
+import { createSimUI } from './sim-ui.js?v=20261111c';
+import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261111c';
+import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261111c';
+import { createCamUI } from './cam-ui.js?v=20261111c';
+import { createCam5UI } from './cam5-ui.js?v=20261111c';
+import { machinePose } from './kin.js?v=20261111c';
+import { createOcctUI } from './occt-ui.js?v=20261111c';
 
-const APP_VER = '20261111b'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261111c'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -73,12 +75,12 @@ let weldPlan = null;   // Akıllı Kaynak Planlama: { welds, set, symbols, ver }
 let mechData = { cs: [], motor: null };   // Mekanizma: bağıntılar (dişli, kasnak, kremayer, vida, oran) ve motor
 let simData = null;   // Geleceğimi Göster: onay, test kurulumu, saklanan alternatifler
 let asmAnswers = {};   // Montaj planı: kullanıcının bildirdiği bağlantı türleri { 'a-b': 'kaynak' | 'cıvata' | ... }
-const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData });
+const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined });
 // "Tek parça" ağları (üçgen verisi) geri al geçmişine girmesin diye parçada yalnızca anahtar (mk) durur, veri burada tutulur.
 // Kaydederken (otomatik kayıt, proje) veri de dosyaya yazılır.
 const meshStore = new Map();
 function snapshotSave() {
-  const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData };
+  const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined };   // cam5: 4/5 eksen CNC ayarları
   const ks = [...new Set(parts.flatMap((q) => [q.mk, q.bk]).filter((k) => k && meshStore.has(k)))];   // bk: OCCT B-Rep metni
   if (ks.length) { o.meshes = {}; ks.forEach((k) => { o.meshes[k] = meshStore.get(k); }); }
   return JSON.stringify(o);
@@ -88,6 +90,7 @@ function restore(s) {
   if (o.meshes) for (const k of Object.keys(o.meshes)) meshStore.set(k, o.meshes[k]);
   parts = o.parts; selOff = null; sel = o.sel; nextId = o.nextId; weldPlan = o.welds || null; asmAnswers = o.asm && typeof o.asm === 'object' ? o.asm : {}; simData = o.sim && typeof o.sim === 'object' ? o.sim : null; mechData = o.mech && Array.isArray(o.mech.cs) ? o.mech : { cs: [], motor: null };
   cleanLinks(parts);
+  if (typeof cam5UI !== 'undefined') cam5UI.setCfg(o.cam5);   // eski projelerde yok: varsayılan (3 eksen)
   if (!parts.find((p) => p.id === sel)) sel = parts[0].id;
 }
 const commit = () => hist.push(snapshot());
@@ -800,6 +803,7 @@ function rebuild(refit) {
     if (typeof scheduleWeightMarker === 'function') scheduleWeightMarker();
     if (simUI && simUI.active) { simUI.invalidate(); if (tab === 'sim') setTimeout(renderPanel, 0); }
     if (camUI && camUI.active) { camUI.invalidate(); if (tab === 'cam') setTimeout(renderPanel, 0); }
+    if (typeof cam5UI !== 'undefined' && cam5UI && cam5UI.active) { cam5UI.invalidate(); if (tab === 'cam') setTimeout(renderPanel, 0); }
     if (typeof occtUI !== 'undefined' && occtUI && occtUI.active) { occtUI.invalidate(); if (tab === 'occt') setTimeout(renderPanel, 0); }
     if (asmUI && asmUI.active) { asmUI.invalidate(); if (tab === 'asm') setTimeout(renderPanel, 0); }
 
@@ -1200,7 +1204,8 @@ function renderPanel() {
     body = weightUI.html();
     hint = 'Ağırlık her parçanın kendi malzemesi (Dayanım sekmesinde ya da burada seçilir) ve gerçek 3B hacmiyle hesaplanır. Kırmızı-beyaz küre ağırlık merkezidir; kesik çizgi zemine izdüşümü, yeşil / turuncu / kırmızı çizgi destek alanıdır. Model döndürülünce işaret de modelle birlikte döner; parça değişince yeniden hesaplanır.';
   } else if (tab === 'cam') {
-    body = camUI.html();
+    body = cam5UI.modeBar() + (cam5UI.mode === '3' ? camUI.html() : cam5UI.html());
+    if (cam5UI.mode !== '3') hint = '4 / 5 eksen: takım yolu, makine kinematiği, çarpışma kontrolü ve talaş simülasyonu aynı takım yolu verisinden hesaplanır. Simülasyon fiziksel makine doğrulaması değildir; G-kodu makinede doğrulanmamıştır.'; else
     hint = 'CNC: takım yolları modelin üstten görünen yüzeyinden hesaplanır (3 eksen). Kesme değerleri başlangıç değeridir; ilk parçada makinede düşük ilerlemeyle dene. Program çalıştırmadan önce kumandada simülasyonla kontrol et.';
   } else if (tab === 'occt') {
     body = occtUI.html();
@@ -2020,6 +2025,93 @@ var camUI = createCamUI({   // var: yeniden çizim modül yüklenirken çağrıl
   date: () => new Date().toLocaleDateString('tr-TR'),
 });
 
+/* ---- ⚙ 4 / 5 eksen CNC: görüntü ---- */
+const c5Group = new THREE.Group(); scene.add(c5Group);
+const c5State = { hid: false, R: null, root: null, w: null, path: null, stock: null, tool: null, toolKey: null };
+function c5Clear() {
+  c5Group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+  c5Group.clear();
+  Object.assign(c5State, { R: null, root: null, w: null, path: null, stock: null, tool: null, toolKey: null });
+  if (c5State.hid) { modelGroup.visible = true; ovl.visible = true; c5State.hid = false; }
+}
+// W (Z yukarı, iş sıfırı) → sahne (Y yukarı, modelin yeri): cam5.toWorld ile aynı
+function c5Build(R) {
+  c5Clear();
+  const T = R.S.T, root = new THREE.Group();
+  root.matrixAutoUpdate = false;
+  root.matrix.set(1, 0, 0, -T[0], 0, 0, 1, -T[2], 0, -1, 0, T[1], 0, 0, 0, 1);
+  const w = new THREE.Group(); w.matrixAutoUpdate = false; root.add(w);
+  // parça
+  const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(R.S.t, 3)); pg.computeVertexNormals();
+  w.add(new THREE.Mesh(pg, new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.2, roughness: 0.6, transparent: true, opacity: 0.55, side: THREE.DoubleSide })));
+  // bağlama
+  const fm = new THREE.MeshStandardMaterial({ color: 0x7c3aed, transparent: true, opacity: 0.35 });
+  for (const f of R.S.fix) {
+    if (f.kind === 'box') { const g = new THREE.BoxGeometry(f.max[0] - f.min[0], f.max[1] - f.min[1], f.max[2] - f.min[2]); const m = new THREE.Mesh(g, fm); m.position.set((f.min[0] + f.max[0]) / 2, (f.min[1] + f.max[1]) / 2, (f.min[2] + f.max[2]) / 2); w.add(m); }
+    else if (f.kind === 'cylX') { const g = new THREE.CylinderGeometry(f.r, f.r, f.x1 - f.x0, 40); g.rotateZ(Math.PI / 2); const m = new THREE.Mesh(g, fm); m.position.set((f.x0 + f.x1) / 2, 0, 0); w.add(m); }
+    else if (f.kind === 'plane') { const sb = R.S.bounds, s = Math.max(sb.max[0] - sb.min[0], sb.max[1] - sb.min[1]) * 2 + 60; const g = new THREE.PlaneGeometry(s, s); const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x334155, transparent: true, opacity: 0.4, side: THREE.DoubleSide })); m.position.set(0, 0, f.z); w.add(m); }
+  }
+  // takım yolu: kesme yeşil, dalma mavi, hızlı kırmızı kesik, çarpışma / limit kırmızı kalın
+  const cut = [], rap = [], bad = [], P = R.pts, n = R.kinds.length;
+  for (let i = 1; i < n; i++) {
+    const a = [P[i * 3 - 3], P[i * 3 - 2], P[i * 3 - 1]], b = [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
+    (R.flags[i] ? bad : R.kinds[i] === 0 ? rap : cut).push(...a, ...b);
+  }
+  const lines = (arr, mat) => { if (!arr.length) return null; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3)); const l = new THREE.LineSegments(g, mat); if (mat.isLineDashedMaterial) l.computeLineDistances(); return l; };
+  const path = new THREE.Group();
+  for (const l of [lines(cut, new THREE.LineBasicMaterial({ color: 0x22c55e })), lines(rap, new THREE.LineDashedMaterial({ color: 0xef4444, dashSize: 2, gapSize: 2, transparent: true, opacity: 0.6 })), lines(bad, new THREE.LineBasicMaterial({ color: 0xff0000 }))]) if (l) path.add(l);
+  w.add(path);
+  // talaş sonucu: yüzey vokselleri
+  const sp = R.sim.points, sk = R.sim.kinds, col = new Float32Array(sk.length * 3);
+  const C3 = [[0.62, 0.65, 0.7], [0.98, 0.55, 0.15], [1, 0.1, 0.1]];
+  for (let i = 0; i < sk.length; i++) col.set(C3[sk[i]], i * 3);
+  const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3)); sg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const stock = new THREE.Points(sg, new THREE.PointsMaterial({ size: Math.max(R.sim.h * 1.4, 0.3), vertexColors: true }));
+  w.add(stock);
+  c5Group.add(root);
+  Object.assign(c5State, { R, root, w, path, stock });
+  modelGroup.visible = false; ovl.visible = false; c5State.hid = true;
+}
+function c5Tool(tl, spindle) {
+  const g = new THREE.Group(), r = tl.d / 2, fl = tl.flute || tl.d * 3, so = Math.max(tl.stickout || fl + 10, fl), h = tl.holder || { d: 30, len: 60 }, sp = spindle || { d: 60, len: 100 };
+  const seg = (a, b, rad, color, op = 1) => { const geo = new THREE.CylinderGeometry(rad, rad, b - a, 24); geo.translate(0, (a + b) / 2, 0); g.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, transparent: op < 1, opacity: op }))); };
+  seg(tl.type === 'ball' ? r : 0, fl, r, 0xf59e0b);
+  if (tl.type === 'ball') { const s = new THREE.SphereGeometry(r, 20, 12); s.translate(0, r, 0); g.add(new THREE.Mesh(s, new THREE.MeshStandardMaterial({ color: 0xf59e0b }))); }
+  seg(fl, so, r * 0.95, 0xcbd5e1); seg(so, so + h.len, h.d / 2, 0x64748b, 0.8); seg(so + h.len, so + h.len + sp.len, sp.d / 2, 0x1e293b, 0.5);
+  return g;
+}
+// spec: { view: 'path' | 'stock' | 'machine', R, i, pose?, toolDef, spindle }
+function c5Draw(spec) {
+  if (c5State.R !== spec.R) c5Build(spec.R);
+  const { w, path, stock, root } = c5State, R = spec.R;
+  path.visible = spec.view !== 'stock'; stock.visible = spec.view === 'stock';
+  // takım
+  const key = spec.toolDef ? JSON.stringify(spec.toolDef) : null;
+  if (c5State.toolKey !== key) { if (c5State.tool) { root.remove(c5State.tool); c5State.tool.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); } c5State.tool = spec.toolDef ? c5Tool(spec.toolDef, spec.spindle) : null; if (c5State.tool) root.add(c5State.tool); c5State.toolKey = key; }
+  const i = Math.min(spec.i || 0, R.kinds.length - 1);
+  let tip, axis;
+  if (spec.view === 'machine' && spec.pose) {
+    const p = spec.pose, m = new THREE.Matrix4();
+    m.set(p.R[0][0], p.R[0][1], p.R[0][2], p.t[0], p.R[1][0], p.R[1][1], p.R[1][2], p.t[1], p.R[2][0], p.R[2][1], p.R[2][2], p.t[2], 0, 0, 0, 1);
+    w.matrix.copy(m); tip = p.tip; axis = p.axis;
+  } else { w.matrix.identity(); tip = [R.pts[i * 3], R.pts[i * 3 + 1], R.pts[i * 3 + 2]]; axis = [R.dirs[i * 3], R.dirs[i * 3 + 1], R.dirs[i * 3 + 2]]; }
+  w.matrixWorldNeedsUpdate = true;
+  if (c5State.tool) {
+    c5State.tool.visible = spec.view !== 'stock';
+    c5State.tool.position.set(...tip);
+    c5State.tool.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...axis).normalize());
+    c5State.tool.traverse((o) => { if (o.material && o.material.color && o.geometry && o.geometry.type !== 'SphereGeometry' && R.flags[i]) o.material.emissive = new THREE.Color(0x660000); else if (o.material && o.material.emissive) o.material.emissive.setHex(0); });
+  }
+}
+var cam5UI = createCam5UI({   // var: yeniden çizim modül yüklenirken çağrılırsa henüz tanımsız olabilir
+  model() { if (!lastClean) throw new Error('Model yok'); return { tris: geoTris(lastClean) }; },
+  draw: c5Draw, clear: c5Clear, pose: machinePose,
+  render: () => { if (tab === 'cam') renderPanel(); },
+  toast, saveBlob,
+  name: () => (projName || 'parca').replace(/[^\w\-]+/g, '_'),
+  changed: () => scheduleSave(),
+});
+
 /* ---- 🧱 B-Rep (OCCT) ---- */
 const occtGroup = new THREE.Group(); scene.add(occtGroup);
 const occtState = { hid: false };
@@ -2804,6 +2896,7 @@ document.addEventListener('change', (e) => {
   if (el.dataset && el.dataset.as) { asmUI.input(el, 'change'); return; }
   if (el.dataset && (el.dataset.cs || el.dataset.cn || el.dataset.ct || el.dataset.co)) { camUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.oc) { occtUI.input(el); return; }
+  if (el.dataset && el.dataset.c5) { cam5UI.input(el, 'change'); return; }
   if (el.dataset && (el.dataset.sm || el.dataset.sf || el.dataset.sp || el.dataset.sv || el.dataset.st || el.dataset.sl2)) { simUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.link === 'parent') setParent(cur(), el.value === '' ? null : Number(el.value));
 });
@@ -3731,6 +3824,7 @@ document.addEventListener('click', (e) => {
   if (act === 'cn-go-tab') { tab = 'cam'; renderPanel(); return; }
   if (act === 'oc-go-tab') { tab = 'occt'; renderPanel(); return; }
   if (act && act.startsWith('oc-') && occtUI.act(act)) return;
+  if (act && act.startsWith('c5-') && cam5UI.act(act)) return;
   if (act && act.startsWith('cn-') && camUI.act(act)) return;
   if (act && act.startsWith('sm-') && simUI.act(act)) return;
   if (act === 'as-go-tab') { tab = 'asm'; renderPanel(); asmUI.start(); return; }
@@ -3742,7 +3836,7 @@ document.addEventListener('click', (e) => {
   if (act === 'add-gear') { addGear(); return; }
   if (act.startsWith('mc-')) { mechAct(act); return; }
   if (act.startsWith('add-')) { addPart(act.slice(4), 'add'); return; }
-  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'asm' && asmUI.active) asmUI.stop(); if (tab !== 'sim' && simUI.active) simUI.exit(); if (tab !== 'cam') camUI.leave(); if (tab !== 'occt') occtUI.leave(); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate' && tab !== 'link') clearFace();
+  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'asm' && asmUI.active) asmUI.stop(); if (tab !== 'sim' && simUI.active) simUI.exit(); if (tab !== 'cam') { camUI.leave(); cam5UI.leave(); } if (tab !== 'occt') occtUI.leave(); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate' && tab !== 'link') clearFace();
     linkPick = false;
     if (tab !== 'mate') { mate.a = null; mate.b = null; }
     if (tab !== 'edge') edgeSels = []; renderPanel(); return; }
@@ -3908,6 +4002,7 @@ document.addEventListener('input', (e) => {
   if (d.cf) return;   // maliyet girdileri değişince (change) işlenir
   if (d.as) { asmUI.input(el, 'input'); return; }
   if (d.cs === 'speed') { camUI.input(el, 'input'); return; }
+  if (d.c5) { if (d.c5 === 'pos') cam5UI.input(el, 'input'); return; }
   if (d.cs || d.cn || d.ct || d.co) return;   // CNC: değişince işlenir
   if (d.sf || d.sv || d.st) { simUI.input(el, 'input'); return; }
   if (d.sm || d.sp || d.sl2) return;   // değişince (change) işlenir

@@ -1,5 +1,5 @@
 // "Geleceğimi Göster" hesap işçisi: sonlu eleman çözümleri arayüzü dondurmadan arka planda çalışır.
-import { solveStatic, solveModal } from './fea.js?v=20261111b';
+import { solveStatic, solveModal } from './fea.js?v=20261111c';
 
 self.onmessage = (ev) => {
   const { id, cmd, a } = ev.data;

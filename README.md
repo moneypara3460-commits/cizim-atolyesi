@@ -121,6 +121,16 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - **Dosya:** STEP dışa aktarma (tam B-Rep, AP214) ve içe aktarma; IGES içe aktarma (occt-import-js; yüzeyler üçgenlenip katıya dikilir). **IGES dışa aktarma yok:** kullanılan OCCT derlemesinde IGES yazıcısı bulunmuyor (özel derleme gerekir)
 - Sınırlar: koni / torus yüzlerinin ayrıntılı parametreleri bu derlemede okunamıyor (yalnız türü); tek tek kenar seçerek yuvarlama henüz yok (kenar grupları var); büyük modellerde telefonda işlem birkaç saniye sürebilir
 
+**⚙ 4 ve 5 eksen CNC (⚙ CNC sekmesi → 4 eksen / 5 eksen)**
+- 3 eksen CAM aynen duruyor (⚙ CNC → 3 eksen). 4 / 5 eksen ayrı bir katmandır: `kin.js` (kinematik), `cam5.js` (stratejiler), `coll5.js` (çarpışma + voksel simülasyon), `post5.js` (G-kodu), `cam5-ui.js` + `cam5-worker.js` (arayüz, işçi). Ayarlar projeyle kaydedilir
+- **Makineler / kinematik:** 4. eksen divizör (A, X boyunca; ayna + punta) ve döner tabla (B, Y ekseni); 5 eksen tabla-tabla (A+C, B+C), kafa-kafa (C+A), kafa-tabla (B kafa + C tabla). Döner eksen limitleri, dönme merkezleri, pivot boyu, doğrusal eksen limitleri düzenlenir; hatalı yapılandırma hesaplanmaz. Ters / ileri kinematik kapalı formül (Paden–Kahan), iki çözümden limit içinde ve öncekine en yakını; sürekli C ekseni tur atlamaz
+- **Stratejiler:** 4 eksen indeksli (her açıda 3 eksen motoru), 4 eksen eş zamanlı döner işleme (X + A helis, kaba + ince), 5 eksen 3+2 (eğim/dönüş açılarıyla sabit takım yönü), 5 eksen eş zamanlı yüzey ince işleme (küresel uç, yüzey normali + lead / tilt, en büyük eğim sınırı, adım başına en çok 3° yön değişimi). Her stratejinin sınırı ekranda yazılır
+- **Güvenli bağlantı:** takım ekseni boyunca geri çekilme, güvenli küre (5 eksen) / güvenli silindir (divizör) üstünde yön ara değerlemesi, eksen boyunca yaklaşma
+- **Çarpışma:** kesici, sap, tutucu ve iş mili burnu (düz uçlu silindirler) ↔ parça (üçgen ağ), bağlama (ayna, punta, mengene çeneleri) ve tabla; hızlı harekette parçaya giriş; küresel uçta yüzeye dalma; eksen limitleri. Makine gövdesi, beşik gövdesi, takım değiştirici ve ara stok modellenmez (ekranda yazar). Çarpışma / limit varsa G-kodu engellenir
+- **Simülasyon:** hacimsel (voksel) talaş kaldırma; kalan fazla malzeme ve parçaya dalma; takım yolu, talaş sonucu ve makine hareketi (tabla eksenlerinde parça döner, kafa eksenlerinde takım eğilir) görünümleri, eksen değerleri, çarpışan noktalar kırmızı. Simülasyon ve G-kodu aynı takım yolu verisinden üretilir (testle doğrulanır)
+- **Kontrolcüler:** Fanuc 30i/31i-B5 (G43.4 TCP), Siemens 840D sl (TRAORI), LinuxCNC (makine koordinatı, G93), Fanuc / Haas 4. eksen ve Mach3 / Mach4 (G93); GRBL döner eksen için reddedilir. TCP'siz kontrolcüye eş zamanlı 5 eksen kodu üretilmez. Örnek programlar: `docs/cnc5-ornekler/` (`node tools/gen_cnc5_samples.mjs`)
+- **Doğrulanmadı:** hiçbir post gerçek bir makinede denenmedi; program başlığında yazar. İlk çalıştırma kumanda simülasyonu, tek blok ve düşük ilerlemeyle, yetkin operatör kontrolünde yapılmalı
+
 **🔮 Geleceğimi Göster — sanal test ortamı (🔮 Gelecek sekmesi, ya da Hesap → Geleceğimi göster)**
 - **Akış:** tasarımı bitir → ölçüler → her parçanın malzemesini seç → **✓ Tasarımımı onayla** → **🔮 GELECEĞİMİ GÖSTER** açılır. Onaydan sonra tasarım değişirse yeniden onay ister. Tasarım test ortamına kopyalanır; orijinal hiçbir zaman değiştirilmez
 - **Gerçek sonlu eleman analizi (FEA):** katı geometri küp elemanlara (voxel) bölünür; 8 düğümlü uyumsuz modlu hekzahedral eleman (eğilmede kilitlenmez), doğrusal-elastik, çok katmanlı (multigrid) ön koşullu eşlenik gradyan çözücü, arka plan iş parçacığında (Worker). Eleman boyu ölçülerle hizalanır (kalınlık yuvarlama hatası olmasın). Ağ: Hızlı / Normal / İnce
@@ -286,6 +296,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - `cad2d.js`, `cad2d-geom.js` — 2B çizim modu ve saf geometrisi (kesişim, kırp, uzat, ofset, radyus, DXF)
 - `cam.js`, `cam-ui.js` — CNC: yükseklik haritası, uzaklık alanı, takım yolları, simülasyon, G-kodu, iş kartı
 - `mech.js` — evolvent dişli profili, mekanizma bağıntıları
+- `kin.js`, `cam5.js`, `coll5.js`, `post5.js`, `cam5-run.js`, `cam5-worker.js`, `cam5-ui.js` — 4 / 5 eksen CNC: kinematik, stratejiler, çarpışma, voksel simülasyon, son işlemciler, arayüz
 - `occt.js`, `occt-ops.js`, `occt-worker.js`, `occt-ui.js` — OCCT B-Rep köprüsü (katı kurma, Boolean, yuvarlama / pah, doğrulama, STEP / IGES, Three.js'e üçgenleme, CAM için topoloji), işçi ve B-Rep sekmesi; `vendor/` — üçüncü taraf WebAssembly kütüphaneleri (bkz. `vendor/README.md`)
 - `fea.js`, `fea-worker.js`, `sim-ui.js` — Geleceğimi Göster: sonlu eleman çözücü (voxel H8, multigrid), modal, ısıl, yorulma / aşınma, alternatifler, arayüz ve PDF
 - `assembly.js`, `assembly-ui.js` — montaj sırası: parça tanıma, delik → cıvata, sökme analizi, patlatma / animasyon, PDF
