@@ -1,6 +1,8 @@
-# Tekstil ve Moda çalışma alanı: Aşama 0 mimari planı ve risk raporu
+# Tekstil ve Moda çalışma alanı (dokuma / konfeksiyon + triko): Aşama 0 mimari planı ve risk raporu
 
 Tarih: 11.11.2026 · Temel: sürüm 20261111e. Bu belge yalnızca plandır, hiçbir kod değişikliği yapılmamıştır.
+
+Güncelleme (12.11.2026): "Tekstil, Moda ve Triko birleşik modül yapısı" kararına göre triko dalı eklendi. Tek ana çalışma alanı, ortak araçlar ve iki uzmanlık dalı var: dokuma / konfeksiyon ve triko.
 
 ## 1. Mevcut sistemin durumu
 
@@ -23,21 +25,35 @@ Tarih: 11.11.2026 · Temel: sürüm 20261111e. Bu belge yalnızca plandır, hiç
 ```
 index.html  ── açılış seçimi ──►  Makine ve Mühendislik (mevcut app.js, değişmez)
                               └─►  tekstil.html → tx/app.js
+                                   Yeni proje: Dokuma/Konfeksiyon · Triko · Karma Koleksiyon
+                                   (seçim yalnız ilgili araçları öne çıkarır; ortak araçlar her dalda açık)
 tx/
-  model.js      proje şeması, sürüm, göç (migration), doğrulama
+  ORTAK
+  model.js      proje şeması, sürüm, göç (migration), doğrulama; dal bazlı alt şemalar
   store.js      IndexedDB kayıt/açma, otomatik kayıt, dışa/içe JSON yedek
+  collection.js koleksiyon, ürün, varyant (model × renk × beden)
+  library.js    renk, kumaş, iplik, aksesuar kartları ("tahmini" bayrağı ile)
+  sizes.js      beden tabloları (kullanıcı tanımlı + kaynağı yazılı örnekler)
   curve.js      kübik Bezier / Catmull-Rom, uzunluk, bölme, en yakın nokta, çokgen yaklaşımı
+  sketch-tx.js  teknik çizim (ön/arka/yan, simetri, katman, şablon, detay kütüphanesi)
+  techpack.js   teknik föy, malzeme listesi, maliyet (dal modüllerinden veri alır)
+  pdf.js        vektör PDF, 1:1 A4 döşemeli baskı, föy sayfaları
+  DOKUMA / KONFEKSİYON  (tx/woven/)
   contour.js    kapalı kontur, öz-kesişim, alan, yön, köşe işlemli ofset (dikiş payı)
   piece.js      kalıp parçası: dikiş hattı, kesim hattı, pens, çıt, iplik yönü, etiket
-  sketch-tx.js  teknik çizim (ön/arka/yan, simetri, katman, şablon, detay kütüphanesi)
-  grade.js      beden tabloları, grading kuralları (nokta bazlı Δx/Δy), bütünlük kontrolü
-  fabric.js     kumaş ve aksesuar kartları ("tahmini" bayrağı ile)
-  nest.js       kumaş yerleşimi (worker), verim/fire, kısıtlar
-  pdf.js        vektör PDF, 1:1 A4 döşemeli baskı, föy sayfaları
-  dxf-aama.js   kalıp DXF (AAMA/ASTM D6673 düzeni) okuma/yazma
-  ui-*.js       arayüz parçaları (telefon önce, dokunmatik)
+  grade.js      nokta bazlı grading (Δx/Δy), dikiş hattı uzunluk eşleşmesi
+  nest.js       kumaş yerleşimi (worker), verim/fire, hav / desen / katlı kumaş kısıtları
+  dxf-aama.js   kalıp DXF (AAMA / ASTM D6673 düzeni)
+  TRİKO  (tx/knit/)
+  stitch.js     ilmek sözlüğü: düz, ters, askı (tuck), atlama (miss), aktarma, saç örgüsü çaprazı; ön/arka iğne yatağı
+  chart.js      örgü deseni ızgarası (iğne × sıra), tekrar (repeat), jakar renk haritası, ribana / saç örgüsü şablonları
+  gauge.js      numune (swatch): 10 cm'deki ilmek / sıra; ölçü ↔ ilmek sayısı dönüşümü
+  shape.js      parça veya bütün giysi triko kalıbı: sıra bazlı eksiltme / artırma (fully-fashioned) tablosu
+  yarn.js       iplik numarası (Nm, Ne, tex, dtex) dönüşümleri; ilmek boyu → iplik uzunluğu → gramaj ve tüketim
+  machine.js    makine profili (marka/model, iğne yatağı, gauge, besleyici sayısı, desen genişliği sınırı) ve uyumluluk kontrolü
+  export-*.js   yalnız doğrulanmış makine biçimleri için çıktı (bkz. risk 12)
+  3B  (tx/3d/)  dokuma için kumaş çözücüsü; triko için ayrı parametreli model; önizleme ve fizik ayrı adlandırılır
 ```
-
 Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (kesişim, DXF temel yazıcı, dönüşümler) ve `logic.js` içindeki yardımcılar (`fmtNum`, `esc`). Bunlarda tekstil için değişiklik gerekirse önce makine testleri çalıştırılır ve onay istenir.
 
 **Açılış seçimi:** `index.html`'de ilk açılışta iki büyük düğmeli bir seçim ekranı olur. Son seçim hatırlanır. Makine alanında araç çubuğuna "Tekstil'e geç", tekstilde "Makine'ye geç" eklenir. Makine koduna dokunan tek değişiklik budur (birkaç satır) ve E2E testiyle korunur.
@@ -45,17 +61,22 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 ### Proje verisi (sürümlü, türlendirilmiş)
 
 ```json
-{ "kind": "cizim.textile", "schema": 1, "id": "…", "name": "…", "created": 0, "modified": 0, "rev": 12,
-  "units": "mm", "sizeTable": { "system": "kullanıcı", "base": "M", "sizes": ["S","M","L"], "measures": {…} },
-  "sketches": [ … teknik çizim … ],
-  "pieces":   [ { "id", "name", "qty", "mirror", "grain": [x,y,x,y], "nap": false, "fabric": "f1",
-                  "seam": { "path": [ … eğri segmentleri … ] }, "allowance": [ { "edge": 0, "w": 10, "corner": "miter" } ],
-                  "darts": [], "notches": [], "grade": { "pointId": { "S": [dx,dy], "L": [dx,dy] } } } ],
-  "fabrics":  [ { "id", "name", "type", "width", "gsm", "stretch": { "warp": null, "weft": null }, "shrink": {…}, "estimated": ["stretch"] } ],
-  "markers":  [ … yerleşimler … ], "techpack": { … }, "revisions": [ { "rev", "at", "note" } ] }
+{ "kind": "cizim.textile", "schema": 1, "branch": "woven | knit | mixed", "id": "…", "name": "…", "rev": 12, "units": "mm",
+  "collection": { "season": "…", "products": [ { "id": "p1", "name": "Gömlek", "branch": "woven", "variants": [ { "color": "c1", "sizes": ["S","M","L"] } ] },
+                                              { "id": "p2", "name": "Kazak", "branch": "knit", … } ] },
+  "library":   { "colors": [], "fabrics": [ { "id", "type", "width", "gsm", "stretch", "shrink", "estimated": ["stretch"] } ],
+                 "yarns":   [ { "id", "fiber", "count": { "system": "Nm", "value": 28, "ply": 2 }, "estimated": [] } ], "trims": [] },
+  "sizeTables": [ { "id", "source": "kullanıcı", "base": "M", "sizes": [], "measures": {} } ],
+  "sketches":  [ … teknik çizim (ortak) … ],
+  "woven": { "pieces": [ { "product": "p1", "seam": { "path": [] }, "allowance": [], "darts": [], "notches": [], "grain": [], "grade": {} } ], "markers": [] },
+  "knit":  { "swatches": [ { "yarn": "y1", "stitch": "düz", "st10cm": 28, "row10cm": 40, "loopLen": null, "washed": false } ],
+             "charts":   [ { "id", "w": 120, "h": 200, "cells": "…kodlu dizi…", "legend": {}, "repeat": [24, 30] } ],
+             "pieces":   [ { "product": "p2", "chart": "ch1", "swatch": "sw1", "shaping": [ { "row": 80, "left": -1, "right": -1 } ] } ],
+             "machine":  null },
+  "techpack": { … }, "revisions": [ { "rev", "at", "note" } ] }
 ```
-
 - `kind` ve `schema` her projede bulunur. Eski şemalar `model.js` içindeki göç fonksiyonlarıyla yükseltilir; bu da test edilir.
+- **Ortak veri, ayrı teknik kurallar:** ürün, renk, beden, koleksiyon, maliyet ve föy ortak. Dokuma kalıbı (`woven`: sürekli eğri geometrisi, mm) ile triko (`knit`: ilmek ızgarası, ilmek/sıra sayısı) **ayrı alt şemalar**; biri diğerine dönüştürülmeye zorlanmaz. Her dal kendi doğrulamasını yapar. Triko parçasının mm ölçüsü yalnız numune (gauge) üzerinden hesaplanır ve bu, föyde böyle yazılır.
 - Makine projeleri (`cizim:projects`) ile tekstil projeleri (IndexedDB `cizim-tx`) **ayrı yerde** tutulur. Biri diğerini okuyamaz, bozamaz.
 
 ### Telefon, tablet, masaüstü
@@ -66,21 +87,23 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 
 ## 3. Aşamaların Claude görevlerine bölünmesi
 
-| Görev | İçerik | Bitti sayılma ölçütü (test) |
-|---|---|---|
-| T0 (bu belge) | Mimari ve risk | Onay |
-| T1a | Açılış seçimi, `tekstil.html` iskeleti, `model.js` ve `store.js` (IndexedDB, sürüm, göç) | Kaydet → yenile → aç aynı; makine E2E'si değişmeden geçer |
-| T1b | `curve.js` ve teknik çizim: ön/arka/yan, simetri, katman, ölçü; tişört, gömlek, pantolon, etek, elbise, ceket şablonları; detay kütüphanesi; PNG ve vektör PDF/SVG | Eğri uzunluğu analitikle (çember, düz) ±0,01 mm; simetri tam; PDF ölçeği 1:1 |
-| T2 | Kalıp parçası, pens, çıt, dikiş payı (seçili kenar / tüm çevre, köşe türleri), böl, birleştir, döndür, aynala, kontur doğrulama, ölçü tablosu bağlantısı | Bilinen dikdörtgen/daire kalıbında pay alanı ve çevresi analitikle eşleşir; öz-kesişim yakalanır |
-| T3 | Beden tablosu (kullanıcı tanımlı ve örnek tablolar), nokta bazlı grading, yuva (nest) görünümü, bütünlük kontrolü | Bedenler arası ölçü farkı kurala tam eşit; dikiş hattı uzunluk eşleşmesi (kol ↔ kol oyuğu) raporlanır |
-| T4 | Kumaş ve aksesuar kütüphanesi | Zorunlu alanlar doğrulanır; tahmini değerler işaretli |
-| T5 | Kumaş yerleşimi: kısıtlar, otomatik + elle, verim/fire, kesim planı çıktısı | Bilinen dikdörtgen kümelerinde alt sınır ile karşılaştırma; kısıt ihlali sıfır |
-| T6 | Teknik föy (PDF), iş emri, revizyon | Föy sayfaları ve tablolar projeden üretilir; revizyon geri alınabilir |
-| T7 | Dosya alışverişi: kalıp DXF (AAMA / ASTM D6673), SVG, PDF | Kendi çıktısı gidiş-dönüşte ölçek ve eğri hatası < 0,1 mm |
-| T8 | 3B giysi: önce **görsel önizleme**, sonra fiziksel kumaş çözücüsü | Önizleme ve fiziksel simülasyon arayüzde ayrı adlandırılır; çözücü sabit yük altında analitik sarkma testleriyle doğrulanır |
-| T9 | Uçtan uca tekstil testleri ve kalite raporu | Kalite raporuna "Tekstil" bölümü eklenir |
+| Görev | Dal | İçerik | Bitti sayılma ölçütü (test) |
+|---|---|---|---|
+| T0 (bu belge) | — | Mimari ve risk | Onay |
+| T1a | Ortak | Açılış seçimi, `tekstil.html`, proje türü seçimi (dokuma / triko / karma), `model.js` + `store.js` (IndexedDB, sürüm, göç), koleksiyon ve varyant iskeleti | Kaydet → yenile → aç aynı; eski şema göçü; makine E2E'si değişmeden geçer |
+| T1b | Ortak | `curve.js` ve teknik çizim: ön/arka/yan, simetri, katman, ölçü; tişört, gömlek, pantolon, etek, elbise, ceket, kazak, hırka şablonları; detay kütüphanesi; PNG, vektör PDF / SVG | Eğri uzunluğu analitikle ±0,01 mm; simetri tam; PDF ölçeği 1:1 |
+| T2 | Dokuma | Kalıp parçası, pens, çıt, dikiş payı (seçili kenar / tüm çevre, köşe türleri), böl, birleştir, döndür, aynala, kontur doğrulama, ölçü tablosu bağlantısı | Bilinen kalıplarda pay alanı ve çevresi analitikle eşleşir; öz-kesişim yakalanır |
+| T3 | Triko | İlmek sözlüğü, örgü deseni ızgarası (düz, ters, ribana, jakar, saç örgüsü), tekrar, numune / gauge, ölçü ↔ ilmek dönüşümü, sıra bazlı eksiltme / artırma ile parça kalıbı, desen PDF'i | 1×1 / 2×2 ribana ve saç örgüsü kuralları (çapraz genişliği, ön/arka yatak) doğrulanır; gauge dönüşümü elle hesapla tam; eksiltme tablosu hedef ölçüye ±1 ilmek |
+| T4 | Ortak + iki dal | Beden tabloları; dokumada nokta bazlı grading; trikoda bedene göre ilmek / sıra sayılarının gauge'dan yeniden hesabı | Bedenler arası fark kurala tam eşit; dikiş hattı eşleşmesi (kol ↔ kol oyuğu) raporlanır |
+| T5 | Ortak | Kumaş, iplik, aksesuar kütüphanesi; iplik numarası dönüşümleri | Nm / Ne / tex / dtex dönüşümleri tam; tahmini değerler işaretli |
+| T6 | Dokuma + triko | Dokuma: kumaş yerleşimi, verim / fire, kesim planı. Triko: iplik tüketimi ve ürün gramajı (ilmek boyu × ilmek sayısı × tex) | Dokuma: kısıt ihlali sıfır, verim alt sınırla raporlanır. Triko: bilinen numunede gramaj elle hesapla eşit; ilmek boyu ölçülmediyse sonuç "tahmini" |
+| T7 | Ortak | Teknik föy (dal bazlı sayfalar), malzeme listesi, maliyet, iş emri, revizyon | Föy projeden üretilir; revizyon geri alınabilir |
+| T8 | Dokuma + triko | Dosya alışverişi: kalıp DXF (AAMA / ASTM D6673), SVG, PDF; triko için makineden bağımsız çıktı (desen ızgarası PNG / CSV, sıra sıra talimat) | Gidiş-dönüşte ölçek ve eğri hatası < 0,1 mm |
+| T9 | Triko | Makineye özgü program çıktısı: yalnız biçimi açık ve doğrulanabilen makineler için, makine profili ve uyumluluk kontrolüyle | Bkz. risk 12; doğrulanamayan makine için çıktı düğmesi yok, gerekçe yazılı |
+| T10 | 3B | Dokuma: önizleme, sonra fiziksel kumaş çözücüsü. Triko: önizleme, sonra ayrı örgü parametreleriyle model | Önizleme ve fizik ayrı adlandırılır; çözücü analitik sarkma testleriyle doğrulanır |
+| T11 | Hepsi | Uçtan uca tekstil + triko testleri, kalite raporu | Kalite raporuna "Tekstil" bölümü |
 
-Plandaki sırayla uyumlu: önce 0–3 (kullanılabilir 2B temel), sonra 4–5, sonra föy ve dosyalar, en son 3B.
+Sıra, birleşik yapıdaki ilkeye uyar: ortak altyapı ve teknik çizim → dokuma kalıbı → triko desen ve ilmek → grading, malzeme ve tüketim → föy ve dosyalar → makine çıktısı → 3B.
 
 ## 4. Riskler
 
@@ -97,9 +120,15 @@ Plandaki sırayla uyumlu: önce 0–3 (kullanılabilir 2B temel), sonra 4–5, s
 | 9 | Kapsamın çok büyük olması: "tam profesyonel" hedefi tek seferde gerçekçi değil | Yüksek | Her görev çalışan prototip ve testle teslim edilir; profesyonel doğruluk aşamalı gelir; kalite raporunda her özellik "çalışıyor / kısmi / yok" diye işaretlenir. |
 | 10 | `app.js` gibi tek dev dosyaya dönüşme | Orta | `tx/` içinde modül başına bir dosya; arayüz ile hesap ayrı; saf hesap modülleri Node'da test edilir. |
 | 11 | Bilgisayarsız kullanıcı (yalnız telefon) | Orta | Her özellik telefonda kullanılabilir olmalı; E2E telefon emülasyonu zorunlu senaryo; gerçek cihaz denemesi kullanıcıdan istenir. |
+| 12 | Triko makine programı biçimleri | Yüksek | Endüstriyel triko makinelerinin desen / program sistemleri çoğunlukla üreticiye özgü ve kapalı. Genel bir dosyanın her makinede çalıştığı iddia edilmez. Önce makineden bağımsız çıktı verilir: desen ızgarası ve sıra sıra talimat. Makineye özgü çıktı, T9'da biçimi açık ve doğrulanabilen makineler araştırılarak tek tek eklenir. Desteklenmeyen makine "tasarım ve teknik çıktı" düzeyinde kalır. |
+| 13 | Triko ölçüsünün numuneye bağlı olması (gauge yanlışsa bütün bedenler kayar) | Yüksek | Her triko parçası bir numuneye bağlanır. Yıkanmış / yıkanmamış numune ayrımı yapılır. Ölçü ↔ ilmek dönüşümü föyde açıkça yazılır. Numunesiz hesap "tahmini" diye işaretlenir. |
+| 14 | İplik tüketimi ve gramaj: ilmek boyu ölçülmeden doğru hesaplanamaz | Orta | İlmek boyu kullanıcıdan (numuneden ölçülen) istenir. Yoksa yaklaşık formülle hesaplanır ve sonuç "tahmini" olarak gösterilir. |
+| 15 | Dokuma ve trikoyu tek veri modeline zorlamak | Orta | Ayrı alt şemalar (`woven`, `knit`); yalnız ürün, renk, beden, maliyet, föy ortak. Karma koleksiyonda her ürün kendi dalının kurallarıyla doğrulanır. |
+| 16 | Triko 3B (ilmek düzeyi) simülasyonu telefonda çok ağır | Yüksek | Önce yüzey düzeyinde önizleme, örgüye özgü parametrelerle (esneme, kalınlık). İlmek düzeyi fizik yalnız doğrulanabilir bir çözücüyle ve gerekirse masaüstünde. |
 
 ## 5. Onay gereken kararlar
 
 1. Tekstil'in ayrı sayfa (`tekstil.html`) olarak yapılması ve açılışta seçim ekranı eklenmesi. Makine koduna dokunan tek değişiklik bu.
 2. Tekstil projelerinin IndexedDB'de, makine projelerinden ayrı saklanması.
-3. Görev sırası: T1a → T1b → T2 → T3 → … (tablodaki gibi).
+3. Dokuma ve triko için ortak üst şema ile ayrı alt şemalar (`woven`, `knit`).
+4. Görev sırası: T1a → T1b → T2 (dokuma) → T3 (triko) → T4 … (tablodaki gibi).
