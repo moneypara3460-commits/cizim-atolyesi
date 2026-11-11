@@ -75,7 +75,7 @@ jobs:
         run: |
           mkdir -p .e2e-libs && cd .e2e-libs
           echo '{"name":"e2e-libs","private":true}' > package.json
-          npm install --no-audit --no-fund three@0.160.0 three-mesh-bvh@0.6.0 three-bvh-csg@0.0.7 playwright@1.49.1
+          npm install --no-audit --no-fund --legacy-peer-deps three@0.160.0 three-mesh-bvh@0.6.0 three-bvh-csg@0.0.7 playwright@1.49.1
           npx playwright install --with-deps chromium
       - name: E2E senaryoları
         env:

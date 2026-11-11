@@ -26,7 +26,7 @@ Tek dosya: `node tests/cam5.test.mjs`. Filtre: `node tests/run-all.mjs fea cam` 
 
 ```bash
 mkdir -p .e2e-libs && cd .e2e-libs && echo '{"name":"e2e-libs","private":true}' > package.json
-npm install three@0.160.0 three-mesh-bvh@0.6.0 three-bvh-csg@0.0.7 playwright
+npm install --legacy-peer-deps three@0.160.0 three-mesh-bvh@0.6.0 three-bvh-csg@0.0.7 playwright
 npx playwright install chromium
 cd .. && E2E_LIBS=$PWD/.e2e-libs/node_modules PLAYWRIGHT_MODULE=$PWD/.e2e-libs/node_modules/playwright node tests/e2e/run.mjs
 ```
