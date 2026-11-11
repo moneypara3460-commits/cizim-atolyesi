@@ -1,8 +1,8 @@
 // Akıllı Otomatik Montaj Sırası ve 3B Patlatılmış Görünüm — "Montaj planı" sekmesi arayüzü.
 // api: { model() → analyzeAssembly girdisi, size() → model köşegeni (mm), getAnswers(), setAnswers(o), enter(res), leave(),
 //        apply(stateMap, selId), focus(ids), render(), toast(m), name(), snapshot()? }
-import { analyzeAssembly, explodeOffsets, animState } from './assembly.js?v=20261111d';
-import { pdfFromJpegs } from './cutopt.js?v=20261111d';
+import { analyzeAssembly, explodeOffsets, animState } from './assembly.js?v=20261111e';
+import { pdfFromJpegs } from './cutopt.js?v=20261111e';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const f0 = (v) => Math.round(v).toLocaleString('tr-TR');

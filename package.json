@@ -4,5 +4,14 @@
   "private": true,
   "dependencies": {
     "react-native-webview": "*"
+  },
+  "scripts": {
+    "test": "node tests/run-all.mjs --no-wasm",
+    "test:wasm": "node tests/run-all.mjs --only-wasm",
+    "test:unit": "node tests/run-all.mjs",
+    "test:coverage": "node tests/run-all.mjs --coverage",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "test:perf": "node --expose-gc tests/perf.mjs",
+    "test:all": "node tests/run-all.mjs && node tests/e2e/run.mjs"
   }
 }

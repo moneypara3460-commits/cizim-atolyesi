@@ -9,7 +9,7 @@
 //     süresi, taşlama (kaynak boyu). Süre varsayımları (hız, dakika) görünür ve değiştirilebilir; bunlar fiyat değil süre varsayımıdır.
 // Adet: hazırlık (setup) süreleri ve parti başı giderler SABİT, kalanlar adet başı DEĞİŞKEN; profiller her adet için yeniden optimize edilir.
 
-import { optimizeCuts } from './cutopt.js?v=20261111d';
+import { optimizeCuts } from './cutopt.js?v=20261111e';
 
 export const OPS = [
   { id: 'saw', name: 'Testere (profil kesim)', setupMin: 10 },

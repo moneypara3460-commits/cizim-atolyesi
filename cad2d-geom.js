@@ -419,7 +419,10 @@ export function parseDXF(txt) {
   let i = 0, section = '';
   const readEnt = () => { const rec = []; i++; while (i < pairs.length && pairs[i][0] !== 0) { rec.push(pairs[i]); i++; } return rec; };
   const get = (rec, c, d) => { const r = rec.find((q) => q[0] === c); return r ? r[1] : d; };
-  const num = (rec, c, d = 0) => { const v = parseFloat(get(rec, c, d)); return isFinite(v) ? v : d; };
+  // alan yoksa varsayılan; alan var ama sayı değilse (NaN, inf, bozuk metin) NaN → varlık atlanır
+  const num = (rec, c, d = 0) => { const r = rec.find((q) => q[0] === c); if (!r) return d; const v = Number(r[1]); return r[1] !== '' && isFinite(v) ? v : NaN; };
+  const okNum = (x) => (Array.isArray(x) ? x.every(okNum) : typeof x !== 'number' || isFinite(x));
+  const push = (...es) => { for (const e of es) { if (Object.values(e).every(okNum) && !(e.r != null && !(e.r > 0))) ents.push(e); else skipped['geçersiz sayı'] = (skipped['geçersiz sayı'] || 0) + 1; } };
   const bulgeArc = (p, q, b, ly) => {
     // bulge = tan(açı/4); p'den q'ya
     const th = 4 * Math.atan(b), ch = dist(p, q);
@@ -449,19 +452,19 @@ export function parseDXF(txt) {
     }
     if (section !== 'ENTITIES' && section !== 'BLOCKS') { i++; continue; }
     if (section === 'BLOCKS') { i++; continue; }
-    if (v === 'LINE') { const r = readEnt(); ents.push({ t: 'line', a: [num(r, 10), num(r, 20)], b: [num(r, 11), num(r, 21)], layer: get(r, 8, '0') }); continue; }
-    if (v === 'CIRCLE') { const r = readEnt(); ents.push({ t: 'circle', c: [num(r, 10), num(r, 20)], r: num(r, 40, 1), layer: get(r, 8, '0') }); continue; }
-    if (v === 'ARC') { const r = readEnt(); ents.push({ t: 'arc', c: [num(r, 10), num(r, 20)], r: num(r, 40, 1), a0: normA(num(r, 50) * Math.PI / 180), a1: normA(num(r, 51) * Math.PI / 180), layer: get(r, 8, '0') }); continue; }
-    if (v === 'TEXT' || v === 'MTEXT') { const r = readEnt(); ents.push({ t: 'text', p: [num(r, 10), num(r, 20)], h: num(r, 40, 3.5), s: get(r, 1, '').replace(/\\P/g, ' '), layer: get(r, 8, '0') }); continue; }
+    if (v === 'LINE') { const r = readEnt(); push({ t: 'line', a: [num(r, 10), num(r, 20)], b: [num(r, 11), num(r, 21)], layer: get(r, 8, '0') }); continue; }
+    if (v === 'CIRCLE') { const r = readEnt(); push({ t: 'circle', c: [num(r, 10), num(r, 20)], r: num(r, 40, 1), layer: get(r, 8, '0') }); continue; }
+    if (v === 'ARC') { const r = readEnt(); push({ t: 'arc', c: [num(r, 10), num(r, 20)], r: num(r, 40, 1), a0: normA(num(r, 50) * Math.PI / 180), a1: normA(num(r, 51) * Math.PI / 180), layer: get(r, 8, '0') }); continue; }
+    if (v === 'TEXT' || v === 'MTEXT') { const r = readEnt(); push({ t: 'text', p: [num(r, 10), num(r, 20)], h: num(r, 40, 3.5), s: get(r, 1, '').replace(/\\P/g, ' '), layer: get(r, 8, '0') }); continue; }
     if (v === 'LWPOLYLINE') {
       const r = readEnt(), ly = get(r, 8, '0'), closed = (parseInt(get(r, 70, 0), 10) & 1) === 1;
       const vs = [];
       for (const [cc, vv] of r) {
-        if (cc === 10) vs.push({ p: [parseFloat(vv), 0], b: 0 });
-        else if (cc === 20 && vs.length) vs[vs.length - 1].p[1] = parseFloat(vv);
-        else if (cc === 42 && vs.length) vs[vs.length - 1].b = parseFloat(vv);
+        if (cc === 10) vs.push({ p: [Number(vv), 0], b: 0 });
+        else if (cc === 20 && vs.length) vs[vs.length - 1].p[1] = Number(vv);
+        else if (cc === 42 && vs.length) vs[vs.length - 1].b = Number(vv);
       }
-      ents.push(...polyEnts(vs, closed, ly));
+      push(...polyEnts(vs, closed, ly));
       continue;
     }
     if (v === 'POLYLINE') {
@@ -469,7 +472,7 @@ export function parseDXF(txt) {
       const vs = [];
       while (i < pairs.length && pairs[i][1] === 'VERTEX') { const q = readEnt(); vs.push({ p: [num(q, 10), num(q, 20)], b: num(q, 42, 0) }); }
       if (i < pairs.length && pairs[i][1] === 'SEQEND') readEnt();
-      ents.push(...polyEnts(vs, closed, ly));
+      push(...polyEnts(vs, closed, ly));
       continue;
     }
     skipped[v] = (skipped[v] || 0) + 1;

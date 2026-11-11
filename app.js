@@ -13,32 +13,32 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
-} from './logic.js?v=20261111d';
-import { openSketch } from './sketch.js?v=20261111d';
-import { to3MF, toSTEP } from './export3d.js?v=20261111d';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261111d';
-import { openCad2D } from './cad2d.js?v=20261111d';
-import { openCutOpt } from './cutopt-ui.js?v=20261111d';
-import { createMfg } from './mfg-ui.js?v=20261111d';
-import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261111d';
-import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261111d';
-import { analyzeWeight } from './weight.js?v=20261111d';
-import { createWeightUI, fkg } from './weight-ui.js?v=20261111d';
-import { createCostUI } from './cost-ui.js?v=20261111d';
-import { planReport as weldReport } from './welds.js?v=20261111d';
-import { altCons as weldAltCons } from './weld-ui.js?v=20261111d';
-import { groupKey } from './cutopt.js?v=20261111d';
-import { createAssemblyUI } from './assembly-ui.js?v=20261111d';
-import { createSimUI } from './sim-ui.js?v=20261111d';
-import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261111d';
-import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261111d';
-import { createCamUI } from './cam-ui.js?v=20261111d';
-import { createCam5UI } from './cam5-ui.js?v=20261111d';
-import { machinePose } from './kin.js?v=20261111d';
-import { createOcctUI } from './occt-ui.js?v=20261111d';
-import { createFemUI } from './fem-ui.js?v=20261111d';
+} from './logic.js?v=20261111e';
+import { openSketch } from './sketch.js?v=20261111e';
+import { to3MF, toSTEP } from './export3d.js?v=20261111e';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261111e';
+import { openCad2D } from './cad2d.js?v=20261111e';
+import { openCutOpt } from './cutopt-ui.js?v=20261111e';
+import { createMfg } from './mfg-ui.js?v=20261111e';
+import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261111e';
+import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261111e';
+import { analyzeWeight } from './weight.js?v=20261111e';
+import { createWeightUI, fkg } from './weight-ui.js?v=20261111e';
+import { createCostUI } from './cost-ui.js?v=20261111e';
+import { planReport as weldReport } from './welds.js?v=20261111e';
+import { altCons as weldAltCons } from './weld-ui.js?v=20261111e';
+import { groupKey } from './cutopt.js?v=20261111e';
+import { createAssemblyUI } from './assembly-ui.js?v=20261111e';
+import { createSimUI } from './sim-ui.js?v=20261111e';
+import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261111e';
+import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261111e';
+import { createCamUI } from './cam-ui.js?v=20261111e';
+import { createCam5UI } from './cam5-ui.js?v=20261111e';
+import { machinePose } from './kin.js?v=20261111e';
+import { createOcctUI } from './occt-ui.js?v=20261111e';
+import { createFemUI } from './fem-ui.js?v=20261111e';
 
-const APP_VER = '20261111d'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261111e'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m

@@ -312,7 +312,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - `occt.js`, `occt-ops.js`, `occt-worker.js`, `occt-ui.js` — OCCT B-Rep köprüsü (katı kurma, Boolean, yuvarlama / pah, doğrulama, STEP / IGES, Three.js'e üçgenleme, CAM için topoloji), işçi ve B-Rep sekmesi; `vendor/` — üçüncü taraf WebAssembly kütüphaneleri (bkz. `vendor/README.md`)
 - `fea.js`, `fea-worker.js`, `sim-ui.js` — Geleceğimi Göster: sonlu eleman çözücü (voxel H8, multigrid), modal, ısıl, yorulma / aşınma, alternatifler, arayüz ve PDF
 - `assembly.js`, `assembly-ui.js` — montaj sırası: parça tanıma, delik → cıvata, sökme analizi, patlatma / animasyon, PDF
-- `tests/` — testler: `node tests/logic.test.mjs`, `node tests/sketch.test.mjs`, `node tests/cad2d.test.mjs`, `node tests/photo2d.test.mjs`, `node tests/examples.test.mjs`, `node tests/export3d.test.mjs`
+- `tests/` — testler. Tek komut: `npm test` (birim), `npm run test:e2e` (tarayıcı), `npm run test:all`; ayrıntı [TESTLER.md](TESTLER.md), sonuçlar [docs/KALITE-RAPORU.md](docs/KALITE-RAPORU.md). `.github/workflows/ci.yml` — her push'ta birim, gerçek OCCT WASM ve E2E işleri
 - `App.js`, `viewerHtml.js`, `package.json` — eski React Native / Expo sürümü (2. aşama; güncellenmedi)
 
 ## Yol haritası

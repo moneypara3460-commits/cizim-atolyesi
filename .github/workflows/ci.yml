@@ -1,0 +1,94 @@
+# Çizim Atölyesi — sürekli test. Ayrıntı: TESTLER.md
+# Kural: hiçbir adımda "continue-on-error" yok; bir test başarısızsa iş kırmızı olur.
+# Raporlar (JSON, ekran görüntüleri, günlükler) her durumda (başarısız olsa da) yüklenir.
+name: Testler
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  birim:
+    name: Birim ve entegrasyon (Node, WASM hariç) + kapsama
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Testler (kapsama ile)
+        run: node tests/run-all.mjs --no-wasm --coverage 2>&1 | tee reports-unit.log
+        shell: bash -o pipefail {0}
+      - name: Raporları yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: birim-raporlari
+          path: |
+            reports/
+            reports-unit.log
+          if-no-files-found: warn
+
+  occt-wasm:
+    name: Gerçek OCCT WebAssembly entegrasyonu (ayrı iş)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: OCCT çekirdeği (vendor/occt, gerçek WASM) testleri
+        run: node tests/run-all.mjs --only-wasm 2>&1 | tee reports-occt.log
+        shell: bash -o pipefail {0}
+      - name: Performans ölçümü (bilgi amaçlı, eşik yok)
+        run: node --expose-gc tests/perf.mjs 2>&1 | tee reports-perf.log
+        shell: bash -o pipefail {0}
+      - name: Raporları yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: occt-wasm-raporlari
+          path: |
+            reports/
+            reports-occt.log
+            reports-perf.log
+          if-no-files-found: warn
+
+  e2e:
+    name: Tarayıcı uçtan uca (Chromium, emülasyon)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Uygulamanın unpkg'den yüklediği sürümlerle aynı (index.html importmap). İnternet yerine yerel kopya: deterministik.
+      - name: Test bağımlılıkları (sürümler sabit)
+        run: |
+          mkdir -p .e2e-libs && cd .e2e-libs
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund three@0.160.0 three-mesh-bvh@0.6.0 three-bvh-csg@0.0.7 playwright@1.49.1
+          npx playwright install --with-deps chromium
+      - name: E2E senaryoları
+        env:
+          E2E_LIBS: ${{ github.workspace }}/.e2e-libs/node_modules
+          PLAYWRIGHT_MODULE: ${{ github.workspace }}/.e2e-libs/node_modules/playwright
+        run: node tests/e2e/run.mjs 2>&1 | tee reports-e2e.log
+        shell: bash -o pipefail {0}
+      - name: Raporları yükle (ekran görüntüleri dahil)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-raporlari
+          path: |
+            reports/
+            reports-e2e.log
+          if-no-files-found: warn

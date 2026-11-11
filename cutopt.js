@@ -153,6 +153,8 @@ function better(a, b, C) {
 }
 
 /* ---------- ana fonksiyon ---------- */
+// Bir profil grubunda hesaplanacak en çok parça (çok büyük adet girilince sonsuz bekleme / bellek taşması olmasın)
+export const MAX_PIECES = 20000;
 export function optimizeCuts(pieces, options = {}) {
   const o = { ...CUT_DEFAULTS, ...options };
   const kerf = Math.max(0, Number(o.kerf) || 0), trim = Math.max(0, Number(o.trim) || 0), minKeep = Math.max(0, Number(o.minKeep) || 0);
@@ -191,6 +193,7 @@ function optimizeGroup(G, o, kerf, trim, minKeep) {
   let idx = 0;
   for (const x of G.list) {
     if (U(x.len) > U(stock - trim)) { errors.push({ label: x.label, len: x.len, qty: x.qty, msg: r1(x.len) + ' mm parça ' + r1(stock - trim) + ' mm kullanılabilir boydan uzun' + (trim ? ' (uç düzeltme dahil)' : '') + '; kaynakla eklenmeli ya da daha uzun stok gerekir' }); continue; }
+    if (idx + x.qty > MAX_PIECES) { errors.push({ label: x.label, len: x.len, qty: x.qty, msg: 'Adet çok büyük: bir profilde en çok ' + MAX_PIECES + ' parça hesaplanır (telefonun donmaması için). Listeyi bölerek hesapla.' }); continue; }
     for (let k = 0; k < x.qty; k++) items.push({ i: idx++, label: x.label, len: x.len, s: U(x.len + kerf) });
   }
   items.sort((a, b) => b.s - a.s || a.label.localeCompare(b.label));
