@@ -1,6 +1,6 @@
 // Örgü şeması editörü (tam ekran). Fırça: dokun / sürükle ile ilmek ve renk boyar; "Kaydır" ile gezinilir; iki parmak yakınlaştırır.
-import * as K from './chart.js?v=20261112f';
-import { drawChartCanvas, chartPDF } from './chart-export.js?v=20261112f';
+import * as K from './chart.js?v=20261112g';
+import { drawChartCanvas, chartPDF } from './chart-export.js?v=20261112g';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const PAL = ['k', 'p', 't', 'm', 'yo', 'k2t', 'ssk', 'c2R', 'c2L', 'c4R', 'c4L', 'c6R', 'c6L', 'x'];

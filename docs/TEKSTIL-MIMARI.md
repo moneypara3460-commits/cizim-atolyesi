@@ -96,7 +96,7 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | 4 | Beden ve grading: nokta bazlı grading, kişiye özel ölçü altyapısı, bütünlük kontrolü; trikoda bedene göre ilmek / sıra sayıları | Bedenler arası fark kurala tam eşit; dikiş hattı eşleşmesi raporlanır | ✅ dokuma (12.11.2026) — bkz. bölüm 9; triko ilmek sayıları Aşama 5 ile |
 | 5 | Triko desen ve ilmek: ilmek sözlüğü, ızgara, düz / ters / ribana / saç örgüsü / jakar, tekrar, renk raporu, numune ve gauge, sıra bazlı eksiltme / artırma | Ribana ve saç örgüsü kuralları; gauge dönüşümü elle hesapla tam; eksiltme tablosu hedef ölçüye ±1 ilmek; desteklenmeyen yapıda açık uyarı | ✅ (12.11.2026) — bkz. bölüm 10 |
 | 6 | Kumaş, iplik, aksesuar kütüphanesi (ayrıntılı); iplik numarası dönüşümleri; tüketim, gramaj, maliyet | Nm / Ne / tex / dtex dönüşümleri tam; numunesiz sonuç "tahmini" | ✅ (12.11.2026) — bkz. bölüm 11 |
-| 7 | Kumaş yerleşimi ve kesim optimizasyonu | Kısıt ihlali sıfır; verim alt sınırla raporlanır | Yok |
+| 7 | Kumaş yerleşimi ve kesim optimizasyonu | Kısıt ihlali sıfır; verim alt sınırla raporlanır | ✅ (12.11.2026) — bkz. bölüm 12 |
 | 8 | Triko makine profilleri ve üretim çıktısı | Doğrulanamayan makine için çıktı yok, gerekçe yazılı (risk 12) | Yok |
 | 9 | 3B giysi ve kumaş / örgü simülasyonu | Önizleme ve fizik ayrı adlandırılır; çözücü analitik testlerle doğrulanır | Yok |
 | 10 | Üretim föyü ve maliyet: işçilik, operasyon sırası, dikiş türü, vektör PDF | Föy projeden üretilir; maliyet varsayımları yazılı | Kısmi: föy özeti, varyant, malzeme maliyeti, tarayıcıdan yazdır / PDF Aşama 1'de var |
@@ -130,6 +130,9 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | `tests/tx-knit.test.mjs` | Yeni (Aşama 5) | 11 Node testi |
 | `tx/materials.js` | Yeni (Aşama 6) | Numara dönüşümleri, hazır kartlar, dokuma kumaş tüketimi, triko ilmek toplamı / ilmek boyu / gramaj |
 | `tests/tx-materials.test.mjs` | Yeni (Aşama 6) | 7 Node testi |
+| `tx/woven/marker.js` | Yeni (Aşama 7) | Kesim planı: parça örnekleri (açık en / katlı), yönlendirme, ızgara tabanlı otomatik yerleşim, desen eşleştirme, kesin çokgen doğrulaması, verim / fire |
+| `tx/woven/marker-ui.js` | Yeni (Aşama 7) | Kesim planı editörü (otomatik + elle sürükleme / 180°), PDF (A3, ölçekli) ve SVG 1:1 çıktı |
+| `tests/tx-marker.test.mjs` | Yeni (Aşama 7) | 10 Node testi |
 | `tests/e2e/run.mjs` | Değişti | W (çalışma alanı) ve T (tekstil) senaryoları; makine senaryoları seçim ekranını atlamak için `cizim:workspace = makine` ile başlar |
 
 Yeni dış bağımlılık yok: tarayıcının kendi IndexedDB'si kullanılır. Three.js tekstil tarafında Aşama 9'a kadar yüklenmez.
@@ -461,3 +464,61 @@ Kurallar iki kaynaktan gelir:
 - **Kumaş metresi.** Yerleşim yapılmadan önce varsayılan verimle hesaplanır (Aşama 7'de gerçek yerleşim gelecek).
 - **İlmek boyu tahmini.** Düz örgü katsayısıyla yapılır; ribana / saç örgüsü bölümleri için ayrı katsayı yok. Doğru gramaj için numunede ilmek boyunu ölç ya da numuneyi tart.
 - **Kapsam dışı.** Aksesuar tüketimi (düğme adedi, fermuar boyu) otomatik hesaplanmaz; elle girilir. Stok düşümü / sipariş yok, alanlar kayıt amaçlıdır.
+
+## 12. Aşama 7 raporu: kumaş yerleşimi ve kesim planı (12.11.2026)
+
+**Çalışanlar.**
+- **Kesim planı ekranı.** Kalıp sekmesinde her ürün / beden kartında "✂ Kumaş yerleşimi". Ürüne bağlı kumaş, serim (açık en tek kat ya da ortadan katlı iki kat), kenar (selvedge) payı, parça aralığı, arama ızgarası ve "desen eşleştir" seçilir.
+- **Otomatik yerleşim.**
+  - En sola / en alta sığdırma, ızgara üzerinde. Tutucu tarama: hücre yalnız parçanın iç alanına (aralık kadar şişirilmiş) değiyorsa dolu sayılır.
+  - Dört sıralama denenir (alan, en, boy, çevre), en kısa plan seçilir.
+  - Ardından her çift parça kesin çokgen testiyle denetlenir.
+- **Kısıtlar.**
+  - Düz boy çizgisi kumaş boyuna paralel.
+  - Yönsüz kumaşta 0° / 180°; havlı / yönlü kumaşta (kumaş kartında "hav") hiç çevirme yok. Elle çevrilirse hata.
+  - Çift (sağ / sol) parçalar tek kat seriminde ikinci adet ayna olarak yerleşir.
+  - Katlı serimde kumaş katı kenarlı parça kat çizgisine oturur ve tek yerleşimle iki kat kesilir. Kat kenarı düz boya dik olan parça (yaka, yaka ayağı) açılıp normal yerleşir, uyarı yazılır. Tek adetli parça için "1 fazla kesilir" uyarısı.
+  - Desen eşleştirmede her parçanın düz boy ortası kumaş kartındaki desen raporu ızgarasına (boy × en) oturur.
+- **Elle yerleşim.**
+  - Parça sürüklenir, seçili parça 180° çevrilir (havlıda engelli). İki parmakla yakınlaştırma.
+  - Çakışan ya da en dışına taşan parça kırmızı görünür. Boy, verim, fire ve hata sayısı canlı yazılır.
+- **Çıktılar.**
+  - Kesim planı PDF: A3 yatay, standart ölçek (1:5 … 1:50), sığmazsa sayfalara bölünür. İstatistikler, kısıtlar ve varsayımlar, hata / uyarılar sayfada.
+  - SVG 1:1 (mm), çizici / kesim masası için.
+- **Tüketim.**
+  - Kayıtlı ve hatasız plan varsa föydeki kumaş metresi %80 verim varsayımı yerine plan boyundan hesaplanır: boy / (1 − boy çekmesi) + pastal başı / sonu 2 × 2 cm; katlı serimde × 2.
+  - En çekmesi planda yoktur; föyde "kalıp ene göre büyütülmeli ya da kumaş ön çektirilmeli" diye yazılır.
+  - Plan bozuksa (parça değişti, çakışma) tüketim varsayıma döner ve hata yazılır.
+- **Doğrulama sekmesi.** Kayıtlı her planı yeniden denetler: çakışma, en dışı, yerleşmeyen / artık parça, kat çizgisi, havlıda çevirme, silinmiş kumaş.
+
+**Ölçülen sonuçlar** (gömlek bloğu, M, en 150 cm, kenar 1 cm, aralık 2 mm, ızgara 5 mm):
+
+| Durum | Boy | Verim | Sorun |
+|---|---|---|---|
+| Açık en | 133,5 cm | %69,0 | yok |
+| Açık en, havlı | 136,5 cm | %67,5 | yok |
+| Katlı | 137,5 cm | %68,1 | yalnız uyarı (yaka açılır, cep 1 fazla) |
+| Etek, desen eşleştirme 10 × 8 cm | 78,5 cm | %64,1 | yok |
+
+**Doğrulama** (`tests/tx-marker.test.mjs`, 10 test):
+- **Bilinen optimum.** 4 adet 37 × 30 cm dikdörtgen, kullanılabilir en 148 cm, aralık 0 → boy 30 cm, verim %100.
+- **Gömlek.** Çakışma yok (testin kendi kesişim denetimiyle), hepsi en içinde, verim > %60, süre < 2 s.
+- **Çift parça, katlı serim, havlı kumaş, desen eşleştirme.** Kurallar ayrı ayrı denetlenir; desen eşleştirmede her düz boy ortası rapor ızgarasında (±1e-6 mm).
+- **Doğrulama.** Elle bozulan planda çakışma, en dışı ve eksik parça hata olarak çıkar.
+- **Model.** Kayıt, yerine geçme, JSON gidiş-dönüş; tüketim = plan boyu (+ çekme, + pastal başı), maliyet buna göre; bozuk plan varsayıma döner.
+- **Çıktılar.** SVG tüm parçaları içerir; PDF geçerli ve ölçek etiketli.
+- **Desteklenmeyen.** Kumaş eni yok, desen raporu yok, parça enden geniş, düz boy yok: açık hata.
+- **Tarayıcı testi.**
+  - Gömlek + poplin, otomatik yerleşim hatasız.
+  - Parça elle başka parçanın üstüne sürüklenince çakışma hatası; yeniden yerleştirince temiz.
+  - PDF indirilir; kaydedilir; föyde tüketim plandan, en çekmesi uyarısı.
+  - Yenileme sonrası plan duruyor.
+
+**Sınırlar:**
+- **En iyi sonuç garantisi yok.** Otomatik yerleşim sezgiseldir; ticari yerleşim yazılımlarının (yüzlerce deneme, serbest açı) verimine ulaşmaz. Tipik giysi planında %65–70. Plan ve kısıtlar PDF'de yazılıdır; **kesimden önce operatör kontrol etmelidir.**
+- **Serbest açı yok.** Yalnız 0° / 180° (düz boy toleransı ile küçük eğme desteklenmez); verev (45°) kesim parçası yok.
+- **Tek beden.** Plan tek beden içindir; çok bedenli karışık pastal (ör. 2 M + 1 L) ve kat sayısı / pastal planı yok.
+- **Ana kumaş.** Astar ve tela parçaları bu ekranda planlanmaz; onların tüketimi varsayımla hesaplanmaya devam eder.
+- **Çıktı biçimi.** Kesim makinesine özel biçimler (Gerber, Lectra vb.) yok; SVG 1:1 ve PDF var. DXF-AAMA dışa aktarımı ilerideki bir iş.
+- **Desen eşleştirme.** Parçayı rapor ızgarasına oturtur; parçaların birbirine göre hangi desen noktasında buluşacağı (ör. ön ortada kareli eşleşme) kalıpta işaretlenmez.
+

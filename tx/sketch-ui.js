@@ -1,8 +1,8 @@
 // Teknik moda çizimi editörü (tam ekran). Telefon önce: tek parmak kaydırır / seçer, iki parmak yakınlaştırır.
 // Bütün geometri tx/drawing.js ve tx/curve.js'te; burada yalnız etkileşim ve gösterim.
-import * as C from './curve.js?v=20261112f';
-import * as D from './drawing.js?v=20261112f';
-import * as X from './export2d.js?v=20261112f';
+import * as C from './curve.js?v=20261112g';
+import * as D from './drawing.js?v=20261112g';
+import * as X from './export2d.js?v=20261112g';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cm = (mm) => (Math.round(mm) / 10).toString().replace('.', ',');

@@ -4,13 +4,14 @@
 // Dokuma / konfeksiyon ve triko ayrı alt şemalardır (woven, knit); yalnız koleksiyon, ürün, renk, beden,
 // malzeme, föy ve revizyon ortaktır. Bkz. docs/TEKSTIL-MIMARI.md
 
-import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112f';
-import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112f';
-import { buildSet } from './woven/blocks.js?v=20261112f';
-import { gradeGroup } from './woven/grade.js?v=20261112f';
-import { fromTemplate, validateChart } from './knit/chart.js?v=20261112f';
-import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112f';
-import { PRESETS, presetEstimated, wovenConsumption, knitStitchTotal, yarnConsumption } from './materials.js?v=20261112f';
+import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112g';
+import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112g';
+import { buildSet } from './woven/blocks.js?v=20261112g';
+import { gradeGroup } from './woven/grade.js?v=20261112g';
+import { fromTemplate, validateChart } from './knit/chart.js?v=20261112g';
+import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112g';
+import { PRESETS, presetEstimated, wovenConsumption, knitStitchTotal, yarnConsumption } from './materials.js?v=20261112g';
+import { evaluate as evalMarker, makeMarker } from './woven/marker.js?v=20261112g';
 
 export const KIND = 'cizim.textile';
 export const SCHEMA = 1;
@@ -152,6 +153,17 @@ export function addSketch(p, { name, product = null } = {}) {
 }
 
 // Kalıp (Aşama 3, dokuma): blok takımı ya da serbest parça
+// Kesim planı: ürün + beden + ana kumaş için otomatik yerleşim; aynı ürün / bedenin eski planının yerine geçer
+export function addMarker(p, { product = null, size = '', fabric, mode = 'single', selvedge = 10, gap = 2, res = 5, patternMatch = false } = {}) {
+  if (!p.woven) throw new Error('Bu proje türünde dokuma kalıbı yok');
+  const m = p.library.materials.find((x) => x.id === fabric && x.kind === 'fabric'); if (!m) throw new Error('Kumaş bulunamadı');
+  const pcs = p.woven.pieces.filter((x) => (x.product ?? null) === product && (x.size ?? '') === size && x.fabric === 'ana');
+  if (!pcs.length) throw new Error('Bu ürün / bedende ana kumaş parçası yok');
+  const r = makeMarker(pcs, m, { mode, selvedge, gap, res, patternMatch });
+  const mk = { ...r.marker, fabric: m.id, product, size, at: Date.now() };
+  p.woven.markers = (p.woven.markers || []).filter((x) => !((x.product ?? null) === product && (x.size ?? '') === size)); p.woven.markers.push(mk);
+  return { marker: mk, fails: r.fails, warn: r.warn, eval: r.eval };
+}
 export function addPatternSet(p, set, params, { product = null, size = '' } = {}) {
   if (!p.woven) throw new Error('Bu proje türünde dokuma kalıbı yok');
   const pr = product ? p.collection.products.find((x) => x.id === product) : null;
@@ -236,6 +248,21 @@ export function productConsumption(p, productId, opts = {}) {
       const list = pcs.filter((x) => x.fabric === fab); if (!list.length) continue;
       const l = linkOf(role, 'fabric'); if (!l) { out.errors.push(`${z || '—'}: "${fab}" kumaşlı parça var ama ürüne ${role} kumaş bağlı değil`); continue; }
       const m = p.library.materials.find((x) => x.id === l.mat);
+      const mk = fab === 'ana' && m && (p.woven.markers || []).find((x) => x.product === productId && (x.size ?? '') === z && x.fabric === m.id);
+      if (mk) {
+        // gerçek yerleşim: boy + pastal başı / sonu (2 × 20 mm)
+        const ev = evalMarker(list, mk), ok = !ev.issues.some((x) => x.level === 'hata'), sl = (m.props.shrinkWarp ?? 0) / 100, sw = (m.props.shrinkWeft ?? 0) / 100, lengthM = (ev.length / (1 - sl) + 40) / 1000;
+        if (!ok) out.errors.push(`${z || '—'}: kayıtlı kesim planında hata var; tüketim varsayımla hesaplandı`);
+        else {
+          const detail = { lengthM, cutArea: ev.usedArea, weightG: m.props.gsm > 0 ? lengthM * (m.props.width / 1000) * m.props.gsm * ev.layers : null, efficiency: ev.efficiency, marker: true };
+          (out.sizes[z] = out.sizes[z] || {})[m.id] = { qty: m.priceUnit === 'm' ? lengthM * ev.layers : m.priceUnit === 'm²' ? lengthM * ev.layers * m.props.width / 1000 : m.priceUnit === 'kg' && detail.weightG ? detail.weightG / 1000 : null, unit: m.priceUnit, detail: { ...detail, lengthM: lengthM * ev.layers }, name: m.name, estimated: (m.estimated || []).includes('width') };
+          const note = `${z || '—'}: kesim planından (verim %${(ev.efficiency * 100).toFixed(1).replace('.', ',')}${ev.layers === 2 ? ', katlı serim: kumaş boyu × 2' : ''}, pastal başı / sonu 2 × 2 cm)`;
+          if (!out.notes.includes(note)) out.notes.push(note);
+          if (sl > 0 && !out.notes.some((n) => n.startsWith('Kesim planı: boy çekmesi'))) out.notes.push(`Kesim planı: boy çekmesi %${m.props.shrinkWarp} kumaş boyuna eklendi`);
+          if (sw > 0 && !out.notes.some((n) => n.startsWith('Kesim planı: en çekmesi'))) out.notes.push(`Kesim planı: en çekmesi %${m.props.shrinkWeft} planda yok; kalıp ene göre büyütülmeli ya da kumaş ön çektirilmeli`);
+          continue;
+        }
+      }
       try { const c = wovenConsumption(list, m, opts); (out.sizes[z] = out.sizes[z] || {})[m.id] = { qty: m.priceUnit === 'm' ? c.lengthM : m.priceUnit === 'm²' ? c.lengthM * m.props.width / 1000 : m.priceUnit === 'kg' && c.weightG ? c.weightG / 1000 : null, unit: m.priceUnit, detail: c, name: m.name, estimated: true }; for (const n of c.notes) if (!out.notes.includes(n)) out.notes.push(n); }
       catch (e) { out.errors.push(`${z || '—'}: ${e.message}`); }
     }
@@ -352,6 +379,12 @@ export function validate(p) {
       out.push(...validatePiece(pc));
       if (pc.product && !prodIds.has(pc.product)) E('Kalıp ' + pc.name, 'Bağlı olduğu ürün silinmiş');
     }
+    for (const mk of p.woven.markers || []) {
+      const pcs = p.woven.pieces.filter((x) => (x.product ?? null) === (mk.product ?? null) && (x.size ?? '') === (mk.size ?? '') && x.fabric === 'ana');
+      const w = 'Kesim planı ' + (p.collection.products.find((x) => x.id === mk.product)?.name || '') + ' ' + (mk.size || '');
+      if (!p.library.materials.some((x) => x.id === mk.fabric)) { E(w, 'Kumaşı silinmiş'); continue; }
+      try { for (const is of evalMarker(pcs, mk).issues) (is.level === 'hata' ? E : W)(w, is.msg); } catch (e) { E(w, e.message); }
+    }
     for (const sm of p.woven.seams || []) {
       const r = seamCheck(p.woven.pieces, sm);
       if (r.missing) E('Dikiş eşleşmesi ' + sm.name, 'Eşleşmedeki parça ya da kenar bulunamadı');
@@ -422,6 +455,7 @@ export function migrate(raw) {
     p.schema = 1;
   }
   if (p.woven && !Array.isArray(p.woven.seams)) p.woven.seams = [];
+  if (p.woven && !Array.isArray(p.woven.markers)) p.woven.markers = [];
   p.rev = Number.isInteger(p.rev) ? p.rev : 0;
   if (!Number.isInteger(p.nextId)) {
     const all = [...(p.library?.colors || []), ...(p.library?.materials || []), ...(p.sizeTables || []), ...(p.collection?.products || [])];

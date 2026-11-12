@@ -685,6 +685,50 @@ await TX('Tekstil malzeme / tüketim: hazır kart (poplin, merinos), numara dön
   expect(/\d+ g \(\d+ m iplik, \d+ ilmek\)/.test(b) && /sıkılık faktörü/.test(b), 'iplik gramı ve uyumsuz numune uyarısı');
 });
 
+await TX('Tekstil kesim planı: gömlek kalıbı + poplin, otomatik yerleşim, elle sürükleyince çakışma hatası, geri yerleştirme, kaydet, föyde plan boyundan tüketim, PDF', async ({ page }) => {
+  await A(page, 'type', '[data-v="woven"]'); await page.waitForSelector('[data-a="type"][data-v="woven"].on');
+  await page.fill('#np-name', 'Kesim E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await page.selectOption('#ap-type', 'gomlek'); await A(page, 'add-prod');
+  await A(page, 'tab', '[data-v="mats"]'); await page.selectOption('#nm-preset', 'fabric:0'); await A(page, 'add-preset');
+  await page.fill('[data-f="library.materials.0.price"]', '100'); await page.locator('[data-f="library.materials.0.price"]').dispatchEvent('change');
+  await A(page, 'tab', '[data-v="col"]'); await A(page, 'link', '[data-i="0"]');
+  await A(page, 'tab', '[data-v="pat"]'); await page.fill('#pt-size-free', 'M'); await A(page, 'add-pattern'); await page.waitForSelector('#pkx canvas'); await page.locator('#pkx [data-k="close"]').click();
+  await A(page, 'marker-open'); await page.waitForSelector('#mkx canvas');
+  const K = (k) => page.locator(`#mkx [data-k="${k}"]`).first().click();
+  const ev = () => page.evaluate(() => { const e = document.getElementById('mkx').api.evaluate(); return e && { L: e.length, eff: e.efficiency, err: e.issues.filter((x) => x.level === 'hata').map((x) => x.msg), n: e.pieceCount }; });
+  await K('auto'); await page.waitForFunction(() => document.getElementById('mkx').api.marker());
+  let e = await ev();
+  expect(e.err.length === 0 && e.eff > 0.6 && e.L > 1000 && e.L < 1600, `otomatik: boy ${e.L} verim ${e.eff} hata ${e.err}`);
+  const pane = await page.locator('#mkx .pane').innerText();
+  expect(/Kısıtlar/.test(pane) && /kullanılabilir/.test(pane) && /operatör kontrol/.test(pane), 'kısıtlar ve operatör kontrolü yazılı');
+  // ilk parçayı ikinci parçanın üstüne sürükle → çakışma hatası
+  const pos = await page.evaluate(() => {
+    const api = document.getElementById('mkx').api, e = api.evaluate();
+    const bb = (q) => { const xs = q.pts.map((p) => p[0]), ys = q.pts.map((p) => p[1]); return { w: Math.max(...xs) - Math.min(...xs), c: [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2] }; };
+    const big = e.polys.map(bb).sort((a, b) => b.w - a.w);
+    return [api.toScreen(big[0].c), api.toScreen(big[1].c)];
+  });
+  await page.mouse.move(pos[0][0], pos[0][1]); await page.mouse.down(); await page.mouse.move((pos[0][0] + pos[1][0]) / 2, (pos[0][1] + pos[1][1]) / 2, { steps: 4 }); await page.mouse.move(pos[1][0], pos[1][1], { steps: 4 }); await page.mouse.up();
+  e = await ev(); expect(e.err.some((m) => /üst üste/.test(m)), 'elle sürükleme çakışma hatası: ' + e.err);
+  expect(/⛔/.test(await page.locator('#mkx .st').innerText()), 'durum çubuğunda hata');
+  await K('auto'); await page.waitForFunction(() => document.getElementById('mkx').api.evaluate().issues.every((x) => x.level !== 'hata'));
+  e = await ev(); const L = e.L;
+  const dl = await download(page, () => K('pdf'));
+  expect(dl.text.startsWith('%PDF-') && /1:\d+/.test(dl.text), 'PDF indirildi: ' + dl.name + ' ' + dl.size + ' B');
+  await K('save'); await K('close');
+  let b = await txBody(page); expect(/✂ Kesim planı: boy [\d,]+ cm · verim %[\d,]+ · açık en/.test(b), 'kalıp kartında plan özeti');
+  await A(page, 'tab', '[data-v="tp"]'); b = await txBody(page);
+  expect(/kesim planından \(verim %/.test(b), 'föy: tüketim kesim planından');
+  const want = ((L / 0.97 + 40) / 1000).toFixed(2).replace('.', ',');
+  expect(b.includes(want + ' m kumaş'), `plan boyu + boy çekmesi + pastal başı = ${want} m: ` + (b.match(/[\d,]+ m kumaş/) || [])[0]);
+  expect(/en çekmesi %2 planda yok/.test(b), 'en çekmesi uyarısı');
+  await A(page, 'tab', '[data-v="val"]'); expect(await page.locator('.issue.hata').count() === 0, 'doğrulama temiz');
+  // kaydet, sayfayı yenile, aç: plan duruyor
+  await page.fill('#rev-note', 'plan'); await A(page, 'commit'); await page.waitForFunction(() => /rev 1/.test(document.querySelector('#main').innerText));
+  await page.reload(); await page.waitForSelector('[data-a="open"]'); await A(page, 'open'); await page.waitForSelector('[data-a="add-prod"]');
+  await A(page, 'tab', '[data-v="pat"]'); expect(/✂ Kesim planı: boy/.test(await txBody(page)), 'yenileme sonrası plan kayıtlı');
+});
+
 await TX('Tekstil ↔ Makine ayrılığı: tekstil kaydı makine projelerine yazmaz; makine projeleri tekstil listesinde görünmez', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('cizim:projects', JSON.stringify({ mak: { data: '{}', at: 1 } })));
   await A(page, 'type', '[data-v="woven"]'); await page.waitForSelector('[data-a="type"][data-v="woven"].on'); await page.fill('#np-name', 'Ayrı'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
