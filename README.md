@@ -340,3 +340,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 5. ~~Çoğaltma, ölçü etiketleri, ölçüm, kesit, parça yönetimi, birimler~~
 6. ~~Kroki yayları, eğim, kabuk, delik deseni, montaj, teknik resim (PNG / PDF)~~
 7. Sıradaki (isteğe bağlı): birleşik kroki (birden çok şekil), kroki kısıtları, delik / iç ölçülendirme, teknik resimde Y/Z kesiti ve delik konum ölçüleri
+
+## Lisans
+
+Telif Hakkı (c) 2026 Deniz Kuşaklı. Tüm hakları saklıdır. Depo herkese açık olsa da kod izinsiz kopyalanamaz ya da kullanılamaz; ayrıntı [LICENSE](LICENSE). Üçüncü taraf kütüphaneler kendi lisanslarıyla dağıtılır ([vendor/README.md](vendor/README.md)).

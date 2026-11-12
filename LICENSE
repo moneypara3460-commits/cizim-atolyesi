@@ -1,0 +1,38 @@
+Çizim Atölyesi
+Telif Hakkı (c) 2026 Deniz Kuşaklı. Tüm hakları saklıdır.
+
+Bu depodaki kaynak kod, belgeler, görseller ve tasarımlar Deniz Kuşaklı'ya
+aittir. Deponun herkese açık olması, içeriğin kullanılmasına izin verildiği
+anlamına gelmez. Yazılı izin olmadan bu içeriğin tamamı ya da bir bölümü
+kopyalanamaz, değiştirilemez, dağıtılamaz, satılamaz, başka bir üründe
+kullanılamaz ve bu içerikten türetilmiş çalışma yapılamaz.
+
+Uygulamayı yayınlandığı adreste (https://moneypara3460-commits.github.io/cizim-atolyesi/)
+kişisel olarak kullanmak serbesttir.
+
+Üçüncü taraf kütüphaneler bu nota dahil değildir. vendor/ klasöründeki
+kütüphaneler (three.js, three-mesh-bvh, three-bvh-csg, Open CASCADE /
+replicad-opencascadejs, occt-import-js) kendi lisanslarıyla dağıtılır;
+ayrıntılar vendor/README.md dosyasındadır.
+
+İzin ve iş birliği talepleri için depo sahibiyle GitHub üzerinden iletişime
+geçebilirsiniz.
+
+---
+
+Çizim Atölyesi
+Copyright (c) 2026 Deniz Kuşaklı. All rights reserved.
+
+The source code, documentation, images and designs in this repository are
+the property of Deniz Kuşaklı. Public visibility of this repository does not
+grant any license. Without prior written permission, no part of this content
+may be copied, modified, distributed, sold, used in another product, or used
+to create derivative works.
+
+Personal use of the application at its published address
+(https://moneypara3460-commits.github.io/cizim-atolyesi/) is permitted.
+
+Third-party libraries are excluded from this notice. The libraries in the
+vendor/ folder (three.js, three-mesh-bvh, three-bvh-csg, Open CASCADE /
+replicad-opencascadejs, occt-import-js) are distributed under their own
+licenses; see vendor/README.md.
