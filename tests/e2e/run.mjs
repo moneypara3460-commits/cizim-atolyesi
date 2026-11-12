@@ -226,7 +226,43 @@ await T('3 eksen CAM: takım yolu, simülasyon, Fanuc G-kodu', 'G-CAM3', async (
 });
 
 /* ---------- H. CNC torna ---------- */
-R.blocked('CNC torna CAM (X/Z, çap modu, dış/iç tornalama, kanal, diş, post)', 'Depoda torna modülü yok: 2. görev promptu uygulanmadı (kod kanıtı: torna takım yolu / G-kodu üreten dosya yok). Test yazılmadı; sahte başarı gösterilmez.', 'H-Torna');
+await T('CNC torna: örnek kademeli mil (9 operasyon), hatasız denetim, 3B simülasyon oynat / durdur / operasyon geçişi, G-kodu ekranda + .nc indir, simülasyon ↔ G-kodu tutarlılığı, OCCT doğrulaması; hatalı parametre uyarısı; freze modu korunur', 'H-Torna', async ({ page }) => {
+  await tab(page, 'cam'); await act(page, 'lz-on');
+  await page.waitForSelector('#tabbody [data-act="lz-go"]'); await act(page, 'lz-ex');
+  let b = await body(page);
+  for (const s of ['Makine', 'Ham malzeme ve bağlama', 'Parça geometrisi', 'Takım kütüphanesi', 'Operasyonlar ve işleme parametreleri']) expect(b.includes(s), 'bölüm: ' + s);
+  expect(/Bu sürümde yok:.*C ekseni.*Y ekseni.*Canlı/.test(b), 'olmayan yetenekler açıkça yazılı');
+  expect(await page.locator('#lz-svg path').count() >= 1, '2B X-Z profil çizimi');
+  const t0 = Date.now(); await act(page, 'lz-go');
+  await page.waitForSelector('#lz-sum', { timeout: 120000 }); perf.push(['Torna örnek parça: hesap + simülasyon', Date.now() - t0, 'ms']);
+  b = await body(page);
+  expect(/✅ Hata yok/.test(b) && !/uyarı/.test(await page.locator('#lz-sum').innerText()), 'denetim: ' + (await page.locator('#lz-sum').innerText()));
+  expect(/Fazla kesim \(parçaya girme\)\s*yok/.test(b) && /Kalan malzeme\s*yok/.test(b), 'fazla kesim / kalan yok');
+  expect(/✅ G-kodu geri okundu: \d+ hareket simülasyonla aynı/.test(b), 'simülasyon ↔ G-kodu');
+  const code = await page.locator('#lz-code').innerText();
+  expect(/^%\nO2001/.test(code) && /T0101/.test(code) && /G96 S200 M03/.test(code), 'G-kodu ekranda');
+  // 3B: dönen ham, takım, yol
+  expect(await page.evaluate(() => window.__app.lathe.state().meshes) >= 1, '3B sahne');
+  await act(page, 'lz-play'); await page.waitForFunction(() => window.__app.lathe.state().playI > 30, null, { timeout: 30000 });
+  await act(page, 'lz-play'); const i1 = await page.evaluate(() => window.__app.lathe.state().playI); await page.waitForTimeout(400);
+  expect(await page.evaluate(() => window.__app.lathe.state().playI) === i1, 'durdur');
+  await act(page, 'lz-opn'); const i2 = await page.evaluate(() => window.__app.lathe.state().playI); expect(i2 > i1, `sonraki operasyon ${i1} → ${i2}`);
+  expect(/\d+ \/ \d+/.test(await page.locator('#lz-ro').innerText()), 'konum göstergesi');
+  await page.locator('#tabbody [data-lz="speed"]').selectOption('40'); await act(page, 'lz-play');
+  await page.waitForFunction(() => { const s = window.__app.lathe.state(); return !s.playing && s.playI === s.moves; }, null, { timeout: 60000 });
+  await act(page, 'lz-v-final'); await act(page, 'lz-v-path');
+  const dl = await download(page, () => act(page, 'lz-dl-nc'));
+  expect(/_torna\.nc$/.test(dl.name) && /\r\nM30\r\n%/.test(dl.text) && /G76 /.test(dl.text), 'indirilen .nc: ' + dl.name);
+  // OCCT doğrulaması (gerçek WASM, işçide)
+  await act(page, 'lz-occt'); await page.waitForSelector('#lz-occt-ok, [data-lz-issue]', { timeout: 120000 });
+  b = await body(page); expect(/Katılar geçerli: evet/.test(b), 'OCCT: ' + b.slice(b.indexOf('OCCT'), b.indexOf('OCCT') + 300));
+  // hatalı parametre: ilerleme negatif → hata, indirme engelli
+  await page.locator('#tabbody [data-lz="op.2.f"]').fill('-1'); await page.locator('#tabbody [data-lz="op.2.f"]').dispatchEvent('change');
+  await act(page, 'lz-go'); await page.waitForSelector('#lz-sum', { timeout: 60000 });
+  expect(/⛔/.test(await page.locator('#lz-sum').innerText()) && /İlerleme \(mm\/dev\) pozitif olmalı/.test(await body(page)), 'hatalı ilerleme uyarısı');
+  // freze moduna dönüş: 3 eksen paneli çalışır
+  await act(page, 'c5-mode-3'); expect(await page.locator('#tabbody [data-act="cn-go"]').count() === 1 && !(await page.locator('#tabbody [data-act="lz-go"]').count()), 'freze moduna dönüldü');
+}, { view: PHONE });
 
 /* ---------- I. 4 / 5 eksen ---------- */
 await T('4 eksen: divizör indeksli işlem, çarpışma kontrolü, simülasyon, G-kodu (Fanuc 4. eksen)', 'I-4/5', async ({ page }) => {

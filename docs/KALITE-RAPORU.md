@@ -1,6 +1,6 @@
-# Kalite raporu — Çizim Atölyesi (sürüm 20261111e)
+# Kalite raporu — Çizim Atölyesi (sürüm 20261112t)
 
-Tarih: 11.11.2026 · Ortam: Linux sunucu, Node 22, Chromium (Playwright) + yazılımsal WebGL (SwiftShader).
+Tarih: 11.11.2026, güncelleme 12.11.2026 (tekstil bölüm 7, CNC torna bölüm 8) · Ortam: Linux sunucu, Node 22, Chromium (Playwright) + yazılımsal WebGL (SwiftShader).
 Test komutları ve kurallar: [TESTLER.md](../TESTLER.md). Bu rapor uygulamanın hatasız olduğunu iddia etmez. Yalnızca neyin, hangi ortamda, hangi toleransla sınandığını gösterir.
 
 ## 1. Özet
@@ -9,10 +9,10 @@ Durumlar ayrı sayılmıştır, birbirine karıştırılmaz:
 
 | Katman | Geçti | Başarısız | Atlandı | Blokeli | Çalıştırılamadı |
 |---|---|---|---|---|---|
-| Node birim / entegrasyon (21 dosya) | 316 | 0 | 0 | 0 | 0 |
-| — bunun içinde gerçek OCCT WASM | 15 | 0 | 0 | 0 | 0 |
-| Tarayıcı uçtan uca (Chromium, emülasyon) | 17 | 0 | 0 | 1 (CNC torna) | 0 |
-| GitHub Actions CI (3 iş: birim, OCCT WASM, E2E) | 3 iş | 0 | 0 | — | 0 · E2E orada da 17 geçti, 1 blokeli (npm paketleriyle) |
+| Node birim / entegrasyon (33 dosya; 12.11.2026) | 442 | 0 | 0 | 0 | 0 |
+| — bunun içinde gerçek OCCT WASM | 16 | 0 | 0 | 0 | 0 |
+| Tarayıcı uçtan uca (Chromium, emülasyon; makine + tekstil) | 36 | 0 | 0 | 0 | 0 |
+| GitHub Actions CI (3 iş: birim, OCCT WASM, E2E) | 3 iş | 0 | 0 | — | 0 · sonuç commit sonrası CI'da (bkz. bölüm 8) |
 | Gerçek telefon / tablet | — | — | — | — | Yapılmadı (yalnız emülasyon) |
 
 ## 2. Özellik durum matrisi
@@ -48,7 +48,7 @@ Sütunlar:
 | CAM | 3 eksen: kaba, ince, 3B, delme, simülasyon, G-kodu | Çalışıyor | `cam.js` | U `cam` (9), E G |
 | CAM | 4 eksen indeksli / eş zamanlı | Çalışıyor, tezgâhta doğrulanmadı | `cam5.js`, `kin.js`, `coll5.js`, `post5.js` | U `cam5` (16), E I |
 | CAM | 5 eksen 3+2 / eş zamanlı, TCP | Çalışıyor, tezgâhta doğrulanmadı | aynı | U `cam5`, E I (Mach3 reddi dahil) |
-| CAM | CNC torna | Uygulanmadı | Kodda torna takım yolu / postu yok | E H: blokeli |
+| CAM | CNC torna (2 eksen X / Z, 11 operasyon, simülasyon, Fanuc torna postu) | Çalışıyor, tezgâhta doğrulanmadı | `lathe.js`, `lathe-ui.js` | U `lathe` (22), `occt` (torna doğrulaması), E H |
 | Analiz | Statik, modal, kararlı / geçici ısı, doğrusal burkulma | Çalışıyor | `fea.js`, `fea2.js`, `fem-run.js` | U `fea` (18), `fea2` (14), E J |
 | Analiz | Doğrusal olmayan, temas | Uygulanmadı | `ANALYSES` içinde desteklenmiyor diye işaretli | — |
 | Analiz | Geleceğimi göster (yorulma, aşınma, alternatifler) | Kısmi | `fea.js`, `sim-ui.js` | U `fea`. Ömür hesapları yaklaşık, arayüzü E2E'de yok. |
@@ -149,4 +149,49 @@ Ortam aynı: Node 22, Chromium (Playwright), telefon / tablet / masaüstü **em�
 2. **Dış programlarla alışveriş.** DXF çıktısı Gerber / Lectra / Optitex'te; knitout çıktısı gerçek bir örgü makinesinde denenmedi.
 3. **Fiziksel doğrulama.** Kalıplar temel bloklardır (prova gerekir). Dökümlülük modeli referans numuneyle kalibre edilmeden kullanılmamalıdır. Operasyon süreleri tahminidir.
 4. **Beden tabloları.** Örnek tablo kaynağıyla birlikte verilir; üretimde firmanın kendi ölçü tablosu kullanılmalıdır.
+
+## 8. CNC torna (12.11.2026)
+
+Ortam aynı (Node 22, Chromium emülasyonu, gerçek OCCT WASM). Gerçek bir torna tezgâhında, kumanda simülatöründe ya da CAM yazılımıyla karşılaştırmalı deneme **yapılmadı**.
+
+**Sonuçlar.**
+- `tests/lathe.test.mjs`: 22 test, hepsi geçti.
+- `tests/occt.test.mjs` içine 1 torna testi eklendi (gerçek WASM), geçti.
+- Tarayıcı senaryosu "H-Torna" (telefon emülasyonu) geçti. Önceki raporlardaki "1 blokeli (CNC torna)" kalktı.
+- Bütün uygulama: 33 dosya / 442 Node testi, 0 başarısız.
+
+**Promptun test listesi ↔ testler** (`lathe.test.mjs` numaraları):
+
+| Madde | Test | Ölçüt |
+|---|---|---|
+| X/Z koordinat hesapları | 1, 3, 4 | Sanal uç ↔ uç merkezi; yay merkezi / yönü; r(z) analitik değerle 1e-9; ofsetin her noktası profile tam rn (±0,002 mm) |
+| Çap / yarıçap modu | 2, 16 | Yarıçap modunda her X tam yarı (±0,0005); iki mod geri okununca aynı yol; yarıçap modu olmayan kumandada hata |
+| Dış çap tornalama | 5 | Seviyeler 23,5 / 22 / 20,5 / 20 (ap 1,5); simülasyon çapı Ø40 ±0,1; kaldırılan hacim π(25² − 20²)·30 ±%2 |
+| İç çap tornalama | 6 | Ø20 boru → Ø30: iç çap ±0,1, hacim ±%3; delik yoksa açık hata |
+| Alın tornalama | 7 | 2 mm fazla, 2 paso; ön yüz boş, X = −2·rn ile merkez geçilir; hacim ±%3 |
+| Kanal açma | 8 | 4 mm kanal / 3 mm takım → Z −26 ve −25 dalma; dip ve duvarlar ±0,06; dar kanal ve erişim hatası |
+| Delik delme | 9 | Uç derinliği 30 + 7 / tan 59°; gagalama sayısı; delik çapı ve uç konisi ±0,1 |
+| Konik profil | 10 | Son paso ofset doğrusunun analitik uçlarında (1e-6), omuza girmez; simülasyon çapı doğrusal ±0,1 |
+| Kaba / finiş paso | 11, 19 | Kaba seviyeler tam ap aralıklı, hiçbir kaba hareket finiş payına girmez; finiş uç merkezi konturdan tam rn; G02 R2,6 / G03 R0,4; Rt = f² / (8·rn); profil (G73 tipi) pasoları ve iniş açısına göre köprüleme |
+| Takım yolu sınırları | 12, 20 | Makine X sınırı, aynadan çıkış, ayna tutma payı, punta yok uyarısı, kesmede merkezi en çok 0,2 mm geçme |
+| Çarpışma kontrolleri | 13 | Ayna çenesi, bara gövdesi, hızlı harekette malzeme, kaydırılmış yolda fazla kesim alanı (≈ 30 × (1 − tol) mm²) |
+| G-kodu çıktısı | 14, 15, 17 | Başlangıç / bitiş blokları, takım değişiminde G28 U0., G50 + G96 / G97, M08 / M09 eşleşmesi, yalnız izinli kodlar, ASCII; G76 iki satır (P020060 Q50 R0.05 / X22.16 Z-20.0 P920 Q250 F1.5); G32 açılımı; G41 / G42 ile kontur |
+| Hatalı parametreler | 18 | 21 ayrı hatalı girdi, her biri açık hata ve takım yolu üretilmez; uyarı türleri ayrı |
+| Simülasyon ↔ G-kodu tutarlılığı | 16 | Üretilen G-kodu geri okunur (G76 açılımı dahil), 4 değişkende hareket listesiyle aynı, sapma ≤ 0,001 mm; bozulmuş G-kodu fark edilir |
+| Örnek parça | 21, occt 10 | Kademeli mil M24 (alın, delik, dış kaba / finiş, kanal, iç kaba / finiş, vida, kesme): hata ve uyarı yok, fazla kesim 0, kalan 0; parça hacmi analitik hacimle ±%1,5; çaplar ±0,25. OCCT: hedef hacim analitikle ±%0,2, sonuç hacmi ızgara hacmiyle ±%1, iki yönlü fark < %1 |
+
+**Bu işte bulunan ve düzeltilen hatalar** (geliştirme sırasında, testler yakaladı):
+1. Ofsette dış köşe yayının yönü tersti (G02 yerine G03 olmalı): köşelerde parçaya girme.
+2. Takım biçimindeki uç yayı ters yönden çiziliyordu: simülasyonda uç yanlış tarafta.
+3. Ayrık ızgarada takım konumu aşağı yuvarlanıyordu: tek yönlü 0,1 mm sapma, kalan malzeme gibi görünüyordu.
+4. Profil (G73 tipi) pasolarında büyük ofset iç köşelerde kendini kesiyordu; Fanuc G73 gibi radyal kaydırmaya çevrildi.
+5. Basit dış çap / konik operasyonunda uç, bitişteki omuz duvarına uç yarıçapı kadar giriyordu; omuz hedefe eklendi.
+6. OCCT Boolean, hedef ve sonuç katılarının çakışık düz yüzlerinde başarısız oluyordu; sonuç uçları 0,02 mm uzatıldı, hedefteki doğrudaş noktalar atıldı (etkisi raporda yazılı).
+
+**Kalan sınırlar ve tezgâhta ayrıca doğrulanması gerekenler.**
+- Program **hiçbir tezgâhta** denenmedi. Kumanda uyumu (Fanuc 0i-T sistem A varsayıldı; sistem B / C'de G kodları farklıdır), G76 parametre biçimi, G28 referans dönüşü, takım ofsetleri ve sanal uç numarası, iş mili yönü (M03 / M04, ön / arka taret) makinede kontrol edilmeli.
+- **Simülasyon ve çarpışma.** Eksenel simetrik 2B kesitte yapılır. Taret ve diğer takımlar, punta, gerçek 3B tutucu biçimi, helisel diş, talaş, titreşim, kesme kuvveti ve iş parçasının eğilmesi hesaplanmaz. Ayna yalnız girilen çap / boylarla silindir olarak denetlenir.
+- **Yetenekler.** C ekseni, Y ekseni, canlı takım, punta, karşı iş mili ve inç (G20) çıktısı yok.
+- **Çevrimler.** Kaba / finiş G71 / G70 çevrimi olarak değil, tek tek G01 / G02 / G03 hareketleri olarak yazılır (kumandadan bağımsız ve geri okunarak doğrulanabilir). Diş açmada yanal besleme (G76 açı) kumandaya bırakılır; G32 açılımı radyal beslemedir.
+- **Modelden alma.** Döndürme krokisi ya da silindirden profil alma düğmesi var ama ne otomatik testi var ne de tarayıcıda denendi; sonucu profil tablosundan kontrol et.
 

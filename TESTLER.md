@@ -37,8 +37,8 @@ cd .. && E2E_LIBS=$PWD/.e2e-libs/node_modules PLAYWRIGHT_MODULE=$PWD/.e2e-libs/n
 
 | Katman | Dosyalar | Ne sınanır |
 |---|---|---|
-| Birim | `tests/*.test.mjs` | Saf hesap modülleri: 2B geometri, DXF, sac açınım, ağırlık, kesim optimizasyonu, kaynak, maliyet, montaj, CAM (3 / 4 / 5 eksen), kinematik, son işlemciler, FEM |
-| Entegrasyon | `occt.test.mjs` (gerçek WASM), `selection.test.mjs` (uygulama kodundan çıkarılan gerçek işleyiciler), `cam5.test.mjs` (plan → çarpışma → simülasyon → G-kodu → geri ayrıştırma), `fea2.test.mjs` (ağ → çözücü → sonuç) | Modüllerin birlikte çalışması |
+| Birim | `tests/*.test.mjs` | Saf hesap modülleri: 2B geometri, DXF, sac açınım, ağırlık, kesim optimizasyonu, kaynak, maliyet, montaj, CAM (3 / 4 / 5 eksen, torna), kinematik, son işlemciler, FEM |
+| Entegrasyon | `occt.test.mjs` (gerçek WASM), `selection.test.mjs` (uygulama kodundan çıkarılan gerçek işleyiciler), `cam5.test.mjs` (plan → çarpışma → simülasyon → G-kodu → geri ayrıştırma), `lathe.test.mjs` (torna: takım yolu → simülasyon → G-kodu → geri okuma, analitik hacim / çap karşılaştırması), `fea2.test.mjs` (ağ → çözücü → sonuç) | Modüllerin birlikte çalışması |
 | Uçtan uca | `tests/e2e/run.mjs` (+ `lib.mjs`) | Gerçek sayfa: dokunma / tıklama, dosya indirme, dosya seçici, yenileme, kayıt / açma |
 | Regresyon | `robust.test.mjs` ve diğer dosyalardaki "Hata (düzeltildi)" testleri | Daha önce bulunan hataların geri gelmemesi |
 | Performans | `tests/perf.mjs`, E2E'deki ⏱ ölçümleri | Süre ve bellek (eşik yok) |
@@ -48,7 +48,7 @@ cd .. && E2E_LIBS=$PWD/.e2e-libs/node_modules PLAYWRIGHT_MODULE=$PWD/.e2e-libs/n
 
 - Testler kullanıcı projelerine dokunmaz: E2E her senaryoda **boş, yeni bir tarayıcı profili** açar (telefondaki / tarayıcıdaki kayıtlar okunmaz, yazılmaz). Node testleri dosya sistemine yalnızca `reports/` klasörüne yazar.
 - Örnek veriler deterministiktir (sabit ölçüler, rastgele sayı yok). Aynı girdi aynı sonucu verir; bu ayrıca test edilir.
-- Uygulanmamış özellik için sahte başarılı test yazılmaz: **blokeli** olarak raporlanır (ör. CNC torna).
+- Uygulanmamış özellik için sahte başarılı test yazılmaz: **blokeli** olarak raporlanır. (CNC torna 12.11.2026'da uygulandı; blokeli senaryonun yerini gerçek E2E senaryosu "H-Torna" aldı.)
 - E2E'deki telefon / tablet / masaüstü ölçüleri **emülasyondur** (Chromium cihaz öykünmesi, yazılımsal WebGL). Gerçek telefon testi değildir; gerçek cihaz davranışı (GPU, bellek sınırı, dokunma hassasiyeti, Safari) ayrıca denenmelidir.
 - CNC son işlemci varsayımları `docs/cnc5-ornekler/` ve README'deki "4 / 5 eksen CNC" bölümündedir; G-kodu testleri bu varsayımlara göre yazılmıştır, gerçek tezgâhta kuru çalıştırma (havada) yerine geçmez.
 

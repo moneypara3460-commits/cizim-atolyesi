@@ -2,7 +2,7 @@
 // api: { descs() → [parça tanımı], parts() → [{id, name, desc}], selected() → {id, name, desc} | null,
 //        meshVolume() → mm³ | null, draw(view), clear(), addPart(part, name, hideIds), toast(m), render(),
 //        saveText(text, name), pickFile(accept) → Promise<File|null>, name() }
-const V = '20261111e';
+const V = '20261112t';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 1) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));
 const FT = { Plane: 'düzlem', Cylinder: 'silindir', Cone: 'koni', Sphere: 'küre', Torus: 'torus', BSplineSurface: 'serbest (B-spline)', BezierSurface: 'Bezier', SurfaceOfRevolution: 'dönel', SurfaceOfExtrusion: 'çekme', OffsetSurface: 'ofset', OtherSurface: 'diğer' };
@@ -199,6 +199,7 @@ export function createOcctUI(api) {
   }
   return {
     html, act, input,
+    call: (op, args) => client.call(op, args),   // başka modüller (CNC torna doğrulaması) aynı OCCT işçisini kullanır
     leave() { if (S.showing) { api.clear(); S.showing = false; } },
     invalidate() { if (S.model) { S.model = null; if (S.showing) { api.clear(); S.showing = false; } } },
     get active() { return S.showing || !!S.model; },

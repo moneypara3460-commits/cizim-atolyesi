@@ -418,7 +418,7 @@ export function createKernel(oc) {
   const fromBREP = (txt) => T(oc.BRepToolsWrapper.Read(txt));
 
   return {
-    oc, free, transform, fillet, chamfer, box, cylinder, cone, sphere, tube, fromTris, partShape,
+    oc, free, transform, fillet, chamfer, box, cylinder, cone, sphere, tube, fromTris, partShape, revolveProfile,
     fuse, cut, common, model, volume, props, check, fix, topology, mesh, edgeLines, triangles,
     toSTEP, fromSTEP, toBREP, fromBREP, count,
   };

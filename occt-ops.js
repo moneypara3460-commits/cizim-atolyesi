@@ -104,6 +104,16 @@ export async function runOp(K, op, a, ctx = {}) {
       for (let i = 0; i < pos.length; i += 3) { pos[i] -= cx; pos[i + 1] -= my; pos[i + 2] -= cz; }
       return { note, meshOnly: true, part: { tris: { pos, nor: null }, brep: null, x: cx, y: y0, z: cz, h: Math.max(y1 - y0, 1e-3) } };
     }
+    // CNC torna: hedef parça ile simülasyon sonucunun dönel katıları (kesit çokgeni [r, y]) — hacimler ve iki yönlü fark
+    case 'lathe-verify': {
+      const A = K.revolveProfile(a.target), B = K.revolveProfile(a.result);
+      const vol = (s) => { try { return Math.abs(K.volume(s)); } catch (e) { return 0; } };
+      const ca = K.check(A), cb = K.check(B);
+      const vA = vol(A), vB = vol(B);
+      // fark: önce Boolean çıkarma; çakışık yüzlerde başarısız olursa ortak hacimden (A − A∩B)
+      const diff = (X, Y, vX) => { try { return vol(K.cut(X, Y)); } catch (e) { return Math.max(0, vX - vol(K.common(X, Y))); } };
+      return { target: vA, result: vB, gouge: diff(A, B, vA), residual: diff(B, A, vB), valid: !!(ca.valid && cb.valid), solids: [ca.solids, cb.solids] };
+    }
     case 'brep-view': { const s = K.fromBREP(a.brep); return full(K, s); }
     default: throw new Error('Bilinmeyen OCCT işlemi: ' + op);
   }

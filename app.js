@@ -13,32 +13,33 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
-} from './logic.js?v=20261111e';
-import { openSketch } from './sketch.js?v=20261111e';
-import { to3MF, toSTEP } from './export3d.js?v=20261111e';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261111e';
-import { openCad2D } from './cad2d.js?v=20261111e';
-import { openCutOpt } from './cutopt-ui.js?v=20261111e';
-import { createMfg } from './mfg-ui.js?v=20261111e';
-import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261111e';
-import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261111e';
-import { analyzeWeight } from './weight.js?v=20261111e';
-import { createWeightUI, fkg } from './weight-ui.js?v=20261111e';
-import { createCostUI } from './cost-ui.js?v=20261111e';
-import { planReport as weldReport } from './welds.js?v=20261111e';
-import { altCons as weldAltCons } from './weld-ui.js?v=20261111e';
-import { groupKey } from './cutopt.js?v=20261111e';
-import { createAssemblyUI } from './assembly-ui.js?v=20261111e';
-import { createSimUI } from './sim-ui.js?v=20261111e';
-import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261111e';
-import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261111e';
-import { createCamUI } from './cam-ui.js?v=20261111e';
-import { createCam5UI } from './cam5-ui.js?v=20261111e';
-import { machinePose } from './kin.js?v=20261111e';
-import { createOcctUI } from './occt-ui.js?v=20261111e';
-import { createFemUI } from './fem-ui.js?v=20261111e';
+} from './logic.js?v=20261112t';
+import { openSketch } from './sketch.js?v=20261112t';
+import { to3MF, toSTEP } from './export3d.js?v=20261112t';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261112t';
+import { openCad2D } from './cad2d.js?v=20261112t';
+import { openCutOpt } from './cutopt-ui.js?v=20261112t';
+import { createMfg } from './mfg-ui.js?v=20261112t';
+import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261112t';
+import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261112t';
+import { analyzeWeight } from './weight.js?v=20261112t';
+import { createWeightUI, fkg } from './weight-ui.js?v=20261112t';
+import { createCostUI } from './cost-ui.js?v=20261112t';
+import { planReport as weldReport } from './welds.js?v=20261112t';
+import { altCons as weldAltCons } from './weld-ui.js?v=20261112t';
+import { groupKey } from './cutopt.js?v=20261112t';
+import { createAssemblyUI } from './assembly-ui.js?v=20261112t';
+import { createSimUI } from './sim-ui.js?v=20261112t';
+import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261112t';
+import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261112t';
+import { createCamUI } from './cam-ui.js?v=20261112t';
+import { createCam5UI } from './cam5-ui.js?v=20261112t';
+import { createLatheUI } from './lathe-ui.js?v=20261112t';
+import { machinePose } from './kin.js?v=20261112t';
+import { createOcctUI } from './occt-ui.js?v=20261112t';
+import { createFemUI } from './fem-ui.js?v=20261112t';
 
-const APP_VER = '20261111e'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261112t'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -1207,7 +1208,9 @@ function renderPanel() {
     body = weightUI.html();
     hint = 'Ağırlık her parçanın kendi malzemesi (Dayanım sekmesinde ya da burada seçilir) ve gerçek 3B hacmiyle hesaplanır. Kırmızı-beyaz küre ağırlık merkezidir; kesik çizgi zemine izdüşümü, yeşil / turuncu / kırmızı çizgi destek alanıdır. Model döndürülünce işaret de modelle birlikte döner; parça değişince yeniden hesaplanır.';
   } else if (tab === 'cam') {
-    body = cam5UI.modeBar() + (cam5UI.mode === '3' ? camUI.html() : cam5UI.html());
+    // CNC torna ayrı bir çalışma modu (lathe-ui.js): açıkken 3 / 4 / 5 eksen panelleri gösterilmez
+    body = (latheUI.on ? cam5UI.modeBar().replace(/ class="on"/g, '') : cam5UI.modeBar()) + latheUI.modeBtn() + (latheUI.on ? latheUI.html() : cam5UI.mode === '3' ? camUI.html() : cam5UI.html());
+    if (latheUI.on) hint = 'CNC torna (2 eksen): takım yolu, simülasyon ve G-kodu aynı hareket listesinden üretilir. Simülasyon fiziksel makine doğrulaması değildir; program hiçbir tezgâhta denenmedi. Kumandada simülasyon ve tek blok ile kontrol et.'; else
     if (cam5UI.mode !== '3') hint = '4 / 5 eksen: takım yolu, makine kinematiği, çarpışma kontrolü ve talaş simülasyonu aynı takım yolu verisinden hesaplanır. Simülasyon fiziksel makine doğrulaması değildir; G-kodu makinede doğrulanmamıştır.'; else
     hint = 'CNC: takım yolları modelin üstten görünen yüzeyinden hesaplanır (3 eksen). Kesme değerleri başlangıç değeridir; ilk parçada makinede düşük ilerlemeyle dene. Program çalıştırmadan önce kumandada simülasyonla kontrol et.';
   } else if (tab === 'fem') {
@@ -2142,6 +2145,20 @@ var cam5UI = createCam5UI({   // var: yeniden çizim modül yüklenirken çağr�
   changed: () => scheduleSave(),
 });
 
+/* ---- 🔩 CNC torna (lathe.js + lathe-ui.js): CNC sekmesinde ayrı mod ---- */
+const lzGroup = new THREE.Group(); scene.add(lzGroup);
+const lzState = { hid: false };
+var latheUI = createLatheUI({   // var: yeniden çizim modül yüklenirken çağrılırsa henüz tanımsız olabilir
+  THREE, group: lzGroup,
+  hideModel(on) { if (on) { modelGroup.visible = false; ovl.visible = false; lzState.hid = true; } else if (lzState.hid) { modelGroup.visible = true; ovl.visible = true; lzState.hid = false; } },
+  fit: (box) => fit(box),
+  render: () => { if (tab === 'cam') renderPanel(); },
+  toast, saveBlob,
+  name: () => (projName || 'torna'),
+  parts: () => parts,
+  occt: (op, args) => occtUI.call(op, args),
+});
+
 /* ---- 🧱 B-Rep (OCCT) ---- */
 const occtGroup = new THREE.Group(); scene.add(occtGroup);
 const occtState = { hid: false };
@@ -2928,6 +2945,7 @@ document.addEventListener('change', (e) => {
   if (el.dataset && (el.dataset.cs || el.dataset.cn || el.dataset.ct || el.dataset.co)) { camUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.oc) { occtUI.input(el); return; }
   if (el.dataset && el.dataset.c5) { cam5UI.input(el, 'change'); return; }
+  if (el.dataset && el.dataset.lz) { latheUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.fm && el.dataset.fm !== 'frame' && !el.dataset.fm.startsWith('me.')) { femUI.input(el); return; }
   if (el.dataset && (el.dataset.sm || el.dataset.sf || el.dataset.sp || el.dataset.sv || el.dataset.st || el.dataset.sl2)) { simUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.link === 'parent') setParent(cur(), el.value === '' ? null : Number(el.value));
@@ -3858,6 +3876,9 @@ document.addEventListener('click', (e) => {
   if (act === 'fm-go-tab') { tab = 'fem'; renderPanel(); return; }
   if (act && act.startsWith('fm-') && femUI.act(act)) return;
   if (act && act.startsWith('oc-') && occtUI.act(act)) return;
+  if (act === 'lz-on') { camUI.leave(); cam5UI.leave(); }
+  if (act && act.startsWith('lz-') && latheUI.act(act)) return;
+  if (act && act.startsWith('c5-mode-')) latheUI.setOn(false);
   if (act && act.startsWith('c5-') && cam5UI.act(act)) return;
   if (act && act.startsWith('cn-') && camUI.act(act)) return;
   if (act && act.startsWith('sm-') && simUI.act(act)) return;
@@ -3870,7 +3891,7 @@ document.addEventListener('click', (e) => {
   if (act === 'add-gear') { addGear(); return; }
   if (act.startsWith('mc-')) { mechAct(act); return; }
   if (act.startsWith('add-')) { addPart(act.slice(4), 'add'); return; }
-  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'asm' && asmUI.active) asmUI.stop(); if (tab !== 'sim' && simUI.active) simUI.exit(); if (tab !== 'fem' && femUI.active) femUI.exit(); if (tab !== 'cam') { camUI.leave(); cam5UI.leave(); } if (tab !== 'occt') occtUI.leave(); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate' && tab !== 'link') clearFace();
+  if (act.startsWith('tab-')) { tab = act.slice(4); if (tab !== 'asm' && asmUI.active) asmUI.stop(); if (tab !== 'sim' && simUI.active) simUI.exit(); if (tab !== 'fem' && femUI.active) femUI.exit(); if (tab !== 'cam') { camUI.leave(); cam5UI.leave(); latheUI.leave(); } else latheUI.enter(); if (tab !== 'occt') occtUI.leave(); if (tab !== 'face' && tab !== 'edge' && tab !== 'mate' && tab !== 'link') clearFace();
     linkPick = false;
     if (tab !== 'mate') { mate.a = null; mate.b = null; }
     if (tab !== 'edge') edgeSels = []; renderPanel(); return; }
@@ -4037,6 +4058,7 @@ document.addEventListener('input', (e) => {
   if (d.as) { asmUI.input(el, 'input'); return; }
   if (d.cs === 'speed') { camUI.input(el, 'input'); return; }
   if (d.c5) { if (d.c5 === 'pos') cam5UI.input(el, 'input'); return; }
+  if (d.lz) { if (d.lz === 'speed') latheUI.input(el, 'input'); return; }
   if (d.fm) { if (d.fm === 'frame' || d.fm.startsWith('me.')) femUI.input(el); return; }
   if (d.cs || d.cn || d.ct || d.co) return;   // CNC: değişince işlenir
   if (d.sf || d.sv || d.st) { simUI.input(el, 'input'); return; }
@@ -4239,7 +4261,7 @@ try {
 } catch (e) { /* bozuk kayıt: varsayılanla devam */ }
 
 // test / hata ayıklama için küçük kanca (arayüzü etkilemez)
-window.__app = { edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
+window.__app = { get lathe() { return latheUI; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
 
 renderPanel();
 updateToolbar();

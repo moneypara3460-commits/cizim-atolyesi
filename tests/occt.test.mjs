@@ -167,6 +167,21 @@ await t('bozuk / açık ağ: doğrulama sorunu bildirir', async () => {
   await assert.rejects(op('model', { descs: [{ type: 'tris', pos: open }] }));
 });
 
+await t('10) CNC torna: hedef parça ve simülasyon sonucu dönel katı (OCCT); hacimler analitik / ızgara değeriyle, fark ızgara mertebesinde', async () => {
+  const L = await import('../lathe.js'), { verifyChains } = await import('../lathe-ui.js');
+  // Ø40 × 30 hedef, Ø39,8 × 32 sonuç: hedefe girme π(20² − 19,9²)·30, kalan π·19,9²·2
+  const cyl = await op('lathe-verify', { target: [[0, 0], [20, 0], [20, -30], [0, -30]], result: [[0, 2], [19.9, 2], [19.9, -30], [0, -30]] });
+  near(cyl.target, PI * 400 * 30, 1e-6 * PI * 400 * 30); near(cyl.result, PI * 19.9 ** 2 * 32, 1e-3); near(cyl.gouge, PI * (400 - 19.9 ** 2) * 30, 1e-3); near(cyl.residual, PI * 19.9 ** 2 * 2, 1e-3); assert.ok(cyl.valid);
+  // örnek parça: simülasyon sonucu ↔ hedef
+  const job = L.exampleJob(), r = L.runLathe(job, { res: 0.1 }), ch = verifyChains(job, r.sim);
+  const v = await op('lathe-verify', ch);
+  assert.ok(v.valid, 'katılar geçerli'); assert.deepEqual(v.solids, [1, 1]);
+  const gv = L.gridVolume(r.sim.SG, -80, 0.01);
+  near(v.result, gv, gv * 0.01, 'OCCT sonuç hacmi ↔ ızgara hacmi');
+  let pv = 0; { const G = L.partGeometry(job); for (let z = -79.999; z < 0; z += 0.002) { const ro = L.radiusAt(G.odE, z, 'min'), ri = L.radiusAt(G.id, z, 'max') ?? 0; pv += PI * (ro * ro - ri * ri) * 0.002; } } near(v.target, pv, pv * 0.002, 'OCCT hedef hacmi ↔ analitik');
+  assert.ok(v.gouge / v.target < 0.01, 'hedefe girme %' + (100 * v.gouge / v.target).toFixed(2)); assert.ok(v.residual / v.target < 0.01, 'kalan %' + (100 * v.residual / v.target).toFixed(2));
+});
+
 await t('9) eski projeler: parça listesinde OCCT alanı yoksa bile tanımlar kurulur (geri uyum)', async () => {
   // eski kayıttaki gibi alanları eksik / metin olan parça
   const r = await op('model', { descs: [{ type: 'box', w: '10', h: '20', l: '30', r: undefined, c: null }] });

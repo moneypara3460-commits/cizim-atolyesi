@@ -1,12 +1,12 @@
 // ⚙ CNC sekmesinde 4 ve 5 eksen modu: makine / kinematik, bağlama, takımlar, işlem ağacı, hesap, simülasyon, G-kodu.
 // Ayarlar projeyle birlikte kaydedilir (getCfg / setCfg). Hesap işçide (cam5-worker.js) yapılır.
 // api: { model() → { tris }, draw(spec), clear(), render(), toast(m), name(), saveBlob(b, n), changed() }
-import { MACHINES, DEFAULT_LIN, validateMachine } from './kin.js?v=20261111e';
-import { STRATS, STRAT_LIMITS } from './cam5.js?v=20261111e';
-import { POSTS5 } from './post5.js?v=20261111e';
-import { COVERAGE } from './coll5.js?v=20261111e';
+import { MACHINES, DEFAULT_LIN, validateMachine } from './kin.js?v=20261112t';
+import { STRATS, STRAT_LIMITS } from './cam5.js?v=20261112t';
+import { POSTS5 } from './post5.js?v=20261112t';
+import { COVERAGE } from './coll5.js?v=20261112t';
 
-const V = '20261111e';
+const V = '20261112t';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 1) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));
 const clone = (o) => JSON.parse(JSON.stringify(o));
