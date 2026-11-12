@@ -98,7 +98,7 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | 6 | Kumaş, iplik, aksesuar kütüphanesi (ayrıntılı); iplik numarası dönüşümleri; tüketim, gramaj, maliyet | Nm / Ne / tex / dtex dönüşümleri tam; numunesiz sonuç "tahmini" | ✅ (12.11.2026) — bkz. bölüm 11 |
 | 7 | Kumaş yerleşimi ve kesim optimizasyonu | Kısıt ihlali sıfır; verim alt sınırla raporlanır | ✅ (12.11.2026) — bkz. bölüm 12 |
 | 8 | Triko makine profilleri ve üretim çıktısı | Doğrulanamayan makine için çıktı yok, gerekçe yazılı (risk 12) | ✅ (12.11.2026) — bkz. bölüm 13 |
-| 9 | 3B giysi ve kumaş / örgü simülasyonu | Önizleme ve fizik ayrı adlandırılır; çözücü analitik testlerle doğrulanır | Yok |
+| 9 | 3B giysi ve kumaş / örgü simülasyonu | Önizleme ve fizik ayrı adlandırılır; çözücü analitik testlerle doğrulanır | ✅ (12.11.2026) — bkz. bölüm 14 |
 | 10 | Üretim föyü ve maliyet: işçilik, operasyon sırası, dikiş türü, vektör PDF | Föy projeden üretilir; maliyet varsayımları yazılı | Kısmi: föy özeti, varyant, malzeme maliyeti, tarayıcıdan yazdır / PDF Aşama 1'de var |
 | 11 | Uçtan uca tekstil testleri (promptta 1–14 numaralı liste), kalite raporu | Kalite raporuna "Tekstil" bölümü | Aşama 1 testleri var |
 
@@ -135,6 +135,10 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | `tests/tx-marker.test.mjs` | Yeni (Aşama 7) | 10 Node testi |
 | `tx/knit/machine.js` | Yeni (Aşama 8) | Makine profilleri, doğrulama, uyumluluk, operatör programı, delikli kart, knitout ve yapısal benzetim |
 | `tests/tx-machine.test.mjs` | Yeni (Aşama 8) | 9 Node testi |
+| `tx/sim3d/fit.js` | Yeni (Aşama 9) | Kalıptan giysi çevresi, bolluk raporu, basitleştirilmiş vücut formu, 3B kabuk halkaları |
+| `tx/sim3d/drape.js` | Yeni (Aşama 9) | Dökümlülük benzetimi (XPBD), gölge alanı, kalibrasyon, referans karşılaştırma durumu |
+| `tx/sim3d/view3d.js` | Yeni (Aşama 9) | three.js görüntüleyici (ÖNİZLEME etiketli) |
+| `tests/tx-sim3d.test.mjs` | Yeni (Aşama 9) | 7 Node testi |
 | `tests/e2e/run.mjs` | Değişti | W (çalışma alanı) ve T (tekstil) senaryoları; makine senaryoları seçim ekranını atlamak için `cizim:workspace = makine` ile başlar |
 
 Yeni dış bağımlılık yok: tarayıcının kendi IndexedDB'si kullanılır. Three.js tekstil tarafında Aşama 9'a kadar yüklenmez.
@@ -570,4 +574,59 @@ Kurallar iki kaynaktan gelir:
 - **knitout kapsamı.** Delik / eksiltme / artırma (şekillendirme) yok; düz panel üretir (açık hata verir). Bağlama / kapama makine yazılımına bırakılır. knitout'u makine biçimine çevirmek için ayrı bir dönüştürücü gerekir.
 - **Elektronik ev tipi makineler.** Bunların desen yükleme biçimleri desteklenmez; delikli kart ve operatör programı verilir.
 - **Delikli kart.** Okuma kayması ve kart yönü markaya göre değişir; şema delik konumunu gösterir, kesim şablonu değildir.
+
+## 14. Aşama 9 raporu: 3B önizleme ve kumaş benzetimi (12.11.2026)
+
+Bu aşamada iki ayrı şey var ve arayüzde de ayrı tutuldu.
+
+### 14.1 3B önizleme (geometrik, fiziksel DEĞİL)
+
+**Nerede.** Kalıp sekmesinde her ürün / beden kartında "🧍 3B önizleme"; Örgü sekmesinde beden parçasında "🧍 3B".
+
+**Bolluk raporu.**
+- Giysi çevresi kalıbın dikiş çizgisinden ölçülür. Yan dikişli beden parçaları toplanır; katlı parça × 2, adetli parça × adet. Ön pat (üst üste binme) ve pens payları düşülür.
+- Beden tablosundaki ölçüyle karşılaştırılır; tablonun adı ve kaynağı ekranda yazılı.
+- Gömlek: göğüs, etek ucu (kalça hizasında varsayıldı). Etek: bel, kalça, etek ucu.
+- Önerilen bolluk aralıkları: gömlek göğüs 6–20 cm, etek kalça 2–8 cm, bel 0–2,5 cm. Vücuttan darsa hata.
+- Triko: ön + arka genişlik göğüsle karşılaştırılır; örgü esnediği için −6 … +20 cm aralığı.
+
+**3B sahne.**
+- Basitleştirilmiş vücut formu: elips kesitler, düzey yükseklikleri ortalama oranlardan; kol ve bacak yok.
+- Giysi kabuğu: kalıp çevrelerinden kurulan halkalar. Yeşil uygun, sarı çok dar / bol, kırmızı vücuttan dar.
+- Ekranda sürekli **ÖNİZLEME** etiketi ve "kumaşın düşüşü, kırışıklık, gerilim hesaplanmaz; prova gerekir" notu var.
+
+### 14.2 Dökümlülük benzetimi (fiziksel model)
+
+**Nerede.** Malzemeler sekmesinde her kumaş kartında.
+
+**Model.**
+- Cusick düzeni: 30 cm çaplı daire numune, 18 cm çaplı destek diski.
+- XPBD: uzamaz mesafe kısıtları (yapısal + kesme). Eğilme, ızgara çizgisi üçlülerinin orta nokta sapmasıyla; 1, 2 ve 4 aralıklı üçlülerle.
+- Dökümlülük katsayısı = (gölge − disk) / (numune − disk). Gölge, izdüşen üçgenlerin 1 mm ızgarada taranmasıyla ölçülür. Ayrıca dalga sayısı çıkar.
+
+**Doğrulama durumu (zorunlu).**
+- Ölçülmüş katsayı girilmemişse: **DOĞRULANMAMIŞ — yalnız model tahmini**. Doğrulama sekmesinde uyarı çıkar.
+- "Ölçüme kalibre et": etkin eğilme parametresi ölçülen katsayıya uydurulur. Sonuç "kalibre edildi, bağımsız doğrulama değil" diye yazılır.
+- İkinci bağımsız ölçüm (başka numune) girilip model ±0,05 içinde kalırsa: **referans numuneyle uyumlu**. Dışındaysa: **UYUŞMUYOR** (hata).
+- Gramaj ya da eğilme değişirse sonuç "eski" olur.
+
+**Doğrulama** (`tests/tx-sim3d.test.mjs`, 7 test):
+- **Çevre ölçümü analitik değerle aynı.**
+  - Gömlek göğsü = göğüs + bolluk (üç farklı ölçüde ±0,5 mm).
+  - Etek beli = bel (pens düşülmüş, ±0,2 mm), kalça = kalça + bolluk.
+- **Elips çevresi.** Ölçüye eşit (1e-6).
+- **Dökümlülük modeli.**
+  - Belirlenimci ve durulur.
+  - Çok sert numune düz kalır: katsayı > 0,99, dalga yok. Bu, ölçüm yönteminin kendi doğruluğunu sınar.
+  - Eğilme arttıkça katsayı artar, gramaj arttıkça azalır; disk üstü sabit.
+- **Kalibrasyon.** Hedefe ±0,02; durum kuralları; model doğrulamasına yazılma.
+- **Tarayıcı testi.**
+  - Gömlek kalıbından 3B sahne (vücut + kabuk), göğüs bolluğu uygun, ÖNİZLEME etiketi; kazak 3B.
+  - Poplin benzetimi doğrulanmamış görünür. 0,55 ölçümüne kalibre edilir (bağımsız değil yazısı). İkinci ölçüm 0,57 ile "uyumlu" olur. Dökülmüş numune 3B görünür.
+
+**Sınırlar:**
+- **Ağ yakınsaması tam değil.** 21 / 31 / 41 ızgarada katsayı: eğilme 2 için 0,49 / 0,52 / 0,54; eğilme 10 için 0,83 / 0,91 / 0,92. Uygulama 31 kullanır. Bu yüzden eğilme parametresi "etkin" bir model değeridir (KES / Peirce ölçümüyle birebir aynı değil) ve ölçüme kalibre edilmelidir.
+- **Model aralığı.** Çok yumuşak kumaşta katsayı 0,25'in altına inmez (öz-çarpışma yok, ağ kaba). Bu aralığın dışındaki ölçümler için kalibrasyon açık hata verir.
+- **Giysi düzeyinde kumaş fiziği yok.** 3B önizleme geometriktir. Giysinin vücut üstünde dökülmesi, dikiş gerilimi, kırışıklık benzetilmez.
+- **Vücut formu.** Ortalama oranlarla basitleştirilmiştir; gerçek vücut taraması içe aktarılmaz.
 

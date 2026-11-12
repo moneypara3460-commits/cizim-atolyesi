@@ -1,20 +1,23 @@
 // Tekstil ve Moda çalışma alanı — arayüz (Aşama 1: ortak proje altyapısı).
 // Hesap ve doğrulama tx/model.js'te; burada yalnız gösterim ve düzenleme.
 // Makine ve Mühendislik alanının hiçbir dosyasını içe aktarmaz.
-import * as M from './model.js?v=20261112h';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112h';
-import { TEMPLATES, VIEWS } from './drawing.js?v=20261112h';
-import { openSketchEditor } from './sketch-ui.js?v=20261112h';
-import { SETS, defaultParams } from './woven/blocks.js?v=20261112h';
-import { openPatternEditor } from './woven/pattern-ui.js?v=20261112h';
-import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112h';
-import { sizeTable as gradeTable } from './woven/grade.js?v=20261112h';
-import { TEMPLATES as KTPL, validateChart } from './knit/chart.js?v=20261112h';
-import { KNIT_PIECES, gradeKnit, widthOf } from './knit/shape.js?v=20261112h';
-import { openChartEditor } from './knit/chart-ui.js?v=20261112h';
-import { PRESETS, allCounts } from './materials.js?v=20261112h';
-import { openMarkerEditor } from './woven/marker-ui.js?v=20261112h';
-import * as MC from './knit/machine.js?v=20261112h';
+import * as M from './model.js?v=20261112i';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112i';
+import { TEMPLATES, VIEWS } from './drawing.js?v=20261112i';
+import { openSketchEditor } from './sketch-ui.js?v=20261112i';
+import { SETS, defaultParams } from './woven/blocks.js?v=20261112i';
+import { openPatternEditor } from './woven/pattern-ui.js?v=20261112i';
+import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112i';
+import { sizeTable as gradeTable } from './woven/grade.js?v=20261112i';
+import { TEMPLATES as KTPL, validateChart } from './knit/chart.js?v=20261112i';
+import { KNIT_PIECES, gradeKnit, widthOf } from './knit/shape.js?v=20261112i';
+import { openChartEditor } from './knit/chart-ui.js?v=20261112i';
+import { PRESETS, allCounts } from './materials.js?v=20261112i';
+import { openMarkerEditor } from './woven/marker-ui.js?v=20261112i';
+import * as MC from './knit/machine.js?v=20261112i';
+import * as FIT from './sim3d/fit.js?v=20261112i';
+import * as DR from './sim3d/drape.js?v=20261112i';
+import { open3D, fitScene, drapeScene } from './sim3d/view3d.js?v=20261112i';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -89,7 +92,15 @@ function render() {
   if (key && document.activeElement !== ae) { const el = document.querySelector(key); if (el && el !== ae) { el.focus({ preventScroll: true }); if (sel) try { el.setSelectionRange(...sel); } catch (e) { /* seçim desteklenmiyor */ } } }
 }
 let renderT = null;
-const deferRender = () => { clearTimeout(renderT); renderT = setTimeout(render, 0); };
+// alan değişiminden sonraki ertelenmiş çizim: kaydedilmemiş geçici alanlar (data-f'siz, id'li) yazılan değeri korur
+const deferRender = () => {
+  clearTimeout(renderT);
+  renderT = setTimeout(() => {
+    const keep = new Map(); document.querySelectorAll('#main input[id]:not([data-f]), #main textarea[id]:not([data-f])').forEach((el) => { if (el.type !== 'checkbox' && el.type !== 'file') keep.set(el.id, el.value); });
+    render();
+    for (const [id, v] of keep) { const el = document.getElementById(id); if (el && el.value !== v) el.value = v; }
+  }, 0);
+};
 function renderNow() {
   if (S.view === 'home') return renderHome();
   const p = S.p, T = M.PROJECT_TYPES[p.type];
@@ -212,7 +223,7 @@ function tabPatterns() {
       <div class="small">${pcs.length} parça (${pcs.map((x) => esc(x.name)).join(', ')}) · toplam kesim alanı ${(area / 1e4).toFixed(1)} dm² (adetle)</div>
       <div class="small">${bad ? `⛔ ${bad} parçada hata` : '✅ parçalar geçerli'} · ${sms.length ? (sBad ? `⛔ ${sBad} / ${sms.length} dikiş eşleşmesi tutmuyor` : `✅ ${sms.length} dikiş eşleşmesi tutuyor`) : 'dikiş eşleşmesi yok'}${pcs[0].gradedFrom ? ` · ${esc(pcs[0].gradedFrom.base)} bedeninden yayıldı (${esc(pcs[0].gradedFrom.how)})` : ''}</div>
       ${(() => { const mk = (p.woven.markers || []).find((x) => (x.product ?? '') === pid && (x.size ?? '') === sz); return mk ? `<div class="small">✂ Kesim planı: boy ${num(mk.length / 10)} cm · verim %${num(mk.efficiency * 100)} · ${mk.mode === 'folded' ? 'katlı' : 'açık en'}</div>` : ''; })()}
-      <div class="row noprint"><button data-a="marker-open" data-v="${esc(key)}">✂ Kumaş yerleşimi</button>${pcs[0].gradedFrom ? '' : `<button data-a="grade-open" data-v="${esc(key)}">📐 Bedenlere yay (grading)</button>`}</div>
+      <div class="row noprint"><button data-a="fit3d" data-v="${esc(key)}">🧍 3B önizleme</button><button data-a="marker-open" data-v="${esc(key)}">✂ Kumaş yerleşimi</button>${pcs[0].gradedFrom ? '' : `<button data-a="grade-open" data-v="${esc(key)}">📐 Bedenlere yay (grading)</button>`}</div>
       ${S.gradeKey === key ? gradeForm(pid, sz) : ''}</div>`;
   }
   h += `<div class="card noprint"><h3>Boş kalıp grubu aç</h3><div class="row"><label class="f"><span>Ürün</span><select id="pe-prod">${prods.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}<option value="">— ürüne bağlı değil —</option></select></label><label class="f"><span>Beden</span><input id="pe-size" placeholder="ör. M"></label><button data-a="open-pattern-new">Aç</button></div>
@@ -248,7 +259,7 @@ function tabKnit() {
   K.pieces.forEach((pc, i) => {
     let r = null, err = ''; try { r = M.knitCompute(p, pc); } catch (e) { err = e.message; }
     const pr = p.collection.products.find((x) => x.id === pc.product), sw = K.swatches.find((x) => x.id === pc.swatch);
-    h += `<div class="card"><h3><span class="sp">${esc(pc.name)}${pr ? ' · ' + esc(pr.name) : ''}${pc.size ? ' · Beden ' + esc(pc.size) : ''}</span><button class="danger" data-a="del-kpiece" data-i="${i}">${S.delArm === pc.id ? 'Emin misin?' : 'Sil'}</button></h3>`;
+    h += `<div class="card"><h3><span class="sp">${esc(pc.name)}${pr ? ' · ' + esc(pr.name) : ''}${pc.size ? ' · Beden ' + esc(pc.size) : ''}</span>${pc.kind === 'beden' && !err ? `<button data-a="kfit3d" data-i="${i}">🧍 3B</button>` : ''}<button class="danger" data-a="del-kpiece" data-i="${i}">${S.delArm === pc.id ? 'Emin misin?' : 'Sil'}</button></h3>`;
     if (err) h += `<div class="issue hata">⛔ ${esc(err)}</div>`;
     else {
       h += `<div class="small">Numune ${esc(sw.name)}: ${num(sw.st10)} ilmek × ${num(sw.row10)} sıra / 10 cm${sw.washed ? '' : ' · ⚠ yıkanmamış'} · ilmek sayısı ${r.mult} ve 2 kenar ilmeğine uyduruldu</div>
@@ -268,6 +279,16 @@ function tabKnit() {
   return h;
 }
 // Aşama 8: makine profilleri ve üretim çıktıları
+// Aşama 9: fiziksel dökümlülük benzetimi (model) ve referansla karşılaştırma
+const drapeSig = DR.drapeSig, drapeVerdict = DR.drapeVerdict;
+function drapeCard(m, i) {
+  const v = drapeVerdict(m), sm = m.sim;
+  return `<div class="card" style="background:#0b1730;margin-top:6px"><b>Dökümlülük benzetimi (fiziksel model)</b>
+    <div class="small">Cusick düzeni (30 cm numune, 18 cm disk), XPBD kütle-kısıt modeli. "Etkin eğilme" modelin parametresidir (KES / Peirce ölçümüyle birebir aynı değil); referans numunenin ölçülen katsayısıyla kalibre edilir. Öz-çarpışma yok.</div>
+    ${sm ? `<div class="row"><b>Katsayı ${num(sm.dc, 2)}</b><span class="small">${sm.nodes} dalga · eğilme ${num(sm.bend, 2)} μN·m${sm.calibrated ? ' (kalibre)' : ''} · ${sm.ms} ms</span></div><div class="issue ${v.level === 'ok' ? '' : v.level}">${v.level === 'ok' ? '✅' : v.level === 'hata' ? '⛔' : '⚠'} ${esc(v.text)}</div>` : ''}
+    <div class="row noprint"><button data-a="drape-run" data-i="${i}">▶ Benzet</button><button data-a="drape-cal" data-i="${i}" ${m.props.drapeRef != null ? '' : 'disabled'}>⚙ Ölçüme kalibre et</button>${sm ? `<button data-a="drape-view" data-i="${i}">🧊 3B gör</button>` : ''}</div></div>`;
+}
+let lastDrape = null;
 function tabMachines() {
   const p = S.p, K = p.knit;
   let h = `<div class="card"><h3>Örgü makineleri</h3><div class="small">Şablonlar genel tipik değerlerdir, gerçek bir makine değildir. Kendi makinenin marka / modelini ve değerlerini gir, o makinede numune örüp sonucu doğrula. Doğrulanmamış profilin bütün çıktıları "yalnız numune için" başlığı taşır. Stoll, Shima Seiki, Steiger yerel program biçimleri kapalı / lisanslıdır ve üretilmez; elektronik makine için açık <b>knitout</b> ara biçimi verilir.</div>`;
@@ -395,7 +416,7 @@ function tabMaterials() {
           : `<input data-f="${f}.props.${k}" data-t="${cm ? 'cm' : 'num'}" value="${v == null ? '' : num(cm ? v / 10 : v, 3)}" inputmode="decimal" placeholder="bilinmiyor">`;
         const estBox = kind === 'num' || kind === 'pct' || kind === 'int' ? `<label class="small"><input type="checkbox" data-a="est" data-i="${i}" data-v="${k}" ${est ? 'checked' : ''}> tahmini</label>` : '';
         return `<label class="f"><span>${esc(lbl)}${u ? ' (' + u + ')' : ''}</span>${inp}${estBox}</label>`;
-      }).join('')}</div>${m.kind === 'yarn' && m.props.count > 0 && m.props.countSystem ? (() => { try { const c = allCounts(m.props.count, m.props.countSystem, m.props.ply || 1); return `<div class="small">Sonuç numara${c.ply > 1 ? ` (${c.ply} kat, büküm kısalması hariç)` : ''}: ${num(c.tex, 1)} tex · ${num(c.dtex, 0)} dtex · ${num(c.den, 0)} den · Nm ${num(c.Nm, 2)} · Ne ${num(c.Ne, 2)} · ${num(1000 / c.tex, 1)} m/g</div>`; } catch (e) { return ''; } })() : ''}</div>`;
+      }).join('')}</div>${m.kind === 'fabric' ? drapeCard(m, i) : ''}${m.kind === 'yarn' && m.props.count > 0 && m.props.countSystem ? (() => { try { const c = allCounts(m.props.count, m.props.countSystem, m.props.ply || 1); return `<div class="small">Sonuç numara${c.ply > 1 ? ` (${c.ply} kat, büküm kısalması hariç)` : ''}: ${num(c.tex, 1)} tex · ${num(c.dtex, 0)} dtex · ${num(c.den, 0)} den · Nm ${num(c.Nm, 2)} · Ne ${num(c.Ne, 2)} · ${num(1000 / c.tex, 1)} m/g</div>`; } catch (e) { return ''; } })() : ''}</div>`;
   });
   return h + (p.library.materials.length ? '' : '<div class="small">Malzeme yok.</div>');
 }
@@ -443,9 +464,8 @@ function tabRevisions() {
 function tabTools() {
   const br = M.PROJECT_TYPES[S.p.type].branches;
   const rows = [];
-  if (br.includes('woven')) rows.push(['Dokuma / Konfeksiyon', [['3B giysi', 9]]]);
-  if (br.includes('knit')) rows.push(['Triko / Örgü', [['3B triko', 9]]]);
-  return `<div class="card">✅ Teknik çizim (Aşama 2): "Teknik çizim" sekmesi.${br.includes('woven') ? ' ✅ Dokuma kalıbı (Aşama 3), beden yayma / grading (Aşama 4) ve kumaş yerleşimi / kesim planı (Aşama 7): "Kalıp" sekmesi.' : ''}${br.includes('knit') ? ' ✅ Örgü deseni, numune ve ilmek hesabı (Aşama 5), makine profili ve üretim çıktısı (Aşama 8): "Örgü" sekmesi.' : ''}</div><div class="small">Aşağıdaki araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
+  rows.push(['Ortak', [['Üretim föyü (operasyon listesi, dikim sırası) ve ayrıntılı maliyet (işçilik, genel gider, fiyat)', 10]]]);
+  return `<div class="card">✅ Teknik çizim (Aşama 2): "Teknik çizim" sekmesi.${br.includes('woven') ? ' ✅ Dokuma kalıbı (Aşama 3), beden yayma / grading (Aşama 4) ve kumaş yerleşimi / kesim planı (Aşama 7), 3B önizleme (Aşama 9): "Kalıp" sekmesi. ✅ Kumaş dökümlülük benzetimi (Aşama 9): "Malzemeler" sekmesi.' : ''}${br.includes('knit') ? ' ✅ Örgü deseni, numune ve ilmek hesabı (Aşama 5), makine profili ve üretim çıktısı (Aşama 8), 3B önizleme (Aşama 9): "Örgü" sekmesi.' : ''}</div><div class="small">Aşağıdaki araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
     rows.map(([t, items]) => `<div class="card"><h3>${t}</h3>${items.map(([n, a]) => `<div class="row"><span>${esc(n)}</span><span class="badge" style="flex:0 0 auto">Henüz yok · Aşama ${a}</span></div>`).join('')}</div>`).join('');
 }
 
@@ -558,6 +578,38 @@ document.addEventListener('click', async (e) => {
         const size = $('pt-size') ? $('pt-size').value : $('pt-size-free').value.trim();
         const product = $('pt-prod').value || null;
         M.addPatternSet(p, set, params, { product, size }); dirty(); render(); openPattern(product, size); return;
+      }
+      case 'drape-run': case 'drape-cal': {
+        const m = p.library.materials[i], gsm = m.props.gsm; if (!(gsm > 0)) throw new Error('Önce gramajı gir');
+        let bend = m.props.bendEff, calibrated = false; const t0 = Date.now();
+        if (a === 'drape-cal') { const c = DR.calibrateBend({ gsm, target: m.props.drapeRef }); bend = Math.round(c.bend * 100) / 100; m.props.bendEff = bend; calibrated = true; }
+        else if (!(bend > 0)) { bend = 10; m.props.bendEff = bend; m.estimated = [...new Set([...(m.estimated || []), 'bendEff'])]; }
+        else calibrated = !!(m.sim && m.sim.calibrated && m.sim.bend === bend);
+        const r = DR.simulateDrape({ gsm, bend }); lastDrape = { id: m.id, r };
+        m.sim = { dc: r.dc, nodes: r.nodes, bend, calibrated, settled: r.settled, ms: Date.now() - t0, at: Date.now(), sig: drapeSig(m) };
+        toast(`Dökümlülük katsayısı ${num(r.dc, 2)}${r.settled ? '' : ' (tam durulmadı)'}`); break;
+      }
+      case 'drape-view': { const m = p.library.materials[i]; const r = lastDrape && lastDrape.id === m.id ? lastDrape.r : DR.simulateDrape({ gsm: m.props.gsm, bend: m.sim.bend }); lastDrape = { id: m.id, r };
+        const v = drapeVerdict(m); await open3D({ title: 'Dökümlülük · ' + m.name, paneHTML: `<div class="small">Katsayı ${num(r.dc, 2)} · ${r.nodes} dalga · ${r.particles} parçacık</div><div class="issue ${v.level === 'ok' ? '' : v.level}">${esc(v.text)}</div>`, build: drapeScene(r) }); return; }
+      case 'fit3d': {
+        const [pid, sz] = b.dataset.v.split('|'), pr = p.collection.products.find((x) => x.id === pid);
+        const pcs = p.woven.pieces.filter((x) => (x.product ?? '') === pid && (x.size ?? '') === sz && x.fabric === 'ana');
+        const tb = (pr && p.sizeTables.find((t) => t.id === pr.sizeTable && t.sizes.includes(sz))) || p.sizeTables.find((t) => t.sizes.includes(sz));
+        const meas = tb ? Object.fromEntries(Object.entries(tb.measures).map(([k, row]) => [k, row[sz]])) : {};
+        const rep = FIT.fitReport(pcs, null, meas), body = FIT.bodyForm(meas), rings = FIT.garmentRings(pcs, rep, body);
+        const pane = `<div class="small">Vücut: ${tb ? esc(tb.name) + ' · ' + esc(sz) + (tb.source ? ' · kaynak: ' + esc(tb.source) : '') : '⚠ beden tablosu yok, varsayılan ölçüler'} · ${esc(body.assumptions)}</div>
+          <table><tr><th>Düzey</th><th>Giysi</th><th>Vücut</th><th>Bolluk</th><th></th></tr>${rep.map((r) => `<tr><td>${esc(r.label)}</td><td>${num(r.garment / 10)} cm</td><td>${r.bodyM ? num(r.bodyM / 10) + ' cm' : '—'}</td><td>${r.ease != null ? (r.ease >= 0 ? '+' : '') + num(r.ease / 10) + ' cm' : '—'}</td><td class="small">${r.level === 'hata' ? '⛔' : r.level === 'uyarı' ? '⚠' : r.level === 'ok' ? '✅' : ''} ${esc(r.status)}${r.note ? ' (' + esc(r.note) + ')' : ''}</td></tr>`).join('')}</table>
+          <div class="small">Giysi çevresi kalıbın dikiş çizgisinden ölçüldü (pat ve pens hariç). Renk: yeşil uygun, sarı çok dar / bol, kırmızı vücuttan dar. Bu bir <b>önizlemedir</b>: kumaşın düşüşü, kırışıklık ve gerilim hesaplanmaz; prova gerekir.</div>`;
+        const root = await open3D({ title: `3B önizleme · ${pr?.name || ''} ${sz}`, paneHTML: pane, build: fitScene(body, rings) }); root.api.report = rep; return;
+      }
+      case 'kfit3d': {
+        const pc = p.knit.pieces[i], r = M.knitCompute(p, pc), sw = p.knit.swatches.find((x) => x.id === pc.swatch), pr = p.collection.products.find((x) => x.id === pc.product);
+        const tb = (pr && p.sizeTables.find((t) => t.id === pr.sizeTable && t.sizes.includes(pc.size))) || p.sizeTables.find((t) => t.sizes.includes(pc.size));
+        const meas = tb ? Object.fromEntries(Object.entries(tb.measures).map(([k, row]) => [k, row[pc.size]])) : {};
+        const wmm = widthOf(r.castOn, sw), rep = FIT.knitFitReport(wmm, meas), body = FIT.bodyForm(meas), len = (r.rows / sw.row10) * 100, c = rep[0];
+        const ring = (z, g) => ({ z, girth: g, level: c.level, ...FIT.ellipseAxes(Math.max(g, 100)) }), zc = body.rings[2].z;
+        const pane = `<div class="small">Vücut: ${tb ? esc(tb.name) + ' · ' + esc(pc.size) : '⚠ beden tablosu yok'} · ${esc(body.assumptions)}</div><table><tr><td>Göğüs</td><td>giysi ${num(c.garment / 10)} cm</td><td>vücut ${c.bodyM ? num(c.bodyM / 10) + ' cm' : '—'}</td><td>${c.ease != null ? (c.ease >= 0 ? '+' : '') + num(c.ease / 10) + ' cm' : '—'}</td><td class="small">${esc(c.status)}</td></tr></table><div class="small">Genişlik numuneden (${num(sw.st10)} ilmek / 10 cm); örgünün esnemesi ve ağırlıkla uzaması hesaplanmaz. Önizlemedir.</div>`;
+        const root = await open3D({ title: `3B önizleme · ${pc.name} ${pc.size || ''}`, paneHTML: pane, build: fitScene(body, [ring(body.rings[1].z, c.garment * 0.92), ring(zc, c.garment), ring(body.rings[1].z - len, c.garment)]) }); root.api.report = rep; return;
       }
       case 'add-machine': M.addMachine(p, $('nm-mtpl').value); break;
       case 'del-machine': { const m = p.knit.machines[i]; if (S.delArm !== m.id) { S.delArm = m.id; return render(); } p.knit.machines.splice(i, 1); S.delArm = null; break; }

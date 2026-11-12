@@ -762,6 +762,44 @@ await TX('Tekstil triko makinesi: ev tipi şablon doğrulanmamış uyarısı, uy
   await A(page, 'tab', '[data-v="val"]'); expect(await page.locator('.issue.hata').count() === 0, 'doğrulamada hata yok');
 });
 
+await TX('Tekstil 3B: gömlek kalıbından 3B önizleme (bolluk tablosu, ÖNİZLEME etiketi, WebGL sahne), kazak 3B; kumaş dökümlülük benzetimi DOĞRULANMAMIŞ → ölçüme kalibre → ikinci ölçümle uyumlu', async ({ page }) => {
+  await A(page, 'type', '[data-v="mixed"]'); await page.waitForSelector('[data-a="type"][data-v="mixed"].on');
+  await page.fill('#np-name', '3B E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await page.selectOption('#ap-branch', 'woven'); await page.selectOption('#ap-type', 'gomlek'); await A(page, 'add-prod');
+  await A(page, 'tab', '[data-v="sizes"]'); await A(page, 'add-size-ex');
+  await A(page, 'tab', '[data-v="pat"]'); await page.selectOption('#pt-table', { index: 1 }); await page.waitForSelector('#pt-size'); await page.selectOption('#pt-size', 'M');
+  await A(page, 'add-pattern'); await page.waitForSelector('#pkx canvas'); await page.locator('#pkx [data-k="close"]').click();
+  await A(page, 'fit3d'); await page.waitForSelector('#v3x');
+  await page.waitForFunction(() => { const a = document.getElementById('v3x').api; return a.ready || a.error; });
+  const api = await page.evaluate(() => { const a = document.getElementById('v3x').api; return { ready: a.ready, meshes: a.meshes, rep: a.report.map((r) => [r.label, Math.round(r.garment), r.bodyM, r.level]) }; });
+  expect(api.ready && api.meshes === 2, '3B sahne (vücut + giysi kabuğu): ' + JSON.stringify(api));
+  const pane = await page.locator('#v3x .pane').innerText();
+  expect(/ÖNİZLEME/.test(await page.locator('#v3x .tag').innerText()) && /önizlemedir/.test(pane) && /kaynak:/.test(pane), 'önizleme etiketi ve ölçü kaynağı');
+  const ch = api.rep.find((r) => r[0] === 'Göğüs'); expect(ch && ch[2] > 0 && ch[1] > ch[2] && ch[3] === 'ok', 'göğüs bolluğu uygun: ' + JSON.stringify(ch));
+  await page.locator('#v3x [data-k="close"]').click();
+  // triko 3B
+  await A(page, 'tab', '[data-v="col"]'); await page.selectOption('#ap-branch', 'knit'); await page.selectOption('#ap-type', 'kazak'); await A(page, 'add-prod');
+  await A(page, 'tab', '[data-v="knit"]'); await page.fill('#ns-name', 'N'); await page.fill('#ns-st', '28'); await page.fill('#ns-row', '38'); await A(page, 'add-swatch');
+  await page.selectOption('#kp-prod', { index: 0 }); await page.fill('#kp-size', 'M'); await A(page, 'add-kpiece');
+  await A(page, 'kfit3d'); await page.waitForSelector('#v3x'); await page.waitForFunction(() => { const a = document.getElementById('v3x').api; return a.ready || a.error; });
+  expect(/Göğüs/.test(await page.locator('#v3x .pane').innerText()) && await page.evaluate(() => document.getElementById('v3x').api.ready), 'triko 3B');
+  await page.locator('#v3x [data-k="close"]').click();
+  // dökümlülük
+  await A(page, 'tab', '[data-v="mats"]'); await page.selectOption('#nm-preset', 'fabric:0'); await A(page, 'add-preset');
+  await A(page, 'drape-run', '[data-i="0"]'); await page.waitForFunction(() => /Katsayı \d/.test(document.querySelector('#main').innerText), null, { timeout: 30000 });
+  let b = await txBody(page); expect(/DOĞRULANMAMIŞ — ölçülmüş dökümlülük/.test(b), 'ölçümsüz: doğrulanmamış');
+  await page.fill('[data-f="library.materials.0.props.drapeRef"]', '0,55'); await page.locator('[data-f="library.materials.0.props.drapeRef"]').dispatchEvent('change');
+  await page.waitForSelector('[data-a="drape-cal"]:not([disabled])'); await A(page, 'drape-cal', '[data-i="0"]');
+  await page.waitForFunction(() => /\(kalibre\)/.test(document.querySelector('#main').innerText), null, { timeout: 60000 });
+  b = await txBody(page); expect(/Kalibre edildi: eğilme rijitliği bu ölçümden uyduruldu/.test(b), 'aynı ölçüme kalibre: bağımsız değil');
+  const dc = +(b.match(/Katsayı ([\d,]+)/)[1].replace(',', '.')); expect(Math.abs(dc - 0.55) <= 0.03, 'kalibre katsayı ' + dc);
+  await page.fill('[data-f="library.materials.0.props.drapeRef2"]', '0,57'); await page.locator('[data-f="library.materials.0.props.drapeRef2"]').dispatchEvent('change');
+  await page.waitForFunction(() => /Referans numuneyle uyumlu/.test(document.querySelector('#main').innerText));
+  await A(page, 'drape-view', '[data-i="0"]'); await page.waitForSelector('#v3x'); await page.waitForFunction(() => { const a = document.getElementById('v3x').api; return a.ready || a.error; });
+  expect(await page.evaluate(() => document.getElementById('v3x').api.ready), 'dökümlü numune 3B');
+  await page.locator('#v3x [data-k="close"]').click();
+});
+
 await TX('Tekstil ↔ Makine ayrılığı: tekstil kaydı makine projelerine yazmaz; makine projeleri tekstil listesinde görünmez', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('cizim:projects', JSON.stringify({ mak: { data: '{}', at: 1 } })));
   await A(page, 'type', '[data-v="woven"]'); await page.waitForSelector('[data-a="type"][data-v="woven"].on'); await page.fill('#np-name', 'Ayrı'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');

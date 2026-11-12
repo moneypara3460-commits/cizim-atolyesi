@@ -4,15 +4,16 @@
 // Dokuma / konfeksiyon ve triko ayrı alt şemalardır (woven, knit); yalnız koleksiyon, ürün, renk, beden,
 // malzeme, föy ve revizyon ortaktır. Bkz. docs/TEKSTIL-MIMARI.md
 
-import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112h';
-import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112h';
-import { buildSet } from './woven/blocks.js?v=20261112h';
-import { gradeGroup } from './woven/grade.js?v=20261112h';
-import { fromTemplate, validateChart } from './knit/chart.js?v=20261112h';
-import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112h';
-import { PRESETS, presetEstimated, wovenConsumption, knitStitchTotal, yarnConsumption } from './materials.js?v=20261112h';
-import { evaluate as evalMarker, makeMarker } from './woven/marker.js?v=20261112h';
-import { fromTemplate as machineFromTemplate, machineStatus } from './knit/machine.js?v=20261112h';
+import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112i';
+import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112i';
+import { buildSet } from './woven/blocks.js?v=20261112i';
+import { gradeGroup } from './woven/grade.js?v=20261112i';
+import { fromTemplate, validateChart } from './knit/chart.js?v=20261112i';
+import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112i';
+import { PRESETS, presetEstimated, wovenConsumption, knitStitchTotal, yarnConsumption } from './materials.js?v=20261112i';
+import { evaluate as evalMarker, makeMarker } from './woven/marker.js?v=20261112i';
+import { fromTemplate as machineFromTemplate, machineStatus } from './knit/machine.js?v=20261112i';
+import { drapeVerdict } from './sim3d/drape.js?v=20261112i';
 
 export const KIND = 'cizim.textile';
 export const SCHEMA = 1;
@@ -41,6 +42,7 @@ export const MATERIAL_KINDS = {
       ['shrinkWarp', 'Çekme (boy)', '%', 'pct'], ['shrinkWeft', 'Çekme (en)', '%', 'pct'],
       ['stretchWarp', 'Esneme (boy)', '%', 'pct'], ['stretchWeft', 'Esneme (en)', '%', 'pct'],
       ['nap', 'Havlı / yönlü', '', 'bool'], ['repeatW', 'Desen raporu en', 'mm', 'num'], ['repeatH', 'Desen raporu boy', 'mm', 'num'],
+      ['bendEff', 'Etkin eğilme (benzetim modeli)', 'μN·m', 'num'], ['drapeRef', 'Ölçülen dökümlülük katsayısı (Cusick, referans numune)', '0–1', 'num'], ['drapeRef2', 'İkinci bağımsız ölçüm (başka numune)', '0–1', 'num'],
     ],
     priceUnit: 'm',
   },
@@ -331,6 +333,7 @@ export function validate(p) {
     const K = MATERIAL_KINDS[m.kind], w = 'Malzeme ' + m.name;
     if (!K) { E(w, 'Bilinmeyen tür ' + m.kind); continue; }
     if (!K.branches.some((b) => T.branches.includes(b))) W(w, `${K.label} bu proje türünde kullanılmaz`);
+    if (m.kind === 'fabric') { for (const k of ['drapeRef', 'drapeRef2']) if (m.props[k] != null && !(m.props[k] >= 0 && m.props[k] <= 1)) E(w, 'Dökümlülük katsayısı 0 ile 1 arasında olmalı'); const dv = drapeVerdict(m); if (dv && !dv.verified) (dv.level === 'hata' ? E : W)(w, 'Dökümlülük benzetimi: ' + dv.text); }
     for (const [k, lbl, , kind] of K.fields) {
       const v = m.props?.[k];
       if (v == null || v === '') continue;

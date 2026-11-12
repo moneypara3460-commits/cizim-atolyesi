@@ -3,7 +3,7 @@
 // Bir çizim (sketch): görünüşler (ön, arka, yan) → katmanlar → varlıklar.
 // Varlıklar: path (yol), point (nokta), dim (ölçü), text (açıklama), detail (kütüphane detayı).
 // sym: true olan yol / detay x = 0'a göre aynalanmış kopyasıyla birlikte çizilir (tam simetri).
-import * as C from './curve.js?v=20261112h';
+import * as C from './curve.js?v=20261112i';
 
 export const VIEWS = { front: 'Ön', back: 'Arka', side: 'Yan' };
 export const STROKES = { solid: 'Düz', stitch: 'Dikiş (kesik)', dot: 'Noktalı', fold: 'Katlama (çizgi-nokta)' };
