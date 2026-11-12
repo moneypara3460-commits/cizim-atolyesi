@@ -34,4 +34,4 @@ for (const [pkg, ver, files] of FILES) {
   }
 }
 console.log(bad ? `\n${bad} dosya npm paketinden farklı` : missing ? `\n${missing} dosya vendor/ içinde yok` : '\nBütün kopyalar npm paketleriyle aynı');
-process.exit(bad || missing ? 1 : 0);
+process.exitCode = bad || missing ? 1 : 0;   // exit() değil: yönlendirilmiş çıktı yarıda kesilmesin
