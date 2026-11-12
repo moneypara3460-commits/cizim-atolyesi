@@ -17,9 +17,21 @@ const DESK = { viewport: { width: 1366, height: 900 } };
 const perf = [];
 
 /* ---------- yardımcılar ---------- */
-async function app(view = DESK) { const a = await openApp(browser, url, { ...view, init: NO_GUIDE }); await waitReady(a.page); return a; }
+// E2E_UI=yeni: aynı testler yeni arayüzde (yeni/index.html) koşar; hesap kodu ortak
+const UI_PATH = process.env.E2E_UI === 'yeni' ? 'yeni/index.html' : undefined;
+// yeni arayüz koşusunda tekstil (ayrı sayfa) ve eski açılış seçimi (yalnız eski arayüzde var) tekrar koşulmaz
+const SKIP_YENI = UI_PATH ? ['t-tekstil', 'w-alan'] : [];
+async function app(view = DESK) { const a = await openApp(browser, url, { ...view, path: UI_PATH, init: NO_GUIDE }); await waitReady(a.page); return a; }
 const act = async (page, a) => { const b = page.locator(`[data-act="${a}"]:visible`).first(); await b.scrollIntoViewIfNeeded(); await b.click(); };
-const tab = async (page, k) => { const b = page.locator(`#tabs [data-act="tab-${k}"]`); await b.scrollIntoViewIfNeeded(); await b.click(); await page.waitForTimeout(150); };
+const tab = async (page, k) => {
+  // yeni arayüz: sekme önce alttaki / üstteki bölüm düğmesiyle açılır (Tasarım, Analiz, Üretim); telefonda panel kapalıysa açılır
+  const m = await page.evaluate((k) => (window.__shell ? window.__shell.modeOf(k) : null), k);
+  if (m) {
+    if (!(await page.locator(`#tabs [data-act="tab-${k}"]`).isVisible())) { await page.locator(`#nav [data-mode="${m}"]`).click(); await page.waitForTimeout(150); }
+    if (await page.evaluate(() => !window.__shell.isDesk() && window.__shell.sheet === 'closed')) { await page.locator('#floats [data-ui="props"]').click(); await page.waitForTimeout(300); }
+  }
+  const b = page.locator(`#tabs [data-act="tab-${k}"]`); await b.scrollIntoViewIfNeeded(); await b.click(); await page.waitForTimeout(150);
+};
 const body = (page) => page.locator('#tabbody').innerText();
 const chips = (page) => page.locator('#chips .chip').count();
 const selChips = (page) => page.locator('#chips .chip.on').count();
@@ -32,7 +44,7 @@ const canvasBox = (page) => page.locator('#view canvas').boundingBox();
 async function close(a) { try { await a.ctx.close(); } catch (e) { /* */ } }
 const tmp = (name, text) => { const p = path.join(OUT, 'tmp_' + name); fs.writeFileSync(p, text); return p; };
 // test gövdesi: hata olursa ekran görüntüsü + toplanan sayfa hataları
-const T = (title, area, fn, meta = {}) => { if (only.length && !only.some((o) => area.toLowerCase().startsWith(o.toLowerCase()))) return; return R.test(title, async () => {
+const T = (title, area, fn, meta = {}) => { if (only.length && !only.some((o) => area.toLowerCase().startsWith(o.toLowerCase()))) return; if (SKIP_YENI.includes(area.toLowerCase())) return; return R.test(title, async () => {
   const a = await app(meta.view || DESK);
   try { expect(!a.net.missing.length, 'Kütüphane dosyası bulunamadı: ' + a.net.missing[0]); await fn(a); expect(!a.net.external.length, 'Dış siteye istek: ' + a.net.external.slice(0, 3).join(', ')); const errs = a.errors.filter((e) => !(meta.allowErr || []).some((re) => re.test(e))); expect(!errs.length, 'Sayfa hataları: ' + errs.slice(0, 3).join(' | ')); }
   catch (e) { e.shot = await shot(a.page, area + '_' + title); throw e; }
@@ -375,7 +387,7 @@ await T('Performans: 40 parçalı model yeniden kurma süresi', 'P-Performans', 
 });
 
 /* ---------- W. Çalışma alanı seçimi ---------- */
-await (async () => { if (only.length && !only.some((o) => 'W-Alan'.toLowerCase().startsWith(o.toLowerCase()))) return; await R.test('Çalışma alanı: ilk açılışta seçim ekranı; Makine seçilince mevcut uygulama açılır; seçim hatırlanır; Tekstil\'e geçip geri dönülür', async () => {
+await (async () => { if (only.length && !only.some((o) => 'W-Alan'.toLowerCase().startsWith(o.toLowerCase()))) return; if (SKIP_YENI.includes('w-alan')) return; await R.test('Çalışma alanı: ilk açılışta seçim ekranı; Makine seçilince mevcut uygulama açılır; seçim hatırlanır; Tekstil\'e geçip geri dönülür', async () => {
   const a = await openApp(browser, url, { ...PHONE, init: () => { try { localStorage.setItem('cizim:guideSeen', '1'); } catch (e) { /* */ } } });
   try {
     await a.page.waitForSelector('#ws-pick', { timeout: 30000 });
@@ -401,7 +413,7 @@ async function txApp(view = PHONE) {
   await a.page.waitForSelector('[data-a="create"]', { timeout: 30000 });
   return a;
 }
-const TX = (title, fn, view) => { if (only.length && !only.some((o) => 'T-Tekstil'.toLowerCase().startsWith(o.toLowerCase()))) return; return R.test(title, async () => {
+const TX = (title, fn, view) => { if (only.length && !only.some((o) => 'T-Tekstil'.toLowerCase().startsWith(o.toLowerCase()))) return; if (SKIP_YENI.includes('t-tekstil')) return; return R.test(title, async () => {
   const a = await txApp(view);
   try { await fn(a); expect(!a.errors.length, 'Sayfa hataları: ' + a.errors.slice(0, 3).join(' | ')); expect(!a.net.external.length, 'Dış siteye istek: ' + a.net.external.slice(0, 3).join(', ')); }
   catch (e) { e.shot = await shot(a.page, 'T_' + title.slice(0, 40)); throw e; } finally { await close(a); }
@@ -911,7 +923,8 @@ await TX('Tekstil ↔ Makine ayrılığı: tekstil kaydı makine projelerine yaz
 await browser.close(); srv.close();
 const sum = R.summary();
 sum.perf = perf; sum.env = { node: process.version, chromium: 'Playwright Chromium / Chrome', webgl: 'SwiftShader (yazılımsal)', devices: 'emülasyon (gerçek cihaz değil)', libs: process.env.E2E_LIBS ? 'yerel kopya (E2E_LIBS)' : 'unpkg (internet)', at: new Date().toISOString() };
-fs.writeFileSync(path.join(OUT, 'e2e.json'), JSON.stringify(sum, null, 1));
+sum.ui = UI_PATH ? 'yeni' : 'eski';
+fs.writeFileSync(path.join(OUT, UI_PATH ? 'e2e-yeni.json' : 'e2e.json'), JSON.stringify(sum, null, 1));
 for (const f of fs.readdirSync(OUT)) if (f.startsWith('tmp_')) fs.unlinkSync(path.join(OUT, f));
 console.log('\nÖzet:', JSON.stringify(sum.counts));
 for (const [n, v, u] of perf) console.log('  ⏱ ' + n + ': ' + v + ' ' + u);

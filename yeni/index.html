@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ix40t9c3eiMG7qUZnrberD8mMPC2fDJNqUoNX3wvshs=' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a1120">
+<title>Çizim Atölyesi</title>
+<link rel="stylesheet" href="./ui.css?v=20261112a">
+<script type="importmap">
+{ "imports": {
+  "three": "../vendor/three@0.160.0/build/three.module.js",
+  "three/addons/": "../vendor/three@0.160.0/examples/jsm/",
+  "three-mesh-bvh": "../vendor/three-mesh-bvh@0.6.0/build/index.module.js",
+  "three-bvh-csg": "../vendor/three-bvh-csg@0.0.7/build/index.module.js"
+} }
+</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 4.9.7c0 1.7-2.4 2.1-2.4 3.8M12 17.2v.1"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M6 16l4-6 3 3 5-8"/></symbol>
+  <symbol id="i-cnc" viewBox="0 0 24 24"><path d="M6 3h12v5H6z"/><path d="M12 8v5"/><path d="M9 13h6l-3 8z"/></symbol>
+  <symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.5"/><circle cx="6" cy="17" r="2.5"/><path d="M8.2 8.3L20 18M8.2 15.7L20 6"/></symbol>
+  <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></symbol>
+  <symbol id="i-cyl" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="2.5"/><path d="M5 6v12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6"/></symbol>
+  <symbol id="i-sphere" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><ellipse cx="12" cy="12" rx="8" ry="3"/></symbol>
+  <symbol id="i-cone" viewBox="0 0 24 24"><path d="M12 3L5 18M12 3l7 15"/><ellipse cx="12" cy="18" rx="7" ry="2.5"/></symbol>
+  <symbol id="i-tube" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="2.5"/><ellipse cx="12" cy="6" rx="3.5" ry="1.2"/><path d="M5 6v12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/></symbol>
+  <symbol id="i-sweep" viewBox="0 0 24 24"><path d="M4 18c4 0 4-12 8-12s4 12 8 12"/></symbol>
+  <symbol id="i-loft" viewBox="0 0 24 24"><path d="M4 18h16L16 6H8z"/></symbol>
+  <symbol id="i-sheet" viewBox="0 0 24 24"><path d="M4 6h10v12h6"/></symbol>
+  <symbol id="i-frame" viewBox="0 0 24 24"><path d="M4 5h16M4 19h16M6 5v14M18 5v14M6 12h12"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
+  <symbol id="i-hole" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-sqhole" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></symbol>
+  <symbol id="i-draw" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M7 17L17 7M7 7h4M7 7v4"/></symbol>
+  <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
+  <symbol id="i-weight" viewBox="0 0 24 24"><path d="M6 20h12l-2-12H8z"/><path d="M9 8a3 3 0 0 1 6 0"/></symbol>
+  <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M10 6.5v11M10 17.5c3.5 0 5.5-1.8 5.5-4.5M8 10.5l5-2M8 13.5l5-2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3c3 4 5 6 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5 1-8.5z"/></symbol>
+  <symbol id="i-stack" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-lathe" viewBox="0 0 24 24"><path d="M3 6h5v12H3z"/><path d="M8 9.5h8v5H8z"/><path d="M18 5l3 7h-6z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><path d="M9 9h11v11H9z"/><path d="M5 15V4h11"/></symbol>
+  <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></symbol>
+  <symbol id="i-edge" viewBox="0 0 24 24"><path d="M4 20V11a7 7 0 0 1 7-7h9"/></symbol>
+  <symbol id="i-shell" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol>
+  <symbol id="i-calc" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2M16 11v4"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9H3z"/><path d="M10 20v-6h4v6"/></symbol>
+  <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 12c2-6 4-6 6 0s4 6 6 0 4-6 6 0"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<div id="app" data-mode="tasarim" data-sheet="closed">
+
+  <header id="top">
+    <button class="ui ib" data-ui="menu" aria-label="Menü" title="Menü"><svg><use href="#i-menu"/></svg></button>
+    <div class="brand d-only"><span class="logo"><svg><use href="#i-cube"/></svg></span><b>Çizim Atölyesi</b></div>
+    <div id="title"><b id="t-name">Model</b><small id="t-sub">Yükleniyor</small></div>
+    <nav id="nav" aria-label="Bölümler">
+      <button class="ui" data-mode="tasarim" aria-current="page"><svg><use href="#i-cube"/></svg><span>Tasarım</span></button>
+      <button class="ui" data-mode="analiz"><svg><use href="#i-chart"/></svg><span>Analiz</span></button>
+      <button class="ui" data-mode="uretim"><svg><use href="#i-cnc"/></svg><span>Üretim</span></button>
+      <a class="ui" data-mode="tekstil" href="../tekstil.html"><svg><use href="#i-scissors"/></svg><span>Tekstil</span></a>
+    </nav>
+    <button class="ui search" data-ui="search" aria-label="Komut ara" title="Komut ara (Ctrl K)"><svg><use href="#i-search"/></svg><span class="d-only">Komut ara</span><kbd class="d-only">Ctrl K</kbd></button>
+    <button id="b-undo" class="ui ib" data-act="undo" aria-label="Geri al" title="Geri al"><svg><use href="#i-undo"/></svg></button>
+    <button id="b-redo" class="ui ib" data-act="redo" aria-label="İleri al" title="İleri al"><svg><use href="#i-redo"/></svg></button>
+    <button class="ui ib d-only" data-act="projects" aria-label="Projeler" title="Projeler: kaydet, aç"><svg><use href="#i-folder"/></svg></button>
+    <button id="b-mic" class="ui ib d-only" data-act="mic" aria-label="Sesli komut" title="Sesli komut"><svg><use href="#i-mic"/></svg></button>
+    <button class="ui ib d-only" data-act="guide" aria-label="Rehber ve örnekler" title="Rehber ve örnekler"><svg><use href="#i-help"/></svg></button>
+    <button class="ui primary d-only" data-act="stl" title="3B yazıcı için STL indir"><svg><use href="#i-download"/></svg>STL indir</button>
+  </header>
+
+  <aside id="tools" aria-label="Araçlar">
+    <div class="tools-head p-only"><b>Araçlar</b><button class="ui ib" data-ui="close" aria-label="Araçları kapat"><svg><use href="#i-close"/></svg></button></div>
+    <h3>ŞEKİL EKLE</h3>
+    <div class="tgrid">
+      <button class="ui tool" data-act="add-box"><svg><use href="#i-cube"/></svg><span>Kutu</span></button>
+      <button class="ui tool" data-act="add-cylinder"><svg><use href="#i-cyl"/></svg><span>Silindir</span></button>
+      <button class="ui tool" data-act="add-sphere"><svg><use href="#i-sphere"/></svg><span>Küre</span></button>
+      <button class="ui tool" data-act="add-cone"><svg><use href="#i-cone"/></svg><span>Koni</span></button>
+      <button class="ui tool" data-act="add-tube"><svg><use href="#i-tube"/></svg><span>Boru</span></button>
+      <button class="ui tool" data-act="add-gear"><svg><use href="#i-gear"/></svg><span>Dişli</span></button>
+    </div>
+    <h3>OLUŞTUR</h3>
+    <div class="tlist">
+      <button class="ui trow" data-act="sketch-new"><svg><use href="#i-pen"/></svg>Kroki çiz</button>
+      <button class="ui trow" data-act="add-sweep"><svg><use href="#i-sweep"/></svg>Süpürme</button>
+      <button class="ui trow" data-act="add-loft"><svg><use href="#i-loft"/></svg>Loft</button>
+      <button class="ui trow" data-act="add-sheet"><svg><use href="#i-sheet"/></svg>Sac metal</button>
+      <button class="ui trow" data-act="add-frame"><svg><use href="#i-frame"/></svg>Konstrüksiyon</button>
+      <button class="ui trow" data-act="cad2d"><svg><use href="#i-draw"/></svg>2B çizim</button>
+    </div>
+    <h3>DELİK</h3>
+    <div class="tlist">
+      <button class="ui trow" data-act="hole-round"><svg><use href="#i-hole"/></svg>Yuvarlak delik</button>
+      <button class="ui trow" data-act="hole-square"><svg><use href="#i-sqhole"/></svg>Kare delik</button>
+    </div>
+  </aside>
+
+  <section id="parts" aria-label="Parçalar">
+    <h3 class="d-only">PARÇALAR</h3>
+    <div id="chips"></div>
+  </section>
+
+  <main id="stage">
+    <div id="view">
+      <div id="msg">3B yükleniyor…</div>
+      <div id="measure"></div>
+      <div id="toast"></div>
+    </div>
+    <div id="floats">
+      <button class="ui ib" data-act="fit" aria-label="Ekrana sığdır" title="Ekrana sığdır"><svg><use href="#i-fit"/></svg></button>
+      <button id="b-move" class="ui ib" data-act="move" aria-label="Taşı" title="Parçayı sürükleyerek taşı"><svg><use href="#i-move"/></svg></button>
+      <button class="ui ib p-only" data-ui="props" aria-label="Özellikler paneli" title="Özellikler"><svg><use href="#i-sliders"/></svg></button>
+    </div>
+    <div id="dock" class="p-only">
+      <button class="ui" data-act="add-box"><svg><use href="#i-cube"/></svg><span>Kutu</span></button>
+      <button class="ui" data-act="add-cylinder"><svg><use href="#i-cyl"/></svg><span>Silindir</span></button>
+      <button class="ui" data-act="sketch-new"><svg><use href="#i-pen"/></svg><span>Kroki</span></button>
+      <button class="ui" data-act="hole-round"><svg><use href="#i-hole"/></svg><span>Delik</span></button>
+      <button class="ui" data-ui="tools"><svg><use href="#i-grid"/></svg><span>Tümü</span></button>
+    </div>
+  </main>
+
+  <section id="panelwrap" aria-label="Özellikler">
+    <div id="sheethead">
+      <button class="ui grab p-only" data-ui="sheet-cycle" aria-label="Paneli büyüt ya da küçült"><span></span></button>
+      <div class="sh-row">
+        <div class="sh-title"><b id="sh-name">Özellikler</b><small id="sh-sub"></small></div>
+        <button id="sh-del" class="ui ib danger-ic" data-act="del" aria-label="Seçili parçayı sil" title="Seçili parçayı sil"><svg><use href="#i-trash"/></svg></button>
+        <button class="ui ib p-only" data-ui="sheet-close" aria-label="Paneli kapat"><svg><use href="#i-close"/></svg></button>
+      </div>
+    </div>
+    <div id="panel">
+      <div class="row" id="tabs"></div>
+      <div class="row wrap" id="tabbody"></div>
+      <div class="lbl" id="tabhint"></div>
+    </div>
+  </section>
+
+  <button id="b-panel" data-act="panel" hidden>Panel</button>
+  <div id="scrim" data-ui="close"></div>
+
+  <div id="menu" role="dialog" aria-label="Menü">
+    <div class="menu-head"><span class="logo"><svg><use href="#i-cube"/></svg></span><b>Çizim Atölyesi</b><button class="ui ib" data-ui="close" aria-label="Menüyü kapat"><svg><use href="#i-close"/></svg></button></div>
+    <button class="ui trow" data-act="projects"><svg><use href="#i-folder"/></svg>Projeler: kaydet, aç</button>
+    <button class="ui trow" data-act="guide"><svg><use href="#i-help"/></svg>Rehber ve hazır örnekler</button>
+    <button class="ui trow" data-act="stl"><svg><use href="#i-download"/></svg>STL indir (3B yazıcı)</button>
+    <button class="ui trow" data-act="mic"><svg><use href="#i-mic"/></svg>Sesli komut</button>
+    <button class="ui trow" data-ui="search"><svg><use href="#i-search"/></svg>Komut ara</button>
+    <hr>
+    <a class="ui trow" href="../tekstil.html"><svg><use href="#i-scissors"/></svg>Tekstil ve Moda</a>
+    <a class="ui trow" href="../tanitim/"><svg><use href="#i-home"/></svg>Tanıtım sayfası</a>
+    <a class="ui trow" href="../index.html?ws=makine"><svg><use href="#i-back"/></svg>Eski arayüze dön</a>
+  </div>
+
+  <div id="palette" role="dialog" aria-label="Komut arama">
+    <div class="pal-box">
+      <div class="pal-in">
+        <div class="pal-field"><svg><use href="#i-search"/></svg><label for="pal-q" class="sr">Komut ara</label><input id="pal-q" type="search" placeholder="Komut, araç ya da örnek ara" autocomplete="off" spellcheck="false"></div>
+        <button class="ui pal-x" data-ui="close">Vazgeç</button>
+      </div>
+      <div id="pal-list" role="listbox" aria-label="Sonuçlar"></div>
+      <p class="pal-tip d-only"><kbd>↑</kbd> <kbd>↓</kbd> seç · <kbd>Enter</kbd> çalıştır · <kbd>Esc</kbd> kapat</p>
+    </div>
+  </div>
+</div>
+
+<div id="dlg">
+  <div id="dbox">
+    <h3>Projeler</h3>
+    <div class="row" style="padding:0 0 8px">
+      <input id="pname" type="text" placeholder="Proje adı" style="flex:3">
+      <button data-act="dlg-save" class="on" style="flex:1">Kaydet</button>
+    </div>
+    <div id="plist"></div>
+    <div class="row" style="padding:10px 0 0">
+      <button data-act="dlg-new">Yeni boş proje</button>
+      <button data-act="dlg-close">Kapat</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./shell.js?v=20261112a"></script>
+<script type="module" src="../app.js?v=20261112u"></script>
+</body>
+</html>

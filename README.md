@@ -312,6 +312,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 ## Dosyalar
 
 - `index.html` — arayüz kabuğu (görünüm, stiller)
+- `yeni/` — **yeni arayüz** (deneme): `yeni/index.html`, `yeni/ui.css`, `yeni/shell.js`. Aynı `app.js` ve hesap modüllerini kullanır, onlara dokunmaz. Telefonda tam ekran çizim alanı, alt bölümler (Tasarım · Analiz · Üretim · Tekstil), alttan açılan özellik paneli, araç listesi, menü ve komut arama (Ctrl K); bilgisayarda solda araçlar ve parçalar, sağda özellikler. Projeler aynı tarayıcı kaydını paylaşır. Adres: `…/cizim-atolyesi/yeni/`
 - `app.js` — uygulama: 3D sahne, CSG, kenar çizgileri, panel, taşıma, ölçüm, kesit, sesli komut
 - `sketch.js` — kroki editörü (2D tuval) ve doğrulama
 - `logic.js` — test edilebilir mantık: parça varsayılanları, geri al geçmişi, STL yazıcı, sesli komut çözücü, birimler, kroki dönüşümleri (yay, yuvarlak köşe), kopya / ayna / dizi, pah geometrisi, teknik resim yerleşimi ve PDF yazıcı

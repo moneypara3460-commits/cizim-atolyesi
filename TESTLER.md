@@ -16,6 +16,7 @@ Kalite raporu (özellik durumu, doğrulama toleransları, performans, hatalar): 
 
 `npm` yoksa aynı komutlar doğrudan: `node tests/run-all.mjs`, `node tests/e2e/run.mjs`, `node --expose-gc tests/perf.mjs`.
 Tek dosya: `node tests/cam5.test.mjs`. Filtre: `node tests/run-all.mjs fea cam` · `node tests/e2e/run.mjs B C` (senaryo harfi).
+Yeni arayüz (`yeni/index.html`): `E2E_UI=yeni node tests/e2e/run.mjs` aynı makine senaryolarını yeni sayfada koşar (tekstil ve eski açılış seçimi hariç); sekmelere alttaki / üstteki bölüm düğmesiyle gidilir. Sonuç `reports/e2e-yeni.json`. CI'da e2e işinin ikinci adımıdır.
 
 Çıkış kodu: herhangi bir test başarısızsa **1**. Atlanan / blokeli testler başarı sayılmaz, raporda ayrı sayılır.
 

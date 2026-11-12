@@ -68,7 +68,7 @@ jobs:
   e2e:
     name: Tarayıcı uçtan uca (Chromium, emülasyon)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -87,6 +87,14 @@ jobs:
           PLAYWRIGHT_MODULE: ${{ github.workspace }}/.e2e-libs/node_modules/playwright
         run: node tests/e2e/run.mjs 2>&1 | tee reports-e2e.log
         shell: bash -o pipefail {0}
+      - name: E2E senaryoları — yeni arayüz (yeni/index.html, aynı hesap kodu)
+        if: always()
+        env:
+          E2E_UI: yeni
+          E2E_LIBS: ${{ github.workspace }}/.e2e-libs/node_modules
+          PLAYWRIGHT_MODULE: ${{ github.workspace }}/.e2e-libs/node_modules/playwright
+        run: node tests/e2e/run.mjs 2>&1 | tee reports-e2e-yeni.log
+        shell: bash -o pipefail {0}
       - name: Raporları yükle (ekran görüntüleri dahil)
         if: always()
         uses: actions/upload-artifact@v4
@@ -95,6 +103,7 @@ jobs:
           path: |
             reports/
             reports-e2e.log
+            reports-e2e-yeni.log
           if-no-files-found: warn
 
   # Üçüncü taraf kütüphaneler depoda (vendor/) birebir kopya olarak durur; uygulama dış siteden kod yüklemez.
