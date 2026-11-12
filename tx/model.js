@@ -4,14 +4,15 @@
 // Dokuma / konfeksiyon ve triko ayrı alt şemalardır (woven, knit); yalnız koleksiyon, ürün, renk, beden,
 // malzeme, föy ve revizyon ortaktır. Bkz. docs/TEKSTIL-MIMARI.md
 
-import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112g';
-import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112g';
-import { buildSet } from './woven/blocks.js?v=20261112g';
-import { gradeGroup } from './woven/grade.js?v=20261112g';
-import { fromTemplate, validateChart } from './knit/chart.js?v=20261112g';
-import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112g';
-import { PRESETS, presetEstimated, wovenConsumption, knitStitchTotal, yarnConsumption } from './materials.js?v=20261112g';
-import { evaluate as evalMarker, makeMarker } from './woven/marker.js?v=20261112g';
+import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112h';
+import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112h';
+import { buildSet } from './woven/blocks.js?v=20261112h';
+import { gradeGroup } from './woven/grade.js?v=20261112h';
+import { fromTemplate, validateChart } from './knit/chart.js?v=20261112h';
+import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112h';
+import { PRESETS, presetEstimated, wovenConsumption, knitStitchTotal, yarnConsumption } from './materials.js?v=20261112h';
+import { evaluate as evalMarker, makeMarker } from './woven/marker.js?v=20261112h';
+import { fromTemplate as machineFromTemplate, machineStatus } from './knit/machine.js?v=20261112h';
 
 export const KIND = 'cizim.textile';
 export const SCHEMA = 1;
@@ -225,6 +226,11 @@ export function addKnitPiece(p, { kind, params = {}, swatch, chart = null, rib =
   knitCompute(p, pc);   // hata varsa eklenmez
   p.knit.pieces.push(pc); return pc;
 }
+// Triko makine profili (Aşama 8): genel şablondan; kullanıcı marka / model / değerleri girip numuneyle doğrular
+export function addMachine(p, template = 'hand-std') {
+  if (!p.knit) throw new Error('Bu proje türünde triko yok');
+  const m = machineFromTemplate(template, nid(p, 'mk')); p.knit.machines.push(m); return m;
+}
 export function knitCompute(p, pc) {
   const s = p.knit.swatches.find((x) => x.id === pc.swatch); if (!s) throw new Error('Numune silinmiş');
   const ch = pc.chart ? p.knit.charts.find((x) => x.id === pc.chart) : null;
@@ -364,6 +370,7 @@ export function validate(p) {
   }
   const prodIds = new Set((p.collection?.products || []).map((x) => x.id));
   if (p.knit) {
+    for (const mc of p.knit.machines || []) { uniq(mc.id, 'Makine'); const st = machineStatus(mc); if (st.level === 'hata') E('Makine ' + mc.name, st.text); else if (st.level === 'uyarı') W('Makine ' + mc.name, st.text); }
     for (const s of p.knit.swatches || []) { uniq(s.id, 'Numune'); for (const m of validateSwatch(s)) E('Numune ' + s.name, m); if (!s.washed) W('Numune ' + s.name, 'Yıkanmamış numune: yıkama sonrası ölçü değişebilir'); }
     for (const ch of p.knit.charts || []) { uniq(ch.id, 'Desen'); out.push(...validateChart(ch)); }
     for (const pc of p.knit.pieces || []) {

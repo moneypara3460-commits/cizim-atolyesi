@@ -1,19 +1,20 @@
 // Tekstil ve Moda çalışma alanı — arayüz (Aşama 1: ortak proje altyapısı).
 // Hesap ve doğrulama tx/model.js'te; burada yalnız gösterim ve düzenleme.
 // Makine ve Mühendislik alanının hiçbir dosyasını içe aktarmaz.
-import * as M from './model.js?v=20261112g';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112g';
-import { TEMPLATES, VIEWS } from './drawing.js?v=20261112g';
-import { openSketchEditor } from './sketch-ui.js?v=20261112g';
-import { SETS, defaultParams } from './woven/blocks.js?v=20261112g';
-import { openPatternEditor } from './woven/pattern-ui.js?v=20261112g';
-import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112g';
-import { sizeTable as gradeTable } from './woven/grade.js?v=20261112g';
-import { TEMPLATES as KTPL, validateChart } from './knit/chart.js?v=20261112g';
-import { KNIT_PIECES, gradeKnit, widthOf } from './knit/shape.js?v=20261112g';
-import { openChartEditor } from './knit/chart-ui.js?v=20261112g';
-import { PRESETS, allCounts } from './materials.js?v=20261112g';
-import { openMarkerEditor } from './woven/marker-ui.js?v=20261112g';
+import * as M from './model.js?v=20261112h';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112h';
+import { TEMPLATES, VIEWS } from './drawing.js?v=20261112h';
+import { openSketchEditor } from './sketch-ui.js?v=20261112h';
+import { SETS, defaultParams } from './woven/blocks.js?v=20261112h';
+import { openPatternEditor } from './woven/pattern-ui.js?v=20261112h';
+import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112h';
+import { sizeTable as gradeTable } from './woven/grade.js?v=20261112h';
+import { TEMPLATES as KTPL, validateChart } from './knit/chart.js?v=20261112h';
+import { KNIT_PIECES, gradeKnit, widthOf } from './knit/shape.js?v=20261112h';
+import { openChartEditor } from './knit/chart-ui.js?v=20261112h';
+import { PRESETS, allCounts } from './materials.js?v=20261112h';
+import { openMarkerEditor } from './woven/marker-ui.js?v=20261112h';
+import * as MC from './knit/machine.js?v=20261112h';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -80,7 +81,16 @@ async function renderHome() {
 
 /* ---------- proje ---------- */
 const TABS = [['col', 'Koleksiyon'], ['draw', 'Teknik çizim'], ['pat', 'Kalıp'], ['knit', 'Örgü'], ['colors', 'Renkler'], ['sizes', 'Bedenler'], ['mats', 'Malzemeler'], ['tp', 'Föy'], ['val', 'Doğrulama'], ['revs', 'Revizyonlar'], ['tools', 'Dal araçları']];
+// Yeniden çizimde odaktaki alan (ve imleç) korunur: telefonda bir alandan ötekine geçerken klavye kapanmasın
 function render() {
+  const ae = document.activeElement, key = ae && ae !== document.body ? (ae.dataset?.f ? `[data-f="${ae.dataset.f}"]` : ae.id ? '#' + CSS.escape(ae.id) : null) : null;
+  let sel = null; try { sel = key && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null; } catch (e) { sel = null; }
+  renderNow();
+  if (key && document.activeElement !== ae) { const el = document.querySelector(key); if (el && el !== ae) { el.focus({ preventScroll: true }); if (sel) try { el.setSelectionRange(...sel); } catch (e) { /* seçim desteklenmiyor */ } } }
+}
+let renderT = null;
+const deferRender = () => { clearTimeout(renderT); renderT = setTimeout(render, 0); };
+function renderNow() {
   if (S.view === 'home') return renderHome();
   const p = S.p, T = M.PROJECT_TYPES[p.type];
   const issues = M.validate(p), nErr = issues.filter((x) => x.level === 'hata').length;
@@ -234,6 +244,7 @@ function tabKnit() {
     <label class="f"><span>Ribana</span><select id="kp-rib"><option value="rib11">1×1</option><option value="rib22">2×2</option></select></label></div>
     <div class="row">${Object.entries(KNIT_PIECES[kind].params).map(([k, [lbl, v]]) => `<label class="f"><span>${esc(lbl)} (cm)</span><input data-kp="${k}" inputmode="decimal" value="${num(v / 10)}"></label>`).join('')}</div>
     <div class="row"><button class="ok" data-a="add-kpiece" ${K.swatches.length ? '' : 'disabled'}>Hesapla ve ekle</button></div>${K.swatches.length ? '' : '<div class="small">Önce numune ekle.</div>'}</div>`;
+  h += tabMachines();
   K.pieces.forEach((pc, i) => {
     let r = null, err = ''; try { r = M.knitCompute(p, pc); } catch (e) { err = e.message; }
     const pr = p.collection.products.find((x) => x.id === pc.product), sw = K.swatches.find((x) => x.id === pc.swatch);
@@ -255,6 +266,44 @@ function tabKnit() {
     h += '</div>';
   });
   return h;
+}
+// Aşama 8: makine profilleri ve üretim çıktıları
+function tabMachines() {
+  const p = S.p, K = p.knit;
+  let h = `<div class="card"><h3>Örgü makineleri</h3><div class="small">Şablonlar genel tipik değerlerdir, gerçek bir makine değildir. Kendi makinenin marka / modelini ve değerlerini gir, o makinede numune örüp sonucu doğrula. Doğrulanmamış profilin bütün çıktıları "yalnız numune için" başlığı taşır. Stoll, Shima Seiki, Steiger yerel program biçimleri kapalı / lisanslıdır ve üretilmez; elektronik makine için açık <b>knitout</b> ara biçimi verilir.</div>`;
+  K.machines.forEach((m, i) => {
+    const f = `knit.machines.${i}`, st = MC.machineStatus(m), nI = (k, lbl, d = 0) => `<label class="f"><span>${lbl}${m.estimated?.includes(k) ? ' (tahmini)' : ''}</span><input data-f="${f}.${k}" data-t="num" inputmode="decimal" value="${num(m[k], d)}"></label>`;
+    h += `<div class="card" style="background:#0b1730"><div class="row"><label class="f"><span>Ad</span><input data-f="${f}.name" value="${esc(m.name)}"></label><label class="f"><span>Marka</span><input data-f="${f}.brand" value="${esc(m.brand)}"></label><label class="f"><span>Model</span><input data-f="${f}.model" value="${esc(m.model)}"></label><button class="danger" data-a="del-machine" data-i="${i}">${S.delArm === m.id ? 'Emin misin?' : 'Sil'}</button></div>
+      <div class="small">${esc(MC.MACHINE_KINDS[m.kind])} · ${esc(MC.gaugeLabel(m))} · ${esc(MC.PATTERNING[m.patterning])}</div>
+      <div class="row">${nI('pitch', 'İğne aralığı (mm)', 3)}${nI('needles', 'İğne sayısı')}<label class="f"><span>Plaka</span><select data-f="${f}.beds" data-t="num">${[1, 2].map((v) => `<option ${m.beds === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label>${nI('carriers', 'Besleyici')}${nI('maxRack', 'En çok kaydırma (iğne)')}${m.cardMinRows != null ? nI('cardMinRows', 'Kart en az sıra') : ''}</div>
+      <div class="issue ${st.level === 'ok' ? '' : st.level}">${st.level === 'ok' ? '✅' : st.level === 'hata' ? '⛔' : '⚠'} ${esc(st.text)}</div>
+      ${st.ready ? '' : `<div class="row noprint"><label class="f" style="flex:3 1 200px"><span>Doğrulama notu (hangi numune örüldü, ne ölçüldü)</span><input id="mv-note-${i}" placeholder="ör. 28/38 düz numune örüldü, 10 cm ölçü tuttu"></label><button class="ok" data-a="mc-verify" data-i="${i}">Makinede doğrulandı</button></div>`}</div>`;
+  });
+  h += `<div class="row noprint"><label class="f"><span>Şablon</span><select id="nm-mtpl">${MC.MACHINE_TEMPLATES.map((t) => `<option value="${t.key}">${esc(t.label)}</option>`).join('')}</select></label><button class="ok" data-a="add-machine">+ Makine</button></div></div>`;
+  if (!K.machines.length) return h;
+  const R = S.mo || {};
+  h += `<div class="card"><h3>Makine çıktısı</h3><div class="row">
+    <label class="f"><span>Makine</span><select id="mo-mc">${K.machines.map((m) => `<option value="${m.id}" ${R.mc === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></label>
+    <label class="f"><span>Triko parçası</span><select id="mo-pc"><option value="">—</option>${K.pieces.map((x) => `<option value="${x.id}" ${R.pc === x.id ? 'selected' : ''}>${esc(x.name)}${x.size ? ' · ' + esc(x.size) : ''}</option>`).join('')}</select></label>
+    <label class="f"><span>Desen</span><select id="mo-ch"><option value="">—</option>${K.charts.map((c) => `<option value="${c.id}" ${R.ch === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label></div>
+    <div class="row"><label class="f"><span>knitout panel eni (iğne)</span><input id="mo-w" inputmode="numeric" placeholder="desen eni"></label><label class="f"><span>… sıra</span><input id="mo-h" inputmode="numeric" placeholder="desen boyu"></label></div>
+    <div class="row noprint"><button data-a="mo-check">Uyumluluk</button><button data-a="mo-prog">⬇ Operatör programı</button><button data-a="mo-card">⬇ Delikli kart (SVG)</button><button data-a="mo-knitout">⬇ knitout (.k)</button></div>
+    ${R.html || ''}</div>`;
+  return h;
+}
+function moSel() {
+  const p = S.p, K = p.knit, m = K.machines.find((x) => x.id === $('mo-mc').value), pc = K.pieces.find((x) => x.id === $('mo-pc').value) || null;
+  const ch = K.charts.find((x) => x.id === $('mo-ch').value) || (pc && pc.chart ? K.charts.find((x) => x.id === pc.chart) : null);
+  S.mo = { mc: m?.id, pc: pc?.id, ch: ch?.id };
+  return { m, pc, ch, piece: pc ? M.knitCompute(p, pc) : null, swatch: pc ? K.swatches.find((x) => x.id === pc.swatch) : null };
+}
+const issuesHTML = (list) => list.map((x) => `<div class="issue ${x.level}">${x.level === 'hata' ? '⛔' : '⚠'} ${esc(x.msg)}</div>`).join('') || '<div class="small">✅ Uyumsuzluk bulunmadı.</div>';
+function saveText(text, name, type = 'text/plain') { const u = URL.createObjectURL(new Blob([text], { type: type + ';charset=utf-8' })), a = document.createElement('a'); a.href = u; a.download = name.replace(/[^\wçğıöşüÇĞİÖŞÜ. -]+/g, '_'); document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 5000); }
+function cardSVG(c) {
+  const s = 8, W = c.width * s + 40, H = c.rows * s + 60;
+  let o = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Helvetica, Arial">\n<text x="4" y="12" font-size="9">Delikli kart şeması · ${c.width} iğne × ${c.rows} sıra · ${c.status.ready ? 'doğrulanmış profil' : 'DOĞRULANMAMIŞ — yalnız numune'}</text>\n<text x="4" y="24" font-size="7">${c.notes[1]}</text>\n`;
+  for (let k = 0; k < c.rows; k++) { const y = 40 + (c.rows - 1 - k) * s; o += `<text x="2" y="${y + 6}" font-size="5">${k + 1}</text>`; for (let i = 0; i < c.width; i++) o += `<rect x="${20 + i * s}" y="${y}" width="${s}" height="${s}" fill="none" stroke="#bbb" stroke-width="0.3"/>${c.cells[k][i] ? `<circle cx="${20 + i * s + s / 2}" cy="${y + s / 2}" r="${s * 0.32}" fill="#000"/>` : ''}`; }
+  return o + '\n</svg>\n';
 }
 function openChart(i) { const p = S.p, ch = p.knit.charts[i]; openChartEditor(ch, { toast, meta: { project: p.name }, onChange: (closed) => { dirty(); if (closed) render(); } }); }
 
@@ -395,8 +444,8 @@ function tabTools() {
   const br = M.PROJECT_TYPES[S.p.type].branches;
   const rows = [];
   if (br.includes('woven')) rows.push(['Dokuma / Konfeksiyon', [['3B giysi', 9]]]);
-  if (br.includes('knit')) rows.push(['Triko / Örgü', [['Makine profili ve üretim çıktısı', 8], ['3B triko', 9]]]);
-  return `<div class="card">✅ Teknik çizim (Aşama 2): "Teknik çizim" sekmesi.${br.includes('woven') ? ' ✅ Dokuma kalıbı (Aşama 3), beden yayma / grading (Aşama 4) ve kumaş yerleşimi / kesim planı (Aşama 7): "Kalıp" sekmesi.' : ''}${br.includes('knit') ? ' ✅ Örgü deseni, numune ve ilmek hesabı (Aşama 5): "Örgü" sekmesi.' : ''}</div><div class="small">Aşağıdaki araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
+  if (br.includes('knit')) rows.push(['Triko / Örgü', [['3B triko', 9]]]);
+  return `<div class="card">✅ Teknik çizim (Aşama 2): "Teknik çizim" sekmesi.${br.includes('woven') ? ' ✅ Dokuma kalıbı (Aşama 3), beden yayma / grading (Aşama 4) ve kumaş yerleşimi / kesim planı (Aşama 7): "Kalıp" sekmesi.' : ''}${br.includes('knit') ? ' ✅ Örgü deseni, numune ve ilmek hesabı (Aşama 5), makine profili ve üretim çıktısı (Aşama 8): "Örgü" sekmesi.' : ''}</div><div class="small">Aşağıdaki araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
     rows.map(([t, items]) => `<div class="card"><h3>${t}</h3>${items.map(([n, a]) => `<div class="row"><span>${esc(n)}</span><span class="badge" style="flex:0 0 auto">Henüz yok · Aşama ${a}</span></div>`).join('')}</div>`).join('');
 }
 
@@ -446,14 +495,14 @@ document.addEventListener('change', (e) => {
   // ürün türü / beden tablosu değişince seçili bedenler tabloda yoksa temizlenir
   const m = el.dataset.f.match(/^collection\.products\.(\d+)\.sizeTable$/);
   if (m) { const pr = S.p.collection.products[+m[1]], t = S.p.sizeTables.find((x) => x.id === pr.sizeTable); pr.sizes = t ? pr.sizes.filter((s) => t.sizes.includes(s)) : []; }
-  dirty(); render();
+  dirty(); deferRender();   // odak yeni alana geçtikten sonra çiz, odağı koru
 });
 
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-a]');
   if (!b) return;
   const a = b.dataset.a, p = S.p, i = +b.dataset.i;
-  if (!['del', 'del-prod', 'del-sketch', 'del-pattern', 'del-chart', 'del-kpiece'].includes(a)) S.delArm = null;
+  if (!['del', 'del-prod', 'del-sketch', 'del-pattern', 'del-chart', 'del-kpiece', 'del-machine'].includes(a)) S.delArm = null;
   try {
     switch (a) {
       // tür seçimi yerinde güncellenir (yeniden çizim yok: yazılan proje adı kaybolmaz)
@@ -510,6 +559,17 @@ document.addEventListener('click', async (e) => {
         const product = $('pt-prod').value || null;
         M.addPatternSet(p, set, params, { product, size }); dirty(); render(); openPattern(product, size); return;
       }
+      case 'add-machine': M.addMachine(p, $('nm-mtpl').value); break;
+      case 'del-machine': { const m = p.knit.machines[i]; if (S.delArm !== m.id) { S.delArm = m.id; return render(); } p.knit.machines.splice(i, 1); S.delArm = null; break; }
+      case 'mc-verify': MC.verifyMachine(p.knit.machines[i], { note: $('mv-note-' + i).value }); toast('Profil doğrulandı olarak işaretlendi'); break;
+      case 'mo-check': { const q = moSel(); if (!q.m) throw new Error('Makine seç'); S.mo.html = `<div class="small"><b>${esc(q.m.name)}</b>: ${esc(MC.machineStatus(q.m).text)}</div>` + issuesHTML(MC.checkCompat(q.m, { chart: q.ch, piece: q.piece, swatch: q.swatch })); return render(); }
+      case 'mo-prog': { const q = moSel(); if (!q.piece) throw new Error('Triko parçası seç'); const pcx = p.knit.pieces.find((x) => x.id === S.mo.pc); const r = MC.operatorProgram(q.m, { piece: q.piece, chart: q.ch, swatch: q.swatch, name: pcx.name + (pcx.size ? ' · ' + pcx.size : ''), rib: pcx.rib });
+        S.mo.html = `<pre class="small" style="white-space:pre-wrap">${esc(r.lines.join('\n'))}</pre>`; saveText(r.lines.join('\n') + '\n', `program-${pcx.name}-${pcx.size || ''}.txt`); if (!r.ok) toast('⚠ Uyumsuzluk var: program üretilmedi, nedenler dosyada'); return render(); }
+      case 'mo-card': { const q = moSel(); if (!q.ch) throw new Error('Desen seç'); const c = MC.punchCard(q.m, q.ch); S.mo.html = c.notes.map((n) => `<div class="small">• ${esc(n)}</div>`).join('') + `<div class="issue ${c.status.ready ? '' : 'uyarı'}">${esc(c.status.text)}</div>`; saveText(cardSVG(c), `kart-${q.ch.name}.svg`, 'image/svg+xml'); return render(); }
+      case 'mo-knitout': { const q = moSel(); if (!q.ch) throw new Error('Desen seç'); const w = parseInt($('mo-w').value, 10) || null, hh = parseInt($('mo-h').value, 10) || null;
+        const k = MC.knitout(q.m, q.ch, { width: w, rows: hh, name: q.ch.name }), sim = MC.simulateKnitout(k.text, q.m);
+        S.mo.html = `<div class="${sim.ok ? 'small' : 'issue hata'}">${sim.ok ? '✅' : '⛔'} Yapısal benzetim: ${k.width} iğne × ${k.rows} sıra, ${sim.ops} komut, besleyici ${k.carriers.join(', ')}${sim.ok ? '; aktarma hizası, kaydırma sınırı, ilmek kaybı denetlendi' : ': ' + esc(sim.errors.slice(0, 3).join('; '))}</div>${sim.warnings.map((x) => `<div class="issue uyarı">⚠ ${esc(x)}</div>`).join('')}<div class="small">Yapısal benzetim komut dizisinin tutarlılığını denetler; iplik gerilimi, ilmek çekme, makinenin kendi kuralları denetlenmez. Makinede denenmeden üretime alma.</div><div class="issue ${k.status.ready ? '' : 'uyarı'}">${esc(k.status.text)}</div>`;
+        if (sim.ok) saveText(k.text, `${q.ch.name}.k`); return render(); }
       case 'add-swatch': M.addSwatch(p, { name: $('ns-name').value, st10: parseNum($('ns-st').value), row10: parseNum($('ns-row').value) }); break;
       case 'sw-wash': p.knit.swatches[i].washed = b.checked; dirty(); return;
       case 'add-chart': { const ch = M.addChart(p, $('nk-tpl').value, $('nk-name').value); dirty(); render(); openChart(p.knit.charts.indexOf(ch)); return; }

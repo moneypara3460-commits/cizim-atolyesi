@@ -1,8 +1,8 @@
 // Temel kalıp blokları (dokuma / konfeksiyon). Ölçüden basitleştirilmiş çizim yöntemi; mm, y aşağı.
 // UYARI: Bunlar başlangıç bloklarıdır (temel kalıp). Prova ile doğrulanmadan seri üretime alınmamalı.
 // Her takım, parçalarla birlikte dikiş eşleşmelerini (seams) de üretir: kol başı ↔ kol oyuğu, yan dikiş, omuz, yaka, kemer…
-import * as C from '../curve.js?v=20261112g';
-import * as P from './pattern.js?v=20261112g';
+import * as C from '../curve.js?v=20261112h';
+import * as P from './pattern.js?v=20261112h';
 
 const L = C.line, Q = C.cubic;
 const edge = (name, segs, allow = 10, corner = 'miter') => ({ name, segs: Array.isArray(segs) ? segs : [segs], allow, corner });

@@ -439,7 +439,7 @@ await TX('Tekstil: triko projesi yalnız triko araçlarını gösterir; dal ara�
   expect(kinds.includes('İplik') && !kinds.includes('Kumaş'), 'triko malzemeleri: ' + kinds);
   await A(page, 'tab', '[data-v="tools"]');
   const tl = await txBody(page);
-  expect(/Triko \/ Örgü/.test(tl) && !/Dokuma \/ Konfeksiyon\n/.test(tl) && (tl.match(/Henüz yok/g) || []).length >= 2 && /Örgü deseni, numune ve ilmek hesabı/.test(tl), 'dal araçları');
+  expect(/Triko \/ Örgü/.test(tl) && !/Dokuma \/ Konfeksiyon\n/.test(tl) && (tl.match(/Henüz yok/g) || []).length >= 1 && /Örgü deseni, numune ve ilmek hesabı/.test(tl), 'dal araçları');
   await A(page, 'tab', '[data-v="col"]'); await A(page, 'add-prod');
   const d = await download(page, () => A(page, 'export'));
   const j = JSON.parse(d.text); expect(j.kind === 'cizim.textile' && j.type === 'knit' && j.collection.products.length === 1, 'JSON içeriği');
@@ -727,6 +727,39 @@ await TX('Tekstil kesim planı: gömlek kalıbı + poplin, otomatik yerleşim, e
   await page.fill('#rev-note', 'plan'); await A(page, 'commit'); await page.waitForFunction(() => /rev 1/.test(document.querySelector('#main').innerText));
   await page.reload(); await page.waitForSelector('[data-a="open"]'); await A(page, 'open'); await page.waitForSelector('[data-a="add-prod"]');
   await A(page, 'tab', '[data-v="pat"]'); expect(/✂ Kesim planı: boy/.test(await txBody(page)), 'yenileme sonrası plan kayıtlı');
+});
+
+await TX('Tekstil triko makinesi: ev tipi şablon doğrulanmamış uyarısı, uyumluluk, operatör programı, delikli kart, V yatak knitout + yapısal benzetim, doğrulama ve değer değişince düşmesi', async ({ page }) => {
+  await A(page, 'type', '[data-v="knit"]'); await page.waitForSelector('[data-a="type"][data-v="knit"].on');
+  await page.fill('#np-name', 'Makine E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]'); await A(page, 'add-prod');
+  await A(page, 'tab', '[data-v="knit"]');
+  await page.fill('#ns-name', 'N'); await page.fill('#ns-st', '28'); await page.fill('#ns-row', '38'); await A(page, 'add-swatch');
+  await page.selectOption('#kp-kind', 'kol'); await page.waitForSelector('[data-kp="cuffW"]'); await page.fill('#kp-size', 'M'); await A(page, 'add-kpiece');
+  await page.selectOption('#nk-tpl', 'baklava'); await page.fill('#nk-name', 'Baklava'); await A(page, 'add-chart'); await page.waitForSelector('#kcx canvas'); await page.locator('#kcx [data-k="close"]').click();
+  await page.selectOption('#nm-mtpl', 'hand-std'); await A(page, 'add-machine');
+  let b = await txBody(page); expect(/DOĞRULANMAMIŞ PROFİL/.test(b) && /tahmini değerler/.test(b), 'şablon doğrulanmamış');
+  await page.selectOption('#mo-pc', { index: 1 }); await A(page, 'mo-check'); b = await txBody(page);
+  expect(/ribana plakası/.test(b), 'tek plaka ribana uyarısı');
+  const prog = await download(page, () => A(page, 'mo-prog'));
+  expect(/\*\*\* DOĞRULANMAMIŞ/.test(prog.text) && (prog.text.match(/her iki yanda 1 iğne artır/g) || []).length > 5 && /RC \d{3}/.test(prog.text), 'operatör programı');
+  await page.selectOption('#mo-ch', { label: 'Baklava' }); await page.selectOption('#mo-pc', ''); const card = await download(page, () => A(page, 'mo-card'));
+  expect(/<svg/.test(card.text) && (card.text.match(/<circle/g) || []).length > 20 && /DOĞRULANMAMIŞ/.test(card.text), 'delikli kart');
+  expect(/Jakar \/ fair isle/.test(await txBody(page)), 'kart modu yazılı');
+  // V yatak: knitout
+  await page.selectOption('#nm-mtpl', 'vbed-e7'); await A(page, 'add-machine');
+  await page.selectOption('#mo-mc', { index: 1 }); await page.selectOption('#mo-ch', { label: 'Baklava' }); await page.fill('#mo-w', '24'); await page.fill('#mo-h', '24');
+  const k = await download(page, () => A(page, 'mo-knitout'));
+  expect(k.text.startsWith(';!knitout-2') && /knit [+-] f\d+ 2/.test(k.text), 'knitout iki besleyici');
+  b = await txBody(page); expect(/✅ Yapısal benzetim: 24 iğne × 24 sıra/.test(b) && /Makinede denenmeden üretime alma/.test(b), 'benzetim sonucu: ' + (b.match(/Yapısal benzetim[^\n]*/) || [])[0]);
+  // ev tipinde knitout yok
+  await page.selectOption('#mo-mc', { index: 0 }); await A(page, 'mo-knitout'); await page.waitForFunction(() => /yalnız V yataklı/.test(document.getElementById('toast').innerText));
+  // doğrula → hazır; değer değişince düşer
+  await page.fill('[data-f="knit.machines.0.brand"]', 'Marka'); await page.fill('[data-f="knit.machines.0.model"]', 'KH-1'); await A(page, 'tab', '[data-v="knit"]');
+  await page.fill('#mv-note-0', '28/38 düz numune örüldü, ölçü tuttu'); await A(page, 'mc-verify', '[data-i="0"]');
+  b = await txBody(page); expect(/Kullanıcı doğrulaması: \d{4}-\d\d-\d\d · 28\/38/.test(b), 'doğrulandı: ' + (await page.locator('#toast').innerText()) + ' | ' + (b.match(/.*PROFİL.*/g) || []).join(' / '));
+  await page.fill('[data-f="knit.machines.0.needles"]', '180'); await A(page, 'tab', '[data-v="knit"]');
+  expect(/doğrulamasından sonra makine değerleri değişti/.test(await txBody(page)), 'değer değişince doğrulama düştü');
+  await A(page, 'tab', '[data-v="val"]'); expect(await page.locator('.issue.hata').count() === 0, 'doğrulamada hata yok');
 });
 
 await TX('Tekstil ↔ Makine ayrılığı: tekstil kaydı makine projelerine yazmaz; makine projeleri tekstil listesinde görünmez', async ({ page }) => {

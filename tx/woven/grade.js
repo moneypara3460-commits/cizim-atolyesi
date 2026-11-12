@@ -5,9 +5,9 @@
 // Kural kaynakları:
 //   block       — parça bir temel bloktan geldiyse: blok her bedenin ölçüleriyle yeniden çizilir, köşe farkları kural olur
 //   proportional — genişlik ve boy ölçülerinin oranıyla, düz boy çizgisinin ortasına göre ölçekleme
-import * as C from '../curve.js?v=20261112g';
-import * as P from './pattern.js?v=20261112g';
-import { buildSet, SETS } from './blocks.js?v=20261112g';
+import * as C from '../curve.js?v=20261112h';
+import * as P from './pattern.js?v=20261112h';
+import { buildSet, SETS } from './blocks.js?v=20261112h';
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 export const corners = (pc) => pc.edges.map((e) => e.segs[0].a);

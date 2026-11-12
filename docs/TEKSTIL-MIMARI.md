@@ -97,7 +97,7 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | 5 | Triko desen ve ilmek: ilmek sözlüğü, ızgara, düz / ters / ribana / saç örgüsü / jakar, tekrar, renk raporu, numune ve gauge, sıra bazlı eksiltme / artırma | Ribana ve saç örgüsü kuralları; gauge dönüşümü elle hesapla tam; eksiltme tablosu hedef ölçüye ±1 ilmek; desteklenmeyen yapıda açık uyarı | ✅ (12.11.2026) — bkz. bölüm 10 |
 | 6 | Kumaş, iplik, aksesuar kütüphanesi (ayrıntılı); iplik numarası dönüşümleri; tüketim, gramaj, maliyet | Nm / Ne / tex / dtex dönüşümleri tam; numunesiz sonuç "tahmini" | ✅ (12.11.2026) — bkz. bölüm 11 |
 | 7 | Kumaş yerleşimi ve kesim optimizasyonu | Kısıt ihlali sıfır; verim alt sınırla raporlanır | ✅ (12.11.2026) — bkz. bölüm 12 |
-| 8 | Triko makine profilleri ve üretim çıktısı | Doğrulanamayan makine için çıktı yok, gerekçe yazılı (risk 12) | Yok |
+| 8 | Triko makine profilleri ve üretim çıktısı | Doğrulanamayan makine için çıktı yok, gerekçe yazılı (risk 12) | ✅ (12.11.2026) — bkz. bölüm 13 |
 | 9 | 3B giysi ve kumaş / örgü simülasyonu | Önizleme ve fizik ayrı adlandırılır; çözücü analitik testlerle doğrulanır | Yok |
 | 10 | Üretim föyü ve maliyet: işçilik, operasyon sırası, dikiş türü, vektör PDF | Föy projeden üretilir; maliyet varsayımları yazılı | Kısmi: föy özeti, varyant, malzeme maliyeti, tarayıcıdan yazdır / PDF Aşama 1'de var |
 | 11 | Uçtan uca tekstil testleri (promptta 1–14 numaralı liste), kalite raporu | Kalite raporuna "Tekstil" bölümü | Aşama 1 testleri var |
@@ -133,6 +133,8 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | `tx/woven/marker.js` | Yeni (Aşama 7) | Kesim planı: parça örnekleri (açık en / katlı), yönlendirme, ızgara tabanlı otomatik yerleşim, desen eşleştirme, kesin çokgen doğrulaması, verim / fire |
 | `tx/woven/marker-ui.js` | Yeni (Aşama 7) | Kesim planı editörü (otomatik + elle sürükleme / 180°), PDF (A3, ölçekli) ve SVG 1:1 çıktı |
 | `tests/tx-marker.test.mjs` | Yeni (Aşama 7) | 10 Node testi |
+| `tx/knit/machine.js` | Yeni (Aşama 8) | Makine profilleri, doğrulama, uyumluluk, operatör programı, delikli kart, knitout ve yapısal benzetim |
+| `tests/tx-machine.test.mjs` | Yeni (Aşama 8) | 9 Node testi |
 | `tests/e2e/run.mjs` | Değişti | W (çalışma alanı) ve T (tekstil) senaryoları; makine senaryoları seçim ekranını atlamak için `cizim:workspace = makine` ile başlar |
 
 Yeni dış bağımlılık yok: tarayıcının kendi IndexedDB'si kullanılır. Three.js tekstil tarafında Aşama 9'a kadar yüklenmez.
@@ -521,4 +523,51 @@ Kurallar iki kaynaktan gelir:
 - **Ana kumaş.** Astar ve tela parçaları bu ekranda planlanmaz; onların tüketimi varsayımla hesaplanmaya devam eder.
 - **Çıktı biçimi.** Kesim makinesine özel biçimler (Gerber, Lectra vb.) yok; SVG 1:1 ve PDF var. DXF-AAMA dışa aktarımı ilerideki bir iş.
 - **Desen eşleştirme.** Parçayı rapor ızgarasına oturtur; parçaların birbirine göre hangi desen noktasında buluşacağı (ör. ön ortada kareli eşleşme) kalıpta işaretlenmez.
+
+## 13. Aşama 8 raporu: triko makine profilleri ve üretim çıktısı (12.11.2026)
+
+**Çalışanlar.**
+- **Makine profili** (Örgü sekmesi → "Örgü makineleri"). Dört genel şablon:
+  - Ev tipi standart (4,5 mm, 200 iğne, 24'lük delikli kart).
+  - Ev tipi kalın (9 mm, 110 iğne, 12'lik kart).
+  - V yatak elektronik E7 ve E12.
+  - Şablonlar gerçek bir makine değildir; sayılar "tahmini" işaretlidir. Kullanıcı marka, model, iğne aralığı, iğne sayısı, plaka, besleyici, kaydırma sınırını girer.
+- **Doğrulama.**
+  - Profil, kullanıcı gerçek makinede numune örüp "Makinede doğrulandı" diyene kadar **DOĞRULANMAMIŞ** sayılır (marka, model ve not zorunlu). Doğrulanmamış profilin bütün çıktıları bu başlığı taşır; doğrulama sekmesinde uyarı çıkar.
+  - Doğrulamadan sonra makine değerlerinden biri değişirse doğrulama kendiliğinden düşer.
+- **Uyumluluk kontrolü** (parça + desen + numune ↔ makine):
+  - İğne sayısı yetiyor mu; ribana için ikinci plaka var mı; tek plakada ters ilmek (hata).
+  - Bir sıradaki renk sayısı ≤ besleyici sayısı; saç örgüsü kaydırması ≤ makine sınırı; elle aktarma gereken saç örgüsü / delik uyarısı.
+  - Delikli kartta tekrar genişliği kart genişliğinin böleni, bir sırada kartla seçilebilir karışım (2 renk ya da düz + askı ya da düz + atlama), bütün kartta tek taşıyıcı ayarı.
+  - Numune ilmek genişliği / iğne aralığı oranı 0,5–1,1 dışındaysa "bu incelikte örülemeyebilir" (kaba kural, uyarı).
+- **Çıktılar** (yalnız açık, denetlenebilir biçimler):
+  1. **Operatör programı** (.txt): sıra sayacına (RC) göre talimat. Çalışan iğneler (L / R), ribana, kolda her artırma sırası, bedende kol oyuğu işareti ve ön yaka bekletmesi, kapama. Uyumsuzluk varsa program üretilmez, nedenler yazılır.
+  2. **Delikli kart şeması** (SVG): jakarda delik = 2. renk; askıda boş = askı; atlamada boş = atlama. Tekrar kart genişliğine döşenir, en az sıra sayısına tamamlanır. Kart okuma kayması, ters yüzden okuma ve fiziksel kart ölçüleri için "kılavuzdan doğrula" notları.
+  3. **knitout** (.k, V yatak): açık iğne düzeyi ara biçim (Carnegie Mellon). Düz (ön plaka), ters (arka plakaya aktarma), askı, atlama, saç örgüsü (aktarma + kaydırma), yüzen jakar (renk başına geçiş). Başlangıç tek-çift askılı.
+- **Yapısal benzetim.** Üretilen knitout her seferinde uygulamanın kendi benzetiminden geçer:
+  - Sözdizimi; besleyici giriş / çıkış; iğne aralığı; kaydırma sınırı.
+  - Aktarma hizası (f(n) ↔ b(n − kaydırma)); boştan aktarma; boş iğnede örme (ilmek kaybı).
+  - Benzetim hatalıysa dosya verilmez.
+- **Kapalı biçimler.** Stoll (M1plus / .sin), Shima Seiki (APEX / .dat), Steiger yerel biçimleri kapalı ve lisanslıdır: **üretilmez**, arayüzde açıkça yazılı.
+- **Arayüz düzeltmesi.** Bir alandan ötekine geçerken sayfa yeniden çiziliyor ve dokunulan yeni alan odağını kaybediyordu (telefonda klavye kapanıyordu). Yeniden çizim, odak yeni alana geçtikten sonra yapılıyor ve odak ile imleç korunuyor.
+
+**Doğrulama** (`tests/tx-machine.test.mjs`, 9 test):
+- **Şablonlar.** Geçerli ama doğrulanmamış; doğrulama koşulları; değer değişince düşme.
+- **Uyumluluk kuralları.** Her biri ayrı ayrı denetlenir.
+- **Operatör programı.** Kolda artırma satırı sayısı = (pazu − manşet) / 2 ve her biri doğru RC'de; yaka bekletmesi; uyumsuzlukta program yok.
+- **Delikli kart.** 36 × 24 hücrenin her biri desenle karşılaştırılır; askı kartı.
+- **knitout.** Düz + ters + askı + atlama + iki saç örgüsü + 2 renkli panelde benzetim hatasız. Her sırada her iğnenin işlemi (örme / askı / atlama), plakası (ön / arka) ve besleyicisi şemayla bire bir aynı. Bütün hazır desenler (delikli ajur hariç: açık hata) temiz.
+- **Benzetimin kendisi.** Bozuk programları yakalar: hizasız aktarma, boş iğnede örme, içeride olmayan besleyici, kaydırma sınırı, makine dışı iğne, içeride kalan besleyici, başlık.
+- **Model.** Profil durumu doğrulama sekmesinde; JSON gidiş-dönüş.
+- **Tarayıcı testi.**
+  - Kol + baklava deseni.
+  - Ev tipi şablon: doğrulanmamış uyarısı, ribana plakası uyarısı, operatör programı ve delikli kart indirilir.
+  - V yatak: 24 × 24 knitout indirilir, benzetim ✅.
+  - Ev tipinde knitout reddedilir. Marka / model + not ile doğrulama; iğne sayısı değişince doğrulama düşer.
+
+**Sınırlar:**
+- **Makinede denenmedi.** Hiçbir çıktı bu uygulamada gerçek bir makinede denenmedi. Yapısal benzetim komut tutarlılığını denetler; iplik gerilimi, ilmek çekme, makineye özgü kurallar (ör. aynı anda iki plakada örme, besleyici park konumları, kaydırma sırasında örme yasakları) denetlenmez. Üretimden önce makinede numune şart.
+- **knitout kapsamı.** Delik / eksiltme / artırma (şekillendirme) yok; düz panel üretir (açık hata verir). Bağlama / kapama makine yazılımına bırakılır. knitout'u makine biçimine çevirmek için ayrı bir dönüştürücü gerekir.
+- **Elektronik ev tipi makineler.** Bunların desen yükleme biçimleri desteklenmez; delikli kart ve operatör programı verilir.
+- **Delikli kart.** Okuma kayması ve kart yönü markaya göre değişir; şema delik konumunu gösterir, kesim şablonu değildir.
 
