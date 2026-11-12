@@ -627,6 +627,7 @@ Bu aşamada iki ayrı şey var ve arayüzde de ayrı tutuldu.
 **Sınırlar:**
 - **Ağ yakınsaması tam değil.** 21 / 31 / 41 ızgarada katsayı: eğilme 2 için 0,49 / 0,52 / 0,54; eğilme 10 için 0,83 / 0,91 / 0,92. Uygulama 31 kullanır. Bu yüzden eğilme parametresi "etkin" bir model değeridir (KES / Peirce ölçümüyle birebir aynı değil) ve ölçüme kalibre edilmelidir.
 - **Model aralığı.** Çok yumuşak kumaşta katsayı 0,25'in altına inmez (öz-çarpışma yok, ağ kaba). Bu aralığın dışındaki ölçümler için kalibrasyon açık hata verir.
+- **Süre.** Tek benzetim masaüstünde ~2 s, kalibrasyon (11 benzetim) ~25 s; telefonda daha uzun. Kalibrasyon adım adım çalışır (sayfa donmaz, ilerleme yazılır).
 - **Giysi düzeyinde kumaş fiziği yok.** 3B önizleme geometriktir. Giysinin vücut üstünde dökülmesi, dikiş gerilimi, kırışıklık benzetilmez.
 - **Vücut formu.** Ortalama oranlarla basitleştirilmiştir; gerçek vücut taraması içe aktarılmaz.
 

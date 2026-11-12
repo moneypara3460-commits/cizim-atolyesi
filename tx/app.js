@@ -581,10 +581,14 @@ document.addEventListener('click', async (e) => {
       }
       case 'drape-run': case 'drape-cal': {
         const m = p.library.materials[i], gsm = m.props.gsm; if (!(gsm > 0)) throw new Error('Önce gramajı gir');
-        let bend = m.props.bendEff, calibrated = false; const t0 = Date.now();
-        if (a === 'drape-cal') { const c = DR.calibrateBend({ gsm, target: m.props.drapeRef }); bend = Math.round(c.bend * 100) / 100; m.props.bendEff = bend; calibrated = true; }
-        else if (!(bend > 0)) { bend = 10; m.props.bendEff = bend; m.estimated = [...new Set([...(m.estimated || []), 'bendEff'])]; }
-        else calibrated = !!(m.sim && m.sim.calibrated && m.sim.bend === bend);
+        if (S.busy) throw new Error('Benzetim sürüyor, bekle');
+        let bend = m.props.bendEff, calibrated = false; const t0 = Date.now(); S.busy = true; b.disabled = true;
+        try {
+          if (a === 'drape-cal') { const c = await DR.calibrateBendAsync({ gsm, target: m.props.drapeRef, onStep: (k, n) => toast(`Kalibre ediliyor… ${k}/${n}`) }); bend = Math.round(c.bend * 100) / 100; m.props.bendEff = bend; calibrated = true; }
+          else if (!(bend > 0)) { bend = 10; m.props.bendEff = bend; m.estimated = [...new Set([...(m.estimated || []), 'bendEff'])]; }
+          else calibrated = !!(m.sim && m.sim.calibrated && m.sim.bend === bend);
+          toast('Benzetim hesaplanıyor…'); await new Promise((r) => setTimeout(r, 0));
+        } finally { S.busy = false; }
         const r = DR.simulateDrape({ gsm, bend }); lastDrape = { id: m.id, r };
         m.sim = { dc: r.dc, nodes: r.nodes, bend, calibrated, settled: r.settled, ms: Date.now() - t0, at: Date.now(), sig: drapeSig(m) };
         toast(`Dökümlülük katsayısı ${num(r.dc, 2)}${r.settled ? '' : ' (tam durulmadı)'}`); break;

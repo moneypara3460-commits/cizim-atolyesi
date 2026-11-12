@@ -106,6 +106,18 @@ export function calibrateBend({ gsm, target, lo = 0.02, hi = 2000, rounds = 12, 
   return best;
 }
 
+// Arayüz için: her benzetimden önce olay döngüsüne döner (sayfa donmaz), ilerleme bildirir
+export async function calibrateBendAsync({ gsm, target, lo = 0.02, hi = 2000, rounds = 9, onStep = null, ...o }) {
+  if (!(target > 0 && target < 1)) throw new Error('Ölçülen dökümlülük katsayısı 0 ile 1 arasında olmalı');
+  const tick = () => new Promise((r) => setTimeout(r, 0)), total = rounds + 2; let k = 0;
+  const run = async (bend) => { await tick(); onStep && onStep(++k, total); return simulateDrape({ gsm, bend, ...o }); };
+  const fa = (await run(lo)).dc, fb = (await run(hi)).dc;
+  if (target < fa || target > fb) throw new Error(`Hedef ${target} bu modelin aralığında değil (${fa.toFixed(2)}–${fb.toFixed(2)})`);
+  let a = Math.log(lo), b = Math.log(hi), best = null;
+  for (let r = 0; r < rounds; r++) { const m = (a + b) / 2, s2 = await run(Math.exp(m)); best = { bend: Math.exp(m), dc: s2.dc, res: s2 }; if (s2.dc < target) a = m; else b = m; }
+  return best;
+}
+
 // Doğrulama durumu: ölçülen referans yoksa doğrulanmamış; varsa fark ±0,05 içinde mi. Eğilme aynı ölçümden kalibre edildiyse bağımsız değil.
 export function drapeStatus(simDC, { measured = null, calibratedFromSame = false, tol = 0.05 } = {}) {
   if (measured == null || !(measured >= 0 && measured <= 1)) return { level: 'uyarı', verified: false, text: 'DOĞRULANMAMIŞ — ölçülmüş dökümlülük katsayısı (referans numune) yok; sonuç yalnız model tahminidir' };

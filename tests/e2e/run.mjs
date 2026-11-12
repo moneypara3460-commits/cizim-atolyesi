@@ -786,11 +786,11 @@ await TX('Tekstil 3B: gömlek kalıbından 3B önizleme (bolluk tablosu, ÖNİZL
   await page.locator('#v3x [data-k="close"]').click();
   // dökümlülük
   await A(page, 'tab', '[data-v="mats"]'); await page.selectOption('#nm-preset', 'fabric:0'); await A(page, 'add-preset');
-  await A(page, 'drape-run', '[data-i="0"]'); await page.waitForFunction(() => /Katsayı \d/.test(document.querySelector('#main').innerText), null, { timeout: 30000 });
+  await A(page, 'drape-run', '[data-i="0"]'); await page.waitForFunction(() => /Katsayı \d/.test(document.querySelector('#main').innerText), null, { timeout: 90000 });
   let b = await txBody(page); expect(/DOĞRULANMAMIŞ — ölçülmüş dökümlülük/.test(b), 'ölçümsüz: doğrulanmamış');
   await page.fill('[data-f="library.materials.0.props.drapeRef"]', '0,55'); await page.locator('[data-f="library.materials.0.props.drapeRef"]').dispatchEvent('change');
   await page.waitForSelector('[data-a="drape-cal"]:not([disabled])'); await A(page, 'drape-cal', '[data-i="0"]');
-  await page.waitForFunction(() => /\(kalibre\)/.test(document.querySelector('#main').innerText), null, { timeout: 60000 });
+  await page.waitForFunction(() => /\(kalibre\)/.test(document.querySelector('#main').innerText), null, { timeout: 240000 });
   b = await txBody(page); expect(/Kalibre edildi: eğilme rijitliği bu ölçümden uyduruldu/.test(b), 'aynı ölçüme kalibre: bağımsız değil');
   const dc = +(b.match(/Katsayı ([\d,]+)/)[1].replace(',', '.')); expect(Math.abs(dc - 0.55) <= 0.03, 'kalibre katsayı ' + dc);
   await page.fill('[data-f="library.materials.0.props.drapeRef2"]', '0,57'); await page.locator('[data-f="library.materials.0.props.drapeRef2"]').dispatchEvent('change');

@@ -60,9 +60,10 @@ t('5. Dökümlülük modeli: belirlenimci, durulur, 0 ≤ DC ≤ 1; eğilme artt
   assert.throws(() => D.simulateDrape({ gsm: 0, bend: 1 }), /Gramaj/); assert.throws(() => D.simulateDrape({ gsm: 100 }), /Eğilme/);
 });
 
-t('6. Kalibrasyon ve doğrulama: hedef katsayıya ±0,02 uyar; ölçüm yoksa DOĞRULANMAMIŞ; aynı ölçüme kalibre "bağımsız değil"; ikinci ölçüm ±0,05 → uyumlu, değilse uyuşmuyor', () => {
+t('6. Kalibrasyon ve doğrulama: hedef katsayıya ±0,02 uyar; ölçüm yoksa DOĞRULANMAMIŞ; aynı ölçüme kalibre "bağımsız değil"; ikinci ölçüm ±0,05 → uyumlu, değilse uyuşmuyor', async () => {
   const c = D.calibrateBend({ gsm: 150, target: 0.6, ...Q, rounds: 9 }); near(c.dc, 0.6, 0.02, 'kalibrasyon');
   assert.throws(() => D.calibrateBend({ gsm: 150, target: 0.1, ...Q }), /aralığında değil/);
+  let steps = 0; const ca = await D.calibrateBendAsync({ gsm: 150, target: 0.6, ...Q, rounds: 9, onStep: () => steps++ }); near(ca.dc, 0.6, 0.02, 'eşzamansız'); assert.equal(steps, 11);
   assert.match(D.drapeStatus(0.4).text, /DOĞRULANMAMIŞ/); assert.equal(D.drapeStatus(0.4).verified, false);
   assert.equal(D.drapeStatus(0.4, { measured: 0.41, calibratedFromSame: true }).verified, false);
   assert.equal(D.drapeStatus(0.4, { measured: 0.43 }).verified, true); assert.equal(D.drapeStatus(0.4, { measured: 0.5 }).level, 'hata');
