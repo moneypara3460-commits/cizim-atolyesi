@@ -22,7 +22,12 @@ for (const [pkg, ver, files] of FILES) {
     const src = fs.readFileSync(path.join(NM, pkg, f));
     const out = path.join('/tmp/vendor-out', `${pkg}@${ver}`, f); fs.mkdirSync(path.dirname(out), { recursive: true }); fs.writeFileSync(out, src);
     const mine = path.join(ROOT, 'vendor', `${pkg}@${ver}`, f);
-    if (!fs.existsSync(mine)) { console.log(`yok  vendor/${pkg}@${ver}/${f}`); missing++; continue; }
+    if (!fs.existsSync(mine)) {
+      // ilk kurulum: dosya günlüğe base64 olarak yazılır (sha256 ile), oradan depoya alınır ve bu iş yeniden karşılaştırır
+      console.log(`yok  vendor/${pkg}@${ver}/${f}  sha256 ${sha(src)}  bayt ${src.length}`); missing++;
+      const b64 = src.toString('base64'); console.log(`@@BEGIN ${pkg}@${ver}/${f}`); for (let i = 0; i < b64.length; i += 8000) console.log('@@' + b64.slice(i, i + 8000)); console.log(`@@END ${pkg}@${ver}/${f}`);
+      continue;
+    }
     const a = sha(fs.readFileSync(mine)), b = sha(src);
     if (a !== b) { console.log(`FAIL vendor/${pkg}@${ver}/${f}: sha256 ${a.slice(0, 16)}… ≠ npm ${b.slice(0, 16)}…`); bad++; }
     else console.log(`ok   vendor/${pkg}@${ver}/${f}  sha256 ${a}`);
