@@ -1,6 +1,6 @@
 // Kumaş, iplik, aksesuar: numara dönüşümleri, hazır kartlar, tüketim ve gramaj. Saf modül.
 // Dokuma (kumaş, alan / en) ve triko (iplik, ilmek boyu / tex) ayrı modellerle hesaplanır; aynı varsayımlara zorlanmaz.
-import { cutPolygon, polyArea } from './woven/pattern.js?v=20261112j';
+import { cutPolygon, polyArea } from './woven/pattern.js?v=20261112k';
 
 /* ---------- iplik numarası ----------
    tex = g / 1000 m (doğrudan) · dtex = 10 tex · denye (den) = 9 tex

@@ -100,7 +100,7 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | 8 | Triko makine profilleri ve üretim çıktısı | Doğrulanamayan makine için çıktı yok, gerekçe yazılı (risk 12) | ✅ (12.11.2026) — bkz. bölüm 13 |
 | 9 | 3B giysi ve kumaş / örgü simülasyonu | Önizleme ve fizik ayrı adlandırılır; çözücü analitik testlerle doğrulanır | ✅ (12.11.2026) — bkz. bölüm 14 |
 | 10 | Üretim föyü ve maliyet: işçilik, operasyon sırası, dikiş türü, vektör PDF | Föy projeden üretilir; maliyet varsayımları yazılı | ✅ (12.11.2026) — bkz. bölüm 15 |
-| 11 | Uçtan uca tekstil testleri (promptta 1–14 numaralı liste), kalite raporu | Kalite raporuna "Tekstil" bölümü | Aşama 1 testleri var |
+| 11 | Uçtan uca tekstil testleri (promptta 1–14 numaralı liste), kalite raporu | Kalite raporuna "Tekstil" bölümü | ✅ (12.11.2026) — bkz. bölüm 16 ve KALITE-RAPORU.md bölüm 7 |
 
 ### Eklenen / değiştirilen dosyalar ve bağımlılıklar
 
@@ -142,6 +142,9 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | `tx/production.js` | Yeni (Aşama 10) | Operasyon şablonları, SMV özeti, maliyet kartı, sipariş malzeme ihtiyacı |
 | `tx/production-pdf.js` | Yeni (Aşama 10) | Çok sayfalı üretim föyü PDF'i |
 | `tests/tx-production.test.mjs` | Yeni (Aşama 10) | 6 Node testi |
+| `tx/woven/dxf-aama.js` | Yeni (Aşama 11) | Kalıp DXF yazıcı / okuyucu (AAMA / ASTM D6673 düzeni) |
+| `tx/download.js` | Yeni (Aşama 11) | Ortak dosya indirme (ASCII dosya adı) |
+| `tests/tx-dxf.test.mjs` | Yeni (Aşama 11) | 6 Node testi |
 | `tests/e2e/run.mjs` | Değişti | W (çalışma alanı) ve T (tekstil) senaryoları; makine senaryoları seçim ekranını atlamak için `cizim:workspace = makine` ile başlar |
 
 Yeni dış bağımlılık yok: tarayıcının kendi IndexedDB'si kullanılır. Three.js tekstil tarafında Aşama 9'a kadar yüklenmez.
@@ -528,7 +531,7 @@ Kurallar iki kaynaktan gelir:
 - **Serbest açı yok.** Yalnız 0° / 180° (düz boy toleransı ile küçük eğme desteklenmez); verev (45°) kesim parçası yok.
 - **Tek beden.** Plan tek beden içindir; çok bedenli karışık pastal (ör. 2 M + 1 L) ve kat sayısı / pastal planı yok.
 - **Ana kumaş.** Astar ve tela parçaları bu ekranda planlanmaz; onların tüketimi varsayımla hesaplanmaya devam eder.
-- **Çıktı biçimi.** Kesim makinesine özel biçimler (Gerber, Lectra vb.) yok; SVG 1:1 ve PDF var. DXF-AAMA dışa aktarımı ilerideki bir iş.
+- **Çıktı biçimi.** Kesim makinesine özel biçimler (Gerber, Lectra vb.) yok; SVG 1:1, PDF ve (Aşama 11'de) kalıp DXF-AAMA var.
 - **Desen eşleştirme.** Parçayı rapor ızgarasına oturtur; parçaların birbirine göre hangi desen noktasında buluşacağı (ör. ön ortada kareli eşleşme) kalıpta işaretlenmez.
 
 ## 13. Aşama 8 raporu: triko makine profilleri ve üretim çıktısı (12.11.2026)
@@ -671,4 +674,25 @@ Bu aşamada iki ayrı şey var ve arayüzde de ayrı tutuldu.
 - **İşçilik kalemleri.** Dakika ücretine işçilik ve makine birlikte girilir; kesim, yıkama gibi dış işlemler ayrı fatura edilmez (operasyon olarak eklenir).
 - **Renk dağılımı.** Sipariş bedene göredir; renk × beden dağılımı ve renge göre farklı malzeme yok.
 - **Kapsam dışı.** Hat dengeleme (operasyonların istasyonlara dağıtımı), kapasite ve termin planı yok. Para birimi tek (TL); kur dönüşümü yok.
+
+## 16. Aşama 11 raporu: test ve doğrulama (12.11.2026)
+
+Promptun 14 maddelik test listesi tek tek testlere eşlendi. Tablo, ölçütler ve kalan riskler [KALITE-RAPORU.md](KALITE-RAPORU.md) bölüm 7'de.
+
+**Eklenenler.**
+- **Kalıp DXF (madde 8; eksikti).** `tx/woven/dxf-aama.js`.
+  - Yazıcı: her parça bir blok. Katmanlar: 1 kesim, 14 dikiş, 2 / 3 dönüş / eğri noktaları, 4 / 80 çıt, 6 kat (ayna), 7 düz boy, 8 iç çizgi ve pens, 13 delik, 15 açıklama. Birim başlığı ($INSUNITS) ve "Units: METRIC / ENGLISH" yazısı. mm, cm, inç seçilebilir.
+  - Okuyucu:
+    - BLOCK / INSERT (konum, döndürme, ölçek) ya da bloksuz düz dosya (her kapalı katman-1 çoklu çizgisi bir parça).
+    - Dönüş noktalarından kenarlara bölme; kesim ve dikiş hattı arasından kenar başına pay; ayna hattından kat kenarı; çıt / çift çıt / T çıt; pens; delik.
+    - Birim yoksa mm varsayımı uyarısı; yay, eğri (spline) gibi desteklenmeyen varlıklar için açık uyarı; parça yoksa ya da dosya bozuksa açık hata.
+  - Arayüz: Kalıp sekmesinde "⬆ DXF (AAMA) içe aktar" (seçili ürün / bedene) ve her kalıp grubunda "⬇ DXF (AAMA)".
+- **Cihaz testleri (madde 13).** Telefon, tablet, masaüstü emülasyonunda temel akış: 11 sekme taşmasız, editörler, föy PDF.
+- **İndirme adı düzeltmesi.** Bütün tekstil indirmeleri tek yardımcıya bağlandı; Türkçe harfler ASCII'ye çevriliyor.
+
+**DXF sınırları.**
+- Kenar adları DXF biçiminde olmadığı için içe aktarmada boş gelir.
+- Eğriler 0,05 mm toleransla çoklu çizgiye çevrilir; içe aktarılan parça eğri değil, kısa doğrulardan oluşur.
+- Grading kuralları (AAMA RUL dosyası) ve beden yuvası (çok bedenli tek dosya) desteklenmez.
+- Gerber / Lectra / Optitex ile alışveriş denenmedi.
 

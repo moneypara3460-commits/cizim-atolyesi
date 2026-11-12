@@ -1,8 +1,9 @@
 // Kumaş yerleşimi (kesim planı) editörü. Otomatik yerleştirme + elle sürükleme / 180° çevirme; canlı verim ve kontrol.
-import * as C from '../curve.js?v=20261112j';
-import * as P from './pattern.js?v=20261112j';
-import * as MK from './marker.js?v=20261112j';
-import { pdfDoc } from '../pdf.js?v=20261112j';
+import * as C from '../curve.js?v=20261112k';
+import { saveBlob } from '../download.js?v=20261112k';
+import * as P from './pattern.js?v=20261112k';
+import * as MK from './marker.js?v=20261112k';
+import { pdfDoc } from '../pdf.js?v=20261112k';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n1 = (v, d = 1) => (Math.round(v * 10 ** d) / 10 ** d).toFixed(d).replace('.', ',');
@@ -129,7 +130,7 @@ export function openMarkerEditor(project, { product = null, size = '', fabrics, 
   cv.addEventListener('pointerup', (e) => { if (!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); if (g && g.kind === 'pinch') { if (!ptrs.size) g = null; return; } if (g && g.kind === 'move' && g.moved) { renderPane(); onChange && onChange(); } if (g && !g.moved && !g.key) { S.sel = null; draw(); } g = null; });
   cv.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); g = null; });
   cv.addEventListener('wheel', (e) => { e.preventDefault(); const q = rel(e), w = toW(...q); S.k = Math.max(0.02, Math.min(20, S.k * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); S.ox = w[0] - q[0] / S.k; S.oy = w[1] - q[1] / S.k; draw(); }, { passive: false });
-  const dl = (blob, name) => { const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 5000); };
+  const dl = (blob, name) => saveBlob(blob, name);
   const fname = (ext) => ('kesim-plani-' + (meta.product || '') + '-' + size).replace(/[^\wçğıöşüÇĞİÖŞÜ -]+/g, '_') + '.' + ext;
   root.addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-k]'); if (!b) return;

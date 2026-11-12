@@ -4,17 +4,18 @@
 // Dokuma / konfeksiyon ve triko ayrı alt şemalardır (woven, knit); yalnız koleksiyon, ürün, renk, beden,
 // malzeme, föy ve revizyon ortaktır. Bkz. docs/TEKSTIL-MIMARI.md
 
-import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112j';
-import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112j';
-import { buildSet } from './woven/blocks.js?v=20261112j';
-import { gradeGroup } from './woven/grade.js?v=20261112j';
-import { fromTemplate, validateChart } from './knit/chart.js?v=20261112j';
-import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112j';
-import { PRESETS, presetEstimated, wovenConsumption, knitStitchTotal, yarnConsumption } from './materials.js?v=20261112j';
-import { evaluate as evalMarker, makeMarker } from './woven/marker.js?v=20261112j';
-import { fromTemplate as machineFromTemplate, machineStatus } from './knit/machine.js?v=20261112j';
-import { drapeVerdict } from './sim3d/drape.js?v=20261112j';
-import { templateOps, validateOps, costSheet, orderRequirement } from './production.js?v=20261112j';
+import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112k';
+import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112k';
+import { buildSet } from './woven/blocks.js?v=20261112k';
+import { gradeGroup } from './woven/grade.js?v=20261112k';
+import { fromTemplate, validateChart } from './knit/chart.js?v=20261112k';
+import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112k';
+import { PRESETS, presetEstimated, wovenConsumption, knitStitchTotal, yarnConsumption } from './materials.js?v=20261112k';
+import { evaluate as evalMarker, makeMarker } from './woven/marker.js?v=20261112k';
+import { fromTemplate as machineFromTemplate, machineStatus } from './knit/machine.js?v=20261112k';
+import { drapeVerdict } from './sim3d/drape.js?v=20261112k';
+import { templateOps, validateOps, costSheet, orderRequirement } from './production.js?v=20261112k';
+import { readAAMA } from './woven/dxf-aama.js?v=20261112k';
 
 export const KIND = 'cizim.textile';
 export const SCHEMA = 1;
@@ -175,6 +176,16 @@ export function addPatternSet(p, set, params, { product = null, size = '' } = {}
   if (product && (!pr || pr.branch !== 'woven')) throw new Error('Kalıp yalnız dokuma / konfeksiyon ürününe bağlanır');
   const r = buildSet(set, params, { idPrefix: nid(p, 'w') + '-', product, size });
   p.woven.pieces.push(...r.pieces); p.woven.seams.push(...r.seams);
+  return r;
+}
+// DXF (AAMA) içe aktarma: parçalar seçili ürün / bedene eklenir; uyarılar döner
+export function importDXF(p, text, { product = null, size = '' } = {}) {
+  if (!p.woven) throw new Error('Bu proje türünde dokuma kalıbı yok');
+  const pr = product ? p.collection.products.find((x) => x.id === product) : null;
+  if (product && (!pr || pr.branch !== 'woven')) throw new Error('Kalıp yalnız dokuma / konfeksiyon ürününe bağlanır');
+  const r = readAAMA(text, { idPrefix: nid(p, 'w') + '-d' });
+  for (const pc of r.pieces) { pc.product = product; pc.size = size || pc.size || ''; }
+  p.woven.pieces.push(...r.pieces);
   return r;
 }
 export function addPiece(p, { name, points, allow = 10, product = null, size = '' }) {

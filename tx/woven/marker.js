@@ -5,8 +5,8 @@
 //        'folded' — en ortadan katlı, iki kat (y = 0 kat çizgisi; her yerleşim iki parça keser; kat kenarlı parça kat çizgisine oturur)
 // Otomatik yerleşim: ızgara (res mm) üzerinde en küçük x, sonra en küçük y'ye sığdırma (bottom-left). Sonuç kesin çokgen
 // çakışma testiyle ayrıca doğrulanır; "en iyi" (optimum) iddiası yoktur.
-import * as C from '../curve.js?v=20261112j';
-import * as P from './pattern.js?v=20261112j';
+import * as C from '../curve.js?v=20261112k';
+import * as P from './pattern.js?v=20261112k';
 
 const cross = (a, b) => a[0] * b[1] - a[1] * b[0];
 

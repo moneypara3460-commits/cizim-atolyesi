@@ -1,6 +1,6 @@
 // Örgü şeması çizimi: tuval (editör / PNG) ve A4 PDF (semboller, renkler, sıra / ilmek numaraları, açıklama).
-import * as K from './chart.js?v=20261112j';
-import { pdfDoc } from '../pdf.js?v=20261112j';
+import * as K from './chart.js?v=20261112k';
+import { pdfDoc } from '../pdf.js?v=20261112k';
 
 const hex = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); const v = m ? parseInt(m[1], 16) : 0xcccccc; return [(v >> 16 & 255) / 255, (v >> 8 & 255) / 255, (v & 255) / 255]; };
 const dark = (h) => { const [r, g, b] = hex(h); return 0.3 * r + 0.59 * g + 0.11 * b < 0.5; };

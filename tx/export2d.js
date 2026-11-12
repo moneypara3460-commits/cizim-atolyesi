@@ -1,8 +1,8 @@
 // Teknik çizim çıktıları: SVG (mm, 1:1), vektör PDF (seçilebilir ölçek, A4/A3), tuval (PNG için).
 // Saf modül: tuval çizimi için bir CanvasRenderingContext2D verilir; başka DOM kullanılmaz.
-import * as C from './curve.js?v=20261112j';
-import * as D from './drawing.js?v=20261112j';
-import { pdfDoc, textWidth } from './pdf.js?v=20261112j';
+import * as C from './curve.js?v=20261112k';
+import * as D from './drawing.js?v=20261112k';
+import { pdfDoc, textWidth } from './pdf.js?v=20261112k';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const SCALES = [1, 2, 2.5, 5, 10, 20];

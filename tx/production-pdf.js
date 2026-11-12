@@ -1,10 +1,10 @@
 // Üretim föyü PDF'i (A4 dikey, çok sayfa): başlık, renk, ölçü tablosu (kaynaklı), malzeme ve tüketim (varsayımlı),
 // kesim planı, operasyon listesi, maliyet (bedene göre), sipariş ve malzeme ihtiyacı, doğrulanmamış / eksik kalemler.
-import { pdfDoc, textWidth } from './pdf.js?v=20261112j';
-import * as M from './model.js?v=20261112j';
-import { OP_MACHINES, opsSummary } from './production.js?v=20261112j';
-import { machineStatus } from './knit/machine.js?v=20261112j';
-import { drapeVerdict } from './sim3d/drape.js?v=20261112j';
+import { pdfDoc, textWidth } from './pdf.js?v=20261112k';
+import * as M from './model.js?v=20261112k';
+import { OP_MACHINES, opsSummary } from './production.js?v=20261112k';
+import { machineStatus } from './knit/machine.js?v=20261112k';
+import { drapeVerdict } from './sim3d/drape.js?v=20261112k';
 
 const n2 = (v, d = 2) => (v == null ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toFixed(d).replace('.', ','));
 

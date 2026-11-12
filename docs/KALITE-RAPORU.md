@@ -111,3 +111,42 @@ E2E senaryolarında uygulama hatası, sayfa hatası ya da konsol hatası görül
 3. **4/5 eksen G-kodu** hiçbir tezgâhta denenmedi. Kumanda simülasyonu ve tek blokla doğrulanmadan üretimde kullanılmamalı.
 4. **CNC torna** uygulanmadı.
 5. Analiz sonuçları doğrusal-elastik ve küp ağ ile hesaplanır. Mühendislik onayının yerine geçmez; uygulamada da yazıyor.
+
+## 7. Tekstil ve Moda (Aşama 11, 12.11.2026)
+
+Ortam aynı: Node 22, Chromium (Playwright), telefon / tablet / masaüstü **emülasyonu**. Gerçek cihaz, gerçek örgü makinesi, gerçek kesim masası ve gerçek kumaş numunesiyle deneme **yapılmadı**.
+
+**Özet.**
+- Tekstil Node testleri: 11 dosya, 103 test, hepsi geçti.
+- Tekstil tarayıcı senaryoları: 17, hepsi geçti (ayrıca makine tarafında 17 senaryo, çalışma alanı seçimi dahil; toplam 35 geçti, 1 blokeli); telefon emülasyonunda (390 × 844), ayrıca tablet ve masaüstünde temel akış.
+- Bütün uygulama: 32 dosya / 419 Node testi; makine dahil tüm E2E senaryoları geçti, 1 blokeli (CNC torna, uygulanmadı).
+
+**Promptun Aşama 11 listesi ↔ testler**
+
+| # | Madde | Node testi | Tarayıcı senaryosu | Ölçüt / tolerans |
+|---|---|---|---|---|
+| 1 | Teknik çizim oluşturma, düzenleme, kaydet / aç | tx-drawing (14) | Tekstil teknik çizim | Eğri boyu, simetri, katman; SVG / PDF ölçeği 1 birim = 1 mm; kaydet → yenile → aç |
+| 2 | Kalıp konturu, eğri, ölçü | tx-pattern (14) | Tekstil kalıp | Alan / çevre analitikle ±1e-6; öz-kesişim yakalanır; 1:1 PDF |
+| 3 | Dikiş payı, pens, çıt, parça işlemleri | tx-pattern | Kalıp araçları (dokunarak) | Kenar bazında pay, köşe türleri; böl → birleştir alanı korur; pens dikiş boyundan düşer |
+| 4 | Grading sonrası ölçü ve geometri | tx-grade (8) | Tekstil grading | Bedenler arası fark kurala tam eşit; 6 beden × 7 dikiş eşleşmesi |
+| 5 | İlmek / sıra yoğunluğu, desen tekrarı | tx-knit (11) | Tekstil triko | Gauge dönüşümü elle hesapla tam; tekrar katına uydurma; eksiltme ±1 ilmek |
+| 6 | İplik tüketimi ve gramaj | tx-materials (7) | Malzeme / tüketim | Numara dönüşümleri 1e-9; gram = ilmek × boy × tex; tartılan numune kendi ağırlığını verir |
+| 7 | Kumaş yerleşimi, tüketim, fire | tx-marker (10), tx-production (fire) | Kesim planı, üretim föyü | Bilinen optimum (%100); çakışma kesin çokgen testiyle 0; tüketim = plan boyu (+ çekme, pastal başı); ihtiyaç × (1 + fire) |
+| 8 | DXF içe / dışa ve ölçek | **tx-dxf (6), bu aşamada eklendi** | **Tekstil DXF (AAMA), bu aşamada eklendi** | mm gidiş-dönüşte alan / çevre göreli < 1e-6; inç ve cm ölçeği; pay, kat, çıt, pens, adet korunur |
+| 9 | Triko makine profili ve format | tx-machine (9) | Triko makinesi | Doğrulanmamış profil "yalnız numune"; knitout yapısal benzetimi her iğnede şemayla aynı; kapalı biçim üretilmez |
+| 10 | 2B kalıptan 3B giysiye akış | tx-sim3d (7) | Tekstil 3B | Göğüs çevresi = göğüs + bolluk ±0,5 mm; 3B sahne ÖNİZLEME etiketli; dökümlülük referanssız "doğrulanmamış" |
+| 11 | Dokuma / triko malzeme ayrılığı | tx-model (dal kuralları), tx-sim3d / tx-materials | Karma koleksiyon, triko projesi | Kumaş yalnız dokumaya, iplik yalnız trikoya bağlanır; triko projesinde dokuma araçları yok |
+| 12 | Kaydet, yeniden aç, revizyon | tx-model (store, göç) | Karma koleksiyon, kesim planı | Revizyon geri dönüşü; JSON dışa / içe aktarma; bozuk JSON reddi; eski şemaların göçü |
+| 13 | Telefon, tablet, masaüstü | — | **Temel akış (telefon / tablet / masaüstü), bu aşamada eklendi** | 11 sekmenin hiçbirinde yatay taşma yok; çizim, kalıp, desen editörleri açılır / kapanır; föy PDF iner |
+| 14 | Makine ve Mühendislik regresyonu | 21 makine dosyası | A–S makine senaryoları + W | Önceki raporla aynı; makine kodu (app.js ve modülleri) tekstil için değiştirilmedi, yalnız index.html'e ws.js eklendi |
+
+**Bu aşamada bulunan ve düzeltilen hatalar.**
+1. **Kalıp DXF alışverişi yoktu.** Mimari planda vardı, uygulanmamıştı. `tx/woven/dxf-aama.js` (AAMA / ASTM D6673 düzeni: katmanlar, BLOCK / INSERT, birim başlığı, açıklama yazıları) eklendi.
+2. **Türkçe harfli dosya adları.** Örneğin "kalıp-Gömlek-M.pdf" gibi adlarda tarayıcı adı atıp dosyayı "download" adıyla, uzantısız indiriyordu. Bu, Aşama 3'ten beri bütün tekstil indirmelerini etkiliyordu ve telefonda dosyanın açılamamasına yol açabilirdi. Bütün indirmeler tek yardımcıya bağlandı, ad ASCII'ye çevriliyor (ö → o, ş → s …). Testler artık dosya adını da denetliyor.
+
+**Yayın öncesi tekstil riskleri.**
+1. **Gerçek cihaz.** Telefon ve tablette yalnız emülasyon yapıldı. Özellikle dokunarak kalıp düzenleme, yakınlaştırma ve dökümlülük benzetiminin süresi (masaüstünde ~2 s, kalibrasyon ~25 s) gerçek cihazda denenmeli.
+2. **Dış programlarla alışveriş.** DXF çıktısı Gerber / Lectra / Optitex'te; knitout çıktısı gerçek bir örgü makinesinde denenmedi.
+3. **Fiziksel doğrulama.** Kalıplar temel bloklardır (prova gerekir). Dökümlülük modeli referans numuneyle kalibre edilmeden kullanılmamalıdır. Operasyon süreleri tahminidir.
+4. **Beden tabloları.** Örnek tablo kaynağıyla birlikte verilir; üretimde firmanın kendi ölçü tablosu kullanılmalıdır.
+

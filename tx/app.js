@@ -1,25 +1,27 @@
 // Tekstil ve Moda çalışma alanı — arayüz (Aşama 1: ortak proje altyapısı).
 // Hesap ve doğrulama tx/model.js'te; burada yalnız gösterim ve düzenleme.
 // Makine ve Mühendislik alanının hiçbir dosyasını içe aktarmaz.
-import * as M from './model.js?v=20261112j';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112j';
-import { TEMPLATES, VIEWS } from './drawing.js?v=20261112j';
-import { openSketchEditor } from './sketch-ui.js?v=20261112j';
-import { SETS, defaultParams } from './woven/blocks.js?v=20261112j';
-import { openPatternEditor } from './woven/pattern-ui.js?v=20261112j';
-import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112j';
-import { sizeTable as gradeTable } from './woven/grade.js?v=20261112j';
-import { TEMPLATES as KTPL, validateChart } from './knit/chart.js?v=20261112j';
-import { KNIT_PIECES, gradeKnit, widthOf } from './knit/shape.js?v=20261112j';
-import { openChartEditor } from './knit/chart-ui.js?v=20261112j';
-import { PRESETS, allCounts } from './materials.js?v=20261112j';
-import { openMarkerEditor } from './woven/marker-ui.js?v=20261112j';
-import * as MC from './knit/machine.js?v=20261112j';
-import * as FIT from './sim3d/fit.js?v=20261112j';
-import * as DR from './sim3d/drape.js?v=20261112j';
-import { open3D, fitScene, drapeScene } from './sim3d/view3d.js?v=20261112j';
-import { OP_MACHINES, OP_TEMPLATES, opsSummary } from './production.js?v=20261112j';
-import { productionPDF } from './production-pdf.js?v=20261112j';
+import * as M from './model.js?v=20261112k';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112k';
+import { TEMPLATES, VIEWS } from './drawing.js?v=20261112k';
+import { openSketchEditor } from './sketch-ui.js?v=20261112k';
+import { SETS, defaultParams } from './woven/blocks.js?v=20261112k';
+import { openPatternEditor } from './woven/pattern-ui.js?v=20261112k';
+import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112k';
+import { sizeTable as gradeTable } from './woven/grade.js?v=20261112k';
+import { TEMPLATES as KTPL, validateChart } from './knit/chart.js?v=20261112k';
+import { KNIT_PIECES, gradeKnit, widthOf } from './knit/shape.js?v=20261112k';
+import { openChartEditor } from './knit/chart-ui.js?v=20261112k';
+import { PRESETS, allCounts } from './materials.js?v=20261112k';
+import { openMarkerEditor } from './woven/marker-ui.js?v=20261112k';
+import * as MC from './knit/machine.js?v=20261112k';
+import * as FIT from './sim3d/fit.js?v=20261112k';
+import * as DR from './sim3d/drape.js?v=20261112k';
+import { open3D, fitScene, drapeScene } from './sim3d/view3d.js?v=20261112k';
+import { OP_MACHINES, OP_TEMPLATES, opsSummary } from './production.js?v=20261112k';
+import { productionPDF } from './production-pdf.js?v=20261112k';
+import { writeAAMA } from './woven/dxf-aama.js?v=20261112k';
+import { saveBlob, safeName } from './download.js?v=20261112k';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -210,7 +212,7 @@ function tabPatterns() {
     <label class="f"><span>Beden tablosu</span><select id="pt-table"><option value="">— yok (varsayılan ölçüler) —</option>${p.sizeTables.map((t) => `<option value="${t.id}" ${tbl && t.id === tbl.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
     ${tbl ? `<label class="f"><span>Beden</span><select id="pt-size">${tbl.sizes.map((z) => `<option ${z === size ? 'selected' : ''}>${esc(z)}</option>`).join('')}</select></label>` : `<label class="f"><span>Beden adı</span><input id="pt-size-free" placeholder="ör. M"></label>`}</div>
     <div class="row">${Object.entries(SETS[set].params).map(([k, [lbl, , src]]) => `<label class="f"><span>${esc(lbl)} (cm)${src && Number.isFinite(meas[src]) ? ' · tablodan' : ''}</span><input data-pt="${k}" inputmode="decimal" value="${num(prm[k] / 10)}"></label>`).join('')}</div>
-    <div class="row"><button class="ok" data-a="add-pattern">Oluştur ve aç</button></div>
+    <div class="row"><button class="ok" data-a="add-pattern">Oluştur ve aç</button><button data-a="dxf-in">⬆ DXF (AAMA) içe aktar</button></div>
     <div class="small">Basitleştirilmiş temel bloklardır: ölçülerden çizilir, dikiş eşleşmeleri (kol başı ↔ kol oyuğu bolluğu, yan dikiş, omuz, yaka, kemer) otomatik kontrol edilir. Seri üretimden önce prova ile doğrulanmalı.</div></div>`;
   const groups = new Map();
   for (const pc of p.woven.pieces) { const key = (pc.product ?? '') + '|' + (pc.size ?? ''); if (!groups.has(key)) groups.set(key, []); groups.get(key).push(pc); }
@@ -225,7 +227,7 @@ function tabPatterns() {
       <div class="small">${pcs.length} parça (${pcs.map((x) => esc(x.name)).join(', ')}) · toplam kesim alanı ${(area / 1e4).toFixed(1)} dm² (adetle)</div>
       <div class="small">${bad ? `⛔ ${bad} parçada hata` : '✅ parçalar geçerli'} · ${sms.length ? (sBad ? `⛔ ${sBad} / ${sms.length} dikiş eşleşmesi tutmuyor` : `✅ ${sms.length} dikiş eşleşmesi tutuyor`) : 'dikiş eşleşmesi yok'}${pcs[0].gradedFrom ? ` · ${esc(pcs[0].gradedFrom.base)} bedeninden yayıldı (${esc(pcs[0].gradedFrom.how)})` : ''}</div>
       ${(() => { const mk = (p.woven.markers || []).find((x) => (x.product ?? '') === pid && (x.size ?? '') === sz); return mk ? `<div class="small">✂ Kesim planı: boy ${num(mk.length / 10)} cm · verim %${num(mk.efficiency * 100)} · ${mk.mode === 'folded' ? 'katlı' : 'açık en'}</div>` : ''; })()}
-      <div class="row noprint"><button data-a="fit3d" data-v="${esc(key)}">🧍 3B önizleme</button><button data-a="marker-open" data-v="${esc(key)}">✂ Kumaş yerleşimi</button>${pcs[0].gradedFrom ? '' : `<button data-a="grade-open" data-v="${esc(key)}">📐 Bedenlere yay (grading)</button>`}</div>
+      <div class="row noprint"><button data-a="fit3d" data-v="${esc(key)}">🧍 3B önizleme</button><button data-a="marker-open" data-v="${esc(key)}">✂ Kumaş yerleşimi</button><button data-a="dxf-out" data-v="${esc(key)}">⬇ DXF (AAMA)</button>${pcs[0].gradedFrom ? '' : `<button data-a="grade-open" data-v="${esc(key)}">📐 Bedenlere yay (grading)</button>`}</div>
       ${S.gradeKey === key ? gradeForm(pid, sz) : ''}</div>`;
   }
   h += `<div class="card noprint"><h3>Boş kalıp grubu aç</h3><div class="row"><label class="f"><span>Ürün</span><select id="pe-prod">${prods.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}<option value="">— ürüne bağlı değil —</option></select></label><label class="f"><span>Beden</span><input id="pe-size" placeholder="ör. M"></label><button data-a="open-pattern-new">Aç</button></div>
@@ -321,7 +323,7 @@ function moSel() {
   return { m, pc, ch, piece: pc ? M.knitCompute(p, pc) : null, swatch: pc ? K.swatches.find((x) => x.id === pc.swatch) : null };
 }
 const issuesHTML = (list) => list.map((x) => `<div class="issue ${x.level}">${x.level === 'hata' ? '⛔' : '⚠'} ${esc(x.msg)}</div>`).join('') || '<div class="small">✅ Uyumsuzluk bulunmadı.</div>';
-function saveText(text, name, type = 'text/plain') { const u = URL.createObjectURL(new Blob([text], { type: type + ';charset=utf-8' })), a = document.createElement('a'); a.href = u; a.download = name.replace(/[^\wçğıöşüÇĞİÖŞÜ. -]+/g, '_'); document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 5000); }
+function saveText(text, name, type = 'text/plain') { saveBlob(new Blob([text], { type: type + ';charset=utf-8' }), safeName(name)); }
 function cardSVG(c) {
   const s = 8, W = c.width * s + 40, H = c.rows * s + 60;
   let o = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Helvetica, Arial">\n<text x="4" y="12" font-size="9">Delikli kart şeması · ${c.width} iğne × ${c.rows} sıra · ${c.status.ready ? 'doğrulanmış profil' : 'DOĞRULANMAMIŞ — yalnız numune'}</text>\n<text x="4" y="24" font-size="7">${c.notes[1]}</text>\n`;
@@ -562,6 +564,16 @@ document.addEventListener('click', async (e) => {
       case 'del':
         if (S.delArm !== b.dataset.id) { S.delArm = b.dataset.id; return render(); }
         await store.remove(b.dataset.id); S.delArm = null; toast('Silindi'); return render();
+      case 'dxf-in': {
+        const prod = $('pt-prod')?.value || null, size = ($('pt-size')?.value ?? $('pt-size-free')?.value ?? '').trim();
+        const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.dxf,application/dxf,text/plain';
+        inp.onchange = async () => { try { const r = M.importDXF(p, await inp.files[0].text(), { product: prod, size }); dirty(); render(); toast(`${r.pieces.length} parça (${r.units})${r.warnings.length ? ' · ⚠ ' + r.warnings.join('; ') : ''}`); } catch (er) { toast('⚠ ' + er.message); } };
+        inp.click(); return;
+      }
+      case 'dxf-out': {
+        const [pid, sz] = b.dataset.v.split('|'), pcs = p.woven.pieces.filter((x) => (x.product ?? '') === pid && (x.size ?? '') === sz), pr = p.collection.products.find((x) => x.id === pid);
+        saveText(writeAAMA(pcs), `kalip-${pr?.modelCode || pr?.name || 'parca'}-${sz || ''}.dxf`, 'application/dxf'); toast(`${pcs.length} parça DXF (AAMA, mm) — Gerber / Lectra gibi programlarda denenmedi`); return;
+      }
       case 'import': {
         const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
         inp.onchange = async () => { try { const q = await store.importJSON(await inp.files[0].text()); toast('İçe aktarıldı: ' + q.name); render(); } catch (er) { toast('⚠ ' + er.message); } };
@@ -571,9 +583,7 @@ document.addEventListener('click', async (e) => {
       case 'tab': S.tab = b.dataset.v; if (S.tab === 'revs') revCache = null; return render();
       case 'export': {
         await flush();
-        const url = URL.createObjectURL(new Blob([store.exportJSON(p)], { type: 'application/json' }));
-        const l = document.createElement('a'); l.href = url; l.download = p.name.replace(/[^\wçğıöşüÇĞİÖŞÜ -]+/g, '_') + '.tekstil.json'; l.click();
-        setTimeout(() => URL.revokeObjectURL(url), 5000); return;
+        saveBlob(new Blob([store.exportJSON(p)], { type: 'application/json' }), p.name + '.tekstil.json'); return;
       }
       case 'commit': clearTimeout(saveT); saveT = null; await store.commit(p, $('rev-note').value); revCache = null; toast('Revizyon ' + p.rev + ' kaydedildi'); $('saved').textContent = 'rev ' + p.rev; return render();
       case 'restore': S.p = await store.restore(p.id, +b.dataset.v); revCache = null; toast('Rev ' + b.dataset.v + ' geri yüklendi (yeni rev ' + S.p.rev + ')'); return render();
@@ -644,7 +654,7 @@ document.addEventListener('click', async (e) => {
       case 'op-add': M.addOp(p, b.dataset.v); break;
       case 'op-del': { const [pi, k] = b.dataset.v.split('.').map(Number); p.collection.products[pi].techpack.ops.splice(k, 1); break; }
       case 'op-up': { const [pi, k] = b.dataset.v.split('.').map(Number), o = p.collection.products[pi].techpack.ops; [o[k - 1], o[k]] = [o[k], o[k - 1]]; break; }
-      case 'prod-pdf': { const pr = p.collection.products.find((x) => x.id === b.dataset.v), r = productionPDF(p, pr.id); const u = URL.createObjectURL(new Blob([r.bytes], { type: 'application/pdf' })), l = document.createElement('a'); l.href = u; l.download = ('uretim-foyu-' + (pr.modelCode || pr.name)).replace(/[^\wçğıöşüÇĞİÖŞÜ -]+/g, '_') + '.pdf'; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(u), 5000); toast(`${r.pages} sayfa`); return; }
+      case 'prod-pdf': { const pr = p.collection.products.find((x) => x.id === b.dataset.v), r = productionPDF(p, pr.id); saveBlob(new Blob([r.bytes], { type: 'application/pdf' }), 'uretim-foyu-' + (pr.modelCode || pr.name) + '.pdf'); toast(`${r.pages} sayfa`); return; }
       case 'add-machine': M.addMachine(p, $('nm-mtpl').value); break;
       case 'del-machine': { const m = p.knit.machines[i]; if (S.delArm !== m.id) { S.delArm = m.id; return render(); } p.knit.machines.splice(i, 1); S.delArm = null; break; }
       case 'mc-verify': MC.verifyMachine(p.knit.machines[i], { note: $('mv-note-' + i).value }); toast('Profil doğrulandı olarak işaretlendi'); break;

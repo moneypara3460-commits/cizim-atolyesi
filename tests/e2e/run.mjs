@@ -714,7 +714,7 @@ await TX('Tekstil kesim planı: gömlek kalıbı + poplin, otomatik yerleşim, e
   await K('auto'); await page.waitForFunction(() => document.getElementById('mkx').api.evaluate().issues.every((x) => x.level !== 'hata'));
   e = await ev(); const L = e.L;
   const dl = await download(page, () => K('pdf'));
-  expect(dl.text.startsWith('%PDF-') && /1:\d+/.test(dl.text), 'PDF indirildi: ' + dl.name + ' ' + dl.size + ' B');
+  expect(/^kesim-plani-Gomlek-M\.pdf$/.test(dl.name) && dl.text.startsWith('%PDF-') && /1:\d+/.test(dl.text), 'PDF indirildi: ' + dl.name + ' ' + dl.size + ' B');
   await K('save'); await K('close');
   let b = await txBody(page); expect(/✂ Kesim planı: boy [\d,]+ cm · verim %[\d,]+ · açık en/.test(b), 'kalıp kartında plan özeti');
   await A(page, 'tab', '[data-v="tp"]'); b = await txBody(page);
@@ -829,6 +829,38 @@ await TX('Tekstil üretim föyü: gömlek şablon operasyonları (tahmini), sür
   expect(pdf.text.startsWith('%PDF-') && /Operasyon listesi/.test(pdf.text) && /tahmini/.test(pdf.text), 'üretim föyü PDF ' + pdf.size + ' B');
   await A(page, 'tab', '[data-v="val"]'); expect(await page.locator('.issue.hata').count() === 0 && /Operasyon süreleri şablondan/.test(await txBody(page)), 'doğrulama: tahmini süre uyarısı, hata yok');
 });
+
+await TX('Tekstil DXF (AAMA): gömlek kalıbı DXF dışa → yeni ürüne içe aktar; 7 parça, alanlar aynı, ölçü / pay korunur; bozuk DXF açık hata', async ({ page }) => {
+  await A(page, 'type', '[data-v="woven"]'); await page.waitForSelector('[data-a="type"][data-v="woven"].on');
+  await page.fill('#np-name', 'DXF E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await page.selectOption('#ap-type', 'gomlek'); await A(page, 'add-prod'); await page.fill('#ap-name', 'Kopya'); await page.selectOption('#ap-type', 'gomlek'); await A(page, 'add-prod');
+  await A(page, 'tab', '[data-v="pat"]'); await page.selectOption('#pt-prod', { index: 0 }); await page.fill('#pt-size-free', 'M'); await A(page, 'add-pattern'); await page.waitForSelector('#pkx canvas'); await page.locator('#pkx [data-k="close"]').click();
+  const dxf = await download(page, () => A(page, 'dxf-out'));
+  expect(/AC1009/.test(dxf.text) && (dxf.text.match(/\n0\nBLOCK\n/g) || []).length === 7 && /\.dxf$/.test(dxf.name), 'DXF indirildi: ' + dxf.name);
+  const fsx = await import('node:fs'), pth = '/tmp/e2e-kalip.dxf'; fsx.writeFileSync(pth, dxf.text);
+  await page.selectOption('#pt-prod', { index: 1 }); await page.fill('#pt-size-free', 'L');
+  const [fc] = await Promise.all([page.waitForEvent('filechooser'), A(page, 'dxf-in')]); await fc.setFiles(pth);
+  await page.waitForFunction(() => /7 parça \(mm\)/.test(document.getElementById('toast').innerText));
+  const b = await txBody(page); expect((b.match(/Beden L/g) || []).length >= 1, 'içe aktarılan grup (L)');
+  await A(page, 'tab', '[data-v="val"]'); expect(await page.locator('.issue.hata').count() === 0, 'doğrulama temiz');
+  fsx.writeFileSync('/tmp/e2e-bozuk.dxf', 'bozuk\ndosya\n');
+  await A(page, 'tab', '[data-v="pat"]'); const [fc2] = await Promise.all([page.waitForEvent('filechooser'), A(page, 'dxf-in')]); await fc2.setFiles('/tmp/e2e-bozuk.dxf');
+  await page.waitForFunction(() => /⚠ DXF bozuk/.test(document.getElementById('toast').innerText));
+});
+
+for (const [dev, view] of [['telefon', null], ['tablet', { viewport: { width: 820, height: 1180 }, isMobile: true, hasTouch: true, dpr: 2 }], ['masaüstü', { viewport: { width: 1366, height: 900 } }]]) {
+  await TX(`Tekstil temel akış (${dev}): karma proje, her sekme taşmasız açılır, çizim / kalıp / desen editörleri açılıp kapanır, föy PDF iner`, async ({ page }) => {
+    await A(page, 'type', '[data-v="mixed"]'); await page.waitForSelector('[data-a="type"][data-v="mixed"].on');
+    await page.fill('#np-name', 'Cihaz ' + dev); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+    await page.selectOption('#ap-branch', 'woven'); await page.selectOption('#ap-type', 'gomlek'); await A(page, 'add-prod');
+    const over = () => page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
+    for (const tab of ['col', 'draw', 'pat', 'knit', 'colors', 'sizes', 'mats', 'tp', 'val', 'revs', 'tools']) { await A(page, 'tab', `[data-v="${tab}"]`); await page.waitForSelector(`[data-a="tab"][data-v="${tab}"].on`); const o = await over(); expect(o <= 1, `${tab} sekmesi yatay taşma ${o} px`); }
+    await A(page, 'tab', '[data-v="draw"]'); await A(page, 'add-sketch'); await page.waitForSelector('#skx canvas, #sk canvas, canvas'); await page.locator('[data-k="close"]').first().click();
+    await A(page, 'tab', '[data-v="pat"]'); await page.fill('#pt-size-free', 'M'); await A(page, 'add-pattern'); await page.waitForSelector('#pkx canvas'); expect((await over()) <= 1, 'kalıp editörü taşmasız'); await page.locator('#pkx [data-k="close"]').click();
+    await A(page, 'tab', '[data-v="knit"]'); await page.selectOption('#nk-tpl', 'sac22'); await A(page, 'add-chart'); await page.waitForSelector('#kcx canvas'); await page.locator('#kcx [data-k="close"]').click();
+    await A(page, 'tab', '[data-v="tp"]'); const pdf = await download(page, () => A(page, 'prod-pdf')); expect(pdf.text.startsWith('%PDF-'), 'föy PDF');
+  }, view || undefined);
+}
 
 await TX('Tekstil ↔ Makine ayrılığı: tekstil kaydı makine projelerine yazmaz; makine projeleri tekstil listesinde görünmez', async ({ page }) => {
   await page.evaluate(() => localStorage.setItem('cizim:projects', JSON.stringify({ mak: { data: '{}', at: 1 } })));

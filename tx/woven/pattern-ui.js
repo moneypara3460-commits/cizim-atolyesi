@@ -1,8 +1,9 @@
 // Kalıp editörü (dokuma / konfeksiyon). Tam ekran; bir ürün + beden grubunun parçalarını gösterir.
 // Geometri tx/woven/pattern.js'te; burada yalnız etkileşim.
-import * as C from '../curve.js?v=20261112j';
-import * as P from './pattern.js?v=20261112j';
-import * as X from './pattern-export.js?v=20261112j';
+import * as C from '../curve.js?v=20261112k';
+import { saveBlob } from '../download.js?v=20261112k';
+import * as P from './pattern.js?v=20261112k';
+import * as X from './pattern-export.js?v=20261112k';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cm = (mm, d = 1) => (Math.round(mm * 10 ** d / 10) / 10 ** d).toFixed(d).replace('.', ',');
@@ -216,7 +217,7 @@ export function openPatternEditor(project, { product = null, size = '', title = 
   cv.addEventListener('wheel', (e) => { e.preventDefault(); const q = rel(e), w = toW(...q); S.k = Math.min(100, Math.max(0.03, S.k * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); S.ox = w[0] - q[0] / S.k; S.oy = w[1] - q[1] / S.k; draw(); }, { passive: false });
 
   /* ---------- düğmeler / alanlar ---------- */
-  const dl = (blob, name) => { const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 5000); };
+  const dl = (blob, name) => saveBlob(blob, name);
   const fname = (ext) => (title).replace(/[^\wçğıöşüÇĞİÖŞÜ -]+/g, '_') + '.' + ext;
   root.addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-k]'); if (!b) return;

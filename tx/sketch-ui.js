@@ -1,8 +1,9 @@
 // Teknik moda çizimi editörü (tam ekran). Telefon önce: tek parmak kaydırır / seçer, iki parmak yakınlaştırır.
 // Bütün geometri tx/drawing.js ve tx/curve.js'te; burada yalnız etkileşim ve gösterim.
-import * as C from './curve.js?v=20261112j';
-import * as D from './drawing.js?v=20261112j';
-import * as X from './export2d.js?v=20261112j';
+import * as C from './curve.js?v=20261112k';
+import { saveBlob } from './download.js?v=20261112k';
+import * as D from './drawing.js?v=20261112k';
+import * as X from './export2d.js?v=20261112k';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cm = (mm) => (Math.round(mm) / 10).toString().replace('.', ',');
@@ -225,7 +226,7 @@ export function openSketchEditor(sk, { onChange, toast, meta = {}, sizeTables = 
   cv.addEventListener('wheel', (e) => { e.preventDefault(); const q = rel(e), w = toW(...q); S.k = Math.min(200, Math.max(0.05, S.k * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); S.ox = w[0] - q[0] / S.k; S.oy = w[1] - q[1] / S.k; draw(); }, { passive: false });
 
   /* ---------- düğmeler ---------- */
-  function download(blob, name) { const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 5000); }
+  function download(blob, name) { saveBlob(blob, name); }
   const fname = (ext) => (sk.name + '-' + D.VIEWS[S.view]).replace(/[^\wçğıöşüÇĞİÖŞÜ -]+/g, '_') + '.' + ext;
   root.addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-k]'); if (!b) return;

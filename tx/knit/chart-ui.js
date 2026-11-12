@@ -1,6 +1,7 @@
 // Örgü şeması editörü (tam ekran). Fırça: dokun / sürükle ile ilmek ve renk boyar; "Kaydır" ile gezinilir; iki parmak yakınlaştırır.
-import * as K from './chart.js?v=20261112j';
-import { drawChartCanvas, chartPDF } from './chart-export.js?v=20261112j';
+import * as K from './chart.js?v=20261112k';
+import { saveBlob } from '../download.js?v=20261112k';
+import { drawChartCanvas, chartPDF } from './chart-export.js?v=20261112k';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const PAL = ['k', 'p', 't', 'm', 'yo', 'k2t', 'ssk', 'c2R', 'c2L', 'c4R', 'c4L', 'c6R', 'c6L', 'x'];
@@ -112,7 +113,7 @@ export function openChartEditor(ch, { onChange, toast, meta = {} }) {
       <h4 style="margin:8px 0 2px;font-size:13px">Çıktı</h4><div class="grp"><button data-k="pdf">⬇ PDF şema</button><button data-k="png">⬇ PNG</button><button data-k="csv">⬇ CSV</button><button data-k="txt">⬇ Yazılı talimat</button></div>
       <div class="small">Yazılı talimat gidiş-dönüş örgü içindir (çift sıralar arka yüzden, düz / ters yer değiştirir). Makine programı değildir: makineye özgü çıktı Aşama 8'de, yalnız doğrulanan makineler için.</div>`;
   }
-  const dl = (blob, name) => { const u = URL.createObjectURL(blob), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 5000); };
+  const dl = (blob, name) => saveBlob(blob, name);
   const fname = (ext) => ch.name.replace(/[^\wçğıöşüÇĞİÖŞÜ -]+/g, '_') + '.' + ext;
   root.addEventListener('click', (ev) => {
     const b = ev.target.closest('[data-k]'); if (!b) return;
