@@ -8,6 +8,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Güvenlik: iş akışları depoya yazamaz (yalnız okuma)
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -91,4 +95,30 @@ jobs:
           path: |
             reports/
             reports-e2e.log
+          if-no-files-found: warn
+
+  # Üçüncü taraf kütüphaneler depoda (vendor/) birebir kopya olarak durur; uygulama dış siteden kod yüklemez.
+  # Bu iş, kopyaları npm kayıt defterindeki imzalı (integrity) paketlerle karşılaştırır: bir bayt bile farklıysa kırmızı.
+  kutuphane:
+    name: Üçüncü taraf kütüphane bütünlüğü (vendor ↔ npm)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Paketleri npm'den indir (sürüm sabit, npm integrity doğrular)
+        run: |
+          mkdir -p /tmp/npmv && cd /tmp/npmv
+          echo '{"name":"v","private":true}' > package.json
+          npm install --no-audit --no-fund --legacy-peer-deps --ignore-scripts three@0.160.0 three-mesh-bvh@0.6.0 three-bvh-csg@0.0.7
+      - name: Karşılaştır (ve kopyaları yükle)
+        run: node tools/vendor-check.mjs /tmp/npmv/node_modules
+      - name: npm kopyalarını yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vendor-npm
+          path: /tmp/vendor-out/
           if-no-files-found: warn
