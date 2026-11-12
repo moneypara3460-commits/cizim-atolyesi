@@ -195,3 +195,33 @@ Ortam aynı (Node 22, Chromium emülasyonu, gerçek OCCT WASM). Gerçek bir torn
 - **Çevrimler.** Kaba / finiş G71 / G70 çevrimi olarak değil, tek tek G01 / G02 / G03 hareketleri olarak yazılır (kumandadan bağımsız ve geri okunarak doğrulanabilir). Diş açmada yanal besleme (G76 açı) kumandaya bırakılır; G32 açılımı radyal beslemedir.
 - **Modelden alma.** Döndürme krokisi ya da silindirden profil alma düğmesi var ama ne otomatik testi var ne de tarayıcıda denendi; sonucu profil tablosundan kontrol et.
 
+## 9. Güvenlik taraması (12.11.2026)
+
+**Kapsam.** Uygulama tamamen tarayıcıda çalışan, sunucusu olmayan statik bir sitedir (GitHub Pages). Hesap, parola, sunucu veritabanı ya da dış API anahtarı yoktur; veriler kullanıcının tarayıcısında (localStorage / IndexedDB) durur. Bu yüzden tarama şunlara odaklandı:
+- dışarıdan gelen verinin sayfaya kod olarak sızması (XSS);
+- içe aktarılan dosyalar ve kayıtlar;
+- üçüncü taraf kod (tedarik zinciri);
+- CI izinleri, gizli bilgi sızıntısı.
+
+**Yapılanlar ve sonuçlar.**
+
+| Konu | Yöntem | Sonuç |
+|---|---|---|
+| XSS (tekstil) | Her ad / not / kaynak / marka / model / renk / beden tablosu alanına `<img onerror>` ve `<svg onload>` yükü içeren proje (108 yük) içe aktarıldı. 11 sekme, kalıp, kesim planı, 3B, örgü deseni, makine çıktısı, teknik çizim editörleri açıldı. | **Tetiklenmedi.** Yükler düz metin olarak göründü, DOM'a etiket olarak girmedi. |
+| XSS (makine) | Parça adları, torna iş ve takım adları, kayıtlı proje adı aynı yükle dolduruldu; 25 sekme, torna hesabı, proje penceresi açıldı. | **Tetiklenmedi.** G-kodu açıklamalarında parantez ve ASCII dışı karakterler süzülüyor. Satır kırma ile komut enjeksiyonu yok. |
+| eval / new Function / document.write | Kod taraması | Uygulama kodunda yok. Tek istisna: OCCT işçisi kendi klasöründeki IGES okuyucusunu (vendor) çalıştırıyor, dış içerik değil. |
+| Prototip kirletme | Tekstil alan yazıcısı (`setPath`) incelendi; beden adı `__proto__.x` ile denendi. | **AÇIK BULUNDU, DÜZELTİLDİ.** Önce `Object.prototype` kirleniyordu. Şimdi `__proto__`, `constructor`, `prototype` alan adları reddediliyor; içe aktarılan JSON'da bu anahtarlar varsa dosya reddediliyor; beden / ölçü adlarındaki nokta kodlanıyor. Test: `tx-model` "Güvenlik". |
+| Üçüncü taraf kod | Uygulama three.js, three-mesh-bvh, three-bvh-csg'yi her açılışta unpkg.com'dan bütünlük kontrolü olmadan yüklüyordu. | **RİSK, DÜZELTİLDİ.** Bu kütüphanelerin npm'deki resmi paketlerinin birebir kopyaları `vendor/` içine alındı, sayfalar artık dış siteden kod yüklemiyor. Uygulama internetsiz de açılıyor. Yeni CI işi "Üçüncü taraf kütüphane bütünlüğü", her çalıştırmada kopyaları npm paketiyle bayt bayt (sha256) karşılaştırıyor. E2E testleri dış siteye tek bir istek atılırsa başarısız oluyor. |
+| İçerik güvenlik politikası (CSP) | Yoktu. | **EKLENDİ** (`<meta http-equiv="Content-Security-Policy">`): yalnız aynı kaynaktan betik; satır içi betikten yalnız importmap (sha256 ile); nesne / form / base yasak; `no-referrer`. `'unsafe-eval'` tutuldu: OCCT işçisi açılamazsa sayfada çalışan yedek yol (emscripten / embind) bunu gerektiriyor. |
+| Büyük / bozuk dosya | Boyut sınırı yoktu. | **EKLENDİ:** STEP / IGES 80 MB, DXF ve tekstil JSON 40 MB, fotoğraf 30 MB. Bozuk DXF / STEP / JSON için açık hata zaten vardı (önceki testler). |
+| GitHub Actions | İzin tanımı yoktu (varsayılan jeton yazma yetkili olabilir). `pull_request_target` yok, gizli bilgi kullanılmıyor. | **DÜZELTİLDİ:** `permissions: contents: read`. |
+| Gizli bilgi sızıntısı | Depoda anahtar / parola / jeton taraması | Yok. |
+| `postMessage` | İşçi mesajları yalnız kendi işçilerinden. Eski React Native görüntüleyicisinde (`viewerHtml.js`, web sitesinde kullanılmıyor) kaynak denetimi yoktu. | Kaynak denetimi eklendi. |
+| Adres satırı | Yalnız `?ws=makine` karşılaştırılıyor, sayfaya yazılmıyor. | Sorun yok. |
+
+**Kalan riskler ve sınırlar.**
+- **Başlık tabanlı politika yok.** GitHub Pages özel HTTP başlığı vermiyor: `frame-ancestors` (başka sitenin uygulamayı çerçeve içinde göstermesi) ve HSTS sayfadan ayarlanamıyor. Uygulamada oturum ya da para işlemi olmadığı için etkisi düşük.
+- **Yerel veriler şifresiz.** Projeler tarayıcıda şifresiz durur. Cihaza erişen biri görebilir; tarayıcı verisi silinirse projeler gider (dışa aktarma ile yedek alınmalı).
+- **`'unsafe-eval'` açık.** OCCT yedek yolu için gerekli. Uygulama kodunda eval'e giden kullanıcı verisi yok.
+- **Kapsam dışı.** Fuzz testi yalnız tarayıcı emülasyonunda yapıldı; profesyonel sızma testi değildir.
+

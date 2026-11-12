@@ -34,7 +34,7 @@ const tmp = (name, text) => { const p = path.join(OUT, 'tmp_' + name); fs.writeF
 // test gövdesi: hata olursa ekran görüntüsü + toplanan sayfa hataları
 const T = (title, area, fn, meta = {}) => { if (only.length && !only.some((o) => area.toLowerCase().startsWith(o.toLowerCase()))) return; return R.test(title, async () => {
   const a = await app(meta.view || DESK);
-  try { expect(!a.net.missing.length, 'Kütüphane dosyası bulunamadı: ' + a.net.missing[0]); await fn(a); const errs = a.errors.filter((e) => !(meta.allowErr || []).some((re) => re.test(e))); expect(!errs.length, 'Sayfa hataları: ' + errs.slice(0, 3).join(' | ')); }
+  try { expect(!a.net.missing.length, 'Kütüphane dosyası bulunamadı: ' + a.net.missing[0]); await fn(a); expect(!a.net.external.length, 'Dış siteye istek: ' + a.net.external.slice(0, 3).join(', ')); const errs = a.errors.filter((e) => !(meta.allowErr || []).some((re) => re.test(e))); expect(!errs.length, 'Sayfa hataları: ' + errs.slice(0, 3).join(' | ')); }
   catch (e) { e.shot = await shot(a.page, area + '_' + title); throw e; }
   finally { await close(a); }
 }, { area }); };
@@ -403,7 +403,7 @@ async function txApp(view = PHONE) {
 }
 const TX = (title, fn, view) => { if (only.length && !only.some((o) => 'T-Tekstil'.toLowerCase().startsWith(o.toLowerCase()))) return; return R.test(title, async () => {
   const a = await txApp(view);
-  try { await fn(a); expect(!a.errors.length, 'Sayfa hataları: ' + a.errors.slice(0, 3).join(' | ')); }
+  try { await fn(a); expect(!a.errors.length, 'Sayfa hataları: ' + a.errors.slice(0, 3).join(' | ')); expect(!a.net.external.length, 'Dış siteye istek: ' + a.net.external.slice(0, 3).join(', ')); }
   catch (e) { e.shot = await shot(a.page, 'T_' + title.slice(0, 40)); throw e; } finally { await close(a); }
 }, { area: 'T-Tekstil' }); };
 const A = (page, a, extra = '') => page.locator(`[data-a="${a}"]${extra}`).first().click();

@@ -2,9 +2,9 @@
 // Hesap fea.js / fea2.js'tedir (işçide). Kurulum ve sonuç özetleri projeyle kaydedilir; sonuç alanları bellekte tutulur.
 // api: { parts() → [{ id, name, matId }], items() → [{ id, name, tris }], geoHash(), getFem(), setFem(o), draw(spec), enter(), leave(),
 //        render(), toast(m), name(), saveText(text, name) }
-import * as X from './fea2.js?v=20261112t';
+import * as X from './fea2.js?v=20261112u';
 
-const V = '20261112t';
+const V = '20261112u';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 3) => (v == null || !isFinite(v) ? '—' : Math.abs(v) >= 1e5 || (Math.abs(v) < 1e-3 && v !== 0) ? v.toExponential(d - 1).replace('.', ',') : (+v.toPrecision(d + 1)).toLocaleString('tr-TR', { maximumFractionDigits: 6 }));
 const FACES = [['-y', 'Alt yüz (−Y)'], ['+y', 'Üst yüz (+Y)'], ['-x', 'Sol yüz (−X)'], ['+x', 'Sağ yüz (+X)'], ['-z', 'Arka yüz (−Z)'], ['+z', 'Ön yüz (+Z)']];

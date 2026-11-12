@@ -1,8 +1,8 @@
 // 3B önizleme için kalıp ↔ vücut ölçü karşılaştırması (geometrik; fiziksel değil).
 // Giysi çevresi kalıp parçalarının DİKİŞ çizgisinden ölçülür: "yan dikiş" kenarı olan beden parçaları,
 // kumaş katlı parça × 2, adetli parça × adet; ön ortada "orta çizgi" varsa pat (üst üste binme) ölçüye katılmaz; pens payları düşülür.
-import * as C from '../curve.js?v=20261112k';
-import * as P from '../woven/pattern.js?v=20261112k';
+import * as C from '../curve.js?v=20261112u';
+import * as P from '../woven/pattern.js?v=20261112u';
 
 // y düzeyinde çokgenin yatay kesitleri (x aralıkları)
 function spansAt(pts, y) {

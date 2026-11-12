@@ -31,7 +31,7 @@ npx playwright install chromium
 cd .. && E2E_LIBS=$PWD/.e2e-libs/node_modules PLAYWRIGHT_MODULE=$PWD/.e2e-libs/node_modules/playwright node tests/e2e/run.mjs
 ```
 
-`E2E_LIBS` verilmezse sayfa kütüphaneleri internetten (unpkg) yükler. Yerel kopya, testleri internetten bağımsız ve tekrarlanabilir yapar; sürümler `index.html` içindeki importmap ile aynıdır.
+Sayfalar 3B kütüphanelerini depodaki `vendor/` kopyalarından yükler (12.11.2026'dan beri dış siteden kod yüklenmez); `E2E_LIBS` artık gerekmez, yalnız eski bir sürümü test ederken unpkg isteklerini yerel kopyaya yönlendirmek için kullanılır. E2E her senaryoda dış siteye istek atılmadığını denetler. `vendor/` kopyalarının npm paketleriyle aynı olduğu CI'daki "Üçüncü taraf kütüphane bütünlüğü" işinde (`tools/vendor-check.mjs`) sınanır.
 
 ## Katmanlar
 

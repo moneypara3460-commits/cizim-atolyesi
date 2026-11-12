@@ -66,6 +66,9 @@ export async function openApp(browser, baseUrl, view = {}) {
     net.local++;
     return route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: fs.readFileSync(f) });
   });
+  // güvenlik: uygulama dış siteye istek atmamalı (kütüphaneler vendor/ içinde)
+  net.external = [];
+  ctx.on('request', (r) => { const u = r.url(); if (/^https?:\/\//.test(u) && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(u)) net.external.push(u); });
   const page = await ctx.newPage();
   const errors = [], logs = [];
   page.on('pageerror', (e) => errors.push(String(e.message || e)));

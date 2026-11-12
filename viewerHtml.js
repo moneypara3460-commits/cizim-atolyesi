@@ -164,6 +164,8 @@ addEventListener('resize', function () {
 });
 
 window.addEventListener('message', function (e) {
+  // yalnız kapsayan uygulamadan (aynı kaynak ya da React Native WebView) gelen mesajlar
+  if (e.origin && e.origin !== 'null' && e.origin !== location.origin) return;
   if (e.data && e.data.cmd === 'parts') window.updateParts(e.data.payload);
 });
 

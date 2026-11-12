@@ -8,7 +8,7 @@
 // Bütün hareketler takımın REFERANS noktası (kumandada ofseti ölçülen sanal uç / köşe) için hesaplanır;
 // simülasyon ve G-kodu aynı hareket listesini kullanır.
 // İlk sürüm: C ekseni, Y ekseni, canlı takım, punta, karşı iş mili YOK (yetenek bayrakları false; arayüz açıkça yazar).
-import { matKeyFor, ascii, fmt } from './cam.js?v=20261112t';
+import { matKeyFor, ascii, fmt } from './cam.js?v=20261112u';
 
 const EPS = 1e-9, D2R = Math.PI / 180;
 const hyp = Math.hypot, clamp = (v, a, b) => Math.max(a, Math.min(b, v));

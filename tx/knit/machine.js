@@ -6,7 +6,7 @@
 //   3. knitout (açık iğne düzeyi biçim, CMU) — V yataklı elektronik makine; yerleşik yapısal benzetimle denetlenir.
 // Stoll (M1plus / .sin), Shima Seiki (APEX / .dat), Steiger vb. yerel biçimler kapalı ve lisanslıdır: ÜRETİLMEZ.
 // Profil, kullanıcı gerçek makinede numune örüp doğrulayana kadar "doğrulanmamış" sayılır; çıktılar "yalnız numune için" başlığı taşır.
-import { STITCHES, get, getC, validateChart } from './chart.js?v=20261112k';
+import { STITCHES, get, getC, validateChart } from './chart.js?v=20261112u';
 
 export const MACHINE_KINDS = {
   hand: 'Ev tipi el örgü makinesi (tek plaka, isteğe bağlı ribana plakası)',

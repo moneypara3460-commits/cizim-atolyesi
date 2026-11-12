@@ -1,6 +1,6 @@
 // Bağımlılıksız küçük vektör PDF yazıcı. Koordinatlar mm (içeride pt'ye çevrilir: 1 mm = 72 / 25,4 pt).
 // Yazı tipi: PDF'in yerleşik Helvetica'sı; Türkçe harfler (ğ Ğ ş Ş ı İ) özel kodlamayla (Differences) eşlenir.
-import * as C from './curve.js?v=20261112k';
+import * as C from './curve.js?v=20261112u';
 
 export const PT = 72 / 25.4;
 // WinAnsi dışındaki Türkçe glifler → kullanılmayan kodlar

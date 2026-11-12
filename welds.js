@@ -9,7 +9,7 @@
 // 3) Kaynak sırası önerisi (alt şase → dikmeler → üst şase → çaprazlar → tamamlayıcı), grup içinde karşılıklı dengeli sıra
 // Kaynak ölçüsü (a / s) kullanıcı girmezse BİLİNMİYOR kabul edilir; sarf hesabına katılmaz, tahmin uydurulmaz.
 
-import { Mesh, frameWorldMembers, frameJoints, torchAccess, triTri, closestOnTri } from './mfgcheck.js?v=20261112t';
+import { Mesh, frameWorldMembers, frameJoints, torchAccess, triTri, closestOnTri } from './mfgcheck.js?v=20261112u';
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];

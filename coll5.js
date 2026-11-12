@@ -2,8 +2,8 @@
 // KAPSAM (kullanıcıya da gösterilir): takım kesici kısım, takım sapı, takım tutucu, iş mili burnu (eş eksenli silindirler);
 // bağlama (ayna / punta silindiri, mengene çeneleri kutusu), tabla yüzü (düzlem); bitmiş parça (üçgen ağ).
 // KAPSAM DIŞI: makine gövdesi, kapak, döner tabla / beşik gövdesi, takım değiştirici, ara stok (tutucu kontrolünde bitmiş parça kullanılır).
-import { dot, add, sub, mul, norm, unit } from './kin.js?v=20261112t';
-import { stockBox } from './cam5.js?v=20261112t';
+import { dot, add, sub, mul, norm, unit } from './kin.js?v=20261112u';
+import { stockBox } from './cam5.js?v=20261112u';
 
 export const COVERAGE = {
   checked: ['Takım kesici kısım ↔ bağlama ve tabla', 'Takım sapı ↔ parça, bağlama, tabla', 'Takım tutucu ↔ parça, bağlama, tabla', 'İş mili burnu ↔ parça, bağlama, tabla', 'Hızlı harekette takım ↔ parça', 'Küresel uçta yüzeye dalma (gouge)', 'Doğrusal ve döner eksen limitleri, erişilemeyen takım yönleri'],

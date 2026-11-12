@@ -2,7 +2,7 @@
 // takım yolu (2B X-Z ve 3B), malzeme kaldırma simülasyonu, G-kodu, hata / güvenlik uyarıları, OCCT doğrulaması.
 // Hesap: lathe.js (saf). Simülasyon ve G-kodu aynı hareket listesini kullanır.
 // api: { THREE, group, hideModel(on), fit(box), render(), toast(m), saveBlob(b, n), name(), parts() → parça listesi, occt(op, args) }
-import * as L from './lathe.js?v=20261112t';
+import * as L from './lathe.js?v=20261112u';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 2) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));

@@ -2,8 +2,8 @@
 // Her post'un yetenekleri açıkça tanımlıdır; desteklenmeyen işlem (ör. TCP'siz kontrolcüye eş zamanlı 5 eksen) ve
 // çarpışma / limit ihlali olan yol için G-kodu ÜRETİLMEZ (hata fırlatılır).
 // Hiçbir post belirli bir makinede doğrulanmamıştır: program başlığında yazar.
-import { fmt, ascii } from './cam.js?v=20261112t';
-import { norm, sub } from './kin.js?v=20261112t';
+import { fmt, ascii } from './cam.js?v=20261112u';
+import { norm, sub } from './kin.js?v=20261112u';
 
 export const POSTS5 = {
   fanuc_tcp: { name: 'Fanuc 30i / 31i-B5 (TCP: G43.4)', rot: [2], p32: true, sim4: false, sim5: true, tcp: true, ext: 'nc', cm: '()',

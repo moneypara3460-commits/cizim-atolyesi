@@ -5,8 +5,8 @@
 // Yazı (15): "Piece Name:", "Size:", "Quantity:", "Material:", "Units: METRIC". Kenar adları DXF'e taşınmaz (biçimde yok).
 // UYARI: Biçim tanımı izlenerek yazıldı ve bu modülün kendi okuyucusuyla gidiş-dönüş test edildi; Gerber / Lectra / Optitex
 // gibi programlarda içe aktarma DENENMEDİ.
-import * as C from '../curve.js?v=20261112k';
-import * as P from './pattern.js?v=20261112k';
+import * as C from '../curve.js?v=20261112u';
+import * as P from './pattern.js?v=20261112u';
 
 const TOL = 0.05;
 const UNITS = { mm: { insunits: 4, k: 1 }, cm: { insunits: 5, k: 0.1 }, inch: { insunits: 1, k: 1 / 25.4 } };

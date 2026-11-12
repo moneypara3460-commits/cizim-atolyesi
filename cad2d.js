@@ -1,12 +1,12 @@
 // 2B Çizim (AutoCAD tarzı) — tam ekran çizim alanı.
 // Kullanım: openCad2D({ onExtrude(draw), onClose() })  draw: kroki biçimi (sketch.js / validateDraw)
-import { fmtNum } from './logic.js?v=20261112t';
-import { validateDraw } from './sketch.js?v=20261112t';
+import { fmtNum } from './logic.js?v=20261112u';
+import { validateDraw } from './sketch.js?v=20261112u';
 import {
   arcFrom3, trimEntity, extendEntity, offsetEntity, filletLines, transformEntity, moveFn, rotateFn, mirrorFn,
   stretchToLength, setRadius, matchDims, applyDims, findHatchRegion, hatchSegs, pointInPoly, rdimParts, rdimText, angDimFrom, adimParts, adimText, adimTextPos, mapPoints, arrayRect, arrayPolar, snapPoints, nearestOn, closedLoops, toDXF, parseDXF, dimLine, dimParts, dimText, arcSpan, arcEnds, entBBox, dist, normA, ACI,
-} from './cad2d-geom.js?v=20261112t';
-import { openPhotoImport } from './photoimport.js?v=20261112t';
+} from './cad2d-geom.js?v=20261112u';
+import { openPhotoImport } from './photoimport.js?v=20261112u';
 
 const KEY = 'cizim:2d';
 const CSS = `
@@ -858,8 +858,9 @@ export function openCad2D(opts = {}) {
   const photoIn = document.createElement('input');
   photoIn.type = 'file'; photoIn.accept = 'image/*';
   photoIn.addEventListener('change', () => {
-    const f = photoIn.files && photoIn.files[0];
+    let f = photoIn.files && photoIn.files[0];
     photoIn.value = '';
+    if (f && f.size > 30 * 1024 * 1024) { setHint('Fotoğraf çok büyük (en çok 30 MB).', true); f = null; }
     if (f) importPhoto(f);
   });
   function importPhoto(f) {
@@ -899,6 +900,7 @@ export function openCad2D(opts = {}) {
   fileIn.addEventListener('change', () => {
     const f = fileIn.files && fileIn.files[0];
     if (!f) return;
+    if (f.size > 40 * 1024 * 1024) { setHint('DXF dosyası çok büyük (en çok 40 MB).', true); fileIn.value = ''; return; }
     f.text().then((txt) => {
       const r = parseDXF(txt);
       if (!r.ents.length) { setHint('DXF içinde okunabilir çizgi / daire / yay bulunamadı.', true); return; }

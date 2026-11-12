@@ -157,6 +157,14 @@ t('11. Makine projeleri ile ayrılık: tekstil modülleri (tx/ ve alt klasörler
   }
 });
 
+t('Güvenlik: __proto__ / constructor anahtarlı içe aktarma reddedilir; prototip kirlenmez', () => {
+  const p = M.createProject({ name: 'G', type: 'woven' });
+  const raw = JSON.stringify(p).replace('"sizeTables":[]', '"sizeTables":[{"__proto__":{"kirli":1},"id":"x"}]');
+  assert.throws(() => M.migrate(raw), /geçersiz alan adı: __proto__/);
+  assert.throws(() => M.migrate(JSON.stringify({ ...p, collection: { ...p.collection, constructor: { prototype: { kirli: 1 } } } })), /geçersiz alan adı: constructor/);
+  assert.equal(({}).kirli, undefined);
+});
+
 for (const [name, fn] of tests) {
   try { await fn(); console.log('ok   ', name); }
   catch (e) { fail++; console.log('FAIL ', name, '\n     ', String(e.message).split('\n')[0]); }

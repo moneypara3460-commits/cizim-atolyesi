@@ -1,27 +1,27 @@
 // Tekstil ve Moda çalışma alanı — arayüz (Aşama 1: ortak proje altyapısı).
 // Hesap ve doğrulama tx/model.js'te; burada yalnız gösterim ve düzenleme.
 // Makine ve Mühendislik alanının hiçbir dosyasını içe aktarmaz.
-import * as M from './model.js?v=20261112k';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112k';
-import { TEMPLATES, VIEWS } from './drawing.js?v=20261112k';
-import { openSketchEditor } from './sketch-ui.js?v=20261112k';
-import { SETS, defaultParams } from './woven/blocks.js?v=20261112k';
-import { openPatternEditor } from './woven/pattern-ui.js?v=20261112k';
-import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112k';
-import { sizeTable as gradeTable } from './woven/grade.js?v=20261112k';
-import { TEMPLATES as KTPL, validateChart } from './knit/chart.js?v=20261112k';
-import { KNIT_PIECES, gradeKnit, widthOf } from './knit/shape.js?v=20261112k';
-import { openChartEditor } from './knit/chart-ui.js?v=20261112k';
-import { PRESETS, allCounts } from './materials.js?v=20261112k';
-import { openMarkerEditor } from './woven/marker-ui.js?v=20261112k';
-import * as MC from './knit/machine.js?v=20261112k';
-import * as FIT from './sim3d/fit.js?v=20261112k';
-import * as DR from './sim3d/drape.js?v=20261112k';
-import { open3D, fitScene, drapeScene } from './sim3d/view3d.js?v=20261112k';
-import { OP_MACHINES, OP_TEMPLATES, opsSummary } from './production.js?v=20261112k';
-import { productionPDF } from './production-pdf.js?v=20261112k';
-import { writeAAMA } from './woven/dxf-aama.js?v=20261112k';
-import { saveBlob, safeName } from './download.js?v=20261112k';
+import * as M from './model.js?v=20261112u';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112u';
+import { TEMPLATES, VIEWS } from './drawing.js?v=20261112u';
+import { openSketchEditor } from './sketch-ui.js?v=20261112u';
+import { SETS, defaultParams } from './woven/blocks.js?v=20261112u';
+import { openPatternEditor } from './woven/pattern-ui.js?v=20261112u';
+import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112u';
+import { sizeTable as gradeTable } from './woven/grade.js?v=20261112u';
+import { TEMPLATES as KTPL, validateChart } from './knit/chart.js?v=20261112u';
+import { KNIT_PIECES, gradeKnit, widthOf } from './knit/shape.js?v=20261112u';
+import { openChartEditor } from './knit/chart-ui.js?v=20261112u';
+import { PRESETS, allCounts } from './materials.js?v=20261112u';
+import { openMarkerEditor } from './woven/marker-ui.js?v=20261112u';
+import * as MC from './knit/machine.js?v=20261112u';
+import * as FIT from './sim3d/fit.js?v=20261112u';
+import * as DR from './sim3d/drape.js?v=20261112u';
+import { open3D, fitScene, drapeScene } from './sim3d/view3d.js?v=20261112u';
+import { OP_MACHINES, OP_TEMPLATES, opsSummary } from './production.js?v=20261112u';
+import { productionPDF } from './production-pdf.js?v=20261112u';
+import { writeAAMA } from './woven/dxf-aama.js?v=20261112u';
+import { saveBlob, safeName } from './download.js?v=20261112u';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -387,7 +387,7 @@ function tabSizes() {
       <label class="f" style="flex:2 1 200px"><span>Kaynak / standart (zorunlu)</span><input data-f="${f}.source" value="${esc(t.source)}" class="${t.source.trim() ? '' : 'bad'}" placeholder="ör. Marka A 2026 tablosu, kendi ölçüm"></label></div>
       <div class="row"><label class="f"><span>Bedenler (virgülle)</span><input data-f="${f}.sizes" data-t="list" value="${esc(t.sizes.join(', '))}"></label></div>
       <div class="scroll"><table><tr><th>Ölçü (cm)</th>${t.sizes.map((s) => `<th>${esc(s)}</th>`).join('')}<th></th></tr>
-      ${Object.entries(t.measures).map(([mn, row]) => `<tr><td style="min-width:130px"><input data-a-rename="${i}" data-old="${esc(mn)}" value="${esc(mn)}"></td>${t.sizes.map((s) => `<td><input data-f="${f}.measures.${encodeURIComponent(mn)}.${encodeURIComponent(s)}" data-t="cm" value="${num(row[s] / 10)}" inputmode="decimal"></td>`).join('')}<td><button class="danger" data-a="del-meas" data-i="${i}" data-v="${esc(mn)}">×</button></td></tr>`).join('')}
+      ${Object.entries(t.measures).map(([mn, row]) => `<tr><td style="min-width:130px"><input data-a-rename="${i}" data-old="${esc(mn)}" value="${esc(mn)}"></td>${t.sizes.map((s) => `<td><input data-f="${f}.measures.${encKey(mn)}.${encKey(s)}" data-t="cm" value="${num(row[s] / 10)}" inputmode="decimal"></td>`).join('')}<td><button class="danger" data-a="del-meas" data-i="${i}" data-v="${esc(mn)}">×</button></td></tr>`).join('')}
       </table></div>
       <div class="row"><input id="nm-${i}" placeholder="yeni ölçü adı (ör. Kol boyu)"><button data-a="add-meas" data-i="${i}">+ Ölçü</button></div></div>`;
   });
@@ -468,7 +468,7 @@ function productionCards(pr, i) {
     <div class="scroll"><table><tr><th>Kalem</th>${szs.map((z) => `<th>${esc(z || '—')}</th>`).join('')}</tr>${lbs.map((lb, k) => `<tr><td>${esc(lb)}${sh.perSize[szs[0]].lines[k].note ? `<div class="small">${esc(sh.perSize[szs[0]].lines[k].note)}</div>` : ''}</td>${szs.map((z) => { const v = sh.perSize[z].lines[k].value; return `<td>${v == null ? '<span class="small">—</span>' : num(v, 2)}</td>`; }).join('')}</tr>`).join('')}</table></div>
     ${miss.length ? `<div class="issue uyarı">⚠ Hesaplanmayan kalemler var — eksik: ${esc(miss.join('; '))}</div>` : ''}${szs.some((z) => sh.perSize[z].estimated) ? '<div class="small">Maliyette tahmini değerler var (hesaplanan tüketim, şablon süreleri ya da tahmini malzeme kartı).</div>' : ''}</div>`;
   const sizes = pr.sizes.length ? pr.sizes : szs.filter(Boolean);
-  h += `<div class="card"><h3>Sipariş ve malzeme ihtiyacı</h3>${sizes.length ? `<div class="row">${sizes.map((z) => `<label class="f"><span>${esc(z)} adet</span><input data-f="${f}.order.${encodeURIComponent(z)}" data-t="num" inputmode="numeric" value="${num(pr.order[z], 0)}" style="width:70px"></label>`).join('')}${cI('wastePct', 'Fire (%)', 'ör. 3')}</div>` : '<div class="small">Önce ürüne beden seç (Koleksiyon) ya da kalıp ekle.</div>'}
+  h += `<div class="card"><h3>Sipariş ve malzeme ihtiyacı</h3>${sizes.length ? `<div class="row">${sizes.map((z) => `<label class="f"><span>${esc(z)} adet</span><input data-f="${f}.order.${encKey(z)}" data-t="num" inputmode="numeric" value="${num(pr.order[z], 0)}" style="width:70px"></label>`).join('')}${cI('wastePct', 'Fire (%)', 'ör. 3')}</div>` : '<div class="small">Önce ürüne beden seç (Koleksiyon) ya da kalıp ekle.</div>'}
     ${sh.requirement.lines.length && sh.requirement.units ? `<div class="scroll"><table><tr><th>Malzeme</th><th>Net</th><th>Fire dahil</th><th>Tutar</th></tr>${sh.requirement.lines.map((l) => `<tr><td>${esc(l.name)}</td><td>${num(l.net, 2)} ${esc(l.unit)}</td><td><b>${num(l.qty, 2)} ${esc(l.unit)}</b></td><td>${l.cost == null ? '—' : num(l.cost, 2)}</td></tr>`).join('')}</table></div><div class="small">${sh.requirement.units} adet · toplam malzeme ${sh.requirement.total == null ? '— (eksik fiyat / tüketim)' : num(sh.requirement.total, 2) + ' ' + esc(cur)}</div>` : ''}
     ${sh.requirement.problems.filter((x) => !/sipariş adedi/.test(x) || sizes.length).map((x) => `<div class="issue uyarı">⚠ ${esc(x)}</div>`).join('')}</div>`;
   return h;
@@ -496,12 +496,18 @@ function tabTools() {
 }
 
 /* ---------- düzenleme ---------- */
+// Güvenlik: yol parçaları kullanıcı verisinden gelebilir (ör. beden adı) → __proto__ / constructor / prototype
+// yazılamaz (prototip kirletme), ara nesneler yalnız düz nesne / dizi olabilir.
+const BAD_KEY = new Set(['__proto__', 'constructor', 'prototype']);
 function setPath(obj, path, val) {
   const ks = path.split('.').map(decodeURIComponent);
+  if (ks.some((k) => BAD_KEY.has(k))) throw new Error('Geçersiz alan adı');
   let o = obj;
-  for (let i = 0; i < ks.length - 1; i++) { if (o[ks[i]] == null) o[ks[i]] = {}; o = o[ks[i]]; }
+  for (let i = 0; i < ks.length - 1; i++) { if (!Object.prototype.hasOwnProperty.call(o, ks[i]) || o[ks[i]] == null) o[ks[i]] = {}; o = o[ks[i]]; if (typeof o !== 'object') throw new Error('Geçersiz alan yolu'); }
   o[ks.at(-1)] = val;
 }
+// yol parçası kodlama: nokta da kodlanır (beden adı "1.5" gibi olabilir)
+const encKey = (k) => encodeURIComponent(k).replace(/\./g, '%2E');
 function readInput(el) {
   const t = el.dataset.t, v = el.value;
   if (t === 'num') return parseNum(v);
@@ -509,7 +515,7 @@ function readInput(el) {
   if (t === 'bool') return v === '' ? null : v === '1';
   if (t === 'ref') return v === '' ? null : v;
   if (t === 'textnull') return v.trim() === '' ? null : v.trim();
-  if (t === 'list') return [...new Set(v.split(',').map((s) => s.trim()).filter(Boolean))];
+  if (t === 'list') return [...new Set(v.split(',').map((s) => s.trim()).filter((s) => s && !BAD_KEY.has(s)))];   // __proto__ gibi adlar beden olamaz
   return v;
 }
 document.addEventListener('input', (e) => {
@@ -532,7 +538,8 @@ document.addEventListener('change', (e) => {
   if (el.id === 'gr-table') { S.gradeTable = el.value; S.gradeSizes = null; return render(); }
   if (el.dataset.aRename !== undefined) {
     const t = S.p.sizeTables[+el.dataset.aRename], nm = el.value.trim(), old = el.dataset.old;
-    if (nm && nm !== old && !(nm in t.measures)) { t.measures = Object.fromEntries(Object.entries(t.measures).map(([k, v]) => [k === old ? nm : k, v])); dirty(); }
+    if (BAD_KEY.has(nm)) { toast('Bu ad kullanılamaz'); return render(); }
+    if (nm && nm !== old && !Object.prototype.hasOwnProperty.call(t.measures, nm)) { t.measures = Object.fromEntries(Object.entries(t.measures).map(([k, v]) => [k === old ? nm : k, v])); dirty(); }
     return render();
   }
   if (!S.p || !el.dataset.f) return;
@@ -567,7 +574,7 @@ document.addEventListener('click', async (e) => {
       case 'dxf-in': {
         const prod = $('pt-prod')?.value || null, size = ($('pt-size')?.value ?? $('pt-size-free')?.value ?? '').trim();
         const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.dxf,application/dxf,text/plain';
-        inp.onchange = async () => { try { const r = M.importDXF(p, await inp.files[0].text(), { product: prod, size }); dirty(); render(); toast(`${r.pieces.length} parça (${r.units})${r.warnings.length ? ' · ⚠ ' + r.warnings.join('; ') : ''}`); } catch (er) { toast('⚠ ' + er.message); } };
+        inp.onchange = async () => { try { if (inp.files[0].size > 40 * 1024 * 1024) throw new Error('Dosya çok büyük (en çok 40 MB)'); const r = M.importDXF(p, await inp.files[0].text(), { product: prod, size }); dirty(); render(); toast(`${r.pieces.length} parça (${r.units})${r.warnings.length ? ' · ⚠ ' + r.warnings.join('; ') : ''}`); } catch (er) { toast('⚠ ' + er.message); } };
         inp.click(); return;
       }
       case 'dxf-out': {
@@ -576,7 +583,7 @@ document.addEventListener('click', async (e) => {
       }
       case 'import': {
         const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
-        inp.onchange = async () => { try { const q = await store.importJSON(await inp.files[0].text()); toast('İçe aktarıldı: ' + q.name); render(); } catch (er) { toast('⚠ ' + er.message); } };
+        inp.onchange = async () => { try { if (inp.files[0].size > 40 * 1024 * 1024) throw new Error('Dosya çok büyük (en çok 40 MB)'); const q = await store.importJSON(await inp.files[0].text()); toast('İçe aktarıldı: ' + q.name); render(); } catch (er) { toast('⚠ ' + er.message); } };
         inp.click(); return;
       }
       case 'home': await flush(); S.view = 'home'; S.p = null; return render();

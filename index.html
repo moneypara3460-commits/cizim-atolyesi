@@ -2,6 +2,8 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ya+bdWCON6SrW1jvwcsA6M5n/HLI9LZqCEi/bBHwr8w=' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#0f172a">
 <title>Çizim Atölyesi</title>
@@ -65,10 +67,10 @@
 </style>
 <script type="importmap">
 { "imports": {
-  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-  "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.6.0/build/index.module.js",
-  "three-bvh-csg": "https://unpkg.com/three-bvh-csg@0.0.7/build/index.module.js"
+  "three": "./vendor/three@0.160.0/build/three.module.js",
+  "three/addons/": "./vendor/three@0.160.0/examples/jsm/",
+  "three-mesh-bvh": "./vendor/three-mesh-bvh@0.6.0/build/index.module.js",
+  "three-bvh-csg": "./vendor/three-bvh-csg@0.0.7/build/index.module.js"
 } }
 </script>
 </head>
@@ -136,6 +138,6 @@
 </div>
 
 <script src="./ws.js?v=20261112a"></script>
-<script type="module" src="./app.js?v=20261112t"></script>
+<script type="module" src="./app.js?v=20261112u"></script>
 </body>
 </html>

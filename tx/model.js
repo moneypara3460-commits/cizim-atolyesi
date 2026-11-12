@@ -4,18 +4,18 @@
 // Dokuma / konfeksiyon ve triko ayrı alt şemalardır (woven, knit); yalnız koleksiyon, ürün, renk, beden,
 // malzeme, föy ve revizyon ortaktır. Bkz. docs/TEKSTIL-MIMARI.md
 
-import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112k';
-import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112k';
-import { buildSet } from './woven/blocks.js?v=20261112k';
-import { gradeGroup } from './woven/grade.js?v=20261112k';
-import { fromTemplate, validateChart } from './knit/chart.js?v=20261112k';
-import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112k';
-import { PRESETS, presetEstimated, wovenConsumption, knitStitchTotal, yarnConsumption } from './materials.js?v=20261112k';
-import { evaluate as evalMarker, makeMarker } from './woven/marker.js?v=20261112k';
-import { fromTemplate as machineFromTemplate, machineStatus } from './knit/machine.js?v=20261112k';
-import { drapeVerdict } from './sim3d/drape.js?v=20261112k';
-import { templateOps, validateOps, costSheet, orderRequirement } from './production.js?v=20261112k';
-import { readAAMA } from './woven/dxf-aama.js?v=20261112k';
+import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112u';
+import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112u';
+import { buildSet } from './woven/blocks.js?v=20261112u';
+import { gradeGroup } from './woven/grade.js?v=20261112u';
+import { fromTemplate, validateChart } from './knit/chart.js?v=20261112u';
+import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112u';
+import { PRESETS, presetEstimated, wovenConsumption, knitStitchTotal, yarnConsumption } from './materials.js?v=20261112u';
+import { evaluate as evalMarker, makeMarker } from './woven/marker.js?v=20261112u';
+import { fromTemplate as machineFromTemplate, machineStatus } from './knit/machine.js?v=20261112u';
+import { drapeVerdict } from './sim3d/drape.js?v=20261112u';
+import { templateOps, validateOps, costSheet, orderRequirement } from './production.js?v=20261112u';
+import { readAAMA } from './woven/dxf-aama.js?v=20261112u';
 
 export const KIND = 'cizim.textile';
 export const SCHEMA = 1;
@@ -493,6 +493,8 @@ export function migrate(raw) {
   let p = typeof raw === 'string' ? JSON.parse(raw) : clone(raw);
   if (!p || typeof p !== 'object' || p.kind !== KIND) throw new Error('Bu dosya bir Çizim Atölyesi tekstil projesi değil');
   if (!Number.isInteger(p.schema) || p.schema < 0) throw new Error('Şema sürümü okunamadı');
+  // Güvenlik: içe aktarılan dosyada nesne anahtarı olarak __proto__ / constructor / prototype kabul edilmez
+  (function noBad(o, d = 0) { if (!o || typeof o !== 'object' || d > 40) return; for (const k of Object.keys(o)) { if (k === '__proto__' || k === 'constructor' || k === 'prototype') throw new Error('Dosyada geçersiz alan adı: ' + k); noBad(o[k], d + 1); } })(p);
   if (p.schema > SCHEMA) throw new Error(`Bu proje daha yeni bir sürümle kaydedilmiş (şema ${p.schema}); uygulamayı güncelle`);
   // şema 0 (taslak, adlandırılmamış alanlar) → 1
   if (p.schema === 0) {

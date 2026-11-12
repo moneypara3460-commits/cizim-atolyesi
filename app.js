@@ -13,33 +13,33 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
-} from './logic.js?v=20261112t';
-import { openSketch } from './sketch.js?v=20261112t';
-import { to3MF, toSTEP } from './export3d.js?v=20261112t';
-import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261112t';
-import { openCad2D } from './cad2d.js?v=20261112t';
-import { openCutOpt } from './cutopt-ui.js?v=20261112t';
-import { createMfg } from './mfg-ui.js?v=20261112t';
-import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261112t';
-import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261112t';
-import { analyzeWeight } from './weight.js?v=20261112t';
-import { createWeightUI, fkg } from './weight-ui.js?v=20261112t';
-import { createCostUI } from './cost-ui.js?v=20261112t';
-import { planReport as weldReport } from './welds.js?v=20261112t';
-import { altCons as weldAltCons } from './weld-ui.js?v=20261112t';
-import { groupKey } from './cutopt.js?v=20261112t';
-import { createAssemblyUI } from './assembly-ui.js?v=20261112t';
-import { createSimUI } from './sim-ui.js?v=20261112t';
-import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261112t';
-import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261112t';
-import { createCamUI } from './cam-ui.js?v=20261112t';
-import { createCam5UI } from './cam5-ui.js?v=20261112t';
-import { createLatheUI } from './lathe-ui.js?v=20261112t';
-import { machinePose } from './kin.js?v=20261112t';
-import { createOcctUI } from './occt-ui.js?v=20261112t';
-import { createFemUI } from './fem-ui.js?v=20261112t';
+} from './logic.js?v=20261112u';
+import { openSketch } from './sketch.js?v=20261112u';
+import { to3MF, toSTEP } from './export3d.js?v=20261112u';
+import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261112u';
+import { openCad2D } from './cad2d.js?v=20261112u';
+import { openCutOpt } from './cutopt-ui.js?v=20261112u';
+import { createMfg } from './mfg-ui.js?v=20261112u';
+import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261112u';
+import { drawWeldSymbol, METHODS as WELD_METHODS } from './welds.js?v=20261112u';
+import { analyzeWeight } from './weight.js?v=20261112u';
+import { createWeightUI, fkg } from './weight-ui.js?v=20261112u';
+import { createCostUI } from './cost-ui.js?v=20261112u';
+import { planReport as weldReport } from './welds.js?v=20261112u';
+import { altCons as weldAltCons } from './weld-ui.js?v=20261112u';
+import { groupKey } from './cutopt.js?v=20261112u';
+import { createAssemblyUI } from './assembly-ui.js?v=20261112u';
+import { createSimUI } from './sim-ui.js?v=20261112u';
+import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261112u';
+import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261112u';
+import { createCamUI } from './cam-ui.js?v=20261112u';
+import { createCam5UI } from './cam5-ui.js?v=20261112u';
+import { createLatheUI } from './lathe-ui.js?v=20261112u';
+import { machinePose } from './kin.js?v=20261112u';
+import { createOcctUI } from './occt-ui.js?v=20261112u';
+import { createFemUI } from './fem-ui.js?v=20261112u';
 
-const APP_VER = '20261112t'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
+const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
 const RAD = Math.PI / 180;
 const clamp = (v) => (isFinite(v) && v > 0 ? Math.min(v, 100000) : 1); // en fazla 100 m
@@ -2216,7 +2216,8 @@ var occtUI = createOcctUI({   // var: yeniden çizim sırasında çağrılırsa 
   saveText: (text, name) => saveBlob(new Blob([text], { type: 'application/step' }), name),
   pickFile: (accept) => new Promise((res) => {
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = accept;
-    inp.onchange = () => res(inp.files && inp.files[0] ? inp.files[0] : null);
+    // güvenlik / kararlılık: çok büyük dosya sekmeyi kilitlemesin (STEP / IGES en çok 80 MB)
+    inp.onchange = () => { const f = inp.files && inp.files[0]; if (f && f.size > 80 * 1024 * 1024) { toast('Dosya çok büyük (en çok 80 MB)'); res(null); return; } res(f || null); };
     inp.click();
   }),
   name: () => (projName || 'model').replace(/[^\w\-çğıöşüÇĞİÖŞÜ ]+/g, '_'),

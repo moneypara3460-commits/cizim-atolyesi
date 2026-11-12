@@ -2,6 +2,8 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-9O2maei8oM745VFoonVlM0zsrE6j7B7sL9acazHNVPY=' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#0f172a">
 <title>Çizim Atölyesi · Tekstil ve Moda</title>
@@ -64,10 +66,10 @@
 <div id="toast"></div>
 <script type="importmap">
 { "imports": {
-  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  "three": "./vendor/three@0.160.0/build/three.module.js",
+  "three/addons/": "./vendor/three@0.160.0/examples/jsm/"
 } }
 </script>
-<script type="module" src="./tx/app.js?v=20261112k"></script>
+<script type="module" src="./tx/app.js?v=20261112u"></script>
 </body>
 </html>
