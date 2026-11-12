@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Çizim Atölyesi Tanıtım</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Düzen fikri: sayfa bir teknik resim paftası. Ölçü çizgili başlıklar, mono etiketler, altta antet. */
+:root{
+  --paper:#eef1f4; --sheet:#f8fafb; --ink:#14212d; --muted:#51616f; --rule:#b9c4cd;
+  --blue:#1d4f91; --brass:#a8700d; --ok:#1c7a4a; --shot:#0d1524;
+  --display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0e151c; --sheet:#141d26; --ink:#e6edf2; --muted:#9aaab7; --rule:#33424f;
+  --blue:#7fb2f0; --brass:#e0b354; --ok:#5fcf95; --shot:#070b12; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --paper:#0e151c; --sheet:#141d26; --ink:#e6edf2; --muted:#9aaab7; --rule:#33424f;
+  --blue:#7fb2f0; --brass:#e0b354; --ok:#5fcf95; --shot:#070b12; color-scheme:dark;}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 17px/1.6 var(--body);
+  background-image:linear-gradient(var(--rule) 1px,transparent 1px),linear-gradient(90deg,var(--rule) 1px,transparent 1px);
+  background-size:40px 40px;background-position:-1px -1px;}
+body::before{content:"";position:fixed;inset:0;background:var(--paper);opacity:.9;z-index:-1}
+img{max-width:100%;display:block}
+a{color:var(--blue)}
+a:focus-visible,summary:focus-visible{outline:3px solid var(--brass);outline-offset:3px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.mono{font-family:var(--mono);font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+
+/* üst şerit */
+.top{border-bottom:1px solid var(--ink);background:var(--sheet)}
+.top .wrap{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:center;justify-content:space-between;padding-top:12px;padding-bottom:12px}
+.brand{font:800 26px/1 var(--display);letter-spacing:.03em;text-transform:uppercase}
+.top nav{display:flex;flex-wrap:wrap;gap:6px 18px}
+.top nav a{font-family:var(--mono);font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink);text-decoration:none;border-bottom:1px solid transparent}
+.top nav a:hover{border-bottom-color:var(--ink)}
+
+/* açılış */
+.hero{padding:56px 0 48px}
+.hero .wrap{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,.65fr);gap:40px;align-items:center}
+h1{font:800 clamp(40px,8.2vw,104px)/.9 var(--display);text-transform:uppercase;margin:14px 0 0;letter-spacing:.005em;text-wrap:balance;overflow-wrap:anywhere}
+.hero .wrap>*{min-width:0}
+h1 em{font-style:normal;color:var(--blue)}
+.dim{display:flex;align-items:center;gap:10px;margin:22px 0 26px;font-family:var(--mono);font-size:13px;color:var(--muted);max-width:390px}
+.dim::before,.dim::after{content:"";flex:1;height:1px;background:var(--muted)}
+.dim span{white-space:nowrap}
+.dim b{display:block;width:1px;height:14px;background:var(--muted)}
+.lede{font-size:20px;line-height:1.5;max-width:34em;margin:0 0 28px}
+.cta{display:flex;flex-wrap:wrap;gap:12px}
+.btn{display:inline-block;padding:14px 22px;border:1.5px solid var(--ink);font:600 16px/1 var(--body);text-decoration:none;color:var(--ink);background:var(--sheet)}
+.btn.main{background:var(--blue);border-color:var(--blue);color:var(--sheet)}
+.btn:hover{transform:translate(-2px,-2px);box-shadow:4px 4px 0 var(--ink)}
+@media (prefers-reduced-motion:reduce){.btn:hover{transform:none}}
+.phone{background:var(--shot);border:1.5px solid var(--ink);border-radius:26px;padding:8px;box-shadow:10px 10px 0 var(--rule);max-width:300px;margin:0 auto;width:100%}
+.phone img{border-radius:19px;width:100%;aspect-ratio:9/16;object-fit:cover;object-position:top}
+.phone.low img{object-position:bottom}
+.phone.full img{aspect-ratio:auto}
+figure{margin:0}
+figcaption{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:center;margin-top:12px;letter-spacing:.03em}
+
+/* sayılar */
+.facts{border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);background:var(--sheet)}
+.facts .wrap{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:0}
+.fact{padding:22px 20px;border-left:1px solid var(--rule)}
+.fact:first-child{border-left:0}
+.fact strong{display:block;font:800 46px/1 var(--display);font-variant-numeric:tabular-nums}
+.fact span{display:block;font-size:14px;color:var(--muted);margin-top:6px;line-height:1.35}
+
+/* bölümler */
+section{padding:72px 0}
+.kicker{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--blue);margin-bottom:14px}
+.kicker::after{content:"";flex:1;height:1px;background:var(--rule)}
+h2{font:800 clamp(34px,5.4vw,60px)/.95 var(--display);text-transform:uppercase;margin:0 0 18px;text-wrap:balance}
+h3{font:600 20px/1.25 var(--body);margin:0 0 8px}
+p{margin:0 0 14px;max-width:62ch}
+.intro{font-size:19px;color:var(--muted);max-width:60ch;margin-bottom:36px}
+
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;border:1px solid var(--ink);background:var(--sheet)}
+.two>div{padding:28px}
+.two>div+div{border-left:1px solid var(--ink)}
+.two .mono{margin-bottom:10px}
+.two ul{margin:0;padding-left:20px}
+.two li{margin-bottom:8px}
+
+/* iş akışı */
+.step{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:48px;align-items:center;padding:40px 0;border-top:1px solid var(--rule)}
+.step:nth-of-type(even){grid-template-columns:300px minmax(0,1fr)}
+.step:nth-of-type(even) figure{order:-1}
+.num{font:800 84px/.8 var(--display);color:var(--rule);font-variant-numeric:tabular-nums}
+.step h3{font:800 34px/1 var(--display);text-transform:uppercase;margin:6px 0 12px}
+.step ul{margin:0;padding:0;list-style:none}
+.step li{padding:8px 0 8px 22px;border-top:1px dashed var(--rule);position:relative}
+.step li::before{content:"";position:absolute;left:2px;top:19px;width:10px;height:1.5px;background:var(--blue)}
+pre.gcode{margin:0;padding:18px;background:var(--shot);color:#cfe1f5;font:400 13.5px/1.65 var(--mono);border:1.5px solid var(--ink);overflow-x:auto}
+pre.gcode i{font-style:normal;color:#7f93a8}
+
+/* modüller */
+.mods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--ink);border-left:1px solid var(--ink);background:var(--sheet)}
+.mod{padding:22px;border-right:1px solid var(--ink);border-bottom:1px solid var(--ink)}
+.mod .mono{color:var(--brass);margin-bottom:8px}
+.mod p{font-size:15.5px;color:var(--muted);margin:0;line-height:1.5}
+.tag{display:inline-block;font-family:var(--mono);font-size:11.5px;padding:2px 7px;border:1px solid currentColor;margin-top:12px;letter-spacing:.03em}
+.tag.ok{color:var(--ok)} .tag.wait{color:var(--brass)}
+
+/* tekstil */
+.tex{display:grid;grid-template-columns:minmax(0,1fr) 260px 260px;gap:32px;align-items:start}
+.tex ul{padding-left:20px;margin:0}
+.tex li{margin-bottom:8px}
+
+/* kullanıcılar */
+.who{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.who>div{border-top:3px solid var(--ink);padding-top:16px}
+.who p{color:var(--muted);font-size:16px}
+
+/* güven */
+.trust{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:36px 48px}
+.trust h3{display:flex;gap:10px;align-items:baseline}
+.trust h3 span{font-family:var(--mono);font-size:13px;color:var(--ok)}
+.trust p{color:var(--muted);font-size:16px}
+table{width:100%;border-collapse:collapse;font-size:15.5px;background:var(--sheet)}
+.tbl{overflow-x:auto;border:1px solid var(--ink);margin-top:36px}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom-color:var(--ink)}
+tr:last-child td{border-bottom:0}
+td.n{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+
+/* sınırlar */
+.limits{border:1.5px solid var(--brass);background:var(--sheet);padding:28px}
+.limits ul{margin:0;padding-left:20px;columns:2;column-gap:40px}
+.limits li{margin-bottom:10px;break-inside:avoid}
+
+/* hikâye */
+.story{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:48px}
+blockquote{margin:0;font:600 clamp(28px,4vw,44px)/1.05 var(--display);text-transform:uppercase;color:var(--blue);text-wrap:balance}
+
+/* sss */
+.faq{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px 48px}
+.faq h3{font-size:18px}
+.faq p{color:var(--muted);font-size:16px}
+
+/* antet */
+footer{border-top:1px solid var(--ink);background:var(--sheet);padding:36px 0 48px}
+.antet{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;border:1.5px solid var(--ink)}
+.antet>div{padding:10px 14px;border-left:1px solid var(--ink);min-width:0}
+.antet>div:first-child{border-left:0}
+.antet small{display:block;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.antet b{font:800 22px/1.15 var(--display);text-transform:uppercase;letter-spacing:.02em;overflow-wrap:anywhere}
+.antet span{font-size:15px;font-weight:500;overflow-wrap:anywhere}
+.fine{font-size:13.5px;color:var(--muted);margin-top:16px;max-width:80ch}
+
+@media (max-width:860px){
+  .hero .wrap,.story,.trust,.faq,.two{grid-template-columns:minmax(0,1fr)}
+  .two>div+div{border-left:0;border-top:1px solid var(--ink)}
+  .facts .wrap{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .fact:nth-child(3){border-left:0}
+  .fact:nth-child(n+3){border-top:1px solid var(--rule)}
+  .step,.step:nth-of-type(even){grid-template-columns:minmax(0,1fr);gap:24px}
+  .step:nth-of-type(even) figure{order:0}
+  .mods{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tex{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tex>div{grid-column:1/-1}
+  .who{grid-template-columns:minmax(0,1fr)}
+  .limits ul{columns:1}
+  .antet{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .antet>div:nth-child(3){border-left:0}
+  .antet>div:nth-child(n+3){border-top:1px solid var(--ink)}
+  section{padding:52px 0}
+}
+@media (max-width:520px){
+  .mods{grid-template-columns:minmax(0,1fr)}
+  .hero{padding-top:36px}
+  .top nav{display:none}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">Çizim Atölyesi</div>
+    <nav aria-label="Sayfa içi">
+      <a href="#akis">Nasıl çalışır</a>
+      <a href="#moduller">Modüller</a>
+      <a href="#tekstil">Tekstil</a>
+      <a href="#guven">Güven</a>
+      <a href="#sss">Sorular</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <div>
+      <div class="mono">Tarayıcıda çalışan CAD/CAM · kurulum yok</div>
+      <h1>Çizimden <em>tezgâha</em>, telefondan.</h1>
+      <div class="dim" aria-hidden="true"><b></b><span>390 px · bir telefon ekranı</span><b></b></div>
+      <p class="lede">Çizim Atölyesi ile parçanı ölçüyle tasarlar, dayanımını kontrol eder, CNC tezgâhın nasıl keseceğini izler ve G-kodunu indirirsin. Hepsi bir internet tarayıcısında, telefonda bile çalışır.</p>
+      <div class="cta">
+        <a class="btn main" href="../">Uygulamayı aç</a>
+        <a class="btn" href="../tekstil.html">Tekstil alanını aç</a>
+      </div>
+    </div>
+    <figure>
+      <div class="phone full"><img src="img/cad.jpg" alt="Uygulamada flanş örneği: ölçü kutuları ve altında 3B flanş modeli"></div>
+      <figcaption>Hazır örnek: Ø120 flanş, 5 cıvata deliği</figcaption>
+    </figure>
+  </div>
+</div>
+
+<div class="facts">
+  <div class="wrap">
+    <div class="fact"><strong>0</strong><span>kurulum. Adresi açman yeter.</span></div>
+    <div class="fact"><strong>443</strong><span>otomatik testten her değişiklikte geçer.</span></div>
+    <div class="fact"><strong>11</strong><span>torna operasyonu, vida açma dahil.</span></div>
+    <div class="fact"><strong>3 → 5</strong><span>eksen CNC freze desteği.</span></div>
+  </div>
+</div>
+
+<section id="neden">
+  <div class="wrap">
+    <div class="kicker">Neden var</div>
+    <h2>Pahalı program ve güçlü bilgisayar şart olmasın.</h2>
+    <p class="intro">Bir parçayı çizip CNC tezgâhta üretmek için kullanılan profesyonel yazılımlar yüksek lisans ücreti ve güçlü bir bilgisayar ister. Küçük atölye, öğrenci ve kalıpçı çoğu zaman bunlara ulaşamaz.</p>
+    <div class="two">
+      <div>
+        <div class="mono">Alışılmış yol</div>
+        <ul>
+          <li>Yıllık lisans ücreti</li>
+          <li>Kurulum ve güçlü bilgisayar</li>
+          <li>Çizim, analiz ve CAM için ayrı programlar</li>
+          <li>Tekstil kalıbı için yine ayrı bir yazılım</li>
+        </ul>
+      </div>
+      <div>
+        <div class="mono">Çizim Atölyesi</div>
+        <ul>
+          <li>Şu an ücretsiz, hesap açmadan kullanılır</li>
+          <li>Tarayıcıda açılır; telefon, tablet, eski dizüstü yeter</li>
+          <li>Çizim, analiz, simülasyon ve G-kodu tek yerde</li>
+          <li>Makine ve tekstil çalışma alanı aynı sitede</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="akis" style="padding-top:0">
+  <div class="wrap">
+    <div class="kicker">Nasıl çalışır</div>
+    <h2>Dört adımda parçadan programa.</h2>
+
+    <div class="step">
+      <div>
+        <div class="num">01</div>
+        <h3>Tasarla</h3>
+        <p>Ölçüyü yazarak kutu, silindir, boru ekle; kroki çizip kalınlık ver ya da döndür. Delik aç, kenar yuvarla, parçaları birleştir.</p>
+        <ul>
+          <li>2B çizim: çizgi, yay, ölçü, kırp, uzat, ofset, DXF</li>
+          <li>3B: süpürme, loft, kabuk, dişli, sac metal, profil iskelet</li>
+          <li>Montaj: menteşe, kayar eklem, dişli ve kayış bağıntısı</li>
+          <li>Kâğıttaki çizimin fotoğrafından 2B çizim</li>
+        </ul>
+      </div>
+      <figure>
+        <div class="phone"><img src="img/cad.jpg" alt="Ölçü sekmesi: çap 120 mm, yükseklik 12 mm; altında flanş modeli"></div>
+        <figcaption>Ölçüyü yaz, model anında güncellensin</figcaption>
+      </figure>
+    </div>
+
+    <div class="step">
+      <div>
+        <div class="num">02</div>
+        <h3>Kontrol et</h3>
+        <p>Üretmeden önce parçanın taşıyıp taşımayacağını, ne kadar tutacağını ve üretilebilir olup olmadığını gör.</p>
+        <ul>
+          <li>Sonlu eleman analizi: gerilme, sehim, emniyet katsayısı</li>
+          <li>Titreşim frekansları, ısı ve doğrusal burkulma</li>
+          <li>Ağırlık, ağırlık merkezi ve maliyet</li>
+          <li>Üretilebilirlik kontrolü, kaynak planı, kesim listesi</li>
+        </ul>
+      </div>
+      <figure>
+        <pre class="gcode" aria-label="Analiz doğrulama örneği"><i>// ders kitabı formülüyle karşılaştırma</i>
+konsol kiriş sehimi   fark %0,1
+kiriş gerilmesi       fark %1,4
+1. doğal frekans      fark %0,2
+ısıl uzama            fark %1,2
+öz ağırlık            fark %0,4</pre>
+        <figcaption>Analiz sonuçları bilinen çözümlerle sınanır</figcaption>
+      </figure>
+    </div>
+
+    <div class="step">
+      <div>
+        <div class="num">03</div>
+        <h3>Simüle et</h3>
+        <p>Takımın parçayı nasıl keseceğini 3B olarak izle. Uygulama fazla kesimi, kalan malzemeyi ve çarpışmayı kendisi denetler.</p>
+        <ul>
+          <li>Freze: kaba, ince, 3B yüzey, delik delme</li>
+          <li>Torna: dış ve iç çap, alın, kanal, kesme, konik, vida</li>
+          <li>4 ve 5 eksende takım tutucu ve bağlama çarpışması</li>
+          <li>Hata varsa G-kodu indirme kapanır</li>
+        </ul>
+      </div>
+      <figure>
+        <div class="phone low"><img src="img/torna.jpg" alt="Torna simülasyonu: aynaya bağlı mil ve kesici takım; fazla kesim yok, kalan malzeme yok"></div>
+        <figcaption>Örnek mil Ø50: fazla kesim yok, kalan malzeme yok</figcaption>
+      </figure>
+    </div>
+
+    <div class="step">
+      <div>
+        <div class="num">04</div>
+        <h3>Üret</h3>
+        <p>Tezgâhının kumandasına uygun G-kodunu indir, USB belleğe at, makineye yükle. İş kartı PDF olarak hazır gelir.</p>
+        <ul>
+          <li>Freze: Fanuc, Haas, Mach3 / Mach4, LinuxCNC, GRBL</li>
+          <li>5 eksen: Fanuc 30i (TCP), Siemens 840D, LinuxCNC</li>
+          <li>Torna: Fanuc 0i-T uyumlu, G76 ve G32 vida</li>
+          <li>Ayrıca STL, 3MF, STEP, DXF ve PDF teknik resim</li>
+        </ul>
+      </div>
+      <figure>
+        <div class="phone full"><img src="img/gkod.jpg" alt="Üretilen torna G-kodu: O2001 örnek kademeli mil M24, takım listesi ve altında 3B takım yolu"></div>
+        <figcaption>O2001 · kademeli mil M24 · 7 takım</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="moduller" style="padding-top:0">
+  <div class="wrap">
+    <div class="kicker">Modüller</div>
+    <h2>Uygulamanın içinde neler var.</h2>
+    <p class="intro">Her modül ayrı test edilir. Etiketler bugünkü gerçek durumu gösterir.</p>
+    <div class="mods">
+      <div class="mod"><div class="mono">2B</div><h3>2B çizim</h3><p>AutoCAD tarzı çizim araçları, ölçülendirme, DXF alma ve verme, fotoğraftan çizim.</p><span class="tag ok">ÇALIŞIYOR</span></div>
+      <div class="mod"><div class="mono">3B</div><h3>3B modelleme</h3><p>Temel şekiller, kroki, süpürme, loft, kabuk, delik deseni, yuvarlama ve pah.</p><span class="tag ok">ÇALIŞIYOR</span></div>
+      <div class="mod"><div class="mono">B-Rep</div><h3>Hassas katı motoru</h3><p>Open CASCADE çekirdeği: kesin birleştirme ve çıkarma, doğrulama, onarma, STEP ve IGES.</p><span class="tag ok">ÇALIŞIYOR</span></div>
+      <div class="mod"><div class="mono">Montaj</div><h3>Montaj ve mekanizma</h3><p>Eşleşmeler, eklemler, dişli çark, motor, çarpışma kontrolü, montaj sırası ve patlatılmış görünüm.</p><span class="tag ok">ÇALIŞIYOR</span></div>
+      <div class="mod"><div class="mono">FEA</div><h3>Mühendislik analizi</h3><p>Statik, modal, ısıl ve burkulma analizi; yorulma ve aşınma tahmini; PDF test raporu.</p><span class="tag ok">ÇALIŞIYOR · DOĞRUSAL</span></div>
+      <div class="mod"><div class="mono">Üretim</div><h3>Üretim hesapları</h3><p>Ağırlık, maliyet, üretilebilirlik, kaynak planı, profil kesim optimizasyonu, sac açınımı.</p><span class="tag ok">ÇALIŞIYOR</span></div>
+      <div class="mod"><div class="mono">CNC · 3 eksen</div><h3>Freze</h3><p>Yüzey alma, kaba boşaltma, ince işleme, delme; talaş simülasyonu ve iş kartı.</p><span class="tag wait">TEZGÂH DENEMESİ BEKLİYOR</span></div>
+      <div class="mod"><div class="mono">CNC · 4 / 5 eksen</div><h3>Çok eksenli freze</h3><p>İndeksli ve eş zamanlı işleme, makine kinematiği, hacimsel simülasyon.</p><span class="tag wait">TEZGÂH DENEMESİ BEKLİYOR</span></div>
+      <div class="mod"><div class="mono">CNC · Torna</div><h3>Torna</h3><p>2 eksen X/Z, 11 operasyon, takım kütüphanesi, uç yarıçapı telafisi, 3B simülasyon.</p><span class="tag wait">TEZGÂH DENEMESİ BEKLİYOR</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="tekstil" style="padding-top:0">
+  <div class="wrap">
+    <div class="kicker">Tekstil ve Moda</div>
+    <h2>Aynı sitede ikinci bir atölye.</h2>
+    <div class="tex">
+      <div>
+        <p class="intro" style="margin-bottom:18px">Koleksiyondan üretim föyüne kadar konfeksiyon ve triko işini tek projede toplar.</p>
+        <ul>
+          <li>Teknik moda çizimi: 13 giysi şablonu, 15 detay</li>
+          <li>Kalıp: gömlek ve etek blokları, dikiş payı, çıt, pens</li>
+          <li>Dikiş eşleşmesi kontrolü: omuz omuza, kol oyuğu kol başına</li>
+          <li>Beden yayma (grading) ve kişiye özel ölçü</li>
+          <li>Kesim planı: otomatik yerleşim, verim ve fire</li>
+          <li>Triko: örgü şeması, ilmek hesabı, makine programı (knitout)</li>
+          <li>Kumaş, iplik, aksesuar ve bedene göre maliyet</li>
+          <li>Üretim föyü PDF, 1:1 kalıp çıktısı, DXF-AAMA</li>
+        </ul>
+      </div>
+      <figure>
+        <div class="phone"><img src="img/kalip.jpg" alt="Gömlek M beden kalıbı: ön beden, arka beden, kol, yaka, manşet ve cep; altında dikiş eşleşmeleri listesi"></div>
+        <figcaption>Gömlek kalıbı · beden M · 7 dikiş eşleşmesi</figcaption>
+      </figure>
+      <figure>
+        <div class="phone"><img src="img/kesim.jpg" alt="Kesim planı: 12 parça 150 cm enindeki kumaşa yerleştirilmiş; boy 133,5 cm, verim yüzde 69"></div>
+        <figcaption>Kesim planı · boy 133,5 cm · verim %69,0</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="kimler" style="padding-top:0">
+  <div class="wrap">
+    <div class="kicker">Kimler için</div>
+    <h2>Üç kullanıcı, tek araç.</h2>
+    <div class="who">
+      <div><h3>Küçük CNC atölyeleri</h3><p>Lisans ücreti ödemeden parça çizer, takım yolunu ve süreyi görür, tezgâha uygun G-kodunu alır.</p></div>
+      <div><h3>Öğrenciler ve okullar</h3><p>Meslek lisesi ve üniversite öğrencisi kendi telefonunda CAD, analiz ve CNC mantığını baştan sona dener.</p></div>
+      <div><h3>Tekstil ve kalıp atölyeleri</h3><p>Kalıbı çizer, bedenlere yayar, kumaşa yerleştirir ve metrajı, maliyeti, föyü çıkarır.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="guven" style="padding-top:0">
+  <div class="wrap">
+    <div class="kicker">Güven</div>
+    <h2>Her değişiklik sınanır, veri cihazda kalır.</h2>
+    <div class="trust">
+      <div><h3>Otomatik test <span>✓</span></h3><p>Kod her güncellendiğinde 443 hesap testi ve 36 tarayıcı testi kendiliğinden çalışır. Biri bile başarısız olursa hata görünür.</p></div>
+      <div><h3>Simülasyon = G-kodu <span>✓</span></h3><p>Simülasyon ve G-kodu aynı takım yolundan üretilir. Tornada üretilen kod geri okunur ve simülasyonla hareket hareket karşılaştırılır.</p></div>
+      <div><h3>Veri sende <span>✓</span></h3><p>Sunucu ve hesap yok. Çizimlerin tarayıcında saklanır, sen indirmedikçe hiçbir yere gönderilmez. Uygulama kişisel veri toplamaz.</p></div>
+      <div><h3>Güvenlik taraması <span>✓</span></h3><p>Uygulama dış siteden kod yüklemez; kütüphaneler depoda tutulur ve her seferinde doğrulanır. İçerik güvenlik politikası açık, zararlı dosya girişleri sınandı.</p></div>
+    </div>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Denetim</th><th>Sonuç</th><th>Ne gösterir</th></tr></thead>
+        <tbody>
+          <tr><td>Hesap testleri</td><td class="n">443 / 443</td><td>Geometri, CAM, torna, analiz ve tekstil hesapları doğru sonuç verir</td></tr>
+          <tr><td>Tarayıcı testleri</td><td class="n">36 / 36</td><td>Gerçek kullanıcı adımları baştan sona çalışır</td></tr>
+          <tr><td>Geometri çekirdeği</td><td class="n">geçti</td><td>Katılar geçerli, hacimler kesin</td></tr>
+          <tr><td>Kütüphane bütünlüğü</td><td class="n">geçti</td><td>Depodaki kopyalar resmî paketlerle birebir aynı</td></tr>
+          <tr><td>Dış bağlantı</td><td class="n">0</td><td>Uygulama başka siteye istek atmaz</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="fine">Sonuçlar 12 Kasım 2026 tarihli. Testler bilgisayarda telefon ekranı taklit edilerek koşulur.</p>
+  </div>
+</section>
+
+<section id="durum" style="padding-top:0">
+  <div class="wrap">
+    <div class="kicker">Açık konuşalım</div>
+    <h2>Bugün neredeyiz, ne eksik.</h2>
+    <div class="limits">
+      <ul>
+        <li><strong>Gerçek tezgâhta henüz denenmedi.</strong> Freze, 5 eksen ve torna programları yalnız simülasyonla doğrulandı. Her programın başlığında bu yazar.</li>
+        <li><strong>İlk çalıştırma dikkat ister.</strong> Kod, yetkin bir operatör gözetiminde, tek blok ve düşük ilerlemeyle denenmelidir.</li>
+        <li><strong>Analiz doğrusaldır.</strong> Kalıcı şekil değişimi, temas ve cıvata ön yükü hesaplanmaz. Sonuçlar mühendis onayının yerini tutmaz.</li>
+        <li><strong>Tekstilde 3B görünüm bir önizlemedir.</strong> Kumaş dökümü gerçek ölçümle karşılaştırılmadan doğrulanmış sayılmaz.</li>
+        <li><strong>Bazı biçimler yok.</strong> IGES dışa aktarma ve Stoll / Shima örgü makinesi dosyaları üretilmez.</li>
+        <li><strong>Sıradaki adım pilot kullanım.</strong> Gerçek bir atölyede ve bir okulda deneme, ardından arayüz iyileştirmesi.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="hikaye" style="padding-top:0">
+  <div class="wrap">
+    <div class="kicker">Hikâye</div>
+    <div class="story">
+      <blockquote>Bilgisayarım yoktu. Uygulamayı baştan sona telefonda geliştirdim.</blockquote>
+      <div>
+        <p>Çizim Atölyesi'ni Deniz Kuşaklı, İstanbul'da, yapay zekâ desteğiyle ve yalnızca bir telefon kullanarak geliştirdi.</p>
+        <p>Çıkış noktası basit: bir telefonla bu kadar kapsamlı bir yazılım geliştirilebiliyorsa, aynı telefon bir atölyenin ya da bir öğrencinin tasarım ve üretim aracı da olabilir.</p>
+        <p>Hedef, uygulamayı gerçek atölyelerde sınamak ve küçük üreticinin ulaşabildiği bir ürüne dönüştürmek.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="sss" style="padding-top:0">
+  <div class="wrap">
+    <div class="kicker">Sık sorulanlar</div>
+    <h2>Kısa cevaplar.</h2>
+    <div class="faq">
+      <div><h3>Ücretli mi?</h3><p>Şu an tamamı ücretsiz ve hesap açmadan kullanılıyor.</p></div>
+      <div><h3>İnternet olmadan çalışır mı?</h3><p>Sayfa bir kez yüklendikten sonra hesaplar cihazında yapılır. İlk açılış ve hassas katı motorunun ilk indirilmesi (10–25 MB) için internet gerekir.</p></div>
+      <div><h3>Hangi cihazlarda açılır?</h3><p>Güncel bir tarayıcısı olan telefon, tablet ve bilgisayarda. Büyük modellerde telefonda işlem birkaç saniye sürebilir.</p></div>
+      <div><h3>Çizimlerim nerede duruyor?</h3><p>Kendi tarayıcında. Proje dosyasını indirip yedekleyebilir, başka cihazda açabilirsin.</p></div>
+      <div><h3>Başka programlarla dosya alışverişi var mı?</h3><p>Var: STEP, IGES (alma), DXF, STL, 3MF ve tekstilde DXF-AAMA.</p></div>
+      <div><h3>G-kodunu doğrudan tezgâhta kullanabilir miyim?</h3><p>Kod standart kumandalara göre üretilir ama henüz gerçek tezgâhta denenmedi. İlk parçayı kumanda simülasyonu ve düşük ilerlemeyle çalıştır.</p></div>
+    </div>
+    <div class="cta" style="margin-top:44px">
+      <a class="btn main" href="../">Uygulamayı aç</a>
+      <a class="btn" href="https://github.com/moneypara3460-commits/cizim-atolyesi" target="_blank" rel="noopener">Kaynak kodu gör</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="antet">
+      <div><small>Proje</small><b>Çizim Atölyesi</b></div>
+      <div><small>Geliştiren</small><span>Deniz Kuşaklı</span></div>
+      <div><small>Tarih</small><span>12.11.2026</span></div>
+      <div><small>Ölçek</small><span>1:1 · telefon</span></div>
+    </div>
+    <p class="fine">Ekran görüntüleri uygulamanın kendisinden alınmıştır. Üretilen programlar ve analiz sonuçları yardımcı araçtır; üretimden önce yetkin kişi tarafından kontrol edilmelidir.</p>
+  </div>
+</footer>
+
+</body>
+</html>
