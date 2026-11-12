@@ -1,8 +1,8 @@
 // Kumaş yerleşimi (kesim planı) editörü. Otomatik yerleştirme + elle sürükleme / 180° çevirme; canlı verim ve kontrol.
-import * as C from '../curve.js?v=20261112i';
-import * as P from './pattern.js?v=20261112i';
-import * as MK from './marker.js?v=20261112i';
-import { pdfDoc } from '../pdf.js?v=20261112i';
+import * as C from '../curve.js?v=20261112j';
+import * as P from './pattern.js?v=20261112j';
+import * as MK from './marker.js?v=20261112j';
+import { pdfDoc } from '../pdf.js?v=20261112j';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n1 = (v, d = 1) => (Math.round(v * 10 ** d) / 10 ** d).toFixed(d).replace('.', ',');

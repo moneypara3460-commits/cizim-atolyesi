@@ -4,16 +4,17 @@
 // Dokuma / konfeksiyon ve triko ayrı alt şemalardır (woven, knit); yalnız koleksiyon, ürün, renk, beden,
 // malzeme, föy ve revizyon ortaktır. Bkz. docs/TEKSTIL-MIMARI.md
 
-import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112i';
-import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112i';
-import { buildSet } from './woven/blocks.js?v=20261112i';
-import { gradeGroup } from './woven/grade.js?v=20261112i';
-import { fromTemplate, validateChart } from './knit/chart.js?v=20261112i';
-import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112i';
-import { PRESETS, presetEstimated, wovenConsumption, knitStitchTotal, yarnConsumption } from './materials.js?v=20261112i';
-import { evaluate as evalMarker, makeMarker } from './woven/marker.js?v=20261112i';
-import { fromTemplate as machineFromTemplate, machineStatus } from './knit/machine.js?v=20261112i';
-import { drapeVerdict } from './sim3d/drape.js?v=20261112i';
+import { createSketch, validateSketch, TEMPLATES } from './drawing.js?v=20261112j';
+import { validatePiece, seamCheck, makePiece, edgesFromPoints } from './woven/pattern.js?v=20261112j';
+import { buildSet } from './woven/blocks.js?v=20261112j';
+import { gradeGroup } from './woven/grade.js?v=20261112j';
+import { fromTemplate, validateChart } from './knit/chart.js?v=20261112j';
+import { validateSwatch, computePiece, KNIT_PIECES } from './knit/shape.js?v=20261112j';
+import { PRESETS, presetEstimated, wovenConsumption, knitStitchTotal, yarnConsumption } from './materials.js?v=20261112j';
+import { evaluate as evalMarker, makeMarker } from './woven/marker.js?v=20261112j';
+import { fromTemplate as machineFromTemplate, machineStatus } from './knit/machine.js?v=20261112j';
+import { drapeVerdict } from './sim3d/drape.js?v=20261112j';
+import { templateOps, validateOps, costSheet, orderRequirement } from './production.js?v=20261112j';
 
 export const KIND = 'cizim.textile';
 export const SCHEMA = 1;
@@ -123,12 +124,13 @@ export function addMaterial(p, kind, data = {}) {
   p.library.materials.push(m); return m;
 }
 
+const emptyCosting = () => ({ minuteRate: null, efficiency: null, overheadPct: null, marginPct: null, vatPct: null, wastePct: null, currency: 'TL' });
 export function addProduct(p, { branch, type, name, modelCode = '', season = '' }) {
   if (!PROJECT_TYPES[p.type].branches.includes(branch)) throw new Error(`${PROJECT_TYPES[p.type].label} projesine ${BRANCHES[branch] || branch} ürünü eklenemez`);
   if (!PRODUCT_TYPES[branch][type]) throw new Error('Bu dalda böyle bir ürün türü yok: ' + type);
   const pr = {
     id: nid(p, 'p'), branch, type, name: str(name) || PRODUCT_TYPES[branch][type], modelCode: str(modelCode), season: str(season),
-    colors: [], sizeTable: null, sizes: [], materials: [], techpack: { status: 'taslak', notes: '', ops: [] },
+    colors: [], sizeTable: null, sizes: [], materials: [], techpack: { status: 'taslak', notes: '', ops: [] }, costing: emptyCosting(), order: {},
   };
   p.collection.products.push(pr); return pr;
 }
@@ -353,6 +355,12 @@ export function validate(p) {
     const w = 'Ürün ' + pr.name;
     if (!T.branches.includes(pr.branch)) { E(w, `${BRANCHES[pr.branch] || pr.branch} ürünü ${T.label} projesinde olamaz`); continue; }
     if (!PRODUCT_TYPES[pr.branch]?.[pr.type]) E(w, 'Ürün türü dala uymuyor: ' + pr.type);
+    for (const x of validateOps(pr.techpack?.ops)) (x.level === 'hata' ? E : W)(w, x.msg);
+    if ((pr.techpack?.ops || []).some((o) => o.est)) W(w, 'Operasyon süreleri şablondan (tahmini): firma zaman etüdüyle değiştir');
+    const cg = pr.costing || {};
+    for (const [k, l, lo, hi] of [['minuteRate', 'Dakika ücreti', 0, 1e6], ['efficiency', 'Hat verimi', 1, 100], ['overheadPct', 'Genel gider', 0, 500], ['marginPct', 'Kâr payı', -100, 1000], ['vatPct', 'KDV', 0, 100], ['wastePct', 'Fire', 0, 100]])
+      if (cg[k] != null && !(Number.isFinite(cg[k]) && cg[k] >= lo && cg[k] <= hi)) E(w, `${l} ${lo}–${hi} aralığında olmalı`);
+    for (const [z, q] of Object.entries(pr.order || {})) if (q != null && !(Number.isInteger(q) && q >= 0)) E(w, `Sipariş adedi (${z}) tam sayı olmalı`);
     for (const c of pr.colors) if (!colors.has(c)) E(w, 'Silinmiş renk: ' + c);
     if (pr.sizeTable != null) {
       const t = tables.get(pr.sizeTable);
@@ -449,6 +457,25 @@ export function techpackSummary(p, productId) {
   };
 }
 
+// Aşama 10: operasyon şablonu, maliyet kartı (bedene göre), sipariş malzeme ihtiyacı
+export function applyOpTemplate(p, productId) {
+  const pr = p.collection.products.find((x) => x.id === productId); if (!pr) throw new Error('Ürün yok');
+  pr.techpack.ops = templateOps(pr.type).map((o) => ({ id: nid(p, 'op'), ...o })); return pr.techpack.ops;
+}
+export function addOp(p, productId, { name = '', machine = 'duz', smv = null } = {}) {
+  const pr = p.collection.products.find((x) => x.id === productId); if (!pr) throw new Error('Ürün yok');
+  const o = { id: nid(p, 'op'), name: str(name) || 'Operasyon', machine, smv, est: false }; pr.techpack.ops.push(o); return o;
+}
+export function productionSheet(p, productId) {
+  const pr = p.collection.products.find((x) => x.id === productId); if (!pr) return null;
+  const cons = productConsumption(p, productId) || { sizes: {}, notes: [], errors: [] };
+  const sizes = pr.sizes.length ? pr.sizes : Object.keys(cons.sizes);
+  const perSize = Object.fromEntries((sizes.length ? sizes : ['']).map((z) => [z, costSheet({ matCost: materialCost(p, productId, cons.sizes[z] || null), ops: pr.techpack.ops, c: pr.costing })]));
+  const mats = pr.materials.map((l) => p.library.materials.find((m) => m.id === l.mat)).filter(Boolean);
+  const manual = Object.fromEntries(pr.materials.filter((l) => l.qty != null).map((l) => [l.mat, l.qty]));
+  const req = orderRequirement({ order: pr.order, consumption: cons.sizes, manual, materials: mats, wastePct: pr.costing.wastePct || 0 });
+  return { product: pr, consumption: cons, perSize, requirement: req, opsIssues: validateOps(pr.techpack.ops) };
+}
 /* ---------- göç ve içe aktarma ---------- */
 // Dışarıdan gelen veriyi (yedek dosyası, eski kayıt) güvenle yükler. Daha yeni şema reddedilir.
 export function migrate(raw) {
@@ -464,6 +491,7 @@ export function migrate(raw) {
     p.revisions = p.revisions || []; p.sketches = p.sketches || [];
     p.schema = 1;
   }
+  for (const pr of p.collection?.products || []) { if (!pr.costing) pr.costing = emptyCosting(); if (!pr.order) pr.order = {}; if (!pr.techpack) pr.techpack = { status: 'taslak', notes: '', ops: [] }; if (!Array.isArray(pr.techpack.ops)) pr.techpack.ops = []; }
   if (p.woven && !Array.isArray(p.woven.seams)) p.woven.seams = [];
   if (p.woven && !Array.isArray(p.woven.markers)) p.woven.markers = [];
   p.rev = Number.isInteger(p.rev) ? p.rev : 0;

@@ -99,7 +99,7 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | 7 | Kumaş yerleşimi ve kesim optimizasyonu | Kısıt ihlali sıfır; verim alt sınırla raporlanır | ✅ (12.11.2026) — bkz. bölüm 12 |
 | 8 | Triko makine profilleri ve üretim çıktısı | Doğrulanamayan makine için çıktı yok, gerekçe yazılı (risk 12) | ✅ (12.11.2026) — bkz. bölüm 13 |
 | 9 | 3B giysi ve kumaş / örgü simülasyonu | Önizleme ve fizik ayrı adlandırılır; çözücü analitik testlerle doğrulanır | ✅ (12.11.2026) — bkz. bölüm 14 |
-| 10 | Üretim föyü ve maliyet: işçilik, operasyon sırası, dikiş türü, vektör PDF | Föy projeden üretilir; maliyet varsayımları yazılı | Kısmi: föy özeti, varyant, malzeme maliyeti, tarayıcıdan yazdır / PDF Aşama 1'de var |
+| 10 | Üretim föyü ve maliyet: işçilik, operasyon sırası, dikiş türü, vektör PDF | Föy projeden üretilir; maliyet varsayımları yazılı | ✅ (12.11.2026) — bkz. bölüm 15 |
 | 11 | Uçtan uca tekstil testleri (promptta 1–14 numaralı liste), kalite raporu | Kalite raporuna "Tekstil" bölümü | Aşama 1 testleri var |
 
 ### Eklenen / değiştirilen dosyalar ve bağımlılıklar
@@ -139,6 +139,9 @@ Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (ke
 | `tx/sim3d/drape.js` | Yeni (Aşama 9) | Dökümlülük benzetimi (XPBD), gölge alanı, kalibrasyon, referans karşılaştırma durumu |
 | `tx/sim3d/view3d.js` | Yeni (Aşama 9) | three.js görüntüleyici (ÖNİZLEME etiketli) |
 | `tests/tx-sim3d.test.mjs` | Yeni (Aşama 9) | 7 Node testi |
+| `tx/production.js` | Yeni (Aşama 10) | Operasyon şablonları, SMV özeti, maliyet kartı, sipariş malzeme ihtiyacı |
+| `tx/production-pdf.js` | Yeni (Aşama 10) | Çok sayfalı üretim föyü PDF'i |
+| `tests/tx-production.test.mjs` | Yeni (Aşama 10) | 6 Node testi |
 | `tests/e2e/run.mjs` | Değişti | W (çalışma alanı) ve T (tekstil) senaryoları; makine senaryoları seçim ekranını atlamak için `cizim:workspace = makine` ile başlar |
 
 Yeni dış bağımlılık yok: tarayıcının kendi IndexedDB'si kullanılır. Three.js tekstil tarafında Aşama 9'a kadar yüklenmez.
@@ -630,4 +633,42 @@ Bu aşamada iki ayrı şey var ve arayüzde de ayrı tutuldu.
 - **Süre.** Tek benzetim masaüstünde ~2 s, kalibrasyon (11 benzetim) ~25 s; telefonda daha uzun. Kalibrasyon adım adım çalışır (sayfa donmaz, ilerleme yazılır).
 - **Giysi düzeyinde kumaş fiziği yok.** 3B önizleme geometriktir. Giysinin vücut üstünde dökülmesi, dikiş gerilimi, kırışıklık benzetilmez.
 - **Vücut formu.** Ortalama oranlarla basitleştirilmiştir; gerçek vücut taraması içe aktarılmaz.
+
+## 15. Aşama 10 raporu: üretim föyü ve maliyet (12.11.2026)
+
+**Çalışanlar** (Föy sekmesi).
+- **Operasyon listesi.**
+  - Her operasyonun adı, makine türü (düz, overlok, reçme, ilik, düğme, punteriz, ütü, örgü, remaye, yıkama, kontrol, paket…) ve süresi (dakika, SMV) var. Sıra değiştirilir, silinir.
+  - Gömlek, etek ve triko (kazak / hırka / süveter) için şablon var. Şablon süreleri genel kaba değerlerdir ve **tahmini** işaretlidir; kullanıcı süreyi değiştirince o operasyon tahmini olmaktan çıkar.
+  - Toplam süre ve makine başına süre gösterilir. Doğrulama sekmesi tahmini süre uyarısı verir.
+- **Maliyet kartı (bedene göre).**
+  - Malzeme: hesaplanan tüketim (kesim planı varsa plandan) ya da elle girilen miktar × fiyat.
+  - İşçilik: toplam süre × dakika ücreti / hat verimi.
+  - Genel gider %, birim maliyet, kâr % ile satış fiyatı, isteğe bağlı KDV.
+  - **Eksik girdi varsa o kalem ve sonrası hesaplanmaz.** Eksikler tek tek yazılır (ör. "dakika ücreti girilmedi", "2 operasyonun süresi yok", "Düğme (fiyat yok)").
+- **Sipariş ve malzeme ihtiyacı.** Bedene göre adet ve fire %. Her malzeme için net ihtiyaç, fire dahil ihtiyaç ve tutar. Bir bedende tüketim yoksa açıkça yazılır, toplam uydurulmaz.
+- **Üretim föyü PDF'i** (A4, çok sayfa). Sırasıyla:
+  - Başlık, renkler / varyantlar, ölçü tablosu (kaynağıyla).
+  - Malzeme ve bedene göre tüketim (kaynağı ve varsayımlarıyla), kesim planı özeti.
+  - Operasyon listesi (tahmini süreler işaretli), maliyet tablosu ve eksik girdiler, sipariş ve malzeme ihtiyacı.
+  - "Doğrulanmamış ve açık kalemler": doğrulanmamış makine profili, doğrulanmamış dökümlülük, ürün sorunları. Sonunda "numune ve prova onayı olmadan seri üretime alınmamalı" notu.
+
+**Doğrulama** (`tests/tx-production.test.mjs`, 6 test):
+- **Şablonlar.** Geçerli ve tahmini; gömlek toplamı 15–30 dk.
+- **Maliyet zinciri elle hesapla aynı.** 150 + 20 dk × 3 / %80 = 225 → genel gider %20 = 270 → kâr %30 = 351 → KDV %10 = 386,1.
+- **Eksik girdi.** Kalemler null kalır, eksikler listelenir.
+- **Sipariş ihtiyacı.** = Σ adet × beden tüketimi × (1 + fire); elle miktar önceliklidir.
+- **Model düzeyinde.** Gömlek + kalıp + poplin uçtan uca; doğrulama kuralları (verim aralığı, tam sayı adet); eski kayıtların göçü.
+- **PDF.** Geçerli, çok sayfa, bölümler ve işaretler metinde.
+- **Tarayıcı testi.**
+  - Şablon 16 operasyon tahmini; eksik girdi uyarısı.
+  - Süre düzeltilince "tahmini" kalkar.
+  - Girdiler girilince işçilik ve maliyet zinciri ekrandaki toplam süreden elle hesapla aynı.
+  - 200 adet + %3 fire ile malzeme ihtiyacı, PDF indirilir; doğrulamada hata yok.
+
+**Sınırlar:**
+- **Süreler.** Şablon süreleri sektör ortalaması değildir, yalnız başlangıçtır. Gerçek maliyet için firmanın zaman etüdü (GSD / MTM ya da kronometre) gerekir.
+- **İşçilik kalemleri.** Dakika ücretine işçilik ve makine birlikte girilir; kesim, yıkama gibi dış işlemler ayrı fatura edilmez (operasyon olarak eklenir).
+- **Renk dağılımı.** Sipariş bedene göredir; renk × beden dağılımı ve renge göre farklı malzeme yok.
+- **Kapsam dışı.** Hat dengeleme (operasyonların istasyonlara dağıtımı), kapasite ve termin planı yok. Para birimi tek (TL); kur dönüşümü yok.
 

@@ -1,23 +1,25 @@
 // Tekstil ve Moda çalışma alanı — arayüz (Aşama 1: ortak proje altyapısı).
 // Hesap ve doğrulama tx/model.js'te; burada yalnız gösterim ve düzenleme.
 // Makine ve Mühendislik alanının hiçbir dosyasını içe aktarmaz.
-import * as M from './model.js?v=20261112i';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112i';
-import { TEMPLATES, VIEWS } from './drawing.js?v=20261112i';
-import { openSketchEditor } from './sketch-ui.js?v=20261112i';
-import { SETS, defaultParams } from './woven/blocks.js?v=20261112i';
-import { openPatternEditor } from './woven/pattern-ui.js?v=20261112i';
-import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112i';
-import { sizeTable as gradeTable } from './woven/grade.js?v=20261112i';
-import { TEMPLATES as KTPL, validateChart } from './knit/chart.js?v=20261112i';
-import { KNIT_PIECES, gradeKnit, widthOf } from './knit/shape.js?v=20261112i';
-import { openChartEditor } from './knit/chart-ui.js?v=20261112i';
-import { PRESETS, allCounts } from './materials.js?v=20261112i';
-import { openMarkerEditor } from './woven/marker-ui.js?v=20261112i';
-import * as MC from './knit/machine.js?v=20261112i';
-import * as FIT from './sim3d/fit.js?v=20261112i';
-import * as DR from './sim3d/drape.js?v=20261112i';
-import { open3D, fitScene, drapeScene } from './sim3d/view3d.js?v=20261112i';
+import * as M from './model.js?v=20261112j';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261112j';
+import { TEMPLATES, VIEWS } from './drawing.js?v=20261112j';
+import { openSketchEditor } from './sketch-ui.js?v=20261112j';
+import { SETS, defaultParams } from './woven/blocks.js?v=20261112j';
+import { openPatternEditor } from './woven/pattern-ui.js?v=20261112j';
+import { validatePiece, seamCheck, measure } from './woven/pattern.js?v=20261112j';
+import { sizeTable as gradeTable } from './woven/grade.js?v=20261112j';
+import { TEMPLATES as KTPL, validateChart } from './knit/chart.js?v=20261112j';
+import { KNIT_PIECES, gradeKnit, widthOf } from './knit/shape.js?v=20261112j';
+import { openChartEditor } from './knit/chart-ui.js?v=20261112j';
+import { PRESETS, allCounts } from './materials.js?v=20261112j';
+import { openMarkerEditor } from './woven/marker-ui.js?v=20261112j';
+import * as MC from './knit/machine.js?v=20261112j';
+import * as FIT from './sim3d/fit.js?v=20261112j';
+import * as DR from './sim3d/drape.js?v=20261112j';
+import { open3D, fitScene, drapeScene } from './sim3d/view3d.js?v=20261112j';
+import { OP_MACHINES, OP_TEMPLATES, opsSummary } from './production.js?v=20261112j';
+import { productionPDF } from './production-pdf.js?v=20261112j';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -429,7 +431,7 @@ function tabTechpack() {
   const mt = s.sizeTable;
   return `<div class="row noprint"><select id="fp-sel">${prs.map((x) => `<option value="${x.id}" ${x.id === pr.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
     <select data-f="collection.products.${i}.techpack.status"><option value="taslak" ${pr.techpack.status === 'taslak' ? 'selected' : ''}>Taslak</option><option value="numune" ${pr.techpack.status === 'numune' ? 'selected' : ''}>Numune</option><option value="onaylı" ${pr.techpack.status === 'onaylı' ? 'selected' : ''}>Onaylı</option></select>
-    <button data-a="print">🖨 Yazdır / PDF</button></div>
+    <button data-a="print">🖨 Yazdır / PDF</button><button class="ok" data-a="prod-pdf" data-v="${pr.id}">⬇ Üretim föyü PDF</button></div>
   <div class="card"><h3><span class="sp">Teknik föy · ${esc(H.product)}</span><span class="badge">${esc(H.status)}</span></h3>
     <table><tr><th>Proje</th><td>${esc(H.project)}</td><th>Koleksiyon</th><td>${esc(H.collection) || '—'}</td></tr>
     <tr><th>Model kodu</th><td>${esc(H.modelCode) || '—'}</td><th>Dal / tür</th><td>${esc(H.branch)} · ${esc(H.type)}</td></tr>
@@ -442,9 +444,32 @@ function tabTechpack() {
     ${s.consumption.errors.map((e) => `<div class="issue hata">⛔ ${esc(e)}</div>`).join('')}
     <div class="scroll"><table><tr><th>Beden</th><th>Malzeme</th><th>Tüketim</th><th>Maliyet</th></tr>${Object.entries(s.consumption.sizes).map(([z, mats]) => Object.values(mats).map((c, k) => `<tr><td>${k ? '' : esc(z || '—')}</td><td>${esc(c.name)}${c.estimated ? ' <span class="badge">tahmini</span>' : ''}</td><td>${c.grams != null ? `${num(c.grams, 0)} g (${num(c.lengthM, 0)} m iplik, ${c.stitches} ilmek)` : `${num(c.detail.lengthM, 2)} m kumaş · kesim alanı ${num(c.detail.cutArea / 1e6, 2)} m²${c.detail.weightG ? ` · ${num(c.detail.weightG, 0)} g` : ''}`}</td><td>${k ? '' : (() => { const mc = s.consumption.cost[z]; return mc ? `${num(mc.total, 2)}${mc.complete ? '' : ' <b>eksik</b>'}` : '—'; })()}</td></tr>`).join('')).join('')}</table></div>
     <div class="small">Varsayımlar: ${esc(s.consumption.notes.join(' · '))}. Ürüne elle girilen miktar varsa o kullanılır; yoksa bu hesap.</div></div>` : ''}
+  ${productionCards(pr, i)}
   <div class="card"><h3>Varyantlar (${s.variants.length})</h3><div class="small">${s.variants.map((v) => esc(v.sku)).join(' · ')}</div></div>
   <div class="card"><h3>Üretim notları</h3><textarea data-f="collection.products.${i}.techpack.notes" rows="4">${esc(pr.techpack.notes)}</textarea></div>
   ${s.issues.length ? `<div class="card"><h3>Bu ürünün sorunları</h3>${s.issues.map((x) => `<div class="issue ${x.level}">${x.level === 'hata' ? '⛔' : '⚠'} ${esc(x.msg)}</div>`).join('')}</div>` : ''}`;
+}
+
+// Aşama 10: operasyon listesi, maliyet kartı, sipariş ve malzeme ihtiyacı
+function productionCards(pr, i) {
+  const p = S.p, sh = M.productionSheet(p, pr.id), f = `collection.products.${i}`, os = opsSummary(pr.techpack.ops), cur = pr.costing.currency || 'TL';
+  let h = `<div class="card"><h3>Operasyon listesi (dikim / örgü sırası)</h3><div class="small">Süreler dakika (SMV). Şablon süreleri genel kaba değerlerdir ve "tahmini" işaretlidir; firmanın zaman etüdüyle değiştir (değiştirdiğin süre tahmini olmaktan çıkar).</div>
+    <div class="scroll"><table><tr><th>#</th><th>Operasyon</th><th>Makine</th><th>Dk</th><th></th></tr>${pr.techpack.ops.map((o, k) => `<tr><td>${k + 1}</td><td><input data-f="${f}.techpack.ops.${k}.name" value="${esc(o.name)}" style="min-width:150px"></td>
+      <td><select data-f="${f}.techpack.ops.${k}.machine">${Object.entries(OP_MACHINES).map(([m, l]) => `<option value="${m}" ${m === o.machine ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></td>
+      <td><input data-f="${f}.techpack.ops.${k}.smv" data-t="num" inputmode="decimal" value="${num(o.smv, 2)}" style="width:64px" data-op-est="${i}.${k}">${o.est ? ' <span class="small">tahmini</span>' : ''}</td>
+      <td style="white-space:nowrap"><button data-a="op-up" data-v="${i}.${k}" ${k ? '' : 'disabled'}>↑</button><button class="danger" data-a="op-del" data-v="${i}.${k}">×</button></td></tr>`).join('')}</table></div>
+    <div class="row"><b>Toplam ${num(os.total, 2)} dk</b>${os.missing ? `<span class="issue uyarı">⚠ ${os.missing} operasyonun süresi yok</span>` : ''}</div>
+    <div class="row noprint"><button data-a="op-add" data-v="${pr.id}">+ Operasyon</button>${OP_TEMPLATES[pr.type] ? `<button data-a="op-tpl" data-v="${pr.id}">${pr.techpack.ops.length ? 'Şablonla değiştir' : 'Şablondan doldur'} (${esc(M.PRODUCT_TYPES[pr.branch][pr.type])})</button>` : '<span class="small">Bu tür için şablon yok, elle ekle.</span>'}</div></div>`;
+  const cI = (k, lbl, ph) => `<label class="f"><span>${lbl}</span><input data-f="${f}.costing.${k}" data-t="num" inputmode="decimal" value="${num(pr.costing[k], 2)}" placeholder="${ph}"></label>`;
+  const szs = Object.keys(sh.perSize), lbs = sh.perSize[szs[0]].lines.map((l) => l.label), miss = [...new Set(szs.flatMap((z) => sh.perSize[z].missing))];
+  h += `<div class="card"><h3>Maliyet kartı (${esc(cur)}, bedene göre)</h3><div class="row">${cI('minuteRate', `Dakika ücreti (${esc(cur)} / dk)`, 'işçilik + makine')}${cI('efficiency', 'Hat verimi (%)', 'ör. 70')}${cI('overheadPct', 'Genel gider (%)', 'ör. 25')}${cI('marginPct', 'Kâr (%)', 'ör. 40')}${cI('vatPct', 'KDV (%)', 'isteğe bağlı')}</div>
+    <div class="scroll"><table><tr><th>Kalem</th>${szs.map((z) => `<th>${esc(z || '—')}</th>`).join('')}</tr>${lbs.map((lb, k) => `<tr><td>${esc(lb)}${sh.perSize[szs[0]].lines[k].note ? `<div class="small">${esc(sh.perSize[szs[0]].lines[k].note)}</div>` : ''}</td>${szs.map((z) => { const v = sh.perSize[z].lines[k].value; return `<td>${v == null ? '<span class="small">—</span>' : num(v, 2)}</td>`; }).join('')}</tr>`).join('')}</table></div>
+    ${miss.length ? `<div class="issue uyarı">⚠ Hesaplanmayan kalemler var — eksik: ${esc(miss.join('; '))}</div>` : ''}${szs.some((z) => sh.perSize[z].estimated) ? '<div class="small">Maliyette tahmini değerler var (hesaplanan tüketim, şablon süreleri ya da tahmini malzeme kartı).</div>' : ''}</div>`;
+  const sizes = pr.sizes.length ? pr.sizes : szs.filter(Boolean);
+  h += `<div class="card"><h3>Sipariş ve malzeme ihtiyacı</h3>${sizes.length ? `<div class="row">${sizes.map((z) => `<label class="f"><span>${esc(z)} adet</span><input data-f="${f}.order.${encodeURIComponent(z)}" data-t="num" inputmode="numeric" value="${num(pr.order[z], 0)}" style="width:70px"></label>`).join('')}${cI('wastePct', 'Fire (%)', 'ör. 3')}</div>` : '<div class="small">Önce ürüne beden seç (Koleksiyon) ya da kalıp ekle.</div>'}
+    ${sh.requirement.lines.length && sh.requirement.units ? `<div class="scroll"><table><tr><th>Malzeme</th><th>Net</th><th>Fire dahil</th><th>Tutar</th></tr>${sh.requirement.lines.map((l) => `<tr><td>${esc(l.name)}</td><td>${num(l.net, 2)} ${esc(l.unit)}</td><td><b>${num(l.qty, 2)} ${esc(l.unit)}</b></td><td>${l.cost == null ? '—' : num(l.cost, 2)}</td></tr>`).join('')}</table></div><div class="small">${sh.requirement.units} adet · toplam malzeme ${sh.requirement.total == null ? '— (eksik fiyat / tüketim)' : num(sh.requirement.total, 2) + ' ' + esc(cur)}</div>` : ''}
+    ${sh.requirement.problems.filter((x) => !/sipariş adedi/.test(x) || sizes.length).map((x) => `<div class="issue uyarı">⚠ ${esc(x)}</div>`).join('')}</div>`;
+  return h;
 }
 
 function tabValidation(issues) {
@@ -464,8 +489,7 @@ function tabRevisions() {
 function tabTools() {
   const br = M.PROJECT_TYPES[S.p.type].branches;
   const rows = [];
-  rows.push(['Ortak', [['Üretim föyü (operasyon listesi, dikim sırası) ve ayrıntılı maliyet (işçilik, genel gider, fiyat)', 10]]]);
-  return `<div class="card">✅ Teknik çizim (Aşama 2): "Teknik çizim" sekmesi.${br.includes('woven') ? ' ✅ Dokuma kalıbı (Aşama 3), beden yayma / grading (Aşama 4) ve kumaş yerleşimi / kesim planı (Aşama 7), 3B önizleme (Aşama 9): "Kalıp" sekmesi. ✅ Kumaş dökümlülük benzetimi (Aşama 9): "Malzemeler" sekmesi.' : ''}${br.includes('knit') ? ' ✅ Örgü deseni, numune ve ilmek hesabı (Aşama 5), makine profili ve üretim çıktısı (Aşama 8), 3B önizleme (Aşama 9): "Örgü" sekmesi.' : ''}</div><div class="small">Aşağıdaki araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
+    return `<div class="card">✅ Teknik çizim (Aşama 2): "Teknik çizim" sekmesi. ✅ Üretim föyü, operasyon listesi, maliyet kartı, sipariş ve malzeme ihtiyacı (Aşama 10): "Föy" sekmesi.${br.includes('woven') ? ' ✅ Dokuma kalıbı (Aşama 3), beden yayma / grading (Aşama 4) ve kumaş yerleşimi / kesim planı (Aşama 7), 3B önizleme (Aşama 9): "Kalıp" sekmesi. ✅ Kumaş dökümlülük benzetimi (Aşama 9): "Malzemeler" sekmesi.' : ''}${br.includes('knit') ? ' ✅ Örgü deseni, numune ve ilmek hesabı (Aşama 5), makine profili ve üretim çıktısı (Aşama 8), 3B önizleme (Aşama 9): "Örgü" sekmesi.' : ''}</div><div class="small">Aşağıdaki araçlar henüz uygulanmadı. Hangi aşamada geleceği yazılı; şu an kullanılabilir gibi gösterilmez.</div>` +
     rows.map(([t, items]) => `<div class="card"><h3>${t}</h3>${items.map(([n, a]) => `<div class="row"><span>${esc(n)}</span><span class="badge" style="flex:0 0 auto">Henüz yok · Aşama ${a}</span></div>`).join('')}</div>`).join('');
 }
 
@@ -492,6 +516,7 @@ document.addEventListener('input', (e) => {
   const v = readInput(el);
   el.classList.toggle('bad', typeof v === 'number' && Number.isNaN(v));
   setPath(S.p, el.dataset.f, Number.isNaN(v) ? NaN : v);
+  if (el.dataset.opEst) { const [pi, k] = el.dataset.opEst.split('.').map(Number), o = S.p.collection.products[pi]?.techpack.ops[k]; if (o) o.est = false; }
   dirty();
 });
 document.addEventListener('change', (e) => {
@@ -615,6 +640,11 @@ document.addEventListener('click', async (e) => {
         const pane = `<div class="small">Vücut: ${tb ? esc(tb.name) + ' · ' + esc(pc.size) : '⚠ beden tablosu yok'} · ${esc(body.assumptions)}</div><table><tr><td>Göğüs</td><td>giysi ${num(c.garment / 10)} cm</td><td>vücut ${c.bodyM ? num(c.bodyM / 10) + ' cm' : '—'}</td><td>${c.ease != null ? (c.ease >= 0 ? '+' : '') + num(c.ease / 10) + ' cm' : '—'}</td><td class="small">${esc(c.status)}</td></tr></table><div class="small">Genişlik numuneden (${num(sw.st10)} ilmek / 10 cm); örgünün esnemesi ve ağırlıkla uzaması hesaplanmaz. Önizlemedir.</div>`;
         const root = await open3D({ title: `3B önizleme · ${pc.name} ${pc.size || ''}`, paneHTML: pane, build: fitScene(body, [ring(body.rings[1].z, c.garment * 0.92), ring(zc, c.garment), ring(body.rings[1].z - len, c.garment)]) }); root.api.report = rep; return;
       }
+      case 'op-tpl': M.applyOpTemplate(p, b.dataset.v); break;
+      case 'op-add': M.addOp(p, b.dataset.v); break;
+      case 'op-del': { const [pi, k] = b.dataset.v.split('.').map(Number); p.collection.products[pi].techpack.ops.splice(k, 1); break; }
+      case 'op-up': { const [pi, k] = b.dataset.v.split('.').map(Number), o = p.collection.products[pi].techpack.ops; [o[k - 1], o[k]] = [o[k], o[k - 1]]; break; }
+      case 'prod-pdf': { const pr = p.collection.products.find((x) => x.id === b.dataset.v), r = productionPDF(p, pr.id); const u = URL.createObjectURL(new Blob([r.bytes], { type: 'application/pdf' })), l = document.createElement('a'); l.href = u; l.download = ('uretim-foyu-' + (pr.modelCode || pr.name)).replace(/[^\wçğıöşüÇĞİÖŞÜ -]+/g, '_') + '.pdf'; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(u), 5000); toast(`${r.pages} sayfa`); return; }
       case 'add-machine': M.addMachine(p, $('nm-mtpl').value); break;
       case 'del-machine': { const m = p.knit.machines[i]; if (S.delArm !== m.id) { S.delArm = m.id; return render(); } p.knit.machines.splice(i, 1); S.delArm = null; break; }
       case 'mc-verify': MC.verifyMachine(p.knit.machines[i], { note: $('mv-note-' + i).value }); toast('Profil doğrulandı olarak işaretlendi'); break;

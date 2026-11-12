@@ -1,7 +1,7 @@
 // Kalıp çizimi ve çıktıları: tuval (editör / PNG), SVG (1 birim = 1 mm), 1:1 A4 döşemeli PDF.
-import * as C from '../curve.js?v=20261112i';
-import * as P from './pattern.js?v=20261112i';
-import { pdfDoc, textWidth } from '../pdf.js?v=20261112i';
+import * as C from '../curve.js?v=20261112j';
+import * as P from './pattern.js?v=20261112j';
+import { pdfDoc, textWidth } from '../pdf.js?v=20261112j';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n3 = (v) => +v.toFixed(3);

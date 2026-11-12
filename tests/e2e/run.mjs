@@ -439,7 +439,7 @@ await TX('Tekstil: triko projesi yalnız triko araçlarını gösterir; dal ara�
   expect(kinds.includes('İplik') && !kinds.includes('Kumaş'), 'triko malzemeleri: ' + kinds);
   await A(page, 'tab', '[data-v="tools"]');
   const tl = await txBody(page);
-  expect(/Triko \/ Örgü/.test(tl) && !/Dokuma \/ Konfeksiyon\n/.test(tl) && (tl.match(/Henüz yok/g) || []).length >= 1 && /Örgü deseni, numune ve ilmek hesabı/.test(tl), 'dal araçları');
+  expect(!/Dokuma kalıbı/.test(tl) && !/Henüz yok/.test(tl) && /Örgü deseni, numune ve ilmek hesabı/.test(tl) && /Üretim föyü/.test(tl), 'dal araçları: ' + tl.slice(0, 300));
   await A(page, 'tab', '[data-v="col"]'); await A(page, 'add-prod');
   const d = await download(page, () => A(page, 'export'));
   const j = JSON.parse(d.text); expect(j.kind === 'cizim.textile' && j.type === 'knit' && j.collection.products.length === 1, 'JSON içeriği');
@@ -798,6 +798,36 @@ await TX('Tekstil 3B: gömlek kalıbından 3B önizleme (bolluk tablosu, ÖNİZL
   await A(page, 'drape-view', '[data-i="0"]'); await page.waitForSelector('#v3x'); await page.waitForFunction(() => { const a = document.getElementById('v3x').api; return a.ready || a.error; });
   expect(await page.evaluate(() => document.getElementById('v3x').api.ready), 'dökümlü numune 3B');
   await page.locator('#v3x [data-k="close"]').click();
+});
+
+await TX('Tekstil üretim föyü: gömlek şablon operasyonları (tahmini), süre düzeltilince tahmini kalkar, eksik girdi uyarısı, maliyet kartı elle hesapla aynı, sipariş ve malzeme ihtiyacı, üretim föyü PDF', async ({ page }) => {
+  await A(page, 'type', '[data-v="woven"]'); await page.waitForSelector('[data-a="type"][data-v="woven"].on');
+  await page.fill('#np-name', 'Föy E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await page.selectOption('#ap-type', 'gomlek'); await A(page, 'add-prod');
+  await A(page, 'tab', '[data-v="mats"]'); await page.selectOption('#nm-preset', 'fabric:0'); await A(page, 'add-preset');
+  await page.fill('[data-f="library.materials.0.price"]', '100'); await page.locator('[data-f="library.materials.0.price"]').dispatchEvent('change');
+  await A(page, 'tab', '[data-v="col"]'); await A(page, 'link', '[data-i="0"]');
+  await A(page, 'tab', '[data-v="pat"]'); await page.fill('#pt-size-free', 'M'); await A(page, 'add-pattern'); await page.waitForSelector('#pkx canvas'); await page.locator('#pkx [data-k="close"]').click();
+  await A(page, 'tab', '[data-v="tp"]'); await A(page, 'op-tpl');
+  let b = await txBody(page); expect((b.match(/tahmini/g) || []).length >= 16 && /Toplam [\d,]+ dk/.test(b), 'şablon 16 operasyon tahmini');
+  expect(/Hesaplanmayan kalemler var — eksik: .*dakika ücreti/.test(b), 'eksik girdi uyarısı');
+  // ilk operasyon süresini düzelt → tahmini kalkar
+  await page.fill('[data-f="collection.products.0.techpack.ops.0.smv"]', '2'); await page.locator('[data-f="collection.products.0.techpack.ops.0.smv"]').dispatchEvent('change');
+  await page.waitForFunction(() => !document.querySelector('[data-f="collection.products.0.techpack.ops.0.smv"]').parentElement.innerText.includes('tahmini'));
+  const total = +(await txBody(page)).match(/Toplam ([\d,]+) dk/)[1].replace(',', '.');
+  for (const [k, v] of [['minuteRate', '3'], ['efficiency', '75'], ['overheadPct', '20'], ['marginPct', '50']]) { await page.fill(`[data-f="collection.products.0.costing.${k}"]`, v); await page.locator(`[data-f="collection.products.0.costing.${k}"]`).dispatchEvent('change'); }
+  await page.waitForFunction(() => !/Hesaplanmayan kalemler/.test(document.querySelector('#main').innerText));
+  const cells = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#main tr')].filter((r) => r.cells.length === 2).map((r) => [r.cells[0].innerText.split('\n')[0], r.cells[1].innerText])));
+  const nv = (s) => +String(s).replace(/\./g, '').replace(',', '.');
+  const labour = total * 3 / 0.75; expect(Math.abs(nv(cells['İşçilik']) - labour) < 0.02, `işçilik ${cells['İşçilik']} ≈ ${labour}`);
+  const cost = (nv(cells['Malzeme']) + labour) * 1.2; expect(Math.abs(nv(cells['Birim maliyet']) - cost) < 0.05 && Math.abs(nv(cells['Satış fiyatı (KDV hariç)']) - cost * 1.5) < 0.05, 'maliyet zinciri: ' + JSON.stringify(cells));
+  // sipariş
+  await page.fill('[data-f="collection.products.0.order.M"]', '200'); await page.locator('[data-f="collection.products.0.order.M"]').dispatchEvent('change');
+  await page.fill('[data-f="collection.products.0.costing.wastePct"]', '3'); await page.locator('[data-f="collection.products.0.costing.wastePct"]').dispatchEvent('change');
+  await page.waitForFunction(() => /200 adet · toplam malzeme/.test(document.querySelector('#main').innerText));
+  const pdf = await download(page, () => A(page, 'prod-pdf'));
+  expect(pdf.text.startsWith('%PDF-') && /Operasyon listesi/.test(pdf.text) && /tahmini/.test(pdf.text), 'üretim föyü PDF ' + pdf.size + ' B');
+  await A(page, 'tab', '[data-v="val"]'); expect(await page.locator('.issue.hata').count() === 0 && /Operasyon süreleri şablondan/.test(await txBody(page)), 'doğrulama: tahmini süre uyarısı, hata yok');
 });
 
 await TX('Tekstil ↔ Makine ayrılığı: tekstil kaydı makine projelerine yazmaz; makine projeleri tekstil listesinde görünmez', async ({ page }) => {
