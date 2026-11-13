@@ -104,10 +104,20 @@ $('hc-sens').addEventListener('input', (e) => hc.setSensitivity(e.target.value))
 const POS = ['bl', 'br', 'tr', 'tl'];
 function cyclePos() { dock.dataset.pos = POS[(POS.indexOf(dock.dataset.pos) + 1) % POS.length]; }
 
+// önizlemeyi çizim alanının köşesine hizala (yan paneller, üst çubuk, alt gezinme şeridi örtülmesin)
+function place() {
+  const v = $('view'), r = v ? v.getBoundingClientRect() : null, w = window.innerWidth, h = window.innerHeight;
+  const ok = r && r.width > 200 && r.height > 200;
+  root.style.setProperty('--hc-l', (ok ? Math.max(0, r.left) : 0) + 'px'); root.style.setProperty('--hc-r', (ok ? Math.max(0, w - r.right) : 0) + 'px');
+  root.style.setProperty('--hc-t', (ok ? Math.max(0, r.top) : 0) + 'px'); root.style.setProperty('--hc-b', (ok ? Math.max(0, h - r.bottom) : 0) + 'px');
+}
+window.addEventListener('resize', place);
+
 const CAM_TEXT = { off: 'Kapalı', starting: 'Açılıyor… (izin bekleniyor)', on: 'Açık', error: 'Hata' };
 const TRACK_TEXT = { off: 'Kapalı', loading: 'Model yükleniyor…', on: 'Çalışıyor', error: 'Hata' };
 function paint() {
   const on = hc.active;
+  if (on) place();
   for (const b of buttons) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
   dock.hidden = !on;
   pre.classList.toggle('mirror', hc.camera.mirror);

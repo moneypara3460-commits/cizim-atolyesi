@@ -26,13 +26,14 @@
 #hc-cursor[data-g="calib"] { border-color: #facc15; width: 34px; height: 34px; margin: -17px 0 0 -17px; }
 
 /* kamera önizlemesi + durum (kamera açıkken hep görünür, köşe değiştirilebilir) */
-#hc-dock { position: fixed; z-index: 9000; left: 10px; bottom: calc(var(--nav, 0px) + 12px + env(safe-area-inset-bottom, 0px)); width: 148px;
+/* --hc-l / --hc-r / --hc-t / --hc-b: çizim alanının (#view) ekran kenarlarına uzaklığı (ui.js günceller): önizleme araç panellerini örtmez */
+#hc-dock { position: fixed; z-index: 9000; left: calc(var(--hc-l, 0px) + 10px); bottom: calc(var(--hc-b, 0px) + 12px + env(safe-area-inset-bottom, 0px)); width: 148px;
            background: var(--hc-bg); border: 1px solid var(--hc-line); border-radius: 14px; padding: 6px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }
 /* yeni arayüz, telefon: alttaki araç şeridinin (Kutu, Silindir, …) üstünde dursun */
-@media (max-width: 999px) { #hc-root.over-dock #hc-dock { bottom: calc(var(--nav, 0px) + 88px + env(safe-area-inset-bottom, 0px)); } }
-#hc-dock[data-pos="br"] { left: auto; right: 10px; }
-#hc-dock[data-pos="tl"] { bottom: auto; top: calc(var(--top, 0px) + 10px); }
-#hc-dock[data-pos="tr"] { bottom: auto; top: calc(var(--top, 0px) + 10px); left: auto; right: 10px; }
+@media (max-width: 999px) { #hc-root.over-dock #hc-dock:not([data-pos^="t"]) { bottom: calc(var(--hc-b, 0px) + 88px + env(safe-area-inset-bottom, 0px)); } }
+#hc-dock[data-pos="br"] { left: auto; right: calc(var(--hc-r, 0px) + 10px); }
+#hc-dock[data-pos="tl"] { bottom: auto; top: calc(var(--hc-t, 0px) + 10px); }
+#hc-dock[data-pos="tr"] { bottom: auto; top: calc(var(--hc-t, 0px) + 10px); left: auto; right: calc(var(--hc-r, 0px) + 10px); }
 #hc-pre { position: relative; width: 100%; aspect-ratio: 4 / 3; border-radius: 9px; overflow: hidden; background: #000; }
 #hc-pre video, #hc-pre svg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 #hc-pre svg path { stroke: #4ed7af; stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
