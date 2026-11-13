@@ -1,4 +1,4 @@
-// Kullanım: node tools/vendor-check.mjs <npm node_modules klasörü>
+// Kullanım: node tools/vendor-check.mjs <npm node_modules klasörü> [indirilen model klasörü]
 // vendor/ altındaki üçüncü taraf dosyaları npm paketindeki aynı dosyalarla bayt bayt karşılaştırır.
 // Ayrıca npm kopyalarını /tmp/vendor-out/ altına (vendor/ düzeninde) yazar: ilk kurulum ve güncelleme için.
 import fs from 'node:fs';
@@ -12,7 +12,15 @@ export const FILES = [
   ['three', '0.160.0', ['build/three.module.js', 'examples/jsm/controls/OrbitControls.js', 'examples/jsm/geometries/ConvexGeometry.js', 'examples/jsm/math/ConvexHull.js', 'examples/jsm/geometries/RoundedBoxGeometry.js', 'examples/jsm/utils/BufferGeometryUtils.js', 'LICENSE']],
   ['three-mesh-bvh', '0.6.0', ['build/index.module.js', 'LICENSE']],
   ['three-bvh-csg', '0.0.7', ['build/index.module.js', 'LICENSE']],
+  // Parmakla kontrol: MediaPipe Hand Landmarker (tarayıcıda WebAssembly). Yalnız SIMD'li derleme alınır.
+  ['@mediapipe/tasks-vision', '0.10.33', ['vision_bundle.mjs', 'wasm/vision_wasm_internal.js', 'wasm/vision_wasm_internal.wasm']],
 ];
+// npm paketi olmayan dosyalar (model): <2. argüman klasörü>/<ad> olarak indirilmiş kopya, sabitlenmiş sha256 ile karşılaştırılır.
+// sha256 null ise henüz sabitlenmemiştir (ilk kurulum): değer günlüğe yazılır, iş kırmızı olur.
+export const MODELS = [
+  ['mediapipe-models/hand_landmarker.task', 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task', null],
+];
+const DL = process.argv[3];
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 let bad = 0, missing = 0;
 for (const [pkg, ver, files] of FILES) {
@@ -25,6 +33,7 @@ for (const [pkg, ver, files] of FILES) {
     if (!fs.existsSync(mine)) {
       // ilk kurulum: dosya günlüğe base64 olarak yazılır (sha256 ile), oradan depoya alınır ve bu iş yeniden karşılaştırır
       console.log(`yok  vendor/${pkg}@${ver}/${f}  sha256 ${sha(src)}  bayt ${src.length}`); missing++;
+      if (src.length > 512 * 1024) { console.log('     (büyük dosya: günlüğe yazılmadı, "vendor-npm" çıktısından alınır)'); continue; }
       const b64 = src.toString('base64'); console.log(`@@BEGIN ${pkg}@${ver}/${f}`); for (let i = 0; i < b64.length; i += 8000) console.log('@@' + b64.slice(i, i + 8000)); console.log(`@@END ${pkg}@${ver}/${f}`);
       continue;
     }
@@ -32,6 +41,17 @@ for (const [pkg, ver, files] of FILES) {
     if (a !== b) { console.log(`FAIL vendor/${pkg}@${ver}/${f}: sha256 ${a.slice(0, 16)}… ≠ npm ${b.slice(0, 16)}…`); bad++; }
     else console.log(`ok   vendor/${pkg}@${ver}/${f}  sha256 ${a}`);
   }
+}
+for (const [rel, url, pin] of MODELS) {
+  const mine = path.join(ROOT, 'vendor', rel), dl = DL ? path.join(DL, path.basename(rel)) : null;
+  const got = dl && fs.existsSync(dl) ? fs.readFileSync(dl) : null;
+  if (got) { const out = path.join('/tmp/vendor-out', rel); fs.mkdirSync(path.dirname(out), { recursive: true }); fs.writeFileSync(out, got); }
+  if (!fs.existsSync(mine)) { console.log(`yok  vendor/${rel}` + (got ? `  sha256 ${sha(got)}  bayt ${got.length}  (${url})` : '  (indirilen kopya da yok)')); missing++; continue; }
+  const a = sha(fs.readFileSync(mine));
+  if (!pin) { console.log(`FAIL vendor/${rel}: sha256 sabitlenmemiş (${a})`); bad++; continue; }
+  if (a !== pin) { console.log(`FAIL vendor/${rel}: sha256 ${a.slice(0, 16)}… ≠ sabit ${pin.slice(0, 16)}…`); bad++; continue; }
+  if (got && sha(got) !== pin) { console.log(`FAIL ${url}: indirilen dosya sabit sha256 ile aynı değil (${sha(got).slice(0, 16)}…)`); bad++; continue; }
+  console.log(`ok   vendor/${rel}  sha256 ${a}` + (got ? '' : '  (yalnız sabit değerle karşılaştırıldı; indirilen kopya verilmedi)'));
 }
 console.log(bad ? `\n${bad} dosya npm paketinden farklı` : missing ? `\n${missing} dosya vendor/ içinde yok` : '\nBütün kopyalar npm paketleriyle aynı');
 process.exitCode = bad || missing ? 1 : 0;   // exit() değil: yönlendirilmiş çıktı yarıda kesilmesin
