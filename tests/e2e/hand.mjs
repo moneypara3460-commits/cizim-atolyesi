@@ -47,7 +47,7 @@ const T = (title, area, fn, { view = DESK, file = 'index.html', browser = camBro
       });
       await fn(a);
       expect(!a.net.external.length, 'Dış siteye istek: ' + a.net.external.slice(0, 3).join(', '));
-      const errs = a.errors.filter((e) => !/favicon|GPU stall|WebGL: |GL Driver Message|Automatic fallback to software/i.test(e));
+      const errs = a.errors.filter((e) => !/favicon|GPU stall|WebGL: |GL Driver Message|Automatic fallback to software|INFO: Created TensorFlow Lite XNNPACK delegate/i.test(e));
       expect(!errs.length, 'Sayfa hatası: ' + errs.slice(0, 3).join(' || '));
     } catch (e) { e.shot = await shot(a.page, area + '_' + title); throw e; }
     finally { try { await a.ctx.close(); } catch (e) { /* */ } }
@@ -93,8 +93,8 @@ for (const [ui, file] of UIS) {
     expect(/El bekleniyor/.test(await page.locator('#hc-stat').innerText()), 'el yokken durum');
     // el görününce: imleç + önizlemede 21 nokta çizimi
     await moveTo(page, 700, 400);
-    const drawn = await page.evaluate(() => { const c = document.querySelector('#hc-pre canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return { n, lm: window.__hand.landmarks.length, cur: !document.getElementById('hc-cursor').hidden }; });
-    expect(drawn.lm === 21 && drawn.n > 50 && drawn.cur, 'önizlemede el iskeleti ve ekranda imleç: ' + JSON.stringify(drawn));
+    const drawn = await page.evaluate(() => { const s = document.querySelector('#hc-pre svg'), b = s.getBoundingClientRect(), cs = [...s.querySelectorAll('circle')].map((c) => c.getBoundingClientRect()); return { n: cs.filter((r) => r.width > 1 && r.left >= b.left - 2 && r.right <= b.right + 2 && r.top >= b.top - 2 && r.bottom <= b.bottom + 2).length, bones: (s.querySelector('path').getAttribute('d') || '').split('M').length - 1, vis: getComputedStyle(s).visibility, lm: window.__hand.landmarks.length, cur: !document.getElementById('hc-cursor').hidden, canvases: document.querySelectorAll('#hc-root canvas').length }; });
+    expect(drawn.lm === 21 && drawn.n === 21 && drawn.bones === 21 && drawn.vis === 'visible' && drawn.cur && drawn.canvases === 0, 'önizlemede el iskeleti ve ekranda imleç: ' + JSON.stringify(drawn));
     expect(/İmleç/.test(await page.locator('#hc-stat').innerText()), 'durum: imleç');
     // ayar paneli
     await page.locator('[data-hc="panel"]').click();
@@ -240,17 +240,19 @@ if (!only.length || only.some((o) => 'p5-mediapipe'.startsWith(o.toLowerCase()))
       await page.locator('#b-hand').click();
       await page.waitForFunction(() => window.__hand.track === 'on' || window.__hand.cam === 'error', null, { timeout: 120000 });
       const s = await st(page); expect(s.track === 'on', 'başlamadı: ' + s.error);
-      await page.waitForFunction(() => window.__hand.fps >= 3, null, { timeout: 60000 });
-      await page.waitForTimeout(2500);
-      const r = await page.evaluate(() => ({ fps: window.__hand.fps, delegate: window.__hand.tracker.delegate, g: window.__hand.gesture, lm: window.__hand.landmarks, cam: window.__hand.cam }));
+      // yazılımsal WebGL'de ekran kartı yolu çok yavaştır: uygulama kendiliğinden işlemciye (WebAssembly) geçer; ikisi de kabul
+      await page.waitForFunction(() => window.__hand.track === 'on' && window.__hand.fps >= 2, null, { timeout: 150000 });
+      await page.waitForTimeout(3000);
+      const r = await page.evaluate(() => ({ fps: window.__hand.fps, delegate: window.__hand.tracker.delegate, g: window.__hand.gesture, lm: window.__hand.landmarks, cam: window.__hand.cam, track: window.__hand.track, err: window.__hand.error }));
       console.log(`       MediaPipe hazır: ${Date.now() - t0} ms, ${r.fps} kare/sn, ${r.delegate} (yazılımsal ortam; gerçek cihaz hızı değildir)`);
-      expect(r.cam === 'on' && r.fps >= 3, 'kareler işleniyor: ' + JSON.stringify(r));
+      expect(r.cam === 'on' && r.track === 'on' && r.fps >= 2, 'kareler işleniyor: ' + JSON.stringify(r));
       expect(r.lm === null || r.lm.length === 21, 'el bulunursa 21 nokta döner (deneme görüntüsünde el beklenmez)');
       await page.locator('[data-hc="stop"]').click();
       expect(await page.evaluate(() => window.__hand.tracker.lm === null && !document.querySelector('#hc-pre video').srcObject), 'model ve kamera serbest bırakıldı');
       await page.locator('#b-hand').click();
-      await page.waitForFunction(() => window.__hand.track === 'on' && window.__hand.fps >= 3, null, { timeout: 120000 });
+      await page.waitForFunction(() => window.__hand.track === 'on' && window.__hand.fps >= 1, null, { timeout: 150000 });
       await page.locator('[data-hc="stop"]').click();
+      expect((await st(page)).cam === 'off', 'yeniden açılıp kapandı');
     }, { file, init: INIT_REAL });
   }
 }

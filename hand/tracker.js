@@ -9,7 +9,8 @@ const MODEL = new URL('../vendor/mediapipe-models/hand_landmarker.task', import.
 export class MediaPipeTracker {
   constructor() { this.lm = null; this.delegate = null; this.lastTs = -1; }
 
-  async load() {
+  // prefer: 'GPU' (varsayılan; olmazsa işlemciye düşer) ya da 'CPU'
+  async load(prefer = 'GPU') {
     if (this.lm) return;
     let mp;
     try { mp = await import(BASE + 'vision_bundle.mjs'); }
@@ -20,7 +21,7 @@ export class MediaPipeTracker {
       minHandDetectionConfidence: 0.6, minHandPresenceConfidence: 0.55, minTrackingConfidence: 0.55,
     });
     let err = null;
-    for (const d of ['GPU', 'CPU']) {                       // ekran kartı hızlandırması yoksa işlemciye düş
+    for (const d of prefer === 'CPU' ? ['CPU'] : ['GPU', 'CPU']) {   // ekran kartı hızlandırması yoksa işlemciye düş
       try { this.lm = await mp.HandLandmarker.createFromOptions(files, opts(d)); this.delegate = d; return; }
       catch (e) { err = e; }
     }

@@ -16,7 +16,7 @@ const root = el('div', { id: 'hc-root' });
 root.innerHTML = `
 <div id="hc-cursor" hidden></div>
 <div id="hc-dock" data-pos="bl" hidden>
-  <div id="hc-pre" title="Önizlemeyi başka köşeye taşı"><video muted playsinline></video><canvas></canvas><div class="wait" hidden></div></div>
+  <div id="hc-pre" title="Önizlemeyi başka köşeye taşı"><video muted playsinline></video><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path fill="none"/></svg><div class="wait" hidden></div></div>
   <div id="hc-stat" role="status"><i></i><span></span></div>
   <div class="btns"><button type="button" data-hc="panel">Ayarlar</button><button type="button" data-hc="stop" class="bad">Kapat</button></div>
 </div>
@@ -46,7 +46,10 @@ document.body.appendChild(root);
 if (document.getElementById('dock')) root.classList.add('over-dock');
 const $ = (id) => document.getElementById(id);
 const cursor = $('hc-cursor'), dock = $('hc-dock'), panel = $('hc-panel'), pre = $('hc-pre');
-const video = pre.querySelector('video'), canvas = pre.querySelector('canvas'), wait = pre.querySelector('.wait');
+const video = pre.querySelector('video'), wait = pre.querySelector('.wait');
+// 21 el noktası önizlemede SVG ile çizilir (sayfaya fazladan <canvas> eklenmez: uygulamanın tuvalleriyle karışmasın)
+const skel = pre.querySelector('svg'), bones = skel.querySelector('path'), dots = [];
+for (let i = 0; i < 21; i++) { const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); skel.appendChild(c); dots.push(c); }
 
 const hc = new HandControl({ video, tracker: window.__handTracker || undefined });   // __handTracker: yalnız testlerde yapay algılayıcı
 
@@ -135,18 +138,21 @@ function frame() {
   cursor.hidden = !(hc.track === 'on' && c.visible);
   if (!cursor.hidden) { cursor.style.transform = `translate(${c.x}px, ${c.y}px)`; cursor.dataset.g = hc.calib ? 'calib' : hc.gesture; }
   if (dock.hidden) return;
-  const w = pre.clientWidth, h = pre.clientHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
-  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
-  const g = canvas.getContext('2d'); g.clearRect(0, 0, canvas.width, canvas.height);
   const lm = hc.landmarks;
+  skel.style.visibility = lm ? 'visible' : 'hidden';
   if (lm) {
-    // video "cover" ile kırpılır: aynı dönüşüm noktalara uygulanır
-    const va = hc.camera.aspect, ca = w / h, sx = va > ca ? va / ca : 1, sy = va > ca ? 1 : ca / va;
-    const P = (p) => { const x = hc.camera.mirror ? 1 - p.x : p.x; return [((x - 0.5) * sx + 0.5) * canvas.width, ((p.y - 0.5) * sy + 0.5) * canvas.height]; };
-    g.lineWidth = 1.5 * dpr; g.strokeStyle = '#4ed7af'; g.beginPath();
-    for (const [a, b] of CONNECTIONS) { const A = P(lm[a]), B = P(lm[b]); g.moveTo(A[0], A[1]); g.lineTo(B[0], B[1]); }
-    g.stroke();
-    for (let i = 0; i < lm.length; i++) { const q = P(lm[i]), big = i === LM.THUMB_TIP || i === LM.INDEX_TIP; g.fillStyle = big ? (hc.gesture === 'pinch' ? '#f0a43a' : '#fff') : '#4ed7af'; g.beginPath(); g.arc(q[0], q[1], (big ? 3.2 : 1.8) * dpr, 0, 6.2832); g.fill(); }
+    // video "cover" ile kırpılır: aynı dönüşüm noktalara uygulanır (SVG 100 × 100 birim, kutuya esner)
+    const w = pre.clientWidth || 4, h = pre.clientHeight || 3, va = hc.camera.aspect, ca = w / h, sx = va > ca ? va / ca : 1, sy = va > ca ? 1 : ca / va;
+    const P = (p) => { const x = hc.camera.mirror ? 1 - p.x : p.x; return [((x - 0.5) * sx + 0.5) * 100, ((p.y - 0.5) * sy + 0.5) * 100]; };
+    const pt = lm.map(P), rx = 100 / w, ry = 100 / h;
+    bones.setAttribute('d', CONNECTIONS.map(([a, b]) => `M${pt[a][0].toFixed(1)} ${pt[a][1].toFixed(1)}L${pt[b][0].toFixed(1)} ${pt[b][1].toFixed(1)}`).join(''));
+    for (let i = 0; i < dots.length; i++) {
+      const big = i === LM.THUMB_TIP || i === LM.INDEX_TIP, c = dots[i], r = big ? 3.2 : 1.8;
+      c.setAttribute('cx', pt[i][0].toFixed(1)); c.setAttribute('cy', pt[i][1].toFixed(1)); c.setAttribute('r', String(r));
+      // kutu esnediği için daire elips olur: yarıçapı eksenlere göre düzelt
+      c.setAttribute('transform', `translate(${pt[i][0].toFixed(1)} ${pt[i][1].toFixed(1)}) scale(${rx.toFixed(3)} ${ry.toFixed(3)}) translate(${(-pt[i][0]).toFixed(1)} ${(-pt[i][1]).toFixed(1)})`);
+      c.setAttribute('fill', big ? (hc.gesture === 'pinch' ? '#f0a43a' : '#fff') : '#4ed7af');
+    }
   }
   const now = performance.now(); if (now - lastStat > 500) { lastStat = now; paint(); }
 }

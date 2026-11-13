@@ -284,6 +284,15 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - STL dışa aktarma (mm, Z-yukarı, 3D yazıcı dilimleyicilerine uygun)
 - Sesli komut (Türkçe, Chrome): kural tabanlıdır, yapay zekâ kullanmaz
 
+**Parmakla kontrol (kamera ile, dokunmadan)**
+- 🖐 düğmesi (eski arayüzde üst çubuk, yeni arayüzde çizim alanındaki yüzen düğmeler ve menü, tekstil sayfasında üst çubuk): kamera izni istenir, kamera açılır, el algılama başlar; küçük bir önizlemede el iskeleti (21 nokta) ve durum görünür
+- **İşaret parmağı** imleci gezdirir. **Başparmak + işaret parmağını birleştirmek** fare tuşuna basmak gibidir: çizer / sürükler, ayırınca bırakır; kısa birleştirme dokunmadır (düğme, sekme, parça seçimi). **Açık avuç** duraklatır. **İşaret + orta parmak** yukarı / aşağı: kaydırır, çizim alanında yakınlaştırır
+- Uygulamanın kendi çizim işleyicilerine gerçek fare olayı olarak gider: 3B sahne, kroki, 2B çizim, tekstil tuvalleri ve bütün düğmeler değişiklik olmadan çalışır. Fare ve dokunma aynı anda çalışmaya devam eder
+- Ayarlar: kamera aç / kapat, parmakla çizim aç / kapat (kapalıyken yalnız imleç), hassasiyet (1–10), kalibrasyon (rahat çalışılan alanın iki köşesi), durum göstergeleri. Ayarlar cihazda saklanır
+- Titreme için 1€ süzgeci, tek karelik yanlış algılamaya karşı sıçrama süzgeci, eşikte titreyen parmaklara karşı giriş / çıkış eşiği; el 0,3 sn'den kısa kaybolursa çizgi kopmaz
+- El algılama: MediaPipe Hand Landmarker (WebAssembly), depodaki `vendor/` kopyasından yüklenir. **Görüntü yalnız cihazda işlenir; kaydedilmez, hiçbir yere gönderilmez.** Kamera yalnız düğmeye basınca açılır; kapatınca kamera ve model tamamen serbest bırakılır
+- Yeni hareket eklemek için: `window.__hand.engine.addGesture({ id, label, holdMs, test: ({ f, lm, features }) => … })` ve `window.__hand.onGesture(id, fn)`
+
 ### Sesli komut örnekleri
 
 - "elli milimetre çapında yirmi milimetre yüksekliğinde silindir ekle"
@@ -298,6 +307,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 
 ## Bilinen sınırlar
 
+- Parmakla kontrol: hareket mantığı ve uygulamayla bağlantısı yapay el verisiyle, MediaPipe'ın yüklenip kare işlemesi sahte kamera görüntüsüyle sınandı; **gerçek kamera ve gerçek elle doğruluk / eşik ayarı sınanmadı** (ayrıntı: `docs/KALITE-RAPORU.md` bölüm 10). Kaydırıcı, açılır liste ve dosya seçici gibi tarayıcının kendi denetimleri yapay işaretçiyle çalışmaz (hassasiyet için − / + düğmeleri var). Tek el izlenir. İlk açılışta yaklaşık 20 MB (kütüphane + model) iner, sonra tarayıcı önbelleğinden gelir; SIMD desteklemeyen eski tarayıcılarda çalışmaz
 - Pah ve yuvarlama yalnızca kutu ve silindirde var (küre, koni, boru, kroki parçalarında yok)
 - Kroki: yay üç nokta ile çizilir (serbest eğri / spline yok); yaylar ve daire çokgen parçalara bölünür (6° adım, daire 48 kenar). Çizgiler birbirini kesemez (şekiller iç içe ya da ayrı olabilir); döndürmede tek şekil olur
 - Kabuk ve eğim yalnızca düz kutu / silindirde (küre kabuğu var, eğim yok); eğimli ya da yuvarlamalı parçada kenar işlemi ve kabuk yapılamaz
@@ -328,6 +338,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - `fea.js`, `fea-worker.js`, `sim-ui.js` — Geleceğimi Göster: sonlu eleman çözücü (voxel H8, multigrid), modal, ısıl, yorulma / aşınma, alternatifler, arayüz ve PDF
 - `assembly.js`, `assembly-ui.js` — montaj sırası: parça tanıma, delik → cıvata, sökme analizi, patlatma / animasyon, PDF
 - `tekstil.html`, `tx/` — **Tekstil ve Moda** çalışma alanı (dokuma / konfeksiyon + triko). Aşama 1–11 tamam: proje türleri, koleksiyon, ürün, renk, beden tablosu, kumaş / iplik / aksesuar, föy özeti, revizyon, JSON yedek; teknik moda çizimi (ön / arka / yan, eğri, simetri, katman, ölçü, 13 giysi şablonu, 15 detay, PNG / SVG / vektör PDF); dokuma kalıbı (gömlek ve etek temel blokları, dikiş payı, çıt, pens, bölme / birleştirme, dikiş eşleşmesi kontrolü, 1:1 A4 döşemeli PDF); beden yayma / grading (blok ölçüsünden ya da orantılı, kişiye özel ölçü, beden yuvası); triko (numune, örgü şeması editörü: düz / ters / askı / delik / saç örgüsü / jakar, kontroller, tekrar, PDF / talimat / CSV, ilmek ve sıra hesabı, eksiltme / artırma planı, bedenlere göre ilmek sayıları); malzeme kütüphanesi (hazır kartlar, iplik numarası dönüşümleri), kalıptan kumaş metresi, trikodan iplik gramajı, bedene göre maliyet; kumaş yerleşimi / kesim planı (otomatik + elle, açık en / katlı, havlı kumaş, desen eşleştirme, verim / fire, ölçekli PDF ve 1:1 SVG, tüketim plan boyundan). Triko makine profilleri (doğrulama zorunlu), uyumluluk kontrolü, operatör programı, delikli kart şeması, knitout + yapısal benzetim (Stoll / Shima kapalı biçimleri üretilmez); 3B önizleme (kalıptan bolluk, basitleştirilmiş vücut, ÖNİZLEME etiketli) ve kumaş dökümlülük benzetimi (referans ölçümle karşılaştırılmadan doğrulanmış sayılmaz); üretim föyü (operasyon listesi, dakika, maliyet kartı, sipariş ve malzeme ihtiyacı, çok sayfalı PDF; eksik girdi hesaplanmaz); kalıp DXF (AAMA / ASTM D6673 düzeni) içe / dışa aktarma. Test eşlemesi: docs/KALITE-RAPORU.md bölüm 7. Plan ve durum: [docs/TEKSTIL-MIMARI.md](docs/TEKSTIL-MIMARI.md). `ws.js` — açılıştaki çalışma alanı seçimi.
+- `hand/` — **parmakla kontrol**: `gestures.js` (saf hareket motoru: 21 nokta → imleç ve işaretçi olayları, süzgeçler, kalibrasyon), `pointer.js` (yapay işaretçi), `camera.js`, `tracker.js` (MediaPipe bağdaştırıcısı), `control.js` (yönetici), `ui.js`, `hand.css` (düğme, önizleme, panel, imleç). Sayfalara yalnız bir `<script type="module">` ile bağlanır; `app.js` ve çizim modülleri değişmedi
 - `vendor/` — üçüncü taraf kütüphanelerin birebir kopyaları (OCCT WASM, three.js 0.160.0, three-mesh-bvh 0.6.0, three-bvh-csg 0.0.7); uygulama dış siteden kod yüklemez. `tools/vendor-check.mjs` kopyaları npm paketleriyle karşılaştırır (CI).
 - `tests/` — testler. Tek komut: `npm test` (birim), `npm run test:e2e` (tarayıcı), `npm run test:all`; ayrıntı [TESTLER.md](TESTLER.md), sonuçlar [docs/KALITE-RAPORU.md](docs/KALITE-RAPORU.md). `.github/workflows/ci.yml` — her push'ta birim, gerçek OCCT WASM ve E2E işleri
 - `App.js`, `viewerHtml.js`, `package.json` — eski React Native / Expo sürümü (2. aşama; güncellenmedi)

@@ -8,6 +8,7 @@ import { MediaPipeTracker } from './tracker.js?v=20261113a';
 const KEY = 'cizim:hand';
 const MIN_FRAME_MS = 25;          // en çok ~30 kare/sn işlenir (işlemci / pil); 60 kare/sn kamerada her kare işlenmez
 const MAX_ERRORS = 8;
+const SLOW_MS = 120, SLOW_FRAMES = 4;   // ekran kartıyla algılama bu kadar yavaşsa (yazılımsal WebGL, zayıf GPU) işlemciye geçilir
 
 function loadPrefs() {
   try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); if (j && typeof j === 'object') return j; } catch (e) { /* */ }
@@ -38,7 +39,7 @@ export class HandControl extends EventTarget {
     this.cursor = { x: 0, y: 0, visible: false, down: false };
     this.calib = null;             // kalibrasyon sürerken: { step: 1 | 2, a }
     this.gestureHandlers = new Map();
-    this.run = 0; this.raf = 0; this.vfc = 0; this.lastDetect = 0; this.lastVideoTime = -1; this.errors = 0; this.fpsT = []; this.wasPinch = false;
+    this.run = 0; this.raf = 0; this.vfc = 0; this.lastDetect = 0; this.lastVideoTime = -1; this.errors = 0; this.fpsT = []; this.wasPinch = false; this.slow = 0; this.seen = 0;
     this.onVisibility = () => { if (document.hidden) this.idle(); };
     this.onPageHide = () => this.stop();
   }
@@ -64,7 +65,7 @@ export class HandControl extends EventTarget {
       await this.tracker.load();
       if (run !== this.run) return;
       this.track = 'on';
-      this.engine.reset(); this.errors = 0; this.lastVideoTime = -1; this.fpsT = [];
+      this.engine.reset(); this.errors = 0; this.lastVideoTime = -1; this.fpsT = []; this.slow = 0; this.seen = 0;
       this.pointer.install();
       document.addEventListener('visibilitychange', this.onVisibility);
       window.addEventListener('pagehide', this.onPageHide);
@@ -129,9 +130,25 @@ export class HandControl extends EventTarget {
     let res = null;
     try { res = this.tracker.detect(v, now); this.errors = 0; }
     catch (e) { if (++this.errors >= MAX_ERRORS) { this.fail('El algılama durdu: ' + (e && e.message ? e.message : 'bilinmeyen hata')); return; } }
+    const cost = performance.now() - now; this.lastDetect = performance.now();   // sonraki kare, algılama bittikten sonra sayılır (arayüz nefes alsın)
+    if (this.tracker.delegate === 'GPU' && this.slow >= 0) {
+      this.slow = cost > SLOW_MS ? this.slow + 1 : 0; this.seen++;
+      if (this.slow >= SLOW_FRAMES) { this.toCpu(); return; }
+      if (this.seen > 40) this.slow = -1;                   // yeterince hızlı: denetim biter
+    }
     this.fpsT.push(now); while (this.fpsT.length && now - this.fpsT[0] > 1000) this.fpsT.shift();
     this.fps = this.fpsT.length;
     this.feed(res ? res.landmarks : null, now, res ? res.handedness : null);
+  }
+
+  // Ekran kartıyla algılama çok yavaş: modeli işlemciyle (WebAssembly) yeniden kur. Kamera açık kalır.
+  async toCpu() {
+    const run = this.run; this.slow = -1;
+    this.idle(); this.track = 'loading'; this.emit();
+    try { this.tracker.close(); await this.tracker.load('CPU'); }
+    catch (e) { if (run === this.run) this.fail(e && e.message ? e.message : 'El algılama başlatılamadı.'); return; }
+    if (run !== this.run) return;
+    this.engine.reset(); this.fpsT = []; this.track = 'on'; this.emit();
   }
 
   // Bir karenin el noktalarını işle. (Algılayıcıdan gelir; testler de aynı kapıdan yapay el verir.)

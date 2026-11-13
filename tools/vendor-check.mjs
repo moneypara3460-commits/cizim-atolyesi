@@ -19,7 +19,7 @@ export const FILES = [
 // npm paketi olmayan dosyalar (model): <2. argüman klasörü>/<ad> olarak indirilmiş kopya, sabitlenmiş sha256 ile karşılaştırılır.
 // sha256 null ise henüz sabitlenmemiştir (ilk kurulum): değer günlüğe yazılır, iş kırmızı olur.
 export const MODELS = [
-  ['mediapipe-models/hand_landmarker.task', 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task', null],
+  ['mediapipe-models/hand_landmarker.task', 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task', 'fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1'],
 ];
 const DL = process.argv[3];
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
