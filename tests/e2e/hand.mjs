@@ -19,7 +19,7 @@ const camBrowser = await launch({ args: [...BASE_ARGS, '--use-fake-device-for-me
 const plainBrowser = await launch();                      // kamera izni verilmeyen tarayıcı
 const DESK = { viewport: { width: 1366, height: 900 } };
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, dpr: 2 };
-const UIS = [['eski', 'index.html'], ['yeni', 'yeni/index.html']];
+const UIS = [['eski', 'klasik.html'], ['yeni', 'yeni/index.html']];
 const HAS_MP = fs.existsSync(path.join(ROOT, 'vendor/mediapipe-models/hand_landmarker.task')) && fs.existsSync(path.join(ROOT, 'vendor/@mediapipe'));
 
 // sayfa açılmadan önce: rehber kapalı + (istenirse) yapay algılayıcı
@@ -31,7 +31,7 @@ const INIT_FAKE = () => {
 const INIT_REAL = () => { try { localStorage.setItem('cizim:guideSeen', '1'); if (!localStorage.getItem('cizim:workspace')) localStorage.setItem('cizim:workspace', 'makine'); } catch (e) { /* */ } };
 
 async function shot(page, name) { const p = path.join(SHOTS, 'hand_' + name.replace(/[^\w-]+/g, '_').slice(0, 80) + '.png'); try { await page.screenshot({ path: p }); } catch (e) { /* */ } return p; }
-const T = (title, area, fn, { view = DESK, file = 'index.html', browser = camBrowser, init = INIT_FAKE, ready = true } = {}) => {
+const T = (title, area, fn, { view = DESK, file = 'klasik.html', browser = camBrowser, init = INIT_FAKE, ready = true } = {}) => {
   if (only.length && !only.some((o) => area.toLowerCase().startsWith(o.toLowerCase()))) return;
   return R.test(title, async () => {
     const a = await openApp(browser, url, { ...view, path: file, init });

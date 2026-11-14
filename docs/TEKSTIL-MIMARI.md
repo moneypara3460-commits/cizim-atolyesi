@@ -56,7 +56,7 @@ tx/
 ```
 Paylaşılan modüller **salt okunur** kullanılır. Bunlar: `cad2d-geom.js` (kesişim, DXF temel yazıcı, dönüşümler) ve `logic.js` içindeki yardımcılar (`fmtNum`, `esc`). Bunlarda tekstil için değişiklik gerekirse önce makine testleri çalıştırılır ve onay istenir.
 
-**Açılış seçimi:** `index.html` ilk açılışta iki büyük düğmeli seçim ekranı gösterir (`ws.js`); son seçim hatırlanır. Makine alanında Projeler (💾) penceresinde "Tekstil ve Moda" bağlantısı, tekstilde "⚙ Makine" düğmesi var. Makine tarafında değişen tek dosya `index.html` (bir satır); `app.js` değişmedi.
+**Açılış seçimi (14.11.2026'dan beri):** kök `index.html` açılış ekranıdır (`acilis/`): kısa çizim animasyonu, sonra Makine / Tekstil seçimi. Makine yeni arayüzü (`yeni/`), Tekstil `tekstil.html`'i açar; son seçim (`cizim:workspace`) hatırlanır. Bölümler birbirine bağlanmaz; ikisinde de yalnız **Ana ekran** (`./?sec=1`) seçime döner. Eski arayüz `klasik.html` adıyla durur (uygulama çekirdeğinin E2E testleri için), uygulamada ona bağlantı yoktur. Önceki `ws.js` kaldırıldı.
 
 ### Proje verisi (sürümlü, türlendirilmiş)
 

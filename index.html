@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a1120">
+<title>Çizim Atölyesi</title>
+<link rel="stylesheet" href="./acilis/acilis.css?v=20261114a">
+</head>
+<body>
+<!-- Açılış ekranı: önce kısa çizim animasyonu, sonra Makine / Tekstil seçimi.
+     Son seçim hatırlanır (cizim:workspace); bölüm içindeki "Ana ekran" bu sayfaya ?sec=1 ile döner. -->
+<main id="app" data-stage="splash">
+  <section id="splash" aria-label="Çizim Atölyesi açılıyor">
+    <svg class="mark" viewBox="0 0 240 120" aria-hidden="true">
+      <!-- tek çizgi: solda dişli profili, sağda dikiş çizgisi -->
+      <path class="stroke" pathLength="1" d="M55.8 33.3 L56.6 26.2 A34 34 0 0 1 63.4 26.2 L64.2 33.3 A27 27 0 0 1 72.3 35.9 L77.1 30.6 A34 34 0 0 1 82.6 34.6 L79.1 40.9 A27 27 0 0 1 84.1 47.7 L91.1 46.3 A34 34 0 0 1 93.2 52.8 L86.7 55.8 A27 27 0 0 1 86.7 64.2 L93.2 67.2 A34 34 0 0 1 91.1 73.7 L84.1 72.3 A27 27 0 0 1 79.1 79.1 L82.6 85.4 A34 34 0 0 1 77.1 89.4 L72.3 84.1 A27 27 0 0 1 64.2 86.7 L63.4 93.8 A34 34 0 0 1 56.6 93.8 L55.8 86.7 A27 27 0 0 1 47.7 84.1 L42.9 89.4 A34 34 0 0 1 37.4 85.4 L40.9 79.1 A27 27 0 0 1 35.9 72.3 L28.9 73.7 A34 34 0 0 1 26.8 67.2 L33.3 64.2 A27 27 0 0 1 33.3 55.8 L26.8 52.8 A34 34 0 0 1 28.9 46.3 L35.9 47.7 A27 27 0 0 1 40.9 40.9 L37.4 34.6 A34 34 0 0 1 42.9 30.6 L47.7 35.9 A27 27 0 0 1 55.8 33.3 Z M60 60 m-9 0 a9 9 0 1 0 18 0 a9 9 0 1 0 -18 0 M94 60 C124 60 136 32 166 32 S204 74 228 74"/>
+      <path class="stitch" d="M100 66 C130 66 140 36 170 36 S205 76 225 76"/>
+    </svg>
+    <h1>Çizim Atölyesi</h1>
+    <p id="going" hidden></p>
+    <button id="other" type="button" hidden>Başka bölüm seç</button>
+  </section>
+
+  <section id="pick" aria-labelledby="pick-h">
+    <header>
+      <p class="brand">Çizim Atölyesi</p>
+      <h2 id="pick-h">Hangi atölyede çalışacaksın?</h2>
+    </header>
+    <div class="doors">
+      <a class="door makine" href="yeni/" data-ws="makine">
+        <svg class="art" viewBox="0 0 160 120" aria-hidden="true">
+          <circle cx="80" cy="60" r="42" class="guide dash"/>
+                    <path class="line" d="M76.2 31.2 L77.0 24.1 A36 36 0 0 1 83.0 24.1 L83.8 31.2 A29 29 0 0 1 91.1 33.2 L95.3 27.4 A36 36 0 0 1 100.5 30.4 L97.7 37.0 A29 29 0 0 1 103.0 42.3 L109.6 39.5 A36 36 0 0 1 112.6 44.7 L106.8 48.9 A29 29 0 0 1 108.8 56.2 L115.9 57.0 A36 36 0 0 1 115.9 63.0 L108.8 63.8 A29 29 0 0 1 106.8 71.1 L112.6 75.3 A36 36 0 0 1 109.6 80.5 L103.0 77.7 A29 29 0 0 1 97.7 83.0 L100.5 89.6 A36 36 0 0 1 95.3 92.6 L91.1 86.8 A29 29 0 0 1 83.8 88.8 L83.0 95.9 A36 36 0 0 1 77.0 95.9 L76.2 88.8 A29 29 0 0 1 68.9 86.8 L64.7 92.6 A36 36 0 0 1 59.5 89.6 L62.3 83.0 A29 29 0 0 1 57.0 77.7 L50.4 80.5 A36 36 0 0 1 47.4 75.3 L53.2 71.1 A29 29 0 0 1 51.2 63.8 L44.1 63.0 A36 36 0 0 1 44.1 57.0 L51.2 56.2 A29 29 0 0 1 53.2 48.9 L47.4 44.7 A36 36 0 0 1 50.4 39.5 L57.0 42.3 A29 29 0 0 1 62.3 37.0 L59.5 30.4 A36 36 0 0 1 64.7 27.4 L68.9 33.2 A29 29 0 0 1 76.2 31.2 Z"/>
+          <circle cx="80" cy="60" r="10" class="line"/>
+          <path class="center" d="M66 60 h28 M80 46 v28"/>
+        </svg>
+        <span class="txt">
+          <b>Makine ve Mühendislik</b>
+          <span>Parça ve montaj tasarımı, teknik resim, CNC, ağırlık ve dayanım analizi</span>
+          <em class="last" hidden>Son kullandığın</em>
+        </span>
+      </a>
+      <a class="door tekstil" href="tekstil.html" data-ws="tekstil">
+        <svg class="art" viewBox="0 0 160 120" aria-hidden="true">
+          <!-- gömlek ön kalıbı: dikiş payı (kesik), çentikler, düz boy oku -->
+          <path class="line" d="M52 18 q14 10 28 0 l26 8 l10 24 l-14 4 l-2 56 h-60 l-2-56 l-14-4 l10-24 z"/>
+          <path class="guide dash" d="M54 24 q12 8 26 0 l22 7 l8 18 l-12 4 l-2 52 h-52 l-2-52 l-12-4 l8-18 z"/>
+          <path class="line" d="M37 50 l4 -3 M123 50 l-4 -3 M80 110 v-5"/>
+          <path class="center" d="M80 40 v56 M75 46 l5-6 l5 6 M75 90 l5 6 l5-6"/>
+        </svg>
+        <span class="txt">
+          <b>Tekstil ve Moda</b>
+          <span>Kalıp, beden serisi, kesim planı, triko ve üretim föyü</span>
+          <em class="last" hidden>Son kullandığın</em>
+        </span>
+      </a>
+    </div>
+    <p class="note">Seçimin hatırlanır. Bölümü değiştirmek için içerideki menüden <b>Ana ekran</b>'a dön.</p>
+  </section>
+</main>
+<script type="module" src="./acilis/acilis.js?v=20261114a"></script>
+</body>
+</html>
