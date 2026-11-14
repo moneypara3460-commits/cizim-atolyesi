@@ -216,7 +216,9 @@ await T('telefon ölçüsü (emülasyon), yeni arayüz: düğme görünür, parm
   expect(await chips(page) === n0 + 1, 'kalibrasyon sırasında sayfaya basma gitmedi');
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('cizim:hand')));
   expect(saved.sens === 7 && saved.box && Math.abs(saved.box.x0 - 0.3) < 0.02 && Math.abs(saved.box.x1 - 0.6) < 0.02, 'ayar saklandı: ' + JSON.stringify(saved));
-  await raw(0.55, 0.5, 'point'); await page.waitForTimeout(600);   // aynalı: kutunun ortası (0,45) ham görüntüde 0,55
+  await raw(0.55, 0.5, 'point');   // aynalı: kutunun ortası (0,45) ham görüntüde 0,55
+  // sabit süre yerine imlecin oturmasını bekle (yavaş CI makinesinde süzgeç daha geç oturur)
+  await page.waitForFunction(() => Math.abs(window.__hand.cursor.x - 195) < 12, null, { timeout: 8000 }).catch(() => {});
   const c = await st(page); expect(Math.abs(c.x - 195) < 12, 'kalibre alanın ortası ekranın ortasına geliyor: ' + c.x.toFixed(1));
   await noHand(page); await page.locator('[data-hc="panel"]').click(); await page.locator('[data-hc="calib-reset"]').click();
   expect(!(await page.evaluate(() => window.__hand.calibrated)), 'kalibrasyon sıfırlandı');
