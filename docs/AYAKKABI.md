@@ -94,6 +94,12 @@ Derleme adımı olmayan saf JavaScript ES modülleri, HTML Canvas 2D, IndexedDB.
 
 **Aşama 2 — 3D kalıp yükleme, görüntüleme, ölçüm.** Projede `future.last3d` alanı ayrıldı (şu an `null`). Önerilen kayıt: `{ file: { name, format: 'stl'|'obj'|'step', bytesRef }, units: 'mm', transform, landmarks: { burunUcu, topukArka, kemer, ... }, measures: { boy, genislik, ... } }`. Büyük ikili dosya proje JSON'una gömülmez; IndexedDB'de ayrı anahtar (`f:<proje>:<dosya>`) olarak tutulur, projede yalnız referans durur. Depo zaten three.js 0.160.0 (vendor/) ve STL / OCCT (STEP) okuyucularını içeriyor; Aşama 2 bunları `ayk/` içinden salt okunur kullanabilir. 3B görünüm ayrı bir modül (`ayk/last3d.js`) olmalı, 2B editöre bağımlı olmamalı.
 
+**Kalıp fotoğrafı (yapıldı, Kasım 2026).** `project.last`: yan ve alt görünüşün kâğıt (A4/A3) üstünde çekilmiş
+fotoğrafından ölçülü dış çizgi (`ayk/last.js`: kâğıt bulma → perspektif düzeltme → renk farkıyla ayırma → sınır izleme → mm).
+Bilinen kalıp boyu girilirse ölçek ona göre düzeltilir. Çizgi stampada referans katmanında, fotoğraf altlık olarak açılır.
+`project.modelRef`: yapılacak modelin resimleri (en çok 6) ve notu; stampada köşedeki "Model" düğmesiyle görünür.
+Sınır: fotoğraf 3D kalıbın gölge/yükseklik etkisini taşır; kesin ölçü için bilinen boy girilmeli.
+
 **Aşama 3 — kamerayla tarama.** `future.scan`: ham nokta bulutu / ağ referansı + kalibrasyon (bilinen ölçülü işaret). Depodaki `hand/` kamera altyapısı (izin, önizleme) örnek alınabilir.
 
 **Aşama 4 — fotoğraftan saya tanıma.** Çıktısı doğrudan bu aşamanın veri biçimine yazılmalı: her tanınan parça için `outline` (düğüm yolu, mm), `edges` (pay türü önerisi), `marks`. Ölçek, fotoğraftaki bilinen ölçüden alınmalı. Depodaki `photo2d.js` (elle çizimden çizgi / yay çıkarma) başlangıç olabilir.
