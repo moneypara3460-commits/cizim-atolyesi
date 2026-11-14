@@ -111,6 +111,12 @@ jobs:
           sudo apt-get install -y poppler-utils librsvg2-bin python3-pil >/dev/null
           node tests/e2e/ayakkabi.mjs 2>&1 | tee reports-e2e-ayakkabi.log
         shell: bash -o pipefail {0}
+      - name: E2E — tanıtım sitesi (menü, bölümler, taşma)
+        if: always()
+        env:
+          PLAYWRIGHT_MODULE: ${{ github.workspace }}/.e2e-libs/node_modules/playwright
+        run: node tests/e2e/tanitim.mjs 2>&1 | tee reports-e2e-tanitim.log
+        shell: bash -o pipefail {0}
       - name: Raporları yükle (ekran görüntüleri dahil)
         if: always()
         uses: actions/upload-artifact@v4
@@ -122,6 +128,7 @@ jobs:
             reports-e2e-yeni.log
             reports-e2e-hand.log
             reports-e2e-ayakkabi.log
+            reports-e2e-tanitim.log
           if-no-files-found: warn
 
   # Üçüncü taraf kütüphaneler depoda (vendor/) birebir kopya olarak durur; uygulama dış siteden kod yüklemez.
