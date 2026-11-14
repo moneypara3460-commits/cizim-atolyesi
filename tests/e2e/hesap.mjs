@@ -35,7 +35,9 @@ function fakeBackend(state) {
 }
 
 async function ctxWith({ paywall = true, billing = false, view } = {}) {
-  const ctx = await browser.newContext(view || { viewport: { width: 1280, height: 860 } });
+  // bypassCSP: yalnız test aracının kendi bekleme kodu için (yeni Playwright sürümleri sıkı CSP'de eval'e takılıyor).
+  // Sayfanın güvenlik ayarı değişmez; ayrıca aşağıdaki test CSP'nin sayfada durduğunu doğrular.
+  const ctx = await browser.newContext({ ...(view || { viewport: { width: 1280, height: 860 } }), bypassCSP: true });
   const state = { trialDays: 10, subs: [], calls: [], verified: [] };
   if (paywall) await ctx.route('**/hesap/config.js', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: CFG_ON }));
   await ctx.route(SUPABASE_URL + '/**', fakeBackend(state));
@@ -156,6 +158,13 @@ await R.test('Hesabım sayfası telefonda taşmaz; çıkış oturumu siler', asy
   await p.click('#logout'); await p.waitForSelector('#login:not([hidden])');
   expect(await p.evaluate(() => localStorage.getItem('cizim:oturum')) === null, 'oturum silindi');
   await ctx.close();
+});
+
+await R.test('Hesabım sayfasının güvenlik politikası sıkı kalır (eval yok, yalnız kendi sitesi + Supabase)', async () => {
+  const html = fs.readFileSync(path.join(ROOT, 'hesap/index.html'), 'utf8');
+  const csp = /Content-Security-Policy" content="([^"]+)"/.exec(html)[1];
+  expect(/script-src 'self';/.test(csp) && !/unsafe-eval/.test(csp), 'script-src: ' + csp);
+  expect(csp.includes(`connect-src 'self' ${SUPABASE_URL};`), 'connect-src');
 });
 
 await browser.close(); srv.close();
