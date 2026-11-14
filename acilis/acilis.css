@@ -70,11 +70,14 @@ a, button { -webkit-tap-highlight-color: transparent; }
 .last { justify-self: start; margin-top: 4px; font-style: normal; font-size: 13px; font-weight: 600; color: var(--c); }
 .door:active { transform: scale(.985); }
 @media (hover: hover) { .door:hover { border-color: var(--c); } }
+.new { justify-self: start; margin-top: 4px; font-style: normal; font-size: 12px; font-weight: 800; letter-spacing: .06em; color: #0a1120; background: var(--c); padding: 2px 8px; border-radius: 999px; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .55; } }
 .note { margin: 20px 2px 0; color: var(--muted); font-size: 14px; line-height: 1.5; max-width: 60ch; }
 .note b { color: var(--text); font-weight: 600; }
 
 @media (prefers-reduced-motion: reduce) {
   .mark .stroke { animation: none; stroke-dashoffset: 0; }
   .mark .stitch, #splash h1 { animation: none; opacity: 1; }
+  .new { animation: none; }
   #splash, #pick { transition: none; }
 }
