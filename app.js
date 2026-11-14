@@ -783,7 +783,7 @@ function rebuild(refit) {
     modelMesh = null; capMesh = null;
 
     const vis = parts.filter((p) => !p.hidden);
-    if (!vis.length) { lastClean = null; lastBrushes = []; refreshOverlays(); setMsg(parts.length ? 'Tüm parçalar gizli' : '', false); return; }   // boş model: boş çizim alanı
+    if (!vis.length) { lastClean = null; lastBrushes = []; refreshOverlays(); modelChanged(); setMsg(parts.length ? 'Tüm parçalar gizli' : '', false); return; }   // boş model: boş çizim alanı
 
     const useColors = vis.some((p) => p.color);
     let out;
@@ -800,19 +800,13 @@ function rebuild(refit) {
     const clean = compact(out.result.geometry, useColors);
     if (!clean.attributes.position.count) {
       lastClean = null;
-      refreshOverlays();
+      refreshOverlays(); modelChanged();
       setMsg('Model boş: parçalar birbirini tamamen yok etti.', true);
       return;
     }
     clean.computeBoundingBox();
     lastClean = clean;
-    rebuildCount++;
-    if (typeof scheduleWeightMarker === 'function') scheduleWeightMarker();
-    if (simUI && simUI.active) { simUI.invalidate(); if (tab === 'sim') setTimeout(renderPanel, 0); }
-    if (camUI && camUI.active) { camUI.invalidate(); if (tab === 'cam') setTimeout(renderPanel, 0); }
-    if (typeof cam5UI !== 'undefined' && cam5UI && cam5UI.active) { cam5UI.invalidate(); if (tab === 'cam') setTimeout(renderPanel, 0); }
-    if (typeof occtUI !== 'undefined' && occtUI && occtUI.active) { occtUI.invalidate(); if (tab === 'occt') setTimeout(renderPanel, 0); }
-    if (asmUI && asmUI.active) { asmUI.invalidate(); if (tab === 'asm') setTimeout(renderPanel, 0); }
+    modelChanged();
 
     let materials = matFor(vis[0].color);
     if (clean.groups.length) {
@@ -835,6 +829,18 @@ function rebuild(refit) {
   } catch (err) {
     setMsg('Hata: ' + (err && err.message ? err.message : err), true);
   }
+}
+
+// Model geometrisi değişti: ona bağlı katmanlar (ağırlık merkezi, benzetim, CNC, montaj, OCCT) eskimesin.
+// Model boşaldığında (son parça silindi, hepsi gizlendi, parçalar birbirini yok etti) de çağrılır: eski işaretler ekranda kalmaz.
+function modelChanged() {
+  rebuildCount++;
+  if (typeof drawWeightMarker === 'function') { if (lastClean) scheduleWeightMarker(); else { clearTimeout(wgtTimer); drawWeightMarker(); } }
+  if (simUI && simUI.active) { simUI.invalidate(); if (tab === 'sim') setTimeout(renderPanel, 0); }
+  if (camUI && camUI.active) { camUI.invalidate(); if (tab === 'cam') setTimeout(renderPanel, 0); }
+  if (typeof cam5UI !== 'undefined' && cam5UI && cam5UI.active) { cam5UI.invalidate(); if (tab === 'cam') setTimeout(renderPanel, 0); }
+  if (typeof occtUI !== 'undefined' && occtUI && occtUI.active) { occtUI.invalidate(); if (tab === 'occt') setTimeout(renderPanel, 0); }
+  if (asmUI && asmUI.active) { asmUI.invalidate(); if (tab === 'asm') setTimeout(renderPanel, 0); }
 }
 
 /* ---- yardımcı nesneler: hayalet (oyuk), seçim, ölçü etiketleri ---- */
@@ -4277,7 +4283,7 @@ try {
 } catch (e) { /* bozuk kayıt: varsayılanla devam */ }
 
 // test / hata ayıklama için küçük kanca (arayüzü etkilemez)
-window.__app = { get lathe() { return latheUI; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
+window.__app = { get lathe() { return latheUI; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, get weightMarkerCount() { return wgtGroup.children.length; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
 
 renderPanel();
 updateToolbar();
