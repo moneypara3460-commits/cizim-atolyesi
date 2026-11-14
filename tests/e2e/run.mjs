@@ -12,6 +12,15 @@ const R = createRunner('e2e');
 const { srv, url } = await startServer();
 const browser = await launch();
 const NO_GUIDE = () => { try { localStorage.setItem('cizim:guideSeen', '1'); if (!localStorage.getItem('cizim:workspace')) localStorage.setItem('cizim:workspace', 'makine'); } catch (e) { /* */ } };
+// Uygulama boş açılır. Senaryoların çoğu eski başlangıç modelini (tek kutu, 80×60×40 mm) varsayar: bu kutu, otomatik kayıt
+// olarak verilir (kayıt yoksa; sayfa yenilenince kullanıcının kaydı korunur). Boş açılışı sınayan senaryo { empty: true } kullanır.
+// (tarayıcıya kaynak metni olarak gider: dışarıdaki işlevlere başvuramaz, kendi içinde tam olmalı)
+const NO_GUIDE_BOX = () => {
+  try {
+    localStorage.setItem('cizim:guideSeen', '1'); if (!localStorage.getItem('cizim:workspace')) localStorage.setItem('cizim:workspace', 'makine');
+    if (!localStorage.getItem('cizim:auto')) localStorage.setItem('cizim:auto', JSON.stringify({ projName: 'model', snap: JSON.stringify({ parts: [{ id: 1, type: 'box', op: 'add', w: 80, l: 60, h: 40, d: 50, d2: 0, di: 20, r: 0, c: 0, x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }], sel: 1, nextId: 2 }) }));
+  } catch (e) { /* */ }
+};
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, dpr: 2 };
 const DESK = { viewport: { width: 1366, height: 900 } };
 const perf = [];
@@ -21,7 +30,7 @@ const perf = [];
 const UI_PATH = process.env.E2E_UI === 'yeni' ? 'yeni/index.html' : undefined;
 // yeni arayüz koşusunda tekstil (ayrı sayfa) ve eski açılış seçimi (yalnız eski arayüzde var) tekrar koşulmaz
 const SKIP_YENI = UI_PATH ? ['t-tekstil', 'w-alan'] : [];
-async function app(view = DESK) { const a = await openApp(browser, url, { ...view, path: UI_PATH, init: NO_GUIDE }); await waitReady(a.page); return a; }
+async function app(view = DESK, empty = false) { const a = await openApp(browser, url, { ...view, path: UI_PATH, init: empty ? NO_GUIDE : NO_GUIDE_BOX }); await waitReady(a.page); return a; }
 const act = async (page, a) => { const b = page.locator(`[data-act="${a}"]:visible`).first(); await b.scrollIntoViewIfNeeded(); await b.click(); };
 const tab = async (page, k) => {
   // yeni arayüz: sekme önce alttaki / üstteki bölüm düğmesiyle açılır (Tasarım, Analiz, Üretim); telefonda panel kapalıysa açılır
@@ -45,7 +54,7 @@ async function close(a) { try { await a.ctx.close(); } catch (e) { /* */ } }
 const tmp = (name, text) => { const p = path.join(OUT, 'tmp_' + name); fs.writeFileSync(p, text); return p; };
 // test gövdesi: hata olursa ekran görüntüsü + toplanan sayfa hataları
 const T = (title, area, fn, meta = {}) => { if (only.length && !only.some((o) => area.toLowerCase().startsWith(o.toLowerCase()))) return; if (SKIP_YENI.includes(area.toLowerCase())) return; return R.test(title, async () => {
-  const a = await app(meta.view || DESK);
+  const a = await app(meta.view || DESK, !!meta.empty);
   try { expect(!a.net.missing.length, 'Kütüphane dosyası bulunamadı: ' + a.net.missing[0]); await fn(a); expect(!a.net.external.length, 'Dış siteye istek: ' + a.net.external.slice(0, 3).join(', ')); const errs = a.errors.filter((e) => !(meta.allowErr || []).some((re) => re.test(e))); expect(!errs.length, 'Sayfa hataları: ' + errs.slice(0, 3).join(' | ')); }
   catch (e) { e.shot = await shot(a.page, area + '_' + title); throw e; }
   finally { await close(a); }
@@ -102,6 +111,25 @@ await T('3B: kutu + ölçü + yuvarlama + oyuk (delik), kaydet, sayfayı yenile,
   expect(+(await page.locator('#tabbody [data-k="w"]').inputValue()) === 120, 'ölçü korundu');
   expect(+(await page.locator('#tabbody [data-k="r"]').inputValue()) === 4, 'yuvarlama korundu');
 });
+
+await T('3B: uygulama boş çizim alanıyla açılır; eklenen son parça da silinir, geri alınır; boş model kalıcıdır', 'B-3B', async ({ page }) => {
+  expect(await chips(page) === 0 && await page.evaluate(() => window.__app.parts.length === 0), 'ilk açılışta parça yok');
+  expect(await page.evaluate(() => { const m = document.getElementById('msg'); return !m.textContent.trim() || getComputedStyle(m).display === 'none'; }), 'boş modelde hata / uyarı yazısı yok');
+  await tab(page, 'dims'); expect(/Model boş|Seçili parça yok/.test(await body(page)), 'boş modelde panel açıklaması');
+  await act(page, 'add-box'); await page.waitForTimeout(400);
+  expect(await chips(page) === 1, 'kutu eklendi');
+  await act(page, 'del'); await page.waitForTimeout(400);
+  expect(await chips(page) === 0 && await page.evaluate(() => window.__app.parts.length === 0), 'son parça silindi');
+  expect(!/silinemez/.test(await page.evaluate(() => document.body.innerText)), '"Son parça silinemez" uyarısı yok');
+  await act(page, 'undo'); await page.waitForTimeout(400); expect(await chips(page) === 1, 'geri al: parça geri geldi');
+  await act(page, 'redo'); await page.waitForTimeout(400); expect(await chips(page) === 0, 'ileri al: yeniden boş');
+  // boşken parça isteyen işlemler sessizce bozulmaz
+  await page.evaluate(() => { const A = window.__app; for (const v of ['genişlik 50', 'kopyala', 'aynala']) A.applyCommands(A.parseVoice(v), v); });
+  await page.waitForTimeout(300); expect(await chips(page) === 0, 'boşken kopyala / aynala parça üretmez');
+  await page.waitForTimeout(1500);   // otomatik kayıt
+  await page.reload(); await waitReady(page);
+  expect(await chips(page) === 0, 'yenileyince boş model geri yüklendi');
+}, { empty: true });
 
 await T('3B: boş alana dokunma seçimi ve paneli temizler; kamera döndürme temizlemez; parçaya dokununca seçilir', 'B-3B', async ({ page }) => {
   await act(page, 'fit'); await page.waitForTimeout(300);
@@ -328,6 +356,36 @@ await T('Analiz: ankastre kiriş statik (FL³/3EI ±3%), ısı enerji dengesi, e
   expect(/ESKİ/.test(await body(page)), 'yük değişince eski sonuç işaretlendi');
 });
 
+await T('Analiz: basınç yükü eklenir (panel çökmez), değeri değiştirilir; ankastre kirişte yayılı yük sehimi (wL⁴/8EI ±6%)', 'J-Analiz', async ({ page }) => {
+  await tab(page, 'dims'); await setK(page, 'w', 200); await setK(page, 'h', 20); await setK(page, 'l', 20); await setK(page, 'r', 0);
+  await tab(page, 'fem');
+  await act(page, 'fm-type-static'); await act(page, 'fm-add-ms'); await page.locator('#tabbody [data-fm="ms.0.sel"]').selectOption('-x');
+  await act(page, 'fm-add-mp'); await page.waitForTimeout(300);
+  const pv = page.locator('#tabbody [data-fm="ml.0.pv"]');
+  expect(await pv.count() === 1 && /Basınç/.test(await body(page)), 'basınç yükü panelde görünür');
+  expect(+(await pv.inputValue()) === 1, 'varsayılan basınç 1');
+  await page.locator('#tabbody [data-fm="ml.0.sel"]').selectOption('+y'); await page.waitForTimeout(200);
+  await pv.fill('0.5'); await pv.dispatchEvent('change'); await page.waitForTimeout(300);
+  await page.locator('#tabbody [data-fm="ml.0.sel"]').selectOption('+y'); await page.waitForTimeout(200);
+  expect(+(await page.locator('#tabbody [data-fm="ml.0.pv"]').inputValue()) === 0.5, 'yer değişince basınç değeri korunur');
+  await act(page, 'fm-solve');
+  await waitText(page, '#tabbody', /En büyük yer değiştirme|⛔/, 180000);
+  const tx = await body(page), m = tx.match(/En büyük yer değiştirme: ([\d,]+) mm/);
+  expect(m, 'sonuç: ' + tx.slice(0, 300));
+  // üst yüzde 0,5 MPa → yayılı yük w = 0,5 × 20 = 10 N/mm; δ = wL⁴ / 8EI (kayma şekil değişimi küçük katkı)
+  const u = parseFloat(m[1].replace(',', '.')), ex = 10 * 200 ** 4 / (8 * 210000 * (20 * 20 ** 3 / 12));
+  expect(Math.abs(u - ex) / ex < 0.06, `sehim ${u} ≠ ${ex.toFixed(4)} (±%6)`);
+});
+
+await T('Ağırlık: yatık silindir (zemine çizgi boyunca değer) — panel çökmez, "kendi başına durmaz" der', 'F-Üretim', async ({ page }) => {
+  await page.locator('#chips .chip').first().click(); await act(page, 'del'); await page.waitForTimeout(300);
+  await act(page, 'add-cylinder'); await page.waitForTimeout(400);
+  await tab(page, 'rot'); await setK(page, 'rz', 90); await page.waitForTimeout(400);
+  await tab(page, 'wgt'); await page.waitForTimeout(500);
+  const tx = await body(page);
+  expect(/Denge analizi/.test(tx) && /kendi başına dengede durmaz/.test(tx), 'denge: ' + tx.slice(0, 300));
+});
+
 /* ---------- K. Proje bütünlüğü ---------- */
 await T('Proje bütünlüğü: parça + malzeme + OCCT parçası + 5 eksen ayarları + analiz sonucu kaydedilip açılır', 'K-Proje', async ({ page }) => {
   await tab(page, 'dims'); await setK(page, 'w', 80); await setK(page, 'h', 20); await setK(page, 'l', 40);
@@ -367,7 +425,8 @@ for (const [nm, view] of [['telefon 390×844 dokunmatik', PHONE], ['tablet 820×
 await T('Sağlamlık: bozuk otomatik kayıt ve bozuk proje kaydı uygulamayı çökertmez', 'S-Sağlamlık', async ({ page }) => {
   await page.evaluate(() => { localStorage.setItem('cizim:auto', '{bozuk json'); const p = JSON.parse(localStorage.getItem('cizim:projects') || '{}'); p['bozuk'] = { data: '{"parts":"x"}', at: 1 }; p['bozuk2'] = { data: 'null', at: 2 }; localStorage.setItem('cizim:projects', JSON.stringify(p)); });
   await page.reload(); await waitReady(page);
-  expect(await chips(page) >= 1, 'bozuk otomatik kayıtla açıldı');
+  expect(await chips(page) === 0 && await page.evaluate(() => Array.isArray(window.__app.parts)), 'bozuk otomatik kayıtla açıldı (varsayılan: boş model)');
+  await act(page, 'add-box'); await page.waitForTimeout(400);
   const before = await page.locator('#chips').innerText();
   await act(page, 'projects');
   const has = await page.locator('[data-open="bozuk"]').count();
@@ -394,7 +453,7 @@ await (async () => { if (only.length && !only.some((o) => 'W-Alan'.toLowerCase()
     await a.page.locator('#ws-pick [data-ws="makine"]').click();
     await waitReady(a.page);
     expect(await a.page.locator('#ws-pick').count() === 0, 'seçim kapandı');
-    expect(await chips(a.page) >= 1, 'makine uygulaması çalışıyor');
+    expect(await a.page.evaluate(() => !!window.__app && Array.isArray(window.__app.parts) && !!document.querySelector('#view canvas')), 'makine uygulaması çalışıyor');
     await a.page.reload(); await waitReady(a.page);
     expect(await a.page.locator('#ws-pick').count() === 0, 'seçim hatırlandı');
     await act(a.page, 'projects'); await a.page.locator('#ws-tx').click();
@@ -402,7 +461,7 @@ await (async () => { if (only.length && !only.some((o) => 'W-Alan'.toLowerCase()
     // tekstil son seçim olunca ana sayfa tekstile yönlenir; ?ws=makine ile geri dönülür
     await a.page.goto(url + 'index.html'); await a.page.waitForURL(/tekstil\.html/);
     await a.page.locator('#to-mech').click(); await waitReady(a.page);
-    expect(/index\.html\?ws=makine/.test(a.page.url()) && await chips(a.page) >= 1, 'makineye dönüldü');
+    expect(/index\.html\?ws=makine/.test(a.page.url()) && await a.page.evaluate(() => !!window.__app && Array.isArray(window.__app.parts)), 'makineye dönüldü');
     expect(!a.errors.length, 'sayfa hataları: ' + a.errors.join(' | '));
   } catch (e) { e.shot = await shot(a.page, 'W_alan'); throw e; } finally { await close(a); }
 }, { area: 'W-Alan' }); })();

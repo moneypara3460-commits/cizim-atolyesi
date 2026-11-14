@@ -129,6 +129,7 @@ t('çizgi teması: yatık silindir kendi başına durmaz diye raporlanır', () =
   for (let i = 0; i < n; i++) { const a0 = i / n * 2 * Math.PI, a1 = (i + 1) / n * 2 * Math.PI; const P = (a, x) => [x, r + r * Math.sin(a), r * Math.cos(a)]; tr.push(...P(a0, 0), ...P(a1, L), ...P(a1, 0), ...P(a0, 0), ...P(a0, L), ...P(a1, L), 0, r, 0, ...P(a0, 0), ...P(a1, 0), L, r, 0, ...P(a1, L), ...P(a0, L)); }
   const res = analyzeWeight([item('Boru', 'cylinder', Float32Array.from(tr))]);
   assert.equal(res.balance.status, 'line');
+  assert.ok(Array.isArray(res.balance.issues) && Array.isArray(res.balance.feet), 'arayüzün kullandığı alanlar var (eksikse ağırlık paneli çöküyordu)');
 });
 t('kaldırma: masa üst köşelerinden 4 nokta, eşit yük, sapan katsayıları', () => {
   const p = { ...newPart(1, 'frame', 'add', null), fr: 'table', fw: 1200, fd: 700, fh: 750, fs: 150, pf: 'k40' };

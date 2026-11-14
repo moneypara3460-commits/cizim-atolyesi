@@ -214,10 +214,17 @@ await T('telefon ölçüsü (emülasyon), yeni arayüz: düğme görünür, parm
   await raw(0.4, 0.65, 'point'); await page.waitForTimeout(250); await raw(0.4, 0.65, 'pinch');
   await until(page, () => !window.__hand.calib && window.__hand.calibrated, null, 'kalibrasyon bitti');
   expect(await chips(page) === n0 + 1, 'kalibrasyon sırasında sayfaya basma gitmedi');
+  const ov = await page.evaluate(() => ({ iw: innerWidth, vw: window.visualViewport ? visualViewport.width : null, sw: document.documentElement.scrollWidth }));
+  if (ov.iw !== ov.vw) console.log('       not: sayfa yana taşıyor', JSON.stringify(ov));
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('cizim:hand')));
   expect(saved.sens === 7 && saved.box && Math.abs(saved.box.x0 - 0.3) < 0.02 && Math.abs(saved.box.x1 - 0.6) < 0.02, 'ayar saklandı: ' + JSON.stringify(saved));
-  await raw(0.55, 0.5, 'point'); await page.waitForTimeout(600);   // aynalı: kutunun ortası (0,45) ham görüntüde 0,55
-  const c = await st(page); expect(Math.abs(c.x - 195) < 12, 'kalibre alanın ortası ekranın ortasına geliyor: ' + c.x.toFixed(1));
+  // Birleştirmeden çıkarken motor imleç sıçramasın diye bir kayma payı tutar; pay, el hareket ettikçe erir.
+  // Kullanıcının yaptığı gibi eli biraz gezdirip kutunun ortasına getir (aynalı: kutunun ortası 0,45 ham görüntüde 0,55).
+  for (const x of [0.5, 0.62, 0.48, 0.6, 0.5, 0.55]) { await raw(x, 0.5, 'point'); await page.waitForTimeout(220); }
+  // ekranın ortası: görünen alanın (visualViewport) ortası — sayfa yana taşsa bile imleç görünen alanda kalmalı
+  const mid = await page.evaluate(() => { const v = window.visualViewport; return v ? v.offsetLeft + v.width / 2 : innerWidth / 2; });
+  await page.waitForFunction((m) => Math.abs(window.__hand.cursor.x - m) < 12, mid, { timeout: 8000 }).catch(() => {});
+  const c = await st(page); expect(Math.abs(c.x - mid) < 12, `kalibre alanın ortası ekranın ortasına geliyor: ${c.x.toFixed(1)} (orta ${mid.toFixed(1)})`);
   await noHand(page); await page.locator('[data-hc="panel"]').click(); await page.locator('[data-hc="calib-reset"]').click();
   expect(!(await page.evaluate(() => window.__hand.calibrated)), 'kalibrasyon sıfırlandı');
   // sekme arka plana geçerse basılı işaretçi bırakılır

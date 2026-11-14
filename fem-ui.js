@@ -42,7 +42,12 @@ function createClient() {
 export function createFemUI(api) {
   const client = createClient();
   const S = { busy: null, err: null, view: null, live: new Map(), sel: null, field: null, defo: 'auto', mode: 0, frame: 0, pick: null, conv: null, showRep: false, lab: false, matEdit: null };
-  const D = () => { let o = api.getFem(); if (!o) { o = defaults(); api.setFem(o); } const d = defaults(); for (const k of Object.keys(d)) if (o[k] == null) o[k] = d[k]; return o; };
+  const D = () => { let o = api.getFem(); if (!o) { o = defaults(); api.setFem(o); } const d = defaults(); for (const k of Object.keys(d)) if (o[k] == null) o[k] = d[k]; fixPressure(o); return o; };
+  // Basınç yükünün değeri 'pv' alanında tutulur. 'p' alanı her yükte "dokunarak seçilen nokta" ([x, y, z]) içindir.
+  // Eski kayıtlarda basınç değeri 'p' alanındaydı ve nokta seçimiyle çakışıyordu: sayı ise 'pv'ye taşınır.
+  function fixPressure(o) {
+    for (const L of (o.mech && o.mech.loads) || []) if (L && L.type === 'pressure' && !Array.isArray(L.p) && L.pv == null) { L.pv = Number.isFinite(+L.p) ? +L.p : 1; delete L.p; }
+  }
   const save = () => api.setFem(D());
   const U = () => D().units;
   const disp = (q, v) => X.toDisp(U(), q, v), inp = (q, v) => X.fromDisp(U(), q, v), un = (q) => X.unitOf(U(), q);
@@ -59,7 +64,7 @@ export function createFemUI(api) {
     const ids = [...new Set(pm.map((p) => p.mat.id))];
     const items = api.items().filter((x) => x.tris && x.tris.length >= 9).map((x) => { const p = pm.find((q) => q.id === x.id); return { id: x.id, name: x.name, tris: x.tris, mat: ids.indexOf(p ? p.mat.id : ids[0]) }; });
     const mats = ids.map((id) => matOf(id));
-    const sel = (b) => (b.face ? { face: b.face } : { p: b.p, r: b.r });
+    const sel = (b) => (b.face || !Array.isArray(b.p) ? { face: b.face || '+y' } : { p: b.p, r: b.r });
     let setup;
     if (type === 'thermal' || type === 'thermalT') {
       const t = o.therm;
@@ -67,7 +72,7 @@ export function createFemUI(api) {
       if (type === 'thermalT') setup.transient = { T0: t.T0, dt: t.dt, steps: Math.max(1, Math.round(t.dur / t.dt)), save: Math.max(1, Math.round(t.dur / t.dt / 40)) };
     } else {
       const m = o.mech;
-      setup = { supports: m.supports.map(sel), loads: type === 'modal' ? [] : m.loads.map((L) => (L.type === 'force' ? { type: 'force', sel: sel(L), F: L.F, dir: DIRS[L.dir] } : L.type === 'pressure' ? { type: 'pressure', sel: sel(L), p: L.p } : { type: 'moment', sel: sel(L), M: L.M })), gravity: type === 'static' && !!m.gravity };
+      setup = { supports: m.supports.map(sel), loads: type === 'modal' ? [] : m.loads.map((L) => (L.type === 'force' ? { type: 'force', sel: sel(L), F: L.F, dir: DIRS[L.dir] } : L.type === 'pressure' ? { type: 'pressure', sel: sel(L), p: L.pv } : { type: 'moment', sel: sel(L), M: L.M })), gravity: type === 'static' && !!m.gravity };
     }
     return { items, mats, setup, ids };
   }
@@ -167,7 +172,7 @@ export function createFemUI(api) {
   const btn = (l, a, on, st = '') => `<button data-act="${a}"${on ? ' class="on"' : ''}${st ? ' style="' + st + '"' : ''}${S.busy ? ' disabled' : ''}>${l}</button>`;
   const lbl = (t, st = '') => `<div class="lbl" style="flex:1 0 100%;${st}">${t}</div>`;
   const num = (label, key, val) => `<label class="f"><span>${label}</span><input type="number" step="any" inputmode="decimal" data-fm="${key}" value="${val == null || !isFinite(val) ? '' : +(+val).toPrecision(8)}"></label>`;
-  const faceSel = (key, b) => `<label class="f"><span>Yer</span><select data-fm="${key}">${FACES.map(([k, l]) => `<option value="${k}"${b.face === k ? ' selected' : ''}>${l}</option>`).join('')}<option value="pt"${b.p ? ' selected' : ''}>${b.p ? 'Nokta (' + b.p.map((x) => x.toFixed(1)).join(', ') + ')' : 'Dokunarak nokta seç'}</option></select></label>`;
+  const faceSel = (key, b) => `<label class="f"><span>Yer</span><select data-fm="${key}">${FACES.map(([k, l]) => `<option value="${k}"${b.face === k ? ' selected' : ''}>${l}</option>`).join('')}<option value="pt"${Array.isArray(b.p) ? ' selected' : ''}>${Array.isArray(b.p) ? 'Nokta (' + b.p.map((x) => x.toFixed(1)).join(', ') + ')' : 'Dokunarak nokta seç'}</option></select></label>`;
   function legendHtml() {
     const L = S.legend; if (!L) return '';
     return `<div style="flex:1 0 100%"><div style="height:12px;border-radius:6px;background:linear-gradient(90deg,#1d4ed8,#06b6d4,#22c55e,#eab308,#ef4444)"></div><div style="display:flex;justify-content:space-between;font-size:12.5px;color:#94a3b8;margin-top:2px"><span>en az ${nf(L.min)} ${esc(L.unit)}</span><span>en çok ${nf(L.max)} ${esc(L.unit)}</span></div>${L.cut ? `<div style="font-size:12px;color:#94a3b8">${esc(L.cut)}</div>` : ''}</div>`;
@@ -220,7 +225,7 @@ export function createFemUI(api) {
       if (t !== 'modal') M.loads.forEach((L, i) => {
         h += lbl({ force: 'Kuvvet', pressure: 'Basınç (pozitif = yüzeye bastırır)', moment: 'Moment (seçimin ağırlık merkezi etrafında)' }[L.type] + ' ' + (i + 1), 'font-weight:600') + faceSel('ml.' + i + '.sel', L);
         if (L.type === 'force') h += num('F (' + un('F') + ')', 'ml.' + i + '.F', disp('F', L.F)) + `<label class="f"><span>Yön</span><select data-fm="ml.${i}.dir">${Object.keys(DIRS).map((k) => `<option value="${k}"${L.dir === k ? ' selected' : ''}>${k.toUpperCase()}</option>`).join('')}</select></label>`;
-        if (L.type === 'pressure') h += num('p (' + un('P') + ')', 'ml.' + i + '.p', disp('P', L.p));
+        if (L.type === 'pressure') h += num('p (' + un('P') + ')', 'ml.' + i + '.pv', disp('P', L.pv));
         if (L.type === 'moment') h += ['X', 'Y', 'Z'].map((a, k) => num('M' + a + ' (' + un('M') + ')', 'ml.' + i + '.M' + k, disp('M', L.M[k]))).join('');
         h += btn('✕', 'fm-del-ml-' + i);
       });
@@ -306,7 +311,7 @@ export function createFemUI(api) {
     const o = D(), f = { face: '+y' };
     if (kind === 'ms') o.mech.supports.push({ face: '-y' });
     if (kind === 'mf') o.mech.loads.push({ ...f, type: 'force', F: 1000, dir: '-y' });
-    if (kind === 'mp') o.mech.loads.push({ ...f, type: 'pressure', p: 1 });
+    if (kind === 'mp') o.mech.loads.push({ ...f, type: 'pressure', pv: 1 });
     if (kind === 'mm') o.mech.loads.push({ face: '+x', type: 'moment', M: [0, 0, 1e5] });
     if (kind === 'tf') o.therm.fixed.push({ face: '-y', T: 100 });
     if (kind === 'tq') o.therm.flux.push({ ...f, q: 1e-3 });
@@ -380,7 +385,7 @@ export function createFemUI(api) {
         if (p[0] === 'tf' && f === 'T') it.T = inp('T', n);
         else if (p[0] === 'tq') it.q = inp('q', n);
         else if (p[0] === 'tc') it[f] = f === 'h' ? inp('h', n) : inp('T', n);
-        else if (p[0] === 'ml') { if (f === 'F') it.F = Math.abs(inp('F', n)); else if (f === 'p') it.p = inp('P', n); else if (f.startsWith('M')) it.M[+f[1]] = inp('M', n); }
+        else if (p[0] === 'ml') { if (f === 'F') it.F = Math.abs(inp('F', n)); else if (f === 'pv') it.pv = inp('P', n); else if (f.startsWith('M')) it.M[+f[1]] = inp('M', n); }
       }
     }
     save(); render();

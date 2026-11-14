@@ -131,7 +131,7 @@ t('başka bir yoldan farklı parça seçilince (sel değişince) seçim kendili�
 });
 
 t('app.js: her seçim ataması seçimi yeniden etkinleştirir', () => {
-  const lines = src.split('\n').filter((l) => /\bsel = /.test(l) && !/^let sel = /.test(l) && !/\)\s*sel = parts\[0\]\.id;/.test(l));
+  const lines = src.split('\n').filter((l) => /\bsel = /.test(l) && !/^let sel = /.test(l) && !/\)\s*sel = parts(\[0\]\.id| ?\.length \? parts\[0\]\.id : 0);/.test(l));
   for (const l of lines) assert.match(l, /selOff = null; sel = /, l.trim());
 });
 
