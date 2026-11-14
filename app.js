@@ -47,19 +47,21 @@ const pos = (v) => (isFinite(v) ? v : 0);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /* ================= Durum ================= */
-const freshParts = () => [
-  { id: 1, type: 'box', op: 'add', w: 80, l: 60, h: 40, d: 50, d2: 0, di: 20, r: 0, c: 0, x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 },
-];
+// Uygulama boş çizim alanıyla açılır; son parça da silinebilir.
+const freshParts = () => [];
 let parts = freshParts();
-let sel = 1;
+let sel = 0;
 // boş alana dokununca seçim kaldırılır: selOff = seçimi kaldırılan parçanın id'si (sel değişince kendiliğinden geçersiz olur).
 // sel değeri korunur (cur() eski davranışla çalışmaya devam eder); yalnızca vurgu ve parça paneli gizlenir.
 let selOff = null;
 const hasSel = () => !(selOff != null && selOff === sel) && parts.some((p) => p.id === sel);
-let nextId = 2;
+let nextId = 1;
 let projName = 'model';
 let tab = 'dims';
-const cur = () => parts.find((p) => p.id === sel) || parts[0];
+// Model boşken parça isteyen kodlar zararsız bir yer tutucu görür (parça listesinde değildir, seçili sayılmaz: hasSel() false).
+// Seçim kaldırılmış durumla aynı mantık: parça sekmeleri "Seçili parça yok" gösterir.
+const placeholderPart = () => ({ id: 0, type: 'box', op: 'add', w: 80, l: 60, h: 40, d: 50, d2: 0, di: 20, r: 0, c: 0, x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
+const cur = () => parts.find((p) => p.id === sel) || parts[0] || placeholderPart();
 
 const SETTINGS_KEY = 'cizim:settings';
 const settings = { unit: 'mm', snap: 1, drag: 'floor', dim: 'off', ortho: false, move: false };
@@ -95,7 +97,8 @@ function restore(s) {
   cleanLinks(parts);
   if (typeof cam5UI !== 'undefined') cam5UI.setCfg(o.cam5);
   femData = o.fem && typeof o.fem === 'object' ? o.fem : null;   // eski projelerde yok: varsayılan (3 eksen)
-  if (!parts.find((p) => p.id === sel)) sel = parts[0].id;
+  if (!Array.isArray(parts)) parts = [];
+  if (!parts.find((p) => p.id === sel)) sel = parts.length ? parts[0].id : 0;
 }
 const commit = () => hist.push(snapshot());
 
@@ -780,7 +783,7 @@ function rebuild(refit) {
     modelMesh = null; capMesh = null;
 
     const vis = parts.filter((p) => !p.hidden);
-    if (!vis.length) { lastClean = null; lastBrushes = []; refreshOverlays(); setMsg('Tüm parçalar gizli', false); return; }
+    if (!vis.length) { lastClean = null; lastBrushes = []; refreshOverlays(); setMsg(parts.length ? 'Tüm parçalar gizli' : '', false); return; }   // boş model: boş çizim alanı
 
     const useColors = vis.some((p) => p.color);
     let out;
@@ -1031,8 +1034,10 @@ function renderPanel() {
 
   // seçim kaldırılmışken parçaya ait sekmeler parça verisi göstermez
   if (!hasSel() && ['dims', 'type', 'pos', 'rot', 'copy', 'shell', 'part'].includes(tab)) {
-    body = '<div class="lbl" style="flex:1 0 100%">Seçili parça yok. Modelde bir parçaya ya da yukarıdaki parça listesinden birine dokun.</div>';
-    hint = 'Boş alana dokununca seçim kaldırılır; diğer sekmeler (Yüz, Kenar, Görünüm, Hesap…) tüm modelle çalışmaya devam eder.';
+    body = parts.length
+      ? '<div class="lbl" style="flex:1 0 100%">Seçili parça yok. Modelde bir parçaya ya da yukarıdaki parça listesinden birine dokun.</div>'
+      : '<div class="lbl" style="flex:1 0 100%">Model boş. Başlamak için bir şekil ekle (Kutu, Silindir, Küre…) ya da Kroki çiz.</div>';
+    hint = parts.length ? 'Boş alana dokununca seçim kaldırılır; diğer sekmeler (Yüz, Kenar, Görünüm, Hesap…) tüm modelle çalışmaya devam eder.' : '';
   } else if (tab === 'type') {
     body = p.type === 'frame'
       ? '<div class="lbl h">İskelet</div>' + [['table', 'Masa iskeleti'], ['box', 'Kutu çerçeve'], ['shelf', 'Raf / sehpa'], ['rect', 'Pano çerçeve']].map(([k, l]) => btn(l, 'frt-' + k, p.fr === k)).join('') +
@@ -1329,12 +1334,16 @@ function addPart(type, op, dims) {
   return p;
 }
 
+// model boşken parça isteyen işlem: kullanıcıya söyle, hiçbir şey yapma
+function needPart() { if (parts.length) return true; toast('Önce bir parça ekle'); return false; }
+
 function removeCur() {
-  if (parts.length < 2) { toast('Son parça silinemez'); return false; }
+  const i = parts.indexOf(cur());
+  if (i < 0) return false;
   commit();
-  parts.splice(parts.indexOf(cur()), 1);
+  parts.splice(i, 1);
   cleanLinks(parts);
-  selOff = null; sel = parts[0].id;
+  selOff = null; sel = parts.length ? parts[0].id : 0;
   refreshAll();
   return true;
 }
@@ -1423,12 +1432,14 @@ function addCopies(list, msgText) {
   toast(msgText || list.length + ' parça eklendi');
 }
 function doDup(count = 1) {
+  if (!needPart()) return;
   const p = cur();
   const gap = sizeOf(p).x + 10;
   if (count <= 1) addCopies([duplicatePart(p, nextId, gap, 0)], 'Kopyalandı');
   else addCopies(linearArray(p, nextId, Math.min(count, 40), gap, 0, 0));
 }
 function doMirror(axis) {
+  if (!needPart()) return;
   const p = cur(), b = parts[0];
   const q = mirrorPart(p, nextId, axis, pos(b.x), pos(b.z));
   const same = axis === 'x' ? Math.abs(q.x - p.x) < 1e-6 : Math.abs(q.z - p.z) < 1e-6;
@@ -1436,11 +1447,13 @@ function doMirror(axis) {
   addCopies([q], 'Ayna kopyası eklendi');
 }
 function doLinear() {
+  if (!needPart()) return;
   const n = Math.round(cp.n);
   if (!(n >= 1 && n <= 40)) { toast('Kopya sayısı 1 ile 40 arasında olmalı'); return; }
   addCopies(linearArray(cur(), nextId, n, cp.dx, cp.dy, cp.dz));
 }
 function doCircular() {
+  if (!needPart()) return;
   const n = Math.round(cp.cn);
   if (!(n >= 2 && n <= 41)) { toast('Toplam adet 2 ile 41 arasında olmalı'); return; }
   const b = parts[0];
@@ -2320,7 +2333,7 @@ function bakeAll() {
 /* ---- parça yönetimi ---- */
 function moveCur(dir) {
   const i = parts.indexOf(cur()), j = i + dir;
-  if (j < 0 || j >= parts.length) return;
+  if (i < 0 || j < 0 || j >= parts.length) return;
   commit();
   [parts[i], parts[j]] = [parts[j], parts[i]];
   if (parts[0].op === 'sub') { parts[0].op = 'add'; toast('Tabana gelen parça artık oyuk değil, katı oldu'); }
@@ -2795,6 +2808,7 @@ const shellEligible = (p) => !p.hidden && p.op !== 'sub' &&
    (p.type === 'cylinder' && !(p.r > 0.05) && !(p.c > 0.05) && !(p.tp > 0.01)) ||
    p.type === 'sphere');
 function shellFeature() {
+  if (!needPart()) return;
   const p = cur();
   if (!shellEligible(p)) { toast('Bu parça kabuk yapılamaz'); return; }
   const t = Math.max(cp.wall, 0.1);
@@ -3193,6 +3207,7 @@ function gearInfo(p) {
 const mechForm = { t: 'gear', a: '', b: '', z1: '', z2: '', d1: '', d2: '', m: '', p: '', n: 1, k: 1, rev: false, pairz: '' };
 const jointParts = () => parts.filter((q) => q.joint && (q.joint.type === 'hinge' || q.joint.type === 'slide'));
 function addGearPair() {
+  if (!needPart()) return;
   const g = cur();
   if (!g.gear) return;
   const z2 = Math.max(6, Math.round(Number(mechForm.pairz) || g.gz * 2)), a = centerDistance(g.gm, g.gz, z2);
@@ -3996,7 +4011,7 @@ document.addEventListener('click', (e) => {
   if (act === 'dlg-save') { saveProject(($('pname').value || '').trim() || 'model'); renderDialog(); return; }
   if (act === 'dlg-new') {
     commit();
-    parts = freshParts(); selOff = null; sel = 1; nextId = 2; projName = 'model'; weldPlan = null; asmAnswers = {}; simData = null; femData = null; mechData = { cs: [], motor: null };
+    parts = freshParts(); selOff = null; sel = 0; nextId = 1; projName = 'model'; weldPlan = null; asmAnswers = {}; simData = null; femData = null; mechData = { cs: [], motor: null };
     closeDialog(); refreshAll(true);
     return;
   }
@@ -4172,8 +4187,8 @@ function applyCommands(cmds, heard) {
       case 'save': saveProject(projName || 'model'); return;
       case 'delete': ok = hasSel() ? removeCur() : (toast('Önce silinecek parçayı seç'), false); break;
       case 'add': addPart(c.type, c.op, c.dims); break;
-      case 'set': commit(); if (POSE_KEYS.includes(c.key)) carry(cur(), () => { cur()[c.key] = c.value; }); else cur()[c.key] = c.value; refreshAll(); break;
-      case 'rotate': commit(); carry(cur(), () => { cur()['r' + c.axis] = c.deg; }); refreshAll(); break;
+      case 'set': if (!needPart()) return; commit(); if (POSE_KEYS.includes(c.key)) carry(cur(), () => { cur()[c.key] = c.value; }); else cur()[c.key] = c.value; refreshAll(); break;
+      case 'rotate': if (!needPart()) return; commit(); carry(cur(), () => { cur()['r' + c.axis] = c.deg; }); refreshAll(); break;
       case 'copy': doDup(c.count); break;
       case 'mirror': doMirror(c.axis); break;
       case 'view': setView(c.view); break;
