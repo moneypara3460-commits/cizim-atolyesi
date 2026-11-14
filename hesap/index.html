@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://anqfdlahimxdjovecsyk.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
+<title>Hesabım · Çizim Atölyesi</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./hesap.css?v=20261114b">
+</head>
+<body>
+<header id="top">
+  <h1>Çizim Atölyesi <span>· Hesabım</span></h1>
+  <a class="btn ghost" href="../?sec=1">⌂ Ana ekran</a>
+</header>
+<main>
+  <p id="msg" class="note warn" hidden></p>
+
+  <section id="login" hidden>
+    <h2>Giriş yap</h2>
+    <p>Google hesabınla giriş yap. İlk girişte <b>14 gün boyunca tüm bölümler ücretsiz</b> açılır, kart bilgisi istenmez.</p>
+    <button id="google" class="btn primary" type="button">Google ile giriş yap</button>
+  </section>
+
+  <section id="status" hidden>
+    <h2>Durum</h2>
+    <p id="who" class="muted"></p>
+    <div id="state"></div>
+    <div class="row">
+      <a id="back" class="btn primary" hidden>Bölüme dön</a>
+      <button id="restore" class="btn" type="button" hidden>Satın alımları geri yükle</button>
+      <a class="btn" href="https://play.google.com/store/account/subscriptions" target="_blank" rel="noopener">Aboneliği Google Play'de yönet</a>
+      <button id="logout" class="btn ghost" type="button">Çıkış yap</button>
+    </div>
+  </section>
+
+  <section id="plans" hidden>
+    <h2>Paketler</h2>
+    <div class="period" role="tablist">
+      <button type="button" data-period="aylik" aria-selected="true">Aylık</button>
+      <button type="button" data-period="yillik" aria-selected="false">Yıllık · 2 ay bedava</button>
+    </div>
+    <div id="cards" class="cards"></div>
+    <p id="nobill" class="note" hidden>Abonelik, Google Play'deki <b>Çizim Atölyesi</b> Android uygulamasından alınır.
+      Aboneliği aldıktan sonra aynı Google hesabıyla burada giriş yaparsan bilgisayarda ve tarayıcıda da açılır.</p>
+    <p class="muted small">Fiyatlara KDV dahildir. Abonelik dönem sonunda kendiliğinden yenilenir; istediğin zaman Google Play'den iptal edebilirsin, dönem sonuna kadar kullanmaya devam edersin.</p>
+  </section>
+</main>
+<div id="toast" hidden></div>
+<script type="module" src="./hesap.js?v=20261114a"></script>
+</body>
+</html>

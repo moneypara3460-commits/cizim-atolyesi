@@ -38,6 +38,9 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('#other')) showPick();
 });
 
+// Abonelik açıksa seçim ekranında "Hesabım" bağlantısı görünür
+import('../hesap/config.js').then((c) => { if (c.PAYWALL) document.getElementById('hesap-link').hidden = false; }).catch(() => {});
+
 let timer = 0;
 const legacy = q.get('ws');
 if (TARGET[legacy]) { set(legacy); go(legacy); }
