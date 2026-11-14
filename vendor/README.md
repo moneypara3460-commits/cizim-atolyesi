@@ -17,3 +17,15 @@
 
 ## tests/fixtures/cube-10mm.igs
 - occt-import-js deposunun test dosyası (test/testfiles/cube-10x10mm), IGES içe aktarma testi için.
+
+## vendor/@mediapipe/tasks-vision@0.10.33 — MediaPipe Tasks Vision (el algılama, WebAssembly)
+- Dosyalar: `vision_bundle.mjs`, `wasm/vision_wasm_internal.js`, `wasm/vision_wasm_internal.wasm` (değiştirilmedi; yalnız SIMD'li derleme)
+- Kaynak: npm `@mediapipe/tasks-vision` 0.10.33, https://github.com/google-ai-edge/mediapipe
+- Lisans: Apache 2.0 (paketin `package.json` dosyasındaki lisans; https://www.apache.org/licenses/LICENSE-2.0)
+- Uygulamada yalnız "Parmakla kontrol" açıldığında yüklenir (`hand/tracker.js`). Kamera görüntüsü cihazda işlenir.
+- Bütünlük: CI'daki "Üçüncü taraf kütüphane bütünlüğü" işi npm paketiyle bayt bayt karşılaştırır (`tools/vendor-check.mjs`).
+
+## vendor/mediapipe-models/hand_landmarker.task — MediaPipe Hand Landmarker modeli (21 el noktası)
+- Kaynak: https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task (değiştirilmedi)
+- sha256: `fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1` (CI her çalışmada yeniden indirip karşılaştırır)
+- Lisans: Apache 2.0 (model kartı: https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker)

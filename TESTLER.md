@@ -11,6 +11,7 @@ Kalite raporu (özellik durumu, doğrulama toleransları, performans, hatalar): 
 | `npm run test:unit` | İkisi birlikte | ~2 dk |
 | `npm run test:coverage` | Birlikte + satır kapsaması (`reports/coverage.json`); kapsama ölçümü testleri 3–6 kat yavaşlatır | ~5 dk |
 | `npm run test:e2e` | Gerçek uygulamayı Chromium'da açıp kullanıcı gibi kullanan uçtan uca senaryolar | ~7 dk |
+| `npm run test:e2e:hand` | Parmakla kontrol: sahte kamera + yapay el ile uçtan uca (iki arayüz, telefon ölçüsü, tekstil) ve depodaki gerçek MediaPipe kopyasının yüklenmesi | ~4 dk |
 | `npm run test:perf` | Ağır hesapların süre / bellek ölçümü (eşik yok, bilgi amaçlı) | ~30 sn |
 | `npm run test:all` | Birim + E2E | ~9 dk |
 
@@ -53,9 +54,16 @@ Sayfalar 3B kütüphanelerini depodaki `vendor/` kopyalarından yükler (12.11.2
 - E2E'deki telefon / tablet / masaüstü ölçüleri **emülasyondur** (Chromium cihaz öykünmesi, yazılımsal WebGL). Gerçek telefon testi değildir; gerçek cihaz davranışı (GPU, bellek sınırı, dokunma hassasiyeti, Safari) ayrıca denenmelidir.
 - CNC son işlemci varsayımları `docs/cnc5-ornekler/` ve README'deki "4 / 5 eksen CNC" bölümündedir; G-kodu testleri bu varsayımlara göre yazılmıştır, gerçek tezgâhta kuru çalıştırma (havada) yerine geçmez.
 
+## Parmakla kontrol testleri: neyi sınar, neyi sınamaz
+
+- `tests/hand.test.mjs` (birim): hareket motoru. Girdi **yapay** 21 noktalı eldir (`tests/hand-fixture.mjs`).
+- `tests/e2e/hand.mjs`: Chromium **sahte kamera** ile açılır (`--use-fake-device-for-media-stream`: tarayıcının ürettiği deneme görüntüsü). Algılayıcı yerine yapay el verilerek kamera açma / kapama, izin reddi, imleç, birleştirerek çizme (3B sahne, kroki, 2B çizim), dokunma, açık avuç, iki parmak, hassasiyet, kalibrasyon ve mevcut fare davranışı sınanır.
+- "Gerçek MediaPipe" senaryosu: `vendor/` içindeki kütüphane ve modelin sayfanın güvenlik politikası altında yüklendiğini, kamera karelerini işlediğini, kapatınca serbest bırakıldığını sınar. Deneme görüntüsünde el yoktur.
+- **Sınanmayan:** gerçek kamera, gerçek el, 21 noktanın gerçek elde doğruluğu, birleştirme eşiklerinin gerçek elde uygunluğu, gerçek telefon / tablet / Windows cihazları, Safari ve Firefox. Bunlar cihazda elle denenmelidir.
+
 ## Çıktılar
 
-`reports/` (git'e girmez): `unit.json`, `coverage.json`, `e2e.json` (her senaryo: durum, süre, hata, ekran görüntüsü yolu, ⏱ ölçümler, ortam), `perf.json`, `shots/*.png` (başarısız E2E senaryolarının ekran görüntüsü).
+`reports/` (git'e girmez): `unit.json`, `coverage.json`, `e2e.json`, `e2e-hand.json` (her senaryo: durum, süre, hata, ekran görüntüsü yolu, ⏱ ölçümler, ortam), `perf.json`, `shots/*.png` (başarısız E2E senaryolarının ekran görüntüsü).
 
 ## Sürekli entegrasyon
 

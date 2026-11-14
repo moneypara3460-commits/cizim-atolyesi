@@ -225,3 +225,36 @@ Ortam aynı (Node 22, Chromium emülasyonu, gerçek OCCT WASM). Gerçek bir torn
 - **`'unsafe-eval'` açık.** OCCT yedek yolu için gerekli. Uygulama kodunda eval'e giden kullanıcı verisi yok.
 - **Kapsam dışı.** Fuzz testi yalnız tarayıcı emülasyonunda yapıldı; profesyonel sızma testi değildir.
 
+## 10. Parmakla kontrol (13.11.2026)
+
+**Ne eklendi.** Kamerayla el algılama ve dokunmadan kullanım (`hand/`). Uygulama kodu (`app.js`, kroki, 2B çizim, tekstil) değişmedi; üç sayfaya yalnız bir modül etiketi eklendi. Hareketler uygulamaya gerçek fare olayı (pointer / click / wheel) olarak verilir, çizim motoru yeniden yazılmadı.
+
+**Kaynak inceleme (fingermouse, Python).** Paket bir Windows masaüstü aracıdır: OpenCV ile kamera, MediaPipe Tasks Hand Landmarker ile 21 nokta, PyAutoGUI ile işletim sistemi faresi. Tarayıcıda çalışan bu uygulamaya kod olarak taşınamaz (Python, OpenCV penceresi, sistem faresi). Alınan fikirler JavaScript'e yeniden yazıldı: parmak birleştirme oranının avuç genişliğine bölünmesi, giriş / çıkış eşiği (histerezis), parmak açık / kapalı ölçütü, aynı karenin iki kez işlenmemesi, el kaybolunca bırakma, konum / ölçek / dönmeden bağımsız 42 boyutlu özellik vektörü. Alınmayanlar: sistem faresi kontrolü, sağ tık, pencere kapatma (Alt+F4), klavyeyle eğitim menüsü, `gestures.json` kaydı. Buraya özgü ekler: en-boy düzeltmesi, 1€ süzgeci, sıçrama süzgeci, birleştirme anında nişan noktası, dokunma sabitleyici, bırakırken imleç kilidi, kalibrasyon, yavaş ekran kartında işlemciye geçiş.
+
+**Durum matrisi.**
+
+| Konu | Durum | Nasıl doğrulandı |
+|---|---|---|
+| Hareket motoru (imleç, birleştirme, açık avuç, iki parmak, özel hareket, kalibrasyon, sol / sağ el) | Çalışıyor | Birim test, yapay 21 noktalı el |
+| Titreme / sıçrama / kopma önlemleri | Çalışıyor | Birim test (ölçülen: duran elde titreme ≥ 3 kat azalır; 1200 px/sn harekette gecikme < 60 ms) |
+| Kamera açma / kapama, izin reddi, yeniden açma, kaynakların bırakılması | Çalışıyor | E2E, Chromium sahte kamera |
+| 3B sahne, kroki, 2B çizim, düğmeler: parmakla kullanım | Çalışıyor | E2E, sahte kamera + yapay el (iki arayüz, telefon ölçüsü emülasyonu) |
+| Mevcut özelliklerin bozulmaması | Bozulmadı | Bütün birim ve E2E testleri yeniden koşuldu |
+| MediaPipe'ın depodaki kopyadan yüklenmesi ve kare işlemesi (CSP altında, dış istek yok) | Çalışıyor | E2E, sahte kamera görüntüsü (el yok) |
+| **Gerçek kamera + gerçek el: 21 noktanın doğruluğu, eşiklerin uygunluğu, kullanım rahatlığı** | **SINANMADI** | Geliştirme ortamında kamera ve el görüntüsü yok |
+| Gerçek cihaz hızı (kare/sn, pil, ısınma) | SINANMADI | Test ortamı yazılımsal WebGL; orada ölçülen hız gerçek cihazı göstermez |
+
+**Platform değerlendirmesi.**
+
+| Platform | Değerlendirme |
+|---|---|
+| Web — bilgisayar (Windows / macOS / Linux; Chrome, Edge) | Hedef platform. Kod yolu Chromium'da sınandı. https gerekir (GitHub Pages uygun). |
+| Web — Android telefon / tablet (Chrome) | Aynı kod; ön kamera kullanılır, görüntü aynalanır. Telefon ölçüsü yalnız emülasyonda sınandı. Elde tutulan telefonda kamera sallanacağı için telefonu sabit bir yere koymak gerekir. |
+| Firefox, Safari (iOS 16.4+ / macOS) | Kullanılan arabirimler (getUserMedia, WebAssembly SIMD, PointerEvent) destekleniyor; **denenmedi**. |
+| Windows uygulaması | Ayrı bir Windows paketi depoda yok; Windows'ta tarayıcıdan çalışır. İleride WebView2 ile paketlenirse kamera izni isteğini onaylayan işleyici gerekir. |
+| Android uygulaması | Depodaki `App.js` (Expo / WebView) eski 2. aşama sürümüdür ve bu arayüzü yüklemez. Güncel site bir WebView içinde gösterilecekse: uygulama bildiriminde `CAMERA` izni, WebView'da kamera izin isteğinin onaylanması ve https gerekir. Yerel (Kotlin) MediaPipe gerekmez; `hand/tracker.js` aynı arabirimle değiştirilebilir. |
+
+**Güvenlik ve gizlilik.** Kamera yalnız kullanıcı düğmeye basınca istenir; ses istenmez. Kareler yalnız bellekte işlenir: kayıt, ekran görüntüsü ya da ağ isteği yoktur (E2E her senaryoda dış istek olmadığını denetler; CSP `connect-src 'self'`). Kütüphane ve model `vendor/` içinde birebir kopyadır; CI npm paketiyle ve sabit sha256 ile karşılaştırır. Kapatınca kamera izleri durdurulur, model bellekten bırakılır, işaretçi yaması geri alınır; sekme arka plana geçince işleme durur. Yapay işaretçi, tarayıcının `setPointerCapture` işlevini yalnız kendi işaretçi kimliği için ve yalnız kontrol açıkken sarar.
+
+**Bilinen sınırlar.** Tek el. Tarayıcının kendi denetimleri (kaydırıcı, açılır liste, dosya seçici, klavye) yapay işaretçiyle çalışmaz. Sesli komut gibi "kullanıcı hareketi" isteyen tarayıcı özellikleri parmakla dokunmayla açılmayabilir. El algılama ana iş parçacığında çalışır: yavaş cihazda arayüz akıcılığı düşebilir. Özel hareket öğretme arayüzü yok (kodla eklenir).
+

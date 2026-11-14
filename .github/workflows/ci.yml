@@ -95,6 +95,13 @@ jobs:
           PLAYWRIGHT_MODULE: ${{ github.workspace }}/.e2e-libs/node_modules/playwright
         run: node tests/e2e/run.mjs 2>&1 | tee reports-e2e-yeni.log
         shell: bash -o pipefail {0}
+      # Sahte kamera (tarayıcının deneme görüntüsü) + yapay el; ayrıca depodaki gerçek MediaPipe kopyasının yüklenip kare işlemesi
+      - name: E2E senaryoları — parmakla kontrol (iki arayüz + tekstil)
+        if: always()
+        env:
+          PLAYWRIGHT_MODULE: ${{ github.workspace }}/.e2e-libs/node_modules/playwright
+        run: node tests/e2e/hand.mjs 2>&1 | tee reports-e2e-hand.log
+        shell: bash -o pipefail {0}
       - name: Raporları yükle (ekran görüntüleri dahil)
         if: always()
         uses: actions/upload-artifact@v4
@@ -104,6 +111,7 @@ jobs:
             reports/
             reports-e2e.log
             reports-e2e-yeni.log
+            reports-e2e-hand.log
           if-no-files-found: warn
 
   # Üçüncü taraf kütüphaneler depoda (vendor/) birebir kopya olarak durur; uygulama dış siteden kod yüklemez.
@@ -121,9 +129,16 @@ jobs:
         run: |
           mkdir -p /tmp/npmv && cd /tmp/npmv
           echo '{"name":"v","private":true}' > package.json
-          npm install --no-audit --no-fund --legacy-peer-deps --ignore-scripts three@0.160.0 three-mesh-bvh@0.6.0 three-bvh-csg@0.0.7
+          npm install --no-audit --no-fund --legacy-peer-deps --ignore-scripts three@0.160.0 three-mesh-bvh@0.6.0 three-bvh-csg@0.0.7 @mediapipe/tasks-vision@0.10.33
+          ls -la node_modules/@mediapipe/tasks-vision node_modules/@mediapipe/tasks-vision/wasm
+      # El algılama modeli npm paketi değildir: Google'ın yayın adresinden indirilir, depodaki kopya sabit sha256 ile karşılaştırılır
+      - name: El algılama modelini indir (MediaPipe Hand Landmarker)
+        run: |
+          mkdir -p /tmp/models
+          curl -fsSL --retry 3 -o /tmp/models/hand_landmarker.task https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
+          ls -la /tmp/models && sha256sum /tmp/models/hand_landmarker.task
       - name: Karşılaştır (ve kopyaları yükle)
-        run: node tools/vendor-check.mjs /tmp/npmv/node_modules
+        run: node tools/vendor-check.mjs /tmp/npmv/node_modules /tmp/models
       - name: npm kopyalarını yükle
         if: always()
         uses: actions/upload-artifact@v4
