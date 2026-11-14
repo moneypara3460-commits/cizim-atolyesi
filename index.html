@@ -2,143 +2,65 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ya+bdWCON6SrW1jvwcsA6M5n/HLI9LZqCEi/bBHwr8w=' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<meta name="theme-color" content="#0f172a">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a1120">
 <title>Çizim Atölyesi</title>
-<style>
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: #0f172a; color: #fff;
-               font-family: system-ui, -apple-system, Roboto, sans-serif; }
-  #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
-  .row { display: flex; gap: 5px; padding: 0 8px 5px; }
-  .row.wrap { flex-wrap: wrap; }
-  button { font: inherit; color: #fff; background: #1e293b; border: 0; border-radius: 8px;
-           padding: 9px 4px; font-weight: 600; font-size: 12.5px; flex: 1; min-width: 0; }
-  #bar button { white-space: nowrap; padding-left: 2px; padding-right: 2px; font-size: 12px; }
-  button.on { background: #0284c7; }
-  button.danger { background: #7f1d1d; }
-  button.rec { background: #b91c1c; }
-  button:disabled { opacity: .35; }
-  #bar { padding-top: 6px; }
-  #chips { display: flex; gap: 6px; padding: 0 8px 5px; overflow-x: auto; white-space: nowrap; }
-  .chip { flex: none; border-radius: 16px; padding: 8px 12px; }
-  .chip.sub { background: #7f1d1d; }
-  .chip.on { outline: 2px solid #38bdf8; }
-  #panel { max-height: 40vh; overflow-y: auto; }
-  #tabs { overflow-x: auto; flex-wrap: nowrap; }
-  .tab { flex: 0 0 auto; padding: 9px 13px; background: transparent; color: #94a3b8; border-bottom: 2px solid #1e293b; border-radius: 0; }
-  .tab.on { background: transparent; color: #fff; border-bottom-color: #38bdf8; }
-  .f { flex: 1 1 90px; display: block; min-width: 0; }
-  .f span { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 2px; white-space: normal; line-height: 1.2; }
-  input { width: 100%; font: inherit; font-size: 15px; color: #fff; background: #1e293b;
-          border: 0; border-radius: 8px; padding: 7px 9px; }
-  .sw { flex: 0 0 34px; height: 30px; padding: 0; border: 2px solid transparent; }
-  .sw.on { border-color: #fff; }
-  .f.w2 { flex: 2 1 140px; }
-  input[type=range] { padding: 0; height: 28px; background: transparent; }
-  #measure { position: absolute; top: 8px; left: 8px; right: 8px; text-align: center; pointer-events: none;
-             background: rgba(15,23,42,.88); border: 1px solid #334155; border-radius: 10px; padding: 7px 10px;
-             font-size: 14px; display: none; }
-  #tabbody.grid button:not(.sw) { flex: 1 1 44%; min-width: 120px; white-space: normal; line-height: 1.25; font-size: 14px; padding: 12px 6px; }
-  #tabbody.grid .f { flex: 1 1 28%; min-width: 90px; }
-  #tabbody.grid .f.w2 { flex: 1 0 100%; }
-  .lbl.h { flex: 1 0 100%; font-size: 12px; font-weight: 700; color: #cbd5e1; padding: 6px 2px 0; }
-  .lbl { font-size: 11px; color: #94a3b8; padding: 0 10px 3px; }
-  #view { position: relative; flex: 1; min-height: 150px; }
-  #view canvas { display: block; touch-action: none; }
-  #msg { position: absolute; top: 40%; left: 0; right: 0; text-align: center; padding: 0 12px;
-         pointer-events: none; color: #94a3b8; font-size: 14px; }
-  #toast { position: absolute; left: 10px; right: 10px; bottom: 12px; padding: 10px 12px;
-           background: rgba(15,23,42,.92); border: 1px solid #334155; border-radius: 10px;
-           font-size: 14px; opacity: 0; transition: opacity .25s; pointer-events: none; }
-  #dlg { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: none;
-         align-items: center; justify-content: center; padding: 16px; z-index: 10; }
-  #dlg.open { display: flex; }
-  #dbox { background: #0f172a; border: 1px solid #334155; border-radius: 14px; padding: 14px;
-          width: 100%; max-width: 460px; max-height: 85vh; overflow-y: auto; }
-  #dbox h3 { margin: 0 0 10px; font-size: 17px; }
-  .pi { display: flex; gap: 6px; align-items: center; padding: 6px 0; border-top: 1px solid #1e293b; }
-  .pi span { flex: 3; font-size: 14px; word-break: break-word; }
-  .pi small { display: block; color: #64748b; font-size: 11px; }
-  .pi button { flex: 0 0 auto; padding: 8px 12px; }
-  .small { color: #94a3b8; font-size: 13px; padding: 8px 0; }
-</style>
-<script type="importmap">
-{ "imports": {
-  "three": "./vendor/three@0.160.0/build/three.module.js",
-  "three/addons/": "./vendor/three@0.160.0/examples/jsm/",
-  "three-mesh-bvh": "./vendor/three-mesh-bvh@0.6.0/build/index.module.js",
-  "three-bvh-csg": "./vendor/three-bvh-csg@0.0.7/build/index.module.js"
-} }
-</script>
+<link rel="stylesheet" href="./acilis/acilis.css?v=20261114a">
 </head>
 <body>
-<div id="app">
-  <div id="bar" class="row">
-    <button id="b-undo" data-act="undo">↶ Geri</button>
-    <button id="b-redo" data-act="redo">↷ İleri</button>
-    <button id="b-mic" data-act="mic">🎤</button>
-    <button data-act="projects">💾</button>
-    <button data-act="stl">⬇ STL</button>
-    <button id="b-move" data-act="move">✋Taşı</button>
-    <button data-act="guide">❓</button>
-    <button id="b-panel" data-act="panel">▲</button>
-  </div>
-  <div id="panelwrap">
-    <div id="chips"></div>
-    <div id="panel">
-      <div class="row">
-        <button data-act="add-box">+ Kutu</button>
-        <button data-act="add-cylinder">+ Silindir</button>
-        <button data-act="add-sphere">+ Küre</button>
-        <button data-act="add-cone">+ Koni</button>
-        <button data-act="add-tube">+ Boru</button>
-      </div>
-      <div class="row">
-        <button data-act="add-sweep">⤴ Süpürme</button>
-        <button data-act="add-loft">⏢ Loft</button>
-        <button data-act="add-sheet">⌐ Sac metal</button>
-        <button data-act="add-frame">▦ Konstrüksiyon</button><button data-act="add-gear">⚙ Dişli</button>
-      </div>
-      <div class="row">
-        <button data-act="hole-round">○ Delik</button>
-        <button data-act="hole-square">□ Delik</button>
-        <button data-act="sketch-new">✎ Kroki</button>
-        <button data-act="cad2d">📝 2B Çizim</button>
-        <button data-act="fit">Sığdır</button>
-        <button data-act="del" class="danger">Sil</button>
-      </div>
-      <div class="row" id="tabs"></div>
-      <div class="row wrap" id="tabbody"></div>
-      <div class="lbl" id="tabhint"></div>
-    </div>
-  </div>
-  <div id="view">
-    <div id="msg">3D yükleniyor... (internet gerekir)</div>
-    <div id="measure"></div>
-    <div id="toast"></div>
-  </div>
-</div>
+<!-- Açılış ekranı: önce kısa çizim animasyonu, sonra Makine / Tekstil seçimi.
+     Son seçim hatırlanır (cizim:workspace); bölüm içindeki "Ana ekran" bu sayfaya ?sec=1 ile döner. -->
+<main id="app" data-stage="splash">
+  <section id="splash" aria-label="Çizim Atölyesi açılıyor">
+    <svg class="mark" viewBox="0 0 240 120" aria-hidden="true">
+      <!-- tek çizgi: solda dişli profili, sağda dikiş çizgisi -->
+      <path class="stroke" pathLength="1" d="M55.8 33.3 L56.6 26.2 A34 34 0 0 1 63.4 26.2 L64.2 33.3 A27 27 0 0 1 72.3 35.9 L77.1 30.6 A34 34 0 0 1 82.6 34.6 L79.1 40.9 A27 27 0 0 1 84.1 47.7 L91.1 46.3 A34 34 0 0 1 93.2 52.8 L86.7 55.8 A27 27 0 0 1 86.7 64.2 L93.2 67.2 A34 34 0 0 1 91.1 73.7 L84.1 72.3 A27 27 0 0 1 79.1 79.1 L82.6 85.4 A34 34 0 0 1 77.1 89.4 L72.3 84.1 A27 27 0 0 1 64.2 86.7 L63.4 93.8 A34 34 0 0 1 56.6 93.8 L55.8 86.7 A27 27 0 0 1 47.7 84.1 L42.9 89.4 A34 34 0 0 1 37.4 85.4 L40.9 79.1 A27 27 0 0 1 35.9 72.3 L28.9 73.7 A34 34 0 0 1 26.8 67.2 L33.3 64.2 A27 27 0 0 1 33.3 55.8 L26.8 52.8 A34 34 0 0 1 28.9 46.3 L35.9 47.7 A27 27 0 0 1 40.9 40.9 L37.4 34.6 A34 34 0 0 1 42.9 30.6 L47.7 35.9 A27 27 0 0 1 55.8 33.3 Z M60 60 m-9 0 a9 9 0 1 0 18 0 a9 9 0 1 0 -18 0 M94 60 C124 60 136 32 166 32 S204 74 228 74"/>
+      <path class="stitch" d="M100 66 C130 66 140 36 170 36 S205 76 225 76"/>
+    </svg>
+    <h1>Çizim Atölyesi</h1>
+    <p id="going" hidden></p>
+    <button id="other" type="button" hidden>Başka bölüm seç</button>
+  </section>
 
-<div id="dlg">
-  <div id="dbox">
-    <h3>Projeler</h3>
-    <div class="row" style="padding:0 0 8px">
-      <input id="pname" type="text" placeholder="Proje adı" style="flex:3">
-      <button data-act="dlg-save" class="on" style="flex:1">Kaydet</button>
+  <section id="pick" aria-labelledby="pick-h">
+    <header>
+      <p class="brand">Çizim Atölyesi</p>
+      <h2 id="pick-h">Hangi atölyede çalışacaksın?</h2>
+    </header>
+    <div class="doors">
+      <a class="door makine" href="yeni/" data-ws="makine">
+        <svg class="art" viewBox="0 0 160 120" aria-hidden="true">
+          <circle cx="80" cy="60" r="42" class="guide dash"/>
+                    <path class="line" d="M76.2 31.2 L77.0 24.1 A36 36 0 0 1 83.0 24.1 L83.8 31.2 A29 29 0 0 1 91.1 33.2 L95.3 27.4 A36 36 0 0 1 100.5 30.4 L97.7 37.0 A29 29 0 0 1 103.0 42.3 L109.6 39.5 A36 36 0 0 1 112.6 44.7 L106.8 48.9 A29 29 0 0 1 108.8 56.2 L115.9 57.0 A36 36 0 0 1 115.9 63.0 L108.8 63.8 A29 29 0 0 1 106.8 71.1 L112.6 75.3 A36 36 0 0 1 109.6 80.5 L103.0 77.7 A29 29 0 0 1 97.7 83.0 L100.5 89.6 A36 36 0 0 1 95.3 92.6 L91.1 86.8 A29 29 0 0 1 83.8 88.8 L83.0 95.9 A36 36 0 0 1 77.0 95.9 L76.2 88.8 A29 29 0 0 1 68.9 86.8 L64.7 92.6 A36 36 0 0 1 59.5 89.6 L62.3 83.0 A29 29 0 0 1 57.0 77.7 L50.4 80.5 A36 36 0 0 1 47.4 75.3 L53.2 71.1 A29 29 0 0 1 51.2 63.8 L44.1 63.0 A36 36 0 0 1 44.1 57.0 L51.2 56.2 A29 29 0 0 1 53.2 48.9 L47.4 44.7 A36 36 0 0 1 50.4 39.5 L57.0 42.3 A29 29 0 0 1 62.3 37.0 L59.5 30.4 A36 36 0 0 1 64.7 27.4 L68.9 33.2 A29 29 0 0 1 76.2 31.2 Z"/>
+          <circle cx="80" cy="60" r="10" class="line"/>
+          <path class="center" d="M66 60 h28 M80 46 v28"/>
+        </svg>
+        <span class="txt">
+          <b>Makine ve Mühendislik</b>
+          <span>Parça ve montaj tasarımı, teknik resim, CNC, ağırlık ve dayanım analizi</span>
+          <em class="last" hidden>Son kullandığın</em>
+        </span>
+      </a>
+      <a class="door tekstil" href="tekstil.html" data-ws="tekstil">
+        <svg class="art" viewBox="0 0 160 120" aria-hidden="true">
+          <!-- gömlek ön kalıbı: dikiş payı (kesik), çentikler, düz boy oku -->
+          <path class="line" d="M52 18 q14 10 28 0 l26 8 l10 24 l-14 4 l-2 56 h-60 l-2-56 l-14-4 l10-24 z"/>
+          <path class="guide dash" d="M54 24 q12 8 26 0 l22 7 l8 18 l-12 4 l-2 52 h-52 l-2-52 l-12-4 l8-18 z"/>
+          <path class="line" d="M37 50 l4 -3 M123 50 l-4 -3 M80 110 v-5"/>
+          <path class="center" d="M80 40 v56 M75 46 l5-6 l5 6 M75 90 l5 6 l5-6"/>
+        </svg>
+        <span class="txt">
+          <b>Tekstil ve Moda</b>
+          <span>Kalıp, beden serisi, kesim planı, triko ve üretim föyü</span>
+          <em class="last" hidden>Son kullandığın</em>
+        </span>
+      </a>
     </div>
-    <div id="plist"></div>
-    <div class="row" style="padding:10px 0 0">
-      <button data-act="dlg-new">Yeni boş proje</button>
-      <button data-act="dlg-close">Kapat</button>
-    </div>
-  </div>
-</div>
-
-<script src="./ws.js?v=20261112a"></script>
-<script type="module" src="./app.js?v=20261112u"></script>
-<script type="module" src="./hand/ui.js?v=20261113a"></script>
+    <p class="note">Seçimin hatırlanır. Bölümü değiştirmek için içerideki menüden <b>Ana ekran</b>'a dön.</p>
+  </section>
+</main>
+<script type="module" src="./acilis/acilis.js?v=20261114a"></script>
 </body>
 </html>

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ya+bdWCON6SrW1jvwcsA6M5n/HLI9LZqCEi/bBHwr8w=' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<title>Çizim Atölyesi</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0f172a; color: #fff;
+               font-family: system-ui, -apple-system, Roboto, sans-serif; }
+  #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+  .row { display: flex; gap: 5px; padding: 0 8px 5px; }
+  .row.wrap { flex-wrap: wrap; }
+  button { font: inherit; color: #fff; background: #1e293b; border: 0; border-radius: 8px;
+           padding: 9px 4px; font-weight: 600; font-size: 12.5px; flex: 1; min-width: 0; }
+  #bar button { white-space: nowrap; padding-left: 2px; padding-right: 2px; font-size: 12px; }
+  button.on { background: #0284c7; }
+  button.danger { background: #7f1d1d; }
+  button.rec { background: #b91c1c; }
+  button:disabled { opacity: .35; }
+  #bar { padding-top: 6px; }
+  #chips { display: flex; gap: 6px; padding: 0 8px 5px; overflow-x: auto; white-space: nowrap; }
+  .chip { flex: none; border-radius: 16px; padding: 8px 12px; }
+  .chip.sub { background: #7f1d1d; }
+  .chip.on { outline: 2px solid #38bdf8; }
+  #panel { max-height: 40vh; overflow-y: auto; }
+  #tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .tab { flex: 0 0 auto; padding: 9px 13px; background: transparent; color: #94a3b8; border-bottom: 2px solid #1e293b; border-radius: 0; }
+  .tab.on { background: transparent; color: #fff; border-bottom-color: #38bdf8; }
+  .f { flex: 1 1 90px; display: block; min-width: 0; }
+  .f span { display: block; font-size: 11px; color: #94a3b8; margin-bottom: 2px; white-space: normal; line-height: 1.2; }
+  input { width: 100%; font: inherit; font-size: 15px; color: #fff; background: #1e293b;
+          border: 0; border-radius: 8px; padding: 7px 9px; }
+  .sw { flex: 0 0 34px; height: 30px; padding: 0; border: 2px solid transparent; }
+  .sw.on { border-color: #fff; }
+  .f.w2 { flex: 2 1 140px; }
+  input[type=range] { padding: 0; height: 28px; background: transparent; }
+  #measure { position: absolute; top: 8px; left: 8px; right: 8px; text-align: center; pointer-events: none;
+             background: rgba(15,23,42,.88); border: 1px solid #334155; border-radius: 10px; padding: 7px 10px;
+             font-size: 14px; display: none; }
+  #tabbody.grid button:not(.sw) { flex: 1 1 44%; min-width: 120px; white-space: normal; line-height: 1.25; font-size: 14px; padding: 12px 6px; }
+  #tabbody.grid .f { flex: 1 1 28%; min-width: 90px; }
+  #tabbody.grid .f.w2 { flex: 1 0 100%; }
+  .lbl.h { flex: 1 0 100%; font-size: 12px; font-weight: 700; color: #cbd5e1; padding: 6px 2px 0; }
+  .lbl { font-size: 11px; color: #94a3b8; padding: 0 10px 3px; }
+  #view { position: relative; flex: 1; min-height: 150px; }
+  #view canvas { display: block; touch-action: none; }
+  #msg { position: absolute; top: 40%; left: 0; right: 0; text-align: center; padding: 0 12px;
+         pointer-events: none; color: #94a3b8; font-size: 14px; }
+  #toast { position: absolute; left: 10px; right: 10px; bottom: 12px; padding: 10px 12px;
+           background: rgba(15,23,42,.92); border: 1px solid #334155; border-radius: 10px;
+           font-size: 14px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  #dlg { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: none;
+         align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+  #dlg.open { display: flex; }
+  #dbox { background: #0f172a; border: 1px solid #334155; border-radius: 14px; padding: 14px;
+          width: 100%; max-width: 460px; max-height: 85vh; overflow-y: auto; }
+  #dbox h3 { margin: 0 0 10px; font-size: 17px; }
+  .pi { display: flex; gap: 6px; align-items: center; padding: 6px 0; border-top: 1px solid #1e293b; }
+  .pi span { flex: 3; font-size: 14px; word-break: break-word; }
+  .pi small { display: block; color: #64748b; font-size: 11px; }
+  .pi button { flex: 0 0 auto; padding: 8px 12px; }
+  .small { color: #94a3b8; font-size: 13px; padding: 8px 0; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three@0.160.0/build/three.module.js",
+  "three/addons/": "./vendor/three@0.160.0/examples/jsm/",
+  "three-mesh-bvh": "./vendor/three-mesh-bvh@0.6.0/build/index.module.js",
+  "three-bvh-csg": "./vendor/three-bvh-csg@0.0.7/build/index.module.js"
+} }
+</script>
+</head>
+<body>
+<div id="app">
+  <div id="bar" class="row">
+    <button id="b-undo" data-act="undo">↶ Geri</button>
+    <button id="b-redo" data-act="redo">↷ İleri</button>
+    <button id="b-mic" data-act="mic">🎤</button>
+    <button data-act="projects">💾</button>
+    <button data-act="stl">⬇ STL</button>
+    <button id="b-move" data-act="move">✋Taşı</button>
+    <button data-act="guide">❓</button>
+    <button id="b-panel" data-act="panel">▲</button>
+  </div>
+  <div id="panelwrap">
+    <div id="chips"></div>
+    <div id="panel">
+      <div class="row">
+        <button data-act="add-box">+ Kutu</button>
+        <button data-act="add-cylinder">+ Silindir</button>
+        <button data-act="add-sphere">+ Küre</button>
+        <button data-act="add-cone">+ Koni</button>
+        <button data-act="add-tube">+ Boru</button>
+      </div>
+      <div class="row">
+        <button data-act="add-sweep">⤴ Süpürme</button>
+        <button data-act="add-loft">⏢ Loft</button>
+        <button data-act="add-sheet">⌐ Sac metal</button>
+        <button data-act="add-frame">▦ Konstrüksiyon</button><button data-act="add-gear">⚙ Dişli</button>
+      </div>
+      <div class="row">
+        <button data-act="hole-round">○ Delik</button>
+        <button data-act="hole-square">□ Delik</button>
+        <button data-act="sketch-new">✎ Kroki</button>
+        <button data-act="cad2d">📝 2B Çizim</button>
+        <button data-act="fit">Sığdır</button>
+        <button data-act="del" class="danger">Sil</button>
+      </div>
+      <div class="row" id="tabs"></div>
+      <div class="row wrap" id="tabbody"></div>
+      <div class="lbl" id="tabhint"></div>
+    </div>
+  </div>
+  <div id="view">
+    <div id="msg">3D yükleniyor... (internet gerekir)</div>
+    <div id="measure"></div>
+    <div id="toast"></div>
+  </div>
+</div>
+
+<div id="dlg">
+  <div id="dbox">
+    <h3>Projeler</h3>
+    <div class="row" style="padding:0 0 8px">
+      <input id="pname" type="text" placeholder="Proje adı" style="flex:3">
+      <button data-act="dlg-save" class="on" style="flex:1">Kaydet</button>
+    </div>
+    <div id="plist"></div>
+    <div class="row" style="padding:10px 0 0">
+      <button data-act="dlg-new">Yeni boş proje</button>
+      <button data-act="dlg-close">Kapat</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./app.js?v=20261112u"></script>
+<script type="module" src="./hand/ui.js?v=20261114a"></script>
+</body>
+</html>

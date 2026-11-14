@@ -1,0 +1,78 @@
+/* Açılış ekranı. Renkler uygulamanınkiyle aynı: lacivert zemin, Makine = uygulamanın turuncu vurgusu,
+   Tekstil = terzi tebeşiri pembesi. Akılda kalan tek öğe: tek çizginin çizilmesi. */
+:root {
+  --ink: #0a1120; --sheet: #0f172a; --rule: #1b2740; --rule2: #2a3a5a;
+  --text: #e6ecf5; --muted: #9aa8bc;
+  --mak: #f0a43a; --tex: #ec8fa6;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--ink); color: var(--text); font-family: var(--font); -webkit-tap-highlight-color: transparent; }
+body {
+  /* çizim kâğıdı: 8 mm'lik ince kareler, 40 mm'de koyu çizgi */
+  background-image:
+    linear-gradient(var(--rule2) 1px, transparent 1px), linear-gradient(90deg, var(--rule2) 1px, transparent 1px),
+    linear-gradient(var(--rule) 1px, transparent 1px), linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+  background-size: 160px 160px, 160px 160px, 32px 32px, 32px 32px;
+  background-position: -1px -1px;
+}
+[hidden] { display: none !important; }
+a, button { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+
+#app { min-height: 100vh; min-height: 100dvh; display: grid; padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom); }
+#app > section { grid-area: 1 / 1; }
+
+/* ---------- açılış ---------- */
+#splash { align-self: center; justify-self: center; text-align: center; transition: opacity .35s ease; }
+#splash .mark { width: min(78vw, 360px); height: auto; display: block; margin: 0 auto 18px; overflow: visible; }
+.mark .stroke { fill: none; stroke: var(--text); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+                stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.15s cubic-bezier(.55, .1, .3, 1) .1s forwards; }
+.mark .stitch { fill: none; stroke: var(--tex); stroke-width: 1.6; stroke-dasharray: 4 5; opacity: 0; animation: show .4s ease 1.05s forwards; }
+#splash h1 { margin: 0; font-size: clamp(30px, 8vw, 46px); font-weight: 700; letter-spacing: -.02em; opacity: 0; animation: show .5s ease .7s forwards; }
+#going { margin: 14px 0 0; color: var(--muted); font-size: 15px; }
+#other { margin-top: 18px; font: inherit; font-size: 15px; color: var(--text); background: transparent; border: 1px solid var(--rule2);
+         border-radius: 999px; padding: 10px 18px; cursor: pointer; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes show { to { opacity: 1; } }
+
+/* ---------- seçim ---------- */
+#pick { align-self: center; justify-self: center; width: 100%; max-width: 920px; padding: 28px 0; opacity: 0; visibility: hidden; transition: opacity .35s ease; }
+#app[data-stage="pick"] #pick { opacity: 1; visibility: visible; }
+#app[data-stage="pick"] #splash { opacity: 0; pointer-events: none; }
+#app[data-stage="splash"] #pick { display: none; }
+#pick header { margin-bottom: 22px; }
+.brand { margin: 0 0 6px; color: var(--muted); font-size: 15px; font-weight: 600; }
+#pick h2 { margin: 0; font-size: clamp(26px, 6.4vw, 40px); line-height: 1.12; font-weight: 700; letter-spacing: -.02em; max-width: 16ch; }
+
+.doors { display: grid; gap: 14px; }
+@media (min-width: 760px) { .doors { grid-template-columns: 1fr 1fr; gap: 20px; } }
+.door { position: relative; display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 10px; min-height: 132px;
+        padding: 18px 18px 18px 14px; color: var(--text); text-decoration: none; background: rgba(15, 23, 42, .92);
+        border: 1.5px solid var(--rule2); border-left: 6px solid var(--c); border-radius: 6px 18px 18px 6px; }
+.door.makine { --c: var(--mak); }
+.door.tekstil { --c: var(--tex); }
+.door .art { width: 92px; height: 80px; overflow: visible; justify-self: center; }
+@media (min-width: 760px) {
+  .door { grid-template-columns: 1fr; grid-template-rows: auto auto; gap: 18px; padding: 26px 26px 28px 30px; }
+  .door .art { order: -1; width: 100%; height: 190px; }
+}
+.art .line { fill: none; stroke: var(--c); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.art .guide { fill: none; stroke: var(--muted); stroke-width: 1; opacity: .55; }
+.art .dash { stroke-dasharray: 4 4; }
+.art .center { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 10 3 2 3; }
+.txt { display: grid; gap: 6px; }
+.txt b { font-size: 21px; line-height: 1.2; font-weight: 700; letter-spacing: -.01em; }
+.txt span { color: var(--muted); font-size: 15px; line-height: 1.45; max-width: 36ch; }
+.last { justify-self: start; margin-top: 4px; font-style: normal; font-size: 13px; font-weight: 600; color: var(--c); }
+.door:active { transform: scale(.985); }
+@media (hover: hover) { .door:hover { border-color: var(--c); } }
+.note { margin: 20px 2px 0; color: var(--muted); font-size: 14px; line-height: 1.5; max-width: 60ch; }
+.note b { color: var(--text); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mark .stroke { animation: none; stroke-dashoffset: 0; }
+  .mark .stitch, #splash h1 { animation: none; opacity: 1; }
+  #splash, #pick { transition: none; }
+}

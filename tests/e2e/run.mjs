@@ -386,6 +386,27 @@ await T('Ağırlık: yatık silindir (zemine çizgi boyunca değer) — panel ç
   expect(/Denge analizi/.test(tx) && /kendi başına dengede durmaz/.test(tx), 'denge: ' + tx.slice(0, 300));
 });
 
+await T('Ağırlık merkezi işareti: son parça silinince, parçalar gizlenince, oyuk parçayı yok edince ekranda kalmaz', 'F-Üretim', async ({ page }) => {
+  const marks = () => page.evaluate(() => window.__app.weightMarkerCount);
+  const on = async (msg) => { await page.waitForFunction(() => window.__app.weightMarkerCount > 0, null, { timeout: 8000 }).catch(() => {}); expect(await marks() > 0, msg); };
+  const off = async (msg) => { await page.waitForTimeout(500); expect(await marks() === 0, msg + ' (kalan: ' + await marks() + ')'); };
+  await tab(page, 'wgt'); await on('ağırlık sekmesinde işaret çizildi');
+  // 1) son parçayı sil
+  // (düğmeler iki arayüzde farklı yerde: doğrudan basılır; sınanan şey çizim katmanı)
+  const press = (a) => page.evaluate((a) => document.querySelector(`[data-act="${a}"]`).click(), a);
+  await press('del'); await off('son parça silinince işaret kalktı');
+  await press('undo'); await on('geri alınca işaret geri geldi');
+  // 2) bütün parçaları gizle (Tasarım sekmesinde "ağırlık merkezini göster" açıkken — kullanıcının ekranındaki durum)
+  await page.evaluate(() => { window.__app.settings.cogShow = true; });
+  await tab(page, 'dims'); await page.evaluate(() => window.__app.rebuild()); await on('ayar açıkken başka sekmede de işaret var');
+  await page.evaluate(() => { for (const p of window.__app.parts) p.hidden = true; window.__app.rebuild(); }); await off('hepsi gizlenince işaret kalktı');
+  await page.evaluate(() => { for (const p of window.__app.parts) p.hidden = false; window.__app.rebuild(); }); await on('görünür yapınca geri geldi');
+  // 3) oyuk parça bütün modeli yok etsin
+  await page.evaluate(() => { const P = window.__app.parts; P.push({ ...P[0], id: 999, op: 'sub', w: P[0].w + 20, l: P[0].l + 20, h: P[0].h + 20 }); window.__app.rebuild(); });
+  await off('oyuk modeli yok edince işaret kalktı');
+  await page.evaluate(() => { window.__app.settings.cogShow = false; });
+});
+
 /* ---------- K. Proje bütünlüğü ---------- */
 await T('Proje bütünlüğü: parça + malzeme + OCCT parçası + 5 eksen ayarları + analiz sonucu kaydedilip açılır', 'K-Proje', async ({ page }) => {
   await tab(page, 'dims'); await setK(page, 'w', 80); await setK(page, 'h', 20); await setK(page, 'l', 40);
@@ -445,24 +466,50 @@ await T('Performans: 40 parçalı model yeniden kurma süresi', 'P-Performans', 
   expect(await chips(page) >= 41, 'parçalar');
 });
 
-/* ---------- W. Çalışma alanı seçimi ---------- */
-await (async () => { if (only.length && !only.some((o) => 'W-Alan'.toLowerCase().startsWith(o.toLowerCase()))) return; if (SKIP_YENI.includes('w-alan')) return; await R.test('Çalışma alanı: ilk açılışta seçim ekranı; Makine seçilince mevcut uygulama açılır; seçim hatırlanır; Tekstil\'e geçip geri dönülür', async () => {
-  const a = await openApp(browser, url, { ...PHONE, init: () => { try { localStorage.setItem('cizim:guideSeen', '1'); } catch (e) { /* */ } } });
+/* ---------- W. Açılış ekranı: Makine / Tekstil seçimi ---------- */
+await (async () => { if (only.length && !only.some((o) => 'W-Alan'.toLowerCase().startsWith(o.toLowerCase()))) return; if (SKIP_YENI.includes('w-alan')) return; await R.test('Açılış ekranı: ilk açılışta seçim; Makine → yeni arayüz, Tekstil → tekstil; son seçim hatırlanır; bölümler birbirine ve eski arayüze bağlanmaz; "Ana ekran" seçime döner', async () => {
+  const a = await openApp(browser, url, { ...PHONE, path: 'index.html', init: () => { try { localStorage.setItem('cizim:guideSeen', '1'); } catch (e) { /* */ } } });
+  const page = a.page;
+  const stage = () => page.evaluate(() => document.getElementById('app') && document.getElementById('app').dataset.stage);
+  // açılış sayfasının güvenlik politikası metinden kod çalıştırmaya izin vermez (unsafe-eval yok): waitForFunction yerine yoklama
+  const waitStage = async (want, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await stage().catch(() => null) === want) return; await page.waitForTimeout(100); } throw new Error('açılış ekranı "' + want + '" aşamasına gelmedi (şu an: ' + await stage().catch(() => '?') + ')'); };
+  // bölüm içinden öbür bölüme, eski arayüze ya da eski ?ws bağlantısına giden bağlantı yok
+  const crossLinks = (re) => page.evaluate((src) => [...document.querySelectorAll('a[href]')].map((x) => x.getAttribute('href')).filter((h) => new RegExp(src).test(h)), re.source);
   try {
-    await a.page.waitForSelector('#ws-pick', { timeout: 30000 });
-    await a.page.locator('#ws-pick [data-ws="makine"]').click();
-    await waitReady(a.page);
-    expect(await a.page.locator('#ws-pick').count() === 0, 'seçim kapandı');
-    expect(await a.page.evaluate(() => !!window.__app && Array.isArray(window.__app.parts) && !!document.querySelector('#view canvas')), 'makine uygulaması çalışıyor');
-    await a.page.reload(); await waitReady(a.page);
-    expect(await a.page.locator('#ws-pick').count() === 0, 'seçim hatırlandı');
-    await act(a.page, 'projects'); await a.page.locator('#ws-tx').click();
-    await a.page.waitForURL(/tekstil\.html/); await a.page.waitForSelector('[data-a="create"]');
-    // tekstil son seçim olunca ana sayfa tekstile yönlenir; ?ws=makine ile geri dönülür
-    await a.page.goto(url + 'index.html'); await a.page.waitForURL(/tekstil\.html/);
-    await a.page.locator('#to-mech').click(); await waitReady(a.page);
-    expect(/index\.html\?ws=makine/.test(a.page.url()) && await a.page.evaluate(() => !!window.__app && Array.isArray(window.__app.parts)), 'makineye dönüldü');
+    // 1) ilk açılış: çizim animasyonu, sonra iki seçenek (kendiliğinden bir yere gitmez)
+    expect(await stage() === 'splash', 'açılış animasyonu');
+    await waitStage('pick');
+    expect(await page.locator('.door').count() === 2 && await page.locator('.door.makine').isVisible() && await page.locator('.door.tekstil').isVisible(), 'iki seçenek');
+    await page.waitForTimeout(2600); expect(/\/$|\/index\.html$/.test(new URL(page.url()).pathname) && await stage() === 'pick', 'seçim beklerken başka sayfaya geçmez');
+    // 2) Makine → yeni arayüz
+    await page.locator('.door.makine').click(); await page.waitForURL(/\/yeni\//); await waitReady(page);
+    expect(await page.evaluate(() => localStorage.getItem('cizim:workspace')) === 'makine', 'seçim kaydedildi');
+    expect(!(await crossLinks(/tekstil|klasik|index\.html\?ws|\?ws=/)).length, 'makinede tekstile / eski arayüze bağlantı yok: ' + await crossLinks(/tekstil|klasik|\?ws=/));
+    expect(await page.locator('#nav [data-mode]').count() === 3, 'alt gezinme: Tasarım, Analiz, Üretim');
+    expect((await page.locator('#m-home').getAttribute('href')) === '../?sec=1', 'menüde Ana ekran');
+    // 3) yeniden açılınca hatırlanan bölüme gider
+    await page.goto(url); expect(/Makine ve Mühendislik açılıyor/.test(await page.locator('#going').innerText()), 'açılışta hatırlanan bölüm yazar');
+    await page.waitForURL(/\/yeni\//, { timeout: 8000 }); await waitReady(page);
+    // 4) Ana ekran → seçim (kendiliğinden yönlenmez), son kullanılan işaretli
+    await page.goto(url + '?sec=1'); expect(await stage() === 'pick', 'Ana ekran doğrudan seçimi açar');
+    expect(await page.locator('.door.makine .last').isVisible() && !(await page.locator('.door.tekstil .last').isVisible()), '"Son kullandığın" işareti');
+    await page.waitForTimeout(2600); expect(await stage() === 'pick' && !/yeni|tekstil/.test(page.url()), 'Ana ekranda bekler');
+    // 5) Tekstil → tekstil sayfası; makineye / eski arayüze bağlantı yok; Ana ekran düğmesi
+    await page.locator('.door.tekstil').click(); await page.waitForURL(/tekstil\.html/); await page.waitForSelector('[data-a="create"]');
+    expect(await page.evaluate(() => localStorage.getItem('cizim:workspace')) === 'tekstil', 'tekstil kaydedildi');
+    expect(!(await crossLinks(/yeni\/|klasik|index\.html|\?ws=/)).length, 'tekstilde makineye / eski arayüze bağlantı yok: ' + await crossLinks(/yeni|klasik|index|\?ws=/));
+    // 6) yeniden açılınca tekstile gider; "Başka bölüm seç" yönlendirmeyi durdurur
+    await page.goto(url); await page.waitForURL(/tekstil\.html/, { timeout: 8000 }); await page.waitForSelector('[data-a="create"]');
+    await page.goto(url); await page.locator('#other').click();
+    expect(await stage() === 'pick', '"Başka bölüm seç" seçimi açar'); await page.waitForTimeout(2800);
+    expect(!/tekstil|yeni/.test(page.url()), 'seçimdeyken yönlenmez');
+    // 7) tekstildeki Ana ekran düğmesi
+    await page.goto(url + 'tekstil.html'); await page.waitForSelector('[data-a="create"]');
+    await page.locator('#to-home').click(); await page.waitForURL(/\?sec=1/); await waitStage('pick');
+    // 8) eski bağlantılar (index.html?ws=makine) yeni arayüze gider
+    await page.goto(url + 'index.html?ws=makine'); await page.waitForURL(/\/yeni\//, { timeout: 8000 });
     expect(!a.errors.length, 'sayfa hataları: ' + a.errors.join(' | '));
+    expect(!a.net.external.length, 'dış istek: ' + a.net.external.join(', '));
   } catch (e) { e.shot = await shot(a.page, 'W_alan'); throw e; } finally { await close(a); }
 }, { area: 'W-Alan' }); })();
 

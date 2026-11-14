@@ -66,7 +66,7 @@ if (floats) {                                      // yeni arayüz: çizim alan�
   const p = $('b-panel'); if (p && p.parentElement === bar) bar.insertBefore(b, p); else bar.appendChild(b);
 } else if (top) {                                  // tekstil sayfası: üst çubuk
   const b = addButton(el('button', { id: 'b-hand', class: 'btn', type: 'button', title: 'Parmakla kontrol: kamerayla, dokunmadan çiz', 'aria-label': 'Parmakla kontrol' }, '🖐'));
-  const m = $('to-mech'); if (m && m.parentElement === top) top.insertBefore(b, m); else top.appendChild(b);
+  const m = $('to-home') || $('to-mech'); if (m && m.parentElement === top) top.insertBefore(b, m); else top.appendChild(b);
 }
 
 /* ---------- davranış ---------- */

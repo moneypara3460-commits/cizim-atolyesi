@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0a1120">
 <title>Çizim Atölyesi</title>
-<link rel="stylesheet" href="./ui.css?v=20261112a">
+<link rel="stylesheet" href="./ui.css?v=20261114a">
 <script type="importmap">
 { "imports": {
   "three": "../vendor/three@0.160.0/build/three.module.js",
@@ -83,7 +83,6 @@
       <button class="ui" data-mode="tasarim" aria-current="page"><svg><use href="#i-cube"/></svg><span>Tasarım</span></button>
       <button class="ui" data-mode="analiz"><svg><use href="#i-chart"/></svg><span>Analiz</span></button>
       <button class="ui" data-mode="uretim"><svg><use href="#i-cnc"/></svg><span>Üretim</span></button>
-      <a class="ui" data-mode="tekstil" href="../tekstil.html"><svg><use href="#i-scissors"/></svg><span>Tekstil</span></a>
     </nav>
     <button class="ui search" data-ui="search" aria-label="Komut ara" title="Komut ara (Ctrl K)"><svg><use href="#i-search"/></svg><span class="d-only">Komut ara</span><kbd class="d-only">Ctrl K</kbd></button>
     <button id="b-undo" class="ui ib" data-act="undo" aria-label="Geri al" title="Geri al"><svg><use href="#i-undo"/></svg></button>
@@ -173,9 +172,8 @@
     <button class="ui trow" data-act="mic"><svg><use href="#i-mic"/></svg>Sesli komut</button>
     <button class="ui trow" data-ui="search"><svg><use href="#i-search"/></svg>Komut ara</button>
     <hr>
-    <a class="ui trow" href="../tekstil.html"><svg><use href="#i-scissors"/></svg>Tekstil ve Moda</a>
-    <a class="ui trow" href="../tanitim/"><svg><use href="#i-home"/></svg>Tanıtım sayfası</a>
-    <a class="ui trow" href="../index.html?ws=makine"><svg><use href="#i-back"/></svg>Eski arayüze dön</a>
+    <a class="ui trow" id="m-home" href="../?sec=1"><svg><use href="#i-home"/></svg>Ana ekran (Makine / Tekstil seçimi)</a>
+    <a class="ui trow" href="../tanitim/"><svg><use href="#i-doc"/></svg>Tanıtım sayfası</a>
   </div>
 
   <div id="palette" role="dialog" aria-label="Komut arama">
@@ -205,8 +203,8 @@
   </div>
 </div>
 
-<script type="module" src="./shell.js?v=20261112a"></script>
+<script type="module" src="./shell.js?v=20261114a"></script>
 <script type="module" src="../app.js?v=20261112u"></script>
-<script type="module" src="../hand/ui.js?v=20261113a"></script>
+<script type="module" src="../hand/ui.js?v=20261114a"></script>
 </body>
 </html>

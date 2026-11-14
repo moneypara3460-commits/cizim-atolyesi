@@ -1,5 +1,7 @@
 // Yeni arayüz kabuğu. app.js'ye ve hesap modüllerine dokunmaz: yalnızca sayfadaki düzeni yönetir
 // (bölümler, alt panel, araçlar, menü, komut arama). Uygulama düğmeleri aynı data-act değerleriyle çalışır.
+try { localStorage.setItem('cizim:workspace', 'makine'); } catch (e) { /* */ }   // açılış ekranı son bölümü hatırlar
+
 const $ = (id) => document.getElementById(id);
 const appEl = $('app');
 const tabsEl = $('tabs');
@@ -204,8 +206,7 @@ const CMDS = [
   C('Uygulama', 'Projeler', 'Kaydet, aç, yeni proje', 'proje kaydet aç yeni dosya', { act: 'projects' }, 'folder'),
   C('Uygulama', 'Rehber ve örnekler', '', 'rehber yardım örnek nasıl', { act: 'guide' }, 'help'),
   C('Uygulama', 'Sesli komut', '', 'ses mikrofon konuş', { act: 'mic' }, 'mic'),
-  C('Uygulama', 'Tekstil ve Moda', 'Kalıp, kesim planı, triko', 'tekstil moda kalıp giysi triko kumaş', { href: '../tekstil.html' }, 'scissors'),
-  C('Uygulama', 'Eski arayüze dön', '', 'eski arayüz', { href: '../index.html?ws=makine' }, 'back'),
+  C('Uygulama', 'Ana ekran', 'Makine / Tekstil seçimi', 'ana ekran tekstil moda makine bölüm değiştir', { href: '../?sec=1' }, 'home'),
 ];
 const DEFAULT = ['Kutu ekle', 'Silindir ekle', 'Kroki çiz', 'Yuvarlak delik aç', 'Mühendislik analizi (FEA)', 'CNC freze', 'CNC torna', 'Teknik resim', 'Flanş örneğini aç', 'Projeler'];
 

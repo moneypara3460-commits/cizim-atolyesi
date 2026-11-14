@@ -74,7 +74,7 @@ export async function openApp(browser, baseUrl, view = {}) {
   page.on('pageerror', (e) => errors.push(String(e.message || e)));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); logs.push(m.type() + ': ' + m.text()); });
   if (view.init) await ctx.addInitScript(view.init);
-  await page.goto(baseUrl + (view.path || 'index.html'));
+  await page.goto(baseUrl + (view.path || 'klasik.html'));   // eski arayüz (uygulama çekirdeği testleri); kök adres açılış ekranıdır
   return { ctx, page, errors, logs, net };
 }
 
