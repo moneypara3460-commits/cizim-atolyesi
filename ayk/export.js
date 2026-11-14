@@ -1,9 +1,9 @@
 // Ayakkabı Modelhanesi — dışa aktarma: PDF (1:1, sayfalama), SVG (mm), DXF (R12, katmanlı). Saf modül (DOM yok).
 // Hepsi build.js çizim listesinden üretilir; yalnız görünür katmanlar yazılır.
-import * as G from './geom.js?v=20261114s';
+import * as G from './geom.js?v=20261114u';
 import { pdfDoc, textWidth } from '../tx/pdf.js?v=20261112u';
-import { LAYER, LAYERS, LINE_TYPES, SIDES } from './model.js?v=20261114s';
-import { pieceItems, sketchItems, itemsBox, measure, fmt } from './build.js?v=20261114s';
+import { LAYER, LAYERS, LINE_TYPES, SIDES } from './model.js?v=20261114u';
+import { pieceItems, sketchItems, itemsBox, measure, fmt } from './build.js?v=20261114u';
 
 const { C } = G;
 // baskı renkleri (beyaz kâğıt). Kullanıcı katman rengini değiştirdiyse onun rengi kullanılır.

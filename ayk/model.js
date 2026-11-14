@@ -1,7 +1,7 @@
 // Ayakkabı Modelhanesi — proje veri modeli (Aşama 1). Saf modül: DOM ve depolama yok.
 // Birim: mm. Koordinat: y aşağı (ekran gibi); DXF'e yazarken y çevrilir.
 // Proje şeması sürümlüdür (schema); eski kayıtlar migrate() ile yükseltilir.
-import { uid, node, makePath, clone, isP, edges, edgeStarts } from './geom.js?v=20261114s';
+import { uid, node, makePath, clone, isP, edges, edgeStarts } from './geom.js?v=20261114u';
 
 export const SCHEMA = 1;
 export const KIND = 'cizim.ayakkabi';
@@ -139,6 +139,58 @@ export function pruneEdges(pc) {
   pc.marks = pc.marks.filter((m) => !m.edge || live.has(m.edge));
 }
 
+/* ---------- kalıp ve model resmi ---------- */
+// Kalıp: yan ve alt (taban) görünüşünün fotoğraftan çıkarılmış ölçülü çizgisi + düzeltilmiş fotoğraf.
+// view: { img: data:image/jpeg…, k: mm başına piksel, w, h: görüntü pikseli, paper, outline: kapalı yol (mm, sol üst 0,0),
+//         imgAt: görüntünün çizgiye göre konumu (mm), at: stampadaki konum (mm), length, height, sens, scale }
+export const LAST_VIEWS = { yan: 'Kalıp yan görünüşü', alt: 'Kalıp alt görünüşü (taban)' };
+export const PAPER_SIZES = { A4: 'A4 (297 × 210 mm)', A3: 'A3 (420 × 297 mm)' };
+const IMG_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+const fin = (v, d = null) => (Number.isFinite(+v) && v !== null && v !== '' ? +v : d);
+export function makeLastView(v) {
+  if (!v || typeof v.img !== 'string' || !IMG_RE.test(v.img) || !okPath(v.outline) || v.outline.nodes.length < 3) return null;
+  return {
+    img: v.img, k: fin(v.k, 3) > 0 ? +v.k : 3, w: Math.max(1, Math.round(fin(v.w, 1))), h: Math.max(1, Math.round(fin(v.h, 1))),
+    paper: PAPER_SIZES[v.paper] ? v.paper : 'A4', outline: { ...v.outline, closed: true },
+    imgAt: isP(v.imgAt) ? v.imgAt : [0, 0], at: isP(v.at) ? v.at : [0, 0],
+    length: fin(v.length, 0), height: fin(v.height, 0), sens: Math.max(-5, Math.min(5, Math.round(fin(v.sens, 0)))), scale: fin(v.scale, 1) > 0 ? +v.scale : 1,
+  };
+}
+export function makeLast(o = {}) {
+  const L = fin(o.lengthMm);
+  return {
+    name: String(o.name || '').slice(0, 80), lengthMm: L > 0 && L < 600 ? L : null, paper: PAPER_SIZES[o.paper] ? o.paper : 'A4',
+    views: { yan: makeLastView(o.views?.yan), alt: makeLastView(o.views?.alt) },
+  };
+}
+export const MAX_MODEL_PHOTOS = 6;
+// Kalıptan otomatik parça ayarları (hesap ayk/auto.js'de). pieceIds: bu ayarla oluşturulmuş parçalar (yeniden oluşturulunca değiştirilir)
+export const AUTO_TYPES = ['derby', 'oxford', 'loafer', 'spor'];
+export function makeAuto(a = {}) {
+  const params = {};
+  if (a && a.params && typeof a.params === 'object') for (const [k, v] of Object.entries(a.params).slice(0, 16)) if (/^[a-zA-Z]{1,12}$/.test(k) && (typeof v === 'boolean' || Number.isFinite(v))) params[k] = v;
+  return {
+    type: AUTO_TYPES.includes(a?.type) ? a.type : '',
+    flipX: typeof a?.flipX === 'boolean' ? a.flipX : null, flipY: typeof a?.flipY === 'boolean' ? a.flipY : null,
+    params, pieceIds: Array.isArray(a?.pieceIds) ? a.pieceIds.filter((x) => typeof x === 'string').slice(0, 20) : [],
+  };
+}
+export function makeModelRef(o = {}) {
+  return {
+    photos: (Array.isArray(o.photos) ? o.photos : []).filter((ph) => ph && typeof ph.img === 'string' && IMG_RE.test(ph.img)).slice(0, MAX_MODEL_PHOTOS)
+      .map((ph) => ({ id: typeof ph.id === 'string' ? ph.id.slice(0, 40) : uid('ph'), img: ph.img, name: String(ph.name || '').slice(0, 80) })),
+    note: String(o.note || '').slice(0, 500),
+    auto: makeAuto(o.auto),
+  };
+}
+// alt görünüş varsayılan olarak yan görünüşün altına yerleşir
+export function placeLastViews(last) {
+  const y = last.views.yan, a = last.views.alt;
+  // fotoğraflar üst üste binmesin: alt görünüşün fotoğrafı yanınkinin 15 mm altından başlar
+  if (y && a && a.at[0] === 0 && a.at[1] === 0) a.at = [y.at[0], +(y.at[1] + y.imgAt[1] + y.h / y.k + 15 - a.imgAt[1]).toFixed(3)];
+  return last;
+}
+
 /* ---------- proje ---------- */
 export function defaultLayers() { return Object.fromEntries(LAYERS.map((l) => [l.id, { visible: true, color: l.color, width: l.width, type: null }])); }
 export function createProject(o = {}, now = Date.now()) {
@@ -150,6 +202,7 @@ export function createProject(o = {}, now = Date.now()) {
     created: now, modified: now, rev: 0, revisions: [],
     layers: defaultLayers(), sketch: { paths: [] }, pieces: [], matches: [], materials: [],
     view: null,
+    last: makeLast(o.last), modelRef: makeModelRef(o.modelRef),
     // Gelecek aşamalar için ayrılmış alanlar. Bu aşamada hiçbiri hesaplanmaz / gösterilmez (bkz. docs/AYAKKABI.md).
     future: { last3d: null, scan: null, photoAI: null, unfold: null, graphics: [], grading: null, nesting: null },
   };
@@ -170,6 +223,7 @@ export function migrate(input) {
   out.matches = (p.matches || []).filter((m) => m && m.a && m.b);
   out.materials = (p.materials || []).map(makeMaterial);
   out.future = { ...base.future, ...(p.future || {}) };
+  out.last = makeLast(p.last); out.modelRef = makeModelRef(p.modelRef);
   return out;
 }
 const okPath = (np) => np && Array.isArray(np.nodes) && np.nodes.every((n) => n && isP(n.p) && (!n.i || isP(n.i)) && (!n.o || isP(n.o)));
@@ -185,7 +239,7 @@ export function validateProject(p) {
 export { edgeStarts, node };
 
 /* ---------- parça işlemleri (editör ve parça sayfası ortak) ---------- */
-import { transform as tfPath, cloneNew, rp as roundP } from './geom.js?v=20261114s';
+import { transform as tfPath, cloneNew, rp as roundP } from './geom.js?v=20261114u';
 // afin dönüşüm: sınır, iç çizgiler, serbest işaretler, ölçüler, yazılar. Kenar üzerindeki işaretler kenarla birlikte gider.
 export function transformPiece(pc, f) {
   tfPath(pc.outline, f);

@@ -1,9 +1,9 @@
 // Ayakkabı Modelhanesi — 2B stampa editörü (tuval). Birim mm; ekran yakınlaşması ölçüleri değiştirmez.
 // Bağlam (ctx): 'stampa' (yardımcı çizgiler) ya da bir parçanın kimliği. Yalnız etkin bağlamdaki geometri düzenlenir.
 // Bütün değişiklikler api.begin() (geri al noktası) → değişiklik → api.changed() (otomatik kayıt) sırasıyla yapılır.
-import * as G from './geom.js?v=20261114s';
-import * as M from './model.js?v=20261114s';
-import { pieceItems, sketchItems, netPolygon, edgeFrame, markPoint, itemsBox, measure, fmt, checkPiece } from './build.js?v=20261114s';
+import * as G from './geom.js?v=20261114u';
+import * as M from './model.js?v=20261114u';
+import { pieceItems, sketchItems, lastItems, netPolygon, edgeFrame, markPoint, itemsBox, measure, fmt, checkPiece } from './build.js?v=20261114u';
 
 const { C } = G;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -72,7 +72,7 @@ export function createEditor(host, api) {
   function fit() {
     const p = P(); if (!p) return;
     if (W < 60 || H < 60) { const r = cv.getBoundingClientRect(); if (r.width > 0) { W = r.width; H = r.height; } }
-    const items = [...sketchItems(p), ...p.pieces.flatMap((pc) => cachedItems(pc))];
+    const items = [...lastItems(p), ...sketchItems(p), ...p.pieces.flatMap((pc) => cachedItems(pc))];
     const b = itemsBox(items) || { x0: 0, y0: 0, x1: 300, y1: 200 };
     const bw = Math.max(20, b.x1 - b.x0), bh = Math.max(20, b.y1 - b.y0);
     S.view.k = Math.min(200, Math.max(0.05, Math.min((W - 40) / bw, (H - 40) / bh)));
@@ -80,6 +80,12 @@ export function createEditor(host, api) {
   }
   let viewT; function saveView() { clearTimeout(viewT); viewT = setTimeout(() => { const p = P(); if (p) p.view = { ...S.view }; }, 300); }
 
+  const imgCache = new Map();
+  function lastImage(src) {
+    let im = imgCache.get(src);
+    if (!im) { im = new Image(); im.onload = () => draw(); im.src = src; imgCache.set(src, im); if (imgCache.size > 8) imgCache.delete(imgCache.keys().next().value); }
+    return im;
+  }
   /* ---------- çizim listesi önbelleği ---------- */
   function cachedItems(pc) {
     const key = JSON.stringify([pc, P().materials.find((m) => m.id === pc.material)?.name || '']);
@@ -495,6 +501,16 @@ export function createEditor(host, api) {
       const o = toS([0, 0]); ctx2.strokeStyle = '#33507f'; ctx2.beginPath(); ctx2.moveTo(o[0], 0); ctx2.lineTo(o[0], H); ctx2.moveTo(0, o[1]); ctx2.lineTo(W, o[1]); ctx2.stroke();
     }
     const act = piece();
+    // kalıp fotoğrafları (düzeltilmiş, gerçek ölçekte) ve kalıp çizgisi: referans katmanı açıksa
+    if (p.layers.referans?.visible !== false) {
+      for (const v of Object.values(p.last?.views || {})) {
+        if (!v) continue;
+        const im = lastImage(v.img); if (!im.complete || !im.naturalWidth) continue;
+        const o = toS([v.at[0] + v.imgAt[0], v.at[1] + v.imgAt[1]]);
+        ctx2.globalAlpha = act ? 0.12 : 0.3; ctx2.drawImage(im, o[0], o[1], (v.w / v.k) * S.view.k, (v.h / v.k) * S.view.k); ctx2.globalAlpha = 1;
+      }
+    }
+    drawItems(lastItems(p), act ? 0.4 : 1);
     drawItems(sketchItems(p), act ? 0.4 : 1);
     for (const pc of p.pieces) drawItems(cachedItems(pc), !act || pc.id === act.id ? 1 : 0.28);
     // etkin bağlam düzenleme katmanı

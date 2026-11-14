@@ -1,14 +1,17 @@
 // Ayakkabı Modelhanesi — uygulama kabuğu: 8 bölüm, otomatik kayıt, geri al / ileri al.
 // Hesap ve doğrulama saf modüllerde (geom, model, build, match, export); burada yalnız gösterim ve düzenleme.
 // Makine ve Tekstil alanlarının uygulama koduna bağlı değildir (yalnız tekstilin saf eğri / PDF / ofset modüllerini okur).
-import * as G from './geom.js?v=20261114s';
-import * as M from './model.js?v=20261114s';
-import { measure, checkPiece, fmt } from './build.js?v=20261114s';
-import * as X from './match.js?v=20261114s';
-import * as E from './export.js?v=20261114s';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261114s';
-import { createEditor } from './editor.js?v=20261114s';
-import { addSample } from './sample.js?v=20261114s';
+import * as G from './geom.js?v=20261114u';
+import * as M from './model.js?v=20261114u';
+import { measure, checkPiece, fmt, netPolygon } from './build.js?v=20261114u';
+import * as X from './match.js?v=20261114u';
+import * as E from './export.js?v=20261114u';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261114u';
+import { createEditor } from './editor.js?v=20261114u';
+import { addSample } from './sample.js?v=20261114u';
+import * as LST from './last.js?v=20261114u';
+import * as AUTO from './auto.js?v=20261114u';
+import * as AI from './ai.js?v=20261114u';
 import { saveBlob } from '../tx/download.js?v=20261112u';
 
 const $ = (id) => document.getElementById(id);
@@ -61,11 +64,20 @@ window.addEventListener('pagehide', () => { flush(); });
 
 /* ---------- geri al / ileri al (proje anlık görüntüleri) ---------- */
 const MAXH = 100;
-function begin() { if (!S.p) return; S.hist.push(JSON.stringify(S.p)); if (S.hist.length > MAXH) S.hist.shift(); S.fut = []; }
+// Fotoğraflar (kalıp, model) her anlık görüntüde tekrar saklanmaz: ortak havuzda bir kez tutulur, görüntüde yalnız anahtarı durur.
+const IMGS = new Map();
+function imgKey(v) {
+  let h = 2166136261; for (let i = 0; i < v.length; i += 7) h = Math.imul(h ^ v.charCodeAt(i), 16777619);
+  const k = '\u00a7img:' + v.length + ':' + (h >>> 0).toString(36) + ':' + v.slice(-16);
+  IMGS.set(k, v); return k;
+}
+const snap = (p) => JSON.stringify(p, (k, v) => (typeof v === 'string' && v.length > 1000 && v.startsWith('data:image/') ? imgKey(v) : v));
+const unsnap = (j) => JSON.parse(j, (k, v) => (typeof v === 'string' && v.startsWith('\u00a7img:') ? (IMGS.get(v) ?? '') : v));
+function begin() { if (!S.p) return; S.hist.push(snap(S.p)); if (S.hist.length > MAXH) S.hist.shift(); S.fut = []; }
 function undoLast() { S.hist.pop(); }
-function restoreSnap(json) { S.p = JSON.parse(json); dirty(); S.editor?.refresh(); if (S.page !== 'stampa') render(); }
-function undo() { if (!S.hist.length) return toast('Geri alınacak işlem yok'); S.fut.push(JSON.stringify(S.p)); restoreSnap(S.hist.pop()); }
-function redo() { if (!S.fut.length) return toast('İleri alınacak işlem yok'); S.hist.push(JSON.stringify(S.p)); restoreSnap(S.fut.pop()); }
+function restoreSnap(json) { S.p = unsnap(json); dirty(); S.editor?.refresh(); if (S.page !== 'stampa') render(); }
+function undo() { if (!S.hist.length) return toast('Geri alınacak işlem yok'); S.fut.push(snap(S.p)); restoreSnap(S.hist.pop()); }
+function redo() { if (!S.fut.length) return toast('İleri alınacak işlem yok'); S.hist.push(snap(S.p)); restoreSnap(S.fut.pop()); }
 // sayfa formlarından değişiklik: geri al noktası + kayıt
 function edit(fn, { rerender = true } = {}) { begin(); fn(S.p); dirty(); if (rerender) render(); }
 
@@ -90,6 +102,10 @@ $('nav').addEventListener('click', (e) => { const b = e.target.closest('[data-pa
 const needProject = () => `<div class="page"><div class="empty"><b>Açık proje yok</b>Önce bir proje aç ya da yeni bir ayakkabı projesi oluştur.<div class="row" style="justify-content:center;margin-top:14px"><button type="button" data-go="projeler">Projelerim</button><button type="button" class="ok" data-go="yeni">Yeni Ayakkabı Projesi</button></div></div></div>`;
 
 async function render() {
+  // Odaktaki kutu, sayfa değiştirilirken kaldırılınca tarayıcı "change" olayını çizimin ortasında tetikler (iç içe çizim hatası).
+  // Önce odağı bırak: bekleyen değer varsa şimdi kaydedilir, sonra sayfa güvenle yeniden çizilir.
+  const ae = document.activeElement;
+  if (ae && ae !== document.body && $('main').contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) ae.blur();
   renderNav();
   const main = $('main');
   if (S.page !== 'stampa' && S.editor) { S.editor.destroy(); S.editor = null; }
@@ -133,9 +149,137 @@ function projectFields(p, prefix = 'n') {
 function pageNew() {
   const draft = S.newDraft || (S.newDraft = M.createProject({ name: '', material: 'm-deri' }));
   return `<div class="page"><h2>Yeni Ayakkabı Projesi</h2><div class="card">${projectFields(draft, 'n')}
+    </div>${lastCard(draft, 'n')}<div class="card">
     <label class="row" style="color:var(--text);font-size:13px"><input type="checkbox" data-n="sample"${S.newSample ? ' checked' : ''}> Örnek stampa ekle (basitleştirilmiş derby: ön saya, yan saya, dil — deneme amaçlı)</label>
     <div class="row"><button type="button" class="ok" data-act="create">Projeyi oluştur ve Stampa Atölyesi'ni aç</button></div>
     <p class="small">Birim milimetredir. Payların otomatik başlangıç değerleri malzeme kalınlığı ve üretim yöntemine göre hesaplanır; parça bazında değiştirilebilir.</p></div></div>`;
+}
+/* ---------- kalıp ve model resmi (yeni proje + proje dosyaları) ---------- */
+function lastSvg(v) {
+  const x = v.imgAt[0], y = v.imgAt[1], w = v.w / v.k, h = v.h / v.k;
+  const d = 'M' + v.outline.nodes.map((n) => n.p.map((c) => +c.toFixed(2)).join(' ')).join('L') + 'Z';
+  return `<svg viewBox="${f1(x).replace(',', '.')} ${f1(y).replace(',', '.')} ${f1(w).replace(',', '.')} ${f1(h).replace(',', '.')}" role="img" aria-label="Kalıp çizgisi"><image href="${esc(v.img)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="none"/><path d="${d}" fill="none" stroke="#facc15" stroke-width="${+(Math.max(w, h) / 250).toFixed(2)}"/></svg>`;
+}
+function lastCard(p, mode) {
+  const L = p.last, mr = p.modelRef;
+  let h = `<div class="card lastcard" data-lmode="${mode}"><h3>Kalıp ve model resmi</h3>
+  <p class="small">Kalıbın fotoğrafını eklersen kalıp çizgisi Stampa Atölyesi'nde gerçek ölçüsünde açılır. Model resmi çizerken ekranın köşesinde durur.</p>
+  <div class="grid"><label>Kalıp adı / kodu<input data-lst="name" value="${esc(L.name)}" maxlength="80" placeholder="ör. K-41 sivri burun"></label>
+  <label>Bilinen kalıp boyu (mm)<input data-lst="lengthMm" value="${nv(L.lengthMm)}" inputmode="decimal" placeholder="ör. 268"></label>
+  <label>Fotoğraftaki kâğıt<select data-lst="paper">${opts(M.PAPER_SIZES, L.paper)}</select></label></div>`;
+  for (const [id, title] of Object.entries(M.LAST_VIEWS)) {
+    const v = L.views[id];
+    h += `<div class="lview" data-lview="${id}"><b>${title}</b>`;
+    if (v) h += `<div class="lprev">${lastSvg(v)}</div><p class="small">Ölçülen: boy <b>${f1(v.length)} mm</b> · ${id === 'alt' ? 'genişlik' : 'yükseklik'} <b>${f1(v.height)} mm</b>${Math.abs(v.scale - 1) > 1e-6 ? ` · bilinen boya göre ×${fmt(v.scale, 3)} düzeltildi` : ''}</p>
+      <div class="row"><label class="small">Ayırma hassasiyeti <input type="range" min="-5" max="5" step="1" value="${v.sens}" data-lsens="${id}"></label><button type="button" class="danger" data-lrm="${id}">Kaldır</button></div>`;
+    h += `<div class="row"><label class="btn">${v ? 'Yeni fotoğraf' : 'Fotoğraf çek / seç'}<input type="file" accept="image/*" data-lfile="${id}" hidden></label>${S.lbusy === id ? '<span class="small">işleniyor…</span>' : ''}</div></div>`;
+  }
+  h += `<details class="small"><summary>Kalıp fotoğrafı nasıl çekilir?</summary><ol>
+    <li>Kalıbı A4 kâğıdın üstüne koy (büyük numaralarda A3): yan görünüş için yan yatır, alt görünüş için tabanı kâğıda gelsin.</li>
+    <li>Kâğıdı kâğıttan koyu bir masaya koy; kâğıdın <b>dört köşesi</b> fotoğrafta görünsün.</li>
+    <li>Kalıp beyaz ya da açık renkliyse renkli (ör. mavi) kâğıt kullan.</li>
+    <li>Telefonu tam tepeden tut; 60–80 cm yukarıdan çekip yakınlaştır. Yakından çekince kalıbın yüksekliği ölçüyü büyütür.</li>
+    <li>Kalıbın gerçek boyunu biliyorsan "Bilinen kalıp boyu"na yaz: ölçü ona göre düzeltilir.</li></ol></details>
+  ${mode === 'n' ? `<label class="wide">Model tipi — saya parçaları kalıptan otomatik çıkarılsın<select data-lst="type">${opts({ '': 'Seçmedim (parçaları kendim çizeceğim)', ...Object.fromEntries(Object.entries(AUTO.MODELS).map(([k, v]) => [k, v.name])) }, mr.auto.type)}</select></label>
+  ${mr.photos.length ? `<div class="row"><button type="button" data-act="airead" data-mode="n"${S.aiBusy ? ' disabled' : ''}>${S.aiBusy ? 'Okunuyor…' : '🤖 Model resminden tipi ve çizgileri bul'}</button></div>` : ''}${aiNoteHtml()}
+  <p class="small">${mr.auto.type ? (L.views.yan ? '✓ Proje oluşunca saya parçaları bu kalıbın ölçüsünde hazır gelir. Sonra "Saya Parçaları" sayfasından ayarlayıp yeniden oluşturabilirsin.' : '⚠ Otomatik parça için kalıbın <b>yan görünüşü</b> fotoğrafı gerekli.') : 'Model tipi seçersen ön saya, yan saya, dil gibi parçalar kalıptan kendiliğinden çizilir.'}</p>` : ''}
+  <h3 style="margin-top:14px">Yapılacak modelin resmi</h3>
+  <div class="mthumbs">${mr.photos.map((ph) => `<div class="mthumb"><img src="${esc(ph.img)}" alt="${esc(ph.name || 'Model resmi')}"><button type="button" data-mrm="${esc(ph.id)}" aria-label="Kaldır">×</button></div>`).join('')}</div>
+  <div class="row">${mr.photos.length < M.MAX_MODEL_PHOTOS ? `<label class="btn">Model resmi ekle<input type="file" accept="image/*" multiple data-mfile="1" hidden></label>` : ''}<span class="small">${mr.photos.length}/${M.MAX_MODEL_PHOTOS} resim</span>${S.lbusy === 'model' ? '<span class="small">işleniyor…</span>' : ''}</div>
+  <label class="wide">Model notu<textarea data-lst="note" maxlength="500" placeholder="ör. burun kapaklı derby, 5 delik">${esc(mr.note)}</textarea></label></div>`;
+  return h;
+}
+// fotoğrafı küçültüp piksellerini al (çok büyük fotoğraflar işlem süresini uzatır)
+async function loadImageData(file, max) {
+  if (!/^image\//.test(file.type || 'image/')) throw new Error('resim dosyası değil');
+  if (file.size > 40 * 1024 * 1024) throw new Error('dosya çok büyük (40 MB üstü)');
+  const bmp = await createImageBitmap(file);
+  const s = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * s)), h = Math.max(1, Math.round(bmp.height * s));
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const c = cv.getContext('2d', { willReadFrequently: true }); c.drawImage(bmp, 0, 0, w, h); bmp.close?.();
+  return { cv, rgba: c.getImageData(0, 0, w, h).data, w, h };
+}
+function rgbaToJpeg(rgba, w, h, q = 0.82) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  cv.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(rgba), w, h), 0, 0);
+  return cv.toDataURL('image/jpeg', q);
+}
+async function imgToRgba(src, w, h) {
+  const im = new Image(); im.src = src; await im.decode();
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const c = cv.getContext('2d', { willReadFrequently: true }); c.drawImage(im, 0, 0, w, h);
+  return c.getImageData(0, 0, w, h).data;
+}
+// bilinen kalıp boyuna göre ölçek (yan ve alt görünüşün boyu kalıp boyuna eşittir)
+function fixScale(last, id) {
+  const v = last.views[id]; if (!v) return;
+  const raw = v.length / v.scale, want = last.lengthMm ? last.lengthMm / raw : 1;
+  last.views[id] = M.makeLastView(LST.scaleView(v, want / v.scale));
+}
+function viewFrom(r, sens, paper, at = [0, 0]) {
+  return M.makeLastView({ img: rgbaToJpeg(r.rec.rgba, r.rec.w, r.rec.h), k: r.rec.k, w: r.rec.w, h: r.rec.h, paper, outline: r.outline, imgAt: r.imgAt, at, length: r.length, height: r.height, sens, scale: 1 });
+}
+function lastTarget(mode) { return mode === 'p' ? S.p : S.newDraft; }
+// Sayfa bir sonraki adımda yeniden çizilir: odaktaki kutu kaldırılırken tetiklenen ikinci "change" iç içe çizim yapmasın.
+let lastRT = 0;
+const renderSoon = () => { clearTimeout(lastRT); lastRT = setTimeout(render, 0); };
+function applyLast(mode, fn) { if (mode === 'p') edit(fn, { rerender: false }); else fn(S.newDraft); renderSoon(); }
+async function onLastChange(el, mode) {
+  const d = el.dataset, T = lastTarget(mode); if (!T) return;
+  if (d.lst) {
+    const k = d.lst;
+    if (k === 'lengthMm') {
+      const v = pn(el.value);
+      if (v !== null && !(v >= 50 && v <= 500)) { el.classList.add('bad'); return toast('Kalıp boyu 50–500 mm arasında olmalı'); }
+      return applyLast(mode, (q) => { q.last.lengthMm = v; for (const id of Object.keys(M.LAST_VIEWS)) fixScale(q.last, id); toast(v ? 'Kalıp ölçüsü bilinen boya göre düzeltildi' : 'Ölçek düzeltmesi kaldırıldı'); });
+    }
+    if (k === 'note') return applyLast(mode, (q) => { q.modelRef.note = el.value.slice(0, 500); });
+    if (k === 'type') return applyLast(mode, (q) => { q.modelRef.auto = M.makeAuto({ ...q.modelRef.auto, type: el.value, params: {} }); });
+    if (k === 'paper') return applyLast(mode, (q) => { q.last.paper = M.PAPER_SIZES[el.value] ? el.value : 'A4'; });
+    return applyLast(mode, (q) => { q.last.name = el.value.trim().slice(0, 80); });
+  }
+  if (d.lfile) {
+    const file = el.files?.[0]; if (!file) return;
+    const id = d.lfile; S.lbusy = id; renderSoon();
+    try {
+      const { rgba, w, h } = await loadImageData(file, 1600);
+      const r = LST.analyzeLast(rgba, w, h, { paper: T.last.paper });
+      if (!r.ok) { S.lbusy = null; renderSoon(); return toast(r.error); }
+      const view = viewFrom(r, 0, T.last.paper);
+      S.lbusy = null;
+      applyLast(mode, (q) => { q.last.views[id] = view; fixScale(q.last, id); M.placeLastViews(q.last); });
+      toast(r.warnings[0] || `Kalıp çizgisi çıkarıldı: ${f1(lastTarget(mode).last.views[id].length)} mm`);
+    } catch (err) { S.lbusy = null; renderSoon(); toast('Fotoğraf işlenemedi: ' + err.message); }
+    return;
+  }
+  if (d.lsens !== undefined) {
+    const id = d.lsens, v = T.last.views[id]; if (!v) return;
+    const sens = Math.max(-5, Math.min(5, Math.round(+el.value || 0)));
+    try {
+      const k0 = v.k * v.scale, rgba = await imgToRgba(v.img, v.w, v.h);
+      const r = LST.analyzeRectified({ rgba, w: v.w, h: v.h, k: k0 }, sens);
+      if (!r.ok) { renderSoon(); return toast(r.error); }
+      const nv2 = M.makeLastView({ ...viewFrom(r, sens, v.paper, v.at), img: v.img });
+      applyLast(mode, (q) => { q.last.views[id] = nv2; fixScale(q.last, id); });
+      toast(`Kalıp çizgisi yeniden çıkarıldı: ${f1(lastTarget(mode).last.views[id].length)} mm`);
+    } catch (err) { toast('Yeniden işlenemedi: ' + err.message); }
+    return;
+  }
+  if (d.mfile) {
+    const room = M.MAX_MODEL_PHOTOS - T.modelRef.photos.length;
+    const files = [...(el.files || [])].slice(0, Math.max(0, room)); if (!files.length) return toast('En çok ' + M.MAX_MODEL_PHOTOS + ' model resmi eklenebilir');
+    S.lbusy = 'model'; renderSoon();
+    const add = [];
+    for (const f of files) {
+      try { const { cv } = await loadImageData(f, 1280); add.push({ id: G.uid('ph'), img: cv.toDataURL('image/jpeg', 0.8), name: String(f.name || '').slice(0, 80) }); }
+      catch (err) { toast('Eklenemedi: ' + (f.name || '') + ' — ' + err.message); }
+    }
+    S.lbusy = null;
+    if (!add.length) return renderSoon();
+    applyLast(mode, (q) => { q.modelRef = M.makeModelRef({ ...q.modelRef, photos: [...q.modelRef.photos, ...add] }); });
+    toast(add.length + ' model resmi eklendi');
+  }
 }
 function readFields(prefix, target) {
   for (const el of $('main').querySelectorAll(`[data-${prefix}]`)) {
@@ -160,7 +304,26 @@ function mountEditor() {
   if (S.pieceSel && S.p.pieces.some((q) => q.id === S.pieceSel) && S.openCtx) { S.editor.setCtx(S.pieceSel); }
   S.openCtx = false;
   S.editor.setView(S.p.view);
+  modelPeek(host);
   if (S.pendingNewPiece) { S.pendingNewPiece = false; host.querySelector('[data-a="newpiece"]').click(); }
+}
+
+// Stampada model resmi: köşede küçük düğme; dokununca resim açılır, birden çoksa ileri / geri
+function modelPeek(host) {
+  const ph = S.p?.modelRef?.photos || []; if (!ph.length) return;
+  host.style.position = 'relative';
+  const box = document.createElement('div'); box.className = 'ayk-model';
+  box.innerHTML = `<button type="button" class="am-t">🖼 Model</button><div class="am-b" hidden><img alt="Model resmi"><div class="am-r">${ph.length > 1 ? '<button type="button" data-am="-1" aria-label="Önceki">‹</button><span></span><button type="button" data-am="1" aria-label="Sonraki">›</button>' : '<span></span>'}<button type="button" data-am="x">Kapat</button></div></div>`;
+  let i = 0;
+  const b = box.querySelector('.am-b'), img = box.querySelector('img'), lab = box.querySelector('.am-r span');
+  const show = () => { img.src = ph[i].img; lab.textContent = ph.length > 1 ? `${i + 1}/${ph.length}` : ''; };
+  box.addEventListener('click', (e) => {
+    const t = e.target.closest('button'); if (!t) return;
+    if (t.classList.contains('am-t')) { b.hidden = !b.hidden; show(); return; }
+    if (t.dataset.am === 'x') { b.hidden = true; return; }
+    i = (i + +t.dataset.am + ph.length) % ph.length; show();
+  });
+  host.appendChild(box);
 }
 
 /* ---------- 4. Saya parçaları ---------- */
@@ -173,12 +336,93 @@ function pagePieces() {
   if (S.pieceSel && !p.pieces.some((q) => q.id === S.pieceSel)) S.pieceSel = p.pieces[0]?.id || null;
   if (!S.pieceSel && p.pieces.length) S.pieceSel = p.pieces[0].id;
   let h = `<div class="page"><h2>Saya Parçaları</h2><div class="row"><button type="button" class="ok" data-act="newpiece">+ Yeni parça (stampada çiz)</button>${p.pieces.length ? '' : '<button type="button" data-act="sample">Örnek parçaları ekle</button>'}</div>`;
+  h += autoCard(p);
   if (!p.pieces.length) return h + `<div class="empty"><b>Parça yok</b>Stampa Atölyesi'nde "+ Parça" ile sınır çiz ya da kapalı bir yardımcı çizgiyi parçaya dönüştür.</div></div>`;
   h += '<div class="chips">' + p.pieces.map((pc) => `<button type="button" data-psel="${esc(pc.id)}" class="${pc.id === S.pieceSel ? 'on' : ''}">#${pc.no} ${esc(pc.name)}</button>`).join('') + '</div>';
   const pc = p.pieces.find((q) => q.id === S.pieceSel);
   if (pc) h += pieceDetail(pc);
   h += matchCard();
   return h + '</div>';
+}
+/* ---------- kalıptan otomatik parçalar ---------- */
+function aiNoteHtml() {
+  const n = S.aiNote; if (!n || n.pid !== (S.p?.id || 'yeni')) return '';
+  return `<div class="ainote"><b>Resimden okunan:</b> ${esc(n.summary)}${n.warnings.map((w) => `<br><span class="warn">⚠ ${esc(w)}</span>`).join('')}</div>`;
+}
+async function aiRead(mode) {
+  const T = mode === 'p' ? S.p : S.newDraft; if (!T || S.aiBusy) return;
+  const ph = T.modelRef.photos[0]; if (!ph) return toast('Önce model resmi ekle');
+  S.aiBusy = true; renderSoon();
+  try {
+    const res = await AI.readModelPhoto(ph.img);
+    const L = T.last.views.yan?.length || 260;
+    const out = AI.toAuto(res, L);
+    S.aiNote = { pid: mode === 'p' ? S.p.id : 'yeni', summary: out.summary, warnings: out.warnings };
+    S.aiBusy = false;
+    if (!out.type) { renderSoon(); return toast('Model tanınmadı: ' + out.summary); }
+    if (mode === 'p') {
+      try {
+        edit((q) => { q.modelRef.auto = M.makeAuto({ ...q.modelRef.auto, type: out.type, flipX: q.modelRef.auto.flipX, flipY: q.modelRef.auto.flipY, params: out.params }); if (q.last.views.yan) runAuto(q); });
+        toast(T.last.views.yan ? 'Resimden okundu, parçalar oluşturuldu: ' + AUTO.MODELS[out.type].name : 'Resimden okundu: ' + AUTO.MODELS[out.type].name);
+      } catch (err) { undoLast(); renderSoon(); toast('Parçalar çıkarılamadı: ' + err.message); }
+    } else {
+      applyLast('n', (q) => { q.modelRef.auto = M.makeAuto({ ...q.modelRef.auto, type: out.type, params: out.params }); });
+      toast('Resimden okundu: ' + AUTO.MODELS[out.type].name);
+    }
+  } catch (err) { S.aiBusy = false; renderSoon(); toast('Resim okunamadı: ' + err.message); }
+}
+// Projeye ekler (önceki otomatik parçaların yerine). Hata fırlatabilir.
+function runAuto(q) {
+  const a = q.modelRef.auto;
+  const r = AUTO.generate({ last: q.last, pieces: [] }, { type: a.type, flipX: a.flipX ?? undefined, flipY: a.flipY ?? undefined, params: a.params, material: q.material });
+  const old = new Set(a.pieceIds);
+  q.pieces = q.pieces.filter((pc) => !old.has(pc.id));
+  q.matches = q.matches.filter((mt) => !old.has(mt.a?.piece) && !old.has(mt.b?.piece));
+  let no = M.nextPieceNo(q);
+  const mat = S.lib.find((m) => m.id === q.material);
+  for (const pc of r.pieces) { pc.no = no++; M.refreshAutoAllowances(pc, mat, q.method); }
+  q.pieces.push(...r.pieces); q.matches.push(...r.matches);
+  q.modelRef.auto = M.makeAuto({ type: r.type, flipX: r.frame.flipX, flipY: r.frame.flipY, params: r.params, pieceIds: r.pieces.map((pc) => pc.id) });
+  return r;
+}
+function autoPreview(p) {
+  const a = p.modelRef.auto, v = p.last.views.yan;
+  let r;
+  try { r = AUTO.generate({ last: p.last, pieces: [] }, { type: a.type, flipX: a.flipX ?? undefined, flipY: a.flipY ?? undefined, params: a.params }); } catch (err) { return { html: `<p class="small warn">⚠ ${esc(err.message)}</p>` }; }
+  const pts = v.outline.nodes.map((n) => [n.p[0] + v.at[0], n.p[1] + v.at[1]]);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  const pad = 30, P = (q) => q.map((c) => +c.toFixed(1)).join(' ');
+  const cols = ['#ef4444', '#3b82f6', '#22c55e', '#a855f7', '#f97316'];
+  let svg = `<svg viewBox="${x0 - pad} ${y0 - pad} ${x1 - x0 + 2 * pad} ${y1 - y0 + 2 * pad}" role="img" aria-label="Otomatik parça önizlemesi"><path d="M${pts.map(P).join('L')}Z" fill="#e5e7eb" stroke="#9ca3af" stroke-width="0.8"/>`;
+  r.pieces.forEach((pc, i) => {
+    const net = netPolygon(pc); let cx = 0, cy = 0; for (const [x, y] of net) { cx += x; cy += y; } cx /= net.length; cy /= net.length;
+    svg += `<path d="M${net.map(P).join('L')}Z" fill="${cols[i % cols.length]}" fill-opacity="0.18" stroke="${cols[i % cols.length]}" stroke-width="1"/>`;
+    svg += `<text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" font-size="7" text-anchor="middle" fill="#111827">${esc(pc.name)}</text>`;
+    for (const m of pc.marks) if (m.kind === 'delik' && m.p) svg += `<circle cx="${m.p[0]}" cy="${m.p[1]}" r="${(m.d || 4) / 2}" fill="none" stroke="#111827" stroke-width="0.5"/>`;
+  });
+  return { html: svg + '</svg>', r };
+}
+function autoCard(p) {
+  if (!p.last?.views?.yan) return `<div class="card autocard"><h3>Kalıptan otomatik saya parçaları</h3><p class="small">Kalıbın yan görünüşü fotoğrafını "Proje Dosyaları → Kalıp ve model resmi"nden eklersen ön saya, yan saya, dil gibi parçalar kalıp ölçüsünde kendiliğinden çıkarılır.</p><div class="row"><button type="button" data-go="dosyalar">Kalıp fotoğrafı ekle</button></div></div>`;
+  const a = p.modelRef.auto;
+  let h = `<div class="card autocard"><h3>Kalıptan otomatik saya parçaları</h3><div class="grid"><label>Model tipi<select data-au="type">${opts({ '': 'Seç…', ...Object.fromEntries(Object.entries(AUTO.MODELS).map(([k, v]) => [k, v.name])) }, a.type)}</select></label></div>`;
+  if (p.modelRef.photos.length) h += `<div class="row"><button type="button" data-act="airead" data-mode="p"${S.aiBusy ? ' disabled' : ''}>${S.aiBusy ? 'Okunuyor…' : '🤖 Model resminden oku ve parçaları oluştur'}</button></div>${aiNoteHtml()}`;
+  else h += `<p class="small">Model resmi eklersen (Proje Dosyaları) yapay zekâ model tipini ve çizgi konumlarını resimden tahmin edebilir.</p>`;
+  if (!a.type) return h + `<p class="small">Bir model tipi seç: parçalar kalıbın yan çizgisine göre çizilir.</p></div>`;
+  const pv = autoPreview(p), m = AUTO.MODELS[a.type], L = p.last.views.yan.length;
+  const P = AUTO.cleanParams(a.type, a.params, L);
+  h += `<div class="aprev">${pv.html}</div><div class="row"><button type="button" data-act="auflipx">↔ Burun yönünü çevir</button><button type="button" data-act="auflipy">↕ Tabanı çevir</button></div>
+  <p class="small">Önizlemede ön saya burun tarafında, yan saya topuk tarafında olmalı; değilse yönü çevir.</p><div class="grid">`;
+  for (const [k, d] of Object.entries(AUTO.PARAMS)) {
+    if (d.lacing && !m.lacing) continue;
+    if (k === 'capAt' && !P.cap) continue;
+    if (d.unit === 'bool') h += `<label class="row" style="font-size:13px"><input type="checkbox" data-aup="${k}"${P[k] ? ' checked' : ''}> ${esc(d.name)}</label>`;
+    else h += `<label>${esc(d.name)} (${d.unit === '%' ? '% kalıp boyu' : d.unit})<input data-aup="${k}" value="${nv(P[k])}" inputmode="decimal"></label>`;
+  }
+  h += `</div><div class="row"><button type="button" class="ok" data-act="aurun">${a.pieceIds.length ? 'Parçaları yeniden oluştur' : 'Parçaları oluştur'}</button><button type="button" data-act="aureset">Varsayılan ayarlar</button></div>
+  <p class="small">${a.pieceIds.length ? 'Yeniden oluşturunca bu kartla çıkarılan önceki parçalar silinir; elle eklediğin parçalar kalır. İstemezsen ↶ ile geri al.' : 'Parçalar yarım kalıptır: "Orta çizgi" kenarı simetri eksenidir. Paylar malzemeye göre otomatik verilir.'} Bu çizgiler başlangıç noktasıdır; usta kontrolü gerekir.</p></div>`;
+  return h;
 }
 function pieceDetail(pc) {
   const p = S.p, m = pc.outline.closed ? measure(pc) : null, edges = pc.outline.closed ? G.edges(pc.outline) : [];
@@ -321,6 +565,7 @@ async function pageFiles() {
   const errs = [...pcIss, ...mtIss, ...M.validateProject(p)].filter((x) => x.level === 'hata').length;
   let h = `<div class="page"><h2>Proje Dosyaları</h2>
   <div class="card"><h3>Proje bilgileri</h3>${projectFields(p, 'pf')}<p class="small">Oluşturma ${date(p.created)} · son değişiklik ${date(p.modified)} · revizyon ${p.rev}</p></div>
+  ${lastCard(p, 'p')}
   <div class="card"><h3>Proje kontrolü ${errs ? `<span class="badge bad">${errs} hata</span>` : '<span class="badge ok">hata yok</span>'}</h3>
   <p class="m">${p.pieces.length} parça · ${p.matches.length} eşleşme · ${p.sketch.paths.length} yardımcı çizgi · ${p.materials.length} malzeme kaydı</p>`;
   for (const x of [...pcIss, ...mtIss].slice(0, 30)) h += `<p class="iss ${x.level === 'hata' ? 'bad' : ''}">${x.pc ? `#${x.pc.no} ${esc(x.pc.name)}` : esc(x.mt?.name || 'Eşleşme')}: ${esc(x.msg)}</p>`;
@@ -376,8 +621,8 @@ function pageSettings() {
     }
     h += `</table></div><div class="row"><button type="button" data-act="layerreset">Varsayılana dön</button></div><p class="small">Ekranda katman rengi kullanılır. PDF ve SVG beyaz kâğıt için koyu renklerle basılır; bir katmanın rengini değiştirirsen çıktıda da senin rengin kullanılır. Kalınlık ve çizgi türü çıktılara da uygulanır.</p></div>`;
   }
-  h += `<div class="card"><h3>Gelecek aşamalar</h3><p class="small">Aşağıdakiler <b>henüz yoktur</b>; proje dosyasında yalnız yerleri ayrılmıştır (ayrıntı: docs/AYAKKABI.md).</p><ul class="future">
-    <li><b>Aşama 2</b> — 3D kalıp dosyası yükleme, görüntüleme ve ölçüm</li><li><b>Aşama 3</b> — telefon kamerasıyla kalıp tarama</li><li><b>Aşama 4</b> — fotoğraftan yapay zekâ destekli saya parçası tanıma</li>
+  h += `<div class="card"><h3>Gelecek aşamalar</h3><p class="small">Aşağıdakiler <b>henüz yoktur</b> (belirtilen kısımlar hariç); proje dosyasında yalnız yerleri ayrılmıştır (ayrıntı: docs/AYAKKABI.md).</p><ul class="future">
+    <li><b>Aşama 2</b> — 3D kalıp dosyası yükleme, görüntüleme ve ölçüm</li><li><b>Aşama 3</b> — telefon kamerasıyla 3D kalıp tarama. <i>Şu an var olan:</i> kalıbın kâğıt üstünde çekilmiş fotoğrafından ölçülü yan ve alt çizgisi (Proje → Kalıp ve model resmi)</li><li><b>Aşama 4</b> — fotoğraftan yapay zekâ destekli saya parçası tanıma</li>
     <li><b>Aşama 5</b> — 3D saya yüzeyinin 2D açınımı, kampre hesapları, malzeme telafisi</li><li><b>Aşama 6</b> — grafik tasarım, logo, baskı alanları, 3D önizleme</li><li><b>Aşama 7</b> — otomatik numara serileme (grading)</li><li><b>Aşama 8</b> — kesim yerleşimi ve malzeme optimizasyonu</li></ul></div>
   <div class="card"><h3>Depolama</h3><p class="small">${storeKind === 'idb' ? 'Projeler bu tarayıcının veritabanında ("cizim-ayk") saklanır. Makine ve Tekstil projelerinden ayrıdır.' : '⚠ Kalıcı depolama kullanılamıyor; JSON yedeği indir.'}</p></div></div>`;
   return h;
@@ -389,6 +634,11 @@ main.addEventListener('click', async (e) => {
   const t = e.target.closest('button, [data-go]'); if (!t || t.closest('.ed')) return;
   const d = t.dataset;
   if (d.go) return go(d.go);
+  if (d.lrm || d.mrm) {
+    const mode = t.closest('.lastcard')?.dataset.lmode;
+    if (d.lrm) return applyLast(mode, (q) => { q.last.views[d.lrm] = null; toast(M.LAST_VIEWS[d.lrm] + ' kaldırıldı'); });
+    return applyLast(mode, (q) => { q.modelRef.photos = q.modelRef.photos.filter((ph) => ph.id !== d.mrm); toast('Model resmi kaldırıldı'); });
+  }
   if (d.open) return openProject(d.open);
   if (d.dup) { const src = await store.get(d.dup); const imp = await store.importJSON(JSON.stringify(src)); imp.name = src.name + ' (kopya)'; await store.put(imp); toast('Kopyalandı'); return render(); }
   if (d.del) {
@@ -419,11 +669,30 @@ main.addEventListener('click', async (e) => {
     if (!dr.name) { main.querySelector('[data-n="name"]').classList.add('bad'); return toast('Model adını gir'); }
     const np = M.createProject(dr);
     if (S.newSample) { const n = addSample(np, np.material); const mat = S.lib.find((m) => m.id === np.material); for (const q of n) { M.refreshAutoAllowances(q, mat, np.method); } }
+    let msg = 'Proje oluşturuldu';
+    if (np.modelRef.auto.type) {
+      if (!np.last.views.yan) msg = 'Proje oluşturuldu. Kalıp yan fotoğrafı olmadığı için parçalar çıkarılmadı.';
+      else try { const r = runAuto(np); msg = `Proje oluşturuldu: ${r.pieces.length} saya parçası kalıptan çıkarıldı (${AUTO.MODELS[r.type].name})`; } catch (err) { msg = 'Proje oluşturuldu, parçalar çıkarılamadı: ' + err.message; }
+    }
     syncMaterials(np); await store.commit(np, 'Proje oluşturuldu');
-    S.newDraft = null; S.newSample = false; toast('Proje oluşturuldu');
+    S.newDraft = null; S.newSample = false; toast(msg);
     return openProject(np.id, 'stampa');
   }
   if (a === 'newpiece') { S.pendingNewPiece = true; return go('stampa'); }
+  if (a === 'auflipx' || a === 'auflipy') return edit((q) => {
+    const au = q.modelRef.auto, g = (au.flipX === null || au.flipY === null) ? AUTO.guessOrientation(q.last.views.yan) : null;
+    if (g) { au.flipX = g.flipX; au.flipY = g.flipY; }
+    if (a === 'auflipx') au.flipX = !au.flipX; else au.flipY = !au.flipY;
+  });
+  if (a === 'aureset') return edit((q) => { q.modelRef.auto.params = {}; });
+  if (a === 'airead') return aiRead(t.dataset.mode === 'p' ? 'p' : 'n');
+  if (a === 'aurun') {
+    try {
+      let n = 0;
+      edit((q) => { const r = runAuto(q); n = r.pieces.length; S.pieceSel = r.pieces[0]?.id || S.pieceSel; });
+      return toast(`${n} saya parçası kalıptan çıkarıldı`);
+    } catch (err) { undoLast(); return toast('Parçalar çıkarılamadı: ' + err.message); }
+  }
   if (a === 'sample') return edit((q) => { const n = addSample(q, q.material); const mat = S.lib.find((m) => m.id === q.material); for (const x of n) M.refreshAutoAllowances(x, mat, q.method); S.pieceSel = n[0].id; });
   if (a === 'editpc') { S.openCtx = true; return go('stampa'); }
   if (a === 'autoallow') return edit(() => { for (const k of M.ALLOW_KEYS) pc.allowAuto[k] = true; M.refreshAutoAllowances(pc, S.lib.find((m) => m.id === pc.material), p.method); toast('Paylar malzeme ve yönteme göre hesaplandı'); });
@@ -476,6 +745,15 @@ main.addEventListener('change', async (e) => {
     const file = el.files?.[0]; if (!file) return;
     if (file.size > 30 * 1024 * 1024) return toast('Dosya çok büyük (30 MB üstü)');
     try { const np = await store.importJSON(await file.text()); toast('İçe aktarıldı: ' + np.name); return openProject(np.id, 'parcalar'); } catch (err) { return toast('Açılamadı: ' + err.message); }
+  }
+  if (d.lst || d.lfile || d.lsens !== undefined || d.mfile) return onLastChange(el, el.closest('.lastcard')?.dataset.lmode);
+  if (d.au) return edit((q) => { q.modelRef.auto = M.makeAuto({ ...q.modelRef.auto, type: el.value, params: {} }); });
+  if (d.aup) {
+    const def = AUTO.PARAMS[d.aup]; if (!def) return;
+    if (def.unit === 'bool') return edit((q) => { q.modelRef.auto.params[d.aup] = el.checked; });
+    const v = pn(el.value);
+    if (v === null || v < def.min || v > def.max) { el.classList.add('bad'); return toast(`${def.name}: ${def.min}–${def.max} arası olmalı`); }
+    return edit((q) => { q.modelRef.auto.params[d.aup] = v; });
   }
   if (d.n !== undefined) { if (d.n === 'sample') S.newSample = el.checked; else S.newDraft[d.n] = el.value; return; }
   if (d.pf !== undefined) {

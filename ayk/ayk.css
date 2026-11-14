@@ -120,3 +120,25 @@ td input.n { width: 70px; }
 @media (min-width: 1100px) { .page { padding: 16px 16px 90px; } }
 
 #toast { position: fixed; left: 10px; right: 10px; bottom: 70px; max-width: 560px; margin: 0 auto; padding: 10px 12px; background: rgba(15, 23, 42, .96); border: 1px solid #334155; border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 30; }
+
+/* kalıp ve model resmi */
+.lastcard .lview { border: 1px solid var(--line, #26324a); border-radius: 10px; padding: 10px; margin: 10px 0; }
+.lastcard .lprev { margin: 8px 0; background: #fff; border-radius: 8px; overflow: hidden; }
+.lastcard .lprev svg { display: block; width: 100%; height: auto; max-height: 260px; }
+.lastcard input[type=range] { vertical-align: middle; width: 140px; }
+.lastcard details { margin: 8px 0; } .lastcard details ol { padding-left: 18px; margin: 6px 0; }
+.mthumbs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.mthumb { position: relative; width: 96px; height: 96px; border-radius: 8px; overflow: hidden; background: #fff; }
+.mthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mthumb button { position: absolute; top: 3px; right: 3px; width: 26px; height: 26px; min-height: 0; padding: 0; border-radius: 50%; line-height: 1; }
+.ayk-model { position: absolute; right: 8px; bottom: 44px; z-index: 6; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none; }
+.ayk-model > * { pointer-events: auto; }
+.ayk-model .am-b { background: #0f1a2e; border: 1px solid #2b3d61; border-radius: 10px; padding: 6px; max-width: min(360px, 70vw); box-shadow: 0 6px 20px #0008; }
+.ayk-model .am-b img { display: block; max-width: 100%; max-height: 40vh; border-radius: 6px; background: #fff; }
+.ayk-model .am-r { display: flex; align-items: center; gap: 6px; margin-top: 6px; } .ayk-model .am-r span { flex: 1; text-align: center; font-size: 12px; color: #94a3b8; }
+
+.autocard .aprev { background: #fff; border-radius: 8px; margin: 8px 0; overflow: hidden; }
+.autocard .aprev svg { display: block; width: 100%; height: auto; max-height: 320px; }
+.autocard .warn { color: #fbbf24; }
+.ainote { background: #0f2a1f; border: 1px solid #1f6f4a; border-radius: 8px; padding: 8px 10px; margin: 8px 0; font-size: 13px; }
+.ainote .warn { color: #fbbf24; }
