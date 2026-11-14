@@ -1,0 +1,97 @@
+/* Tanıtım sitesi: sabit üst menü, sekmeli bölümler ve hareket. Temel stil index.html içinde. */
+
+/* ---------- sabit üst menü ---------- */
+.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--sheet) 92%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.top .wrap.bar{display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:12px;padding-top:10px;padding-bottom:6px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-size:24px;white-space:nowrap}
+.brand .spin{width:28px;height:28px;fill:none;stroke:var(--blue);stroke-width:4;animation:spin 14s linear infinite;flex:0 0 auto}
+.btn.small{padding:9px 14px;font-size:14px;white-space:nowrap}
+.top nav.tabs{display:block;border-top:1px solid var(--rule)}
+.top .tabs .wrap{display:flex;flex-wrap:nowrap;justify-content:flex-start;gap:4px;overflow-x:auto;scrollbar-width:none;padding-top:0;padding-bottom:0}
+.top .tabs .wrap::-webkit-scrollbar{display:none}
+.top .tabs a{position:relative;flex:0 0 auto;padding:12px 12px 13px;font-family:var(--mono);font-size:13.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-decoration:none;border:0;white-space:nowrap;transition:color .2s}
+.top .tabs a:hover{color:var(--ink)}
+.top .tabs a[aria-current="page"]{color:var(--ink);font-weight:500}
+/* etkin sekmenin altında yürüyen dikiş */
+.top .tabs a[aria-current="page"]::after{content:"";position:absolute;left:10px;right:10px;bottom:4px;height:2px;background:repeating-linear-gradient(90deg,var(--blue) 0 7px,transparent 7px 11px);background-size:22px 2px;animation:dikis 1.2s linear infinite}
+@keyframes dikis{to{background-position:22px 0}}
+
+/* ---------- bölümler ---------- */
+.panel[hidden]{display:none}
+.panel.enter{animation:gir .45s cubic-bezier(.2,.7,.2,1)}
+@keyframes gir{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.panel>section:first-child,.panel>.hero:first-child{padding-top:44px}
+.next{padding-bottom:56px;display:flex;justify-content:flex-end}
+
+/* ---------- açılış: kendini çizen pafta ---------- */
+.band{background:var(--sheet);border-bottom:1px solid var(--ink);padding:18px 0 8px}
+.pafta{display:block;width:100%;height:auto;max-height:260px}
+.pafta text{font:500 13px var(--mono);letter-spacing:.12em;fill:var(--muted);text-anchor:middle}
+.pafta path{fill:none;stroke:var(--blue);stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+.pafta .draw>path:first-child{stroke-dasharray:1;stroke-dashoffset:1;animation:ciz 9s ease-in-out infinite}
+.pafta .d2>path:first-child{animation-delay:1.2s}
+.pafta .d3>path:first-child{animation-delay:2.4s}
+.pafta .stitch{stroke:var(--brass);stroke-dasharray:5 5;opacity:0;animation:dikisyuru 9s linear infinite;animation-delay:inherit}
+.pafta .d2 .stitch{animation-delay:1.2s}.pafta .d3 .stitch{animation-delay:2.4s}
+.pafta .dimline{stroke:var(--muted);stroke-width:1;opacity:0;animation:belir 9s ease infinite 3.6s}
+@keyframes ciz{0%{stroke-dashoffset:1}35%,85%{stroke-dashoffset:0}100%{stroke-dashoffset:-1}}
+@keyframes dikisyuru{0%,30%{opacity:0;stroke-dashoffset:0}40%{opacity:1}85%{opacity:1;stroke-dashoffset:-60}100%{opacity:0;stroke-dashoffset:-70}}
+@keyframes belir{0%,30%{opacity:0}40%,85%{opacity:1}100%{opacity:0}}
+.kalem{fill:var(--brass);offset-path:path("M 872.7 175.1 C 872.7 140.9 903.1 125.7 944.9 114.3 L 1005.7 72.5 C 1020.9 61.1 1043.7 57.3 1058.9 64.9 L 1074.1 45.9 C 1093.1 42.1 1112.1 49.7 1123.5 64.9 L 1127.3 175.1 Z");offset-rotate:0deg;animation:yuru 9s ease-in-out infinite 2.4s;opacity:0}
+@keyframes yuru{0%{offset-distance:0%;opacity:0}5%{opacity:1}35%{offset-distance:100%;opacity:1}40%,100%{offset-distance:100%;opacity:0}}
+.float{animation:suz 6s ease-in-out infinite}
+@keyframes suz{50%{transform:translateY(-12px) rotate(-.6deg)}}
+
+/* ---------- kayan özellik şeridi ---------- */
+.ticker{overflow:hidden;border-top:1px solid var(--ink);background:var(--ink);color:var(--paper)}
+.ticker .track{display:flex;width:max-content;animation:kay 48s linear infinite}
+.ticker span{font:600 14px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em;padding:13px 22px;white-space:nowrap;position:relative}
+.ticker span::after{content:"✦";position:absolute;right:-6px;color:var(--brass)}
+.ticker:hover .track{animation-play-state:paused}
+@keyframes kay{to{transform:translateX(-50%)}}
+
+/* ---------- atölye kartları ---------- */
+.wcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin-top:26px}
+.wcard{position:relative;background:var(--sheet);border:1.5px solid var(--ink);border-top:6px solid var(--c);padding:22px 22px 18px;display:flex;flex-direction:column;transition:transform .25s,box-shadow .25s}
+.wcard:hover{transform:translate(-4px,-4px);box-shadow:8px 8px 0 var(--c)}
+.wcard.mak{--c:#e08a14}.wcard.tex{--c:#d9668a}.wcard.ayk{--c:#b8783a}
+.wcard h3{font:800 26px/1.05 var(--display);text-transform:uppercase;margin:12px 0 8px}
+.wcard p{color:var(--muted);font-size:16px;margin:0 0 16px;flex:1}
+.wcard .links{display:flex;gap:16px;font-weight:600}
+.wcard .links a{color:var(--ink);text-decoration:none;border-bottom:2px solid var(--c)}
+.wcard .badge{position:absolute;top:14px;right:14px;font:700 12px/1 var(--mono);letter-spacing:.08em;background:var(--c);color:#fff;padding:5px 9px;border-radius:999px;animation:nabiz 1.8s ease-in-out infinite}
+@keyframes nabiz{50%{transform:scale(1.08);opacity:.75}}
+.ic{width:110px;height:84px;fill:none;stroke:var(--c);stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+.ic .stitch{stroke:var(--muted);stroke-width:1.4;stroke-dasharray:4 4;animation:dikis2 1.6s linear infinite}
+.ic .center{stroke:var(--muted);stroke-width:1;stroke-dasharray:10 3 2 3}
+.ic.gear{width:84px}
+.ic.gear g{transform-origin:60px 60px;animation:spin 12s linear infinite}
+@keyframes dikis2{to{stroke-dashoffset:-16}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- görünürken beliren öğeler ---------- */
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
+.reveal.in{opacity:1;transform:none}
+.fact strong{font-variant-numeric:tabular-nums}
+
+@media (max-width:860px){
+  .wcards{grid-template-columns:minmax(0,1fr)}
+  .brand{font-size:21px}
+}
+@media (max-width:420px){
+  .brand{font-size:18px;gap:8px}
+  .brand .spin{width:22px;height:22px}
+  .btn.small{padding:8px 10px;font-size:13px}
+}
+/* hareket istemeyenler: her şey durur, son hâl görünür */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none !important;transition:none !important}
+  .pafta .draw>path:first-child{stroke-dashoffset:0}
+  .pafta .stitch,.pafta .dimline{opacity:1}
+  .reveal{opacity:1;transform:none}
+}
+@media (max-width:600px){
+  .pafta text{font-size:34px;letter-spacing:.06em}
+  /* menünün sağa kaydığı belli olsun */
+  .top .tabs .wrap{-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}
+}

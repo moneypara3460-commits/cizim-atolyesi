@@ -286,6 +286,10 @@ await R.test('Telefon (390 × 844, dokunmatik): proje oluştur, dokunarak kapal�
   expect(p.pieces.length === 1 && p.pieces[0].outline.closed, 'parçaya dönüştü');
   const ov = await m.evaluate(() => document.documentElement.scrollWidth - innerWidth);
   expect(ov <= 1, 'yatay taşma yok: ' + ov);
+  await m.setViewportSize({ width: 320, height: 700 }); await m.waitForTimeout(150);
+  const ov2 = await m.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+  expect(ov2 <= 1, '320 piksel genişlikte yatay taşma yok: ' + ov2);
+  await m.setViewportSize({ width: 390, height: 844 });
   expect(await m.locator('.ed-tools').isVisible(), 'araç çubuğu görünür');
   await m.screenshot({ path: path.join(OUT, 'ayk-telefon.png') });
   expect(!errs.length, errs.join(' | '));
