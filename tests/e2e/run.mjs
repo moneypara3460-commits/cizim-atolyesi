@@ -471,12 +471,14 @@ await (async () => { if (only.length && !only.some((o) => 'W-Alan'.toLowerCase()
   const a = await openApp(browser, url, { ...PHONE, path: 'index.html', init: () => { try { localStorage.setItem('cizim:guideSeen', '1'); } catch (e) { /* */ } } });
   const page = a.page;
   const stage = () => page.evaluate(() => document.getElementById('app') && document.getElementById('app').dataset.stage);
+  // açılış sayfasının güvenlik politikası metinden kod çalıştırmaya izin vermez (unsafe-eval yok): waitForFunction yerine yoklama
+  const waitStage = async (want, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await stage().catch(() => null) === want) return; await page.waitForTimeout(100); } throw new Error('açılış ekranı "' + want + '" aşamasına gelmedi (şu an: ' + await stage().catch(() => '?') + ')'); };
   // bölüm içinden öbür bölüme, eski arayüze ya da eski ?ws bağlantısına giden bağlantı yok
   const crossLinks = (re) => page.evaluate((src) => [...document.querySelectorAll('a[href]')].map((x) => x.getAttribute('href')).filter((h) => new RegExp(src).test(h)), re.source);
   try {
     // 1) ilk açılış: çizim animasyonu, sonra iki seçenek (kendiliğinden bir yere gitmez)
     expect(await stage() === 'splash', 'açılış animasyonu');
-    await page.waitForFunction(() => document.getElementById('app').dataset.stage === 'pick', null, { timeout: 8000 });
+    await waitStage('pick');
     expect(await page.locator('.door').count() === 2 && await page.locator('.door.makine').isVisible() && await page.locator('.door.tekstil').isVisible(), 'iki seçenek');
     await page.waitForTimeout(2600); expect(/\/$|\/index\.html$/.test(new URL(page.url()).pathname) && await stage() === 'pick', 'seçim beklerken başka sayfaya geçmez');
     // 2) Makine → yeni arayüz
@@ -503,7 +505,7 @@ await (async () => { if (only.length && !only.some((o) => 'W-Alan'.toLowerCase()
     expect(!/tekstil|yeni/.test(page.url()), 'seçimdeyken yönlenmez');
     // 7) tekstildeki Ana ekran düğmesi
     await page.goto(url + 'tekstil.html'); await page.waitForSelector('[data-a="create"]');
-    await page.locator('#to-home').click(); await page.waitForFunction(() => document.getElementById('app') && document.getElementById('app').dataset.stage === 'pick', null, { timeout: 8000 });
+    await page.locator('#to-home').click(); await page.waitForURL(/\?sec=1/); await waitStage('pick');
     // 8) eski bağlantılar (index.html?ws=makine) yeni arayüze gider
     await page.goto(url + 'index.html?ws=makine'); await page.waitForURL(/\/yeni\//, { timeout: 8000 });
     expect(!a.errors.length, 'sayfa hataları: ' + a.errors.join(' | '));
