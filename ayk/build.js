@@ -2,9 +2,9 @@
 // Parçanın net çizgisi (stampa) + kenar türüne göre paylar → kesim çizgisi; dikiş, çentik, binme noktası, ölçü, yazı.
 // Ekran, PDF, SVG ve DXF aynı çizim listesini (items) kullanır: ekranda görülen ile dosyaya yazılan aynıdır.
 //   item: { layer, piece, t:'path', path } | { t:'poly', pts, closed } | { t:'circle', c, r } | { t:'text', p, s, h, ang, align }
-import * as G from './geom.js?v=20261114s';
+import * as G from './geom.js?v=20261114u';
 import { cutPolygon, selfIntersections, removeLoops } from '../tx/woven/pattern.js?v=20261112u';
-import { edgeProp, allowValue, LINE_KINDS, MARK_KINDS, SIDES, ALLOW } from './model.js?v=20261114s';
+import { edgeProp, allowValue, LINE_KINDS, MARK_KINDS, SIDES, ALLOW } from './model.js?v=20261114u';
 
 const { C } = G;
 const TOL = 0.05;
@@ -168,6 +168,17 @@ export function pieceItems(pc, project = null, { labels = true } = {}) {
   }
   for (const t of pc.texts) if (G.isP(t.p) && t.s) push({ layer: 'yazi', t: 'text', p: t.p, s: String(t.s).slice(0, 120), h: t.h || 2.5, ang: 0, align: 'l' });
   return items;
+}
+// Kalıp görünüşleri: ölçülü dış çizgi (referans katmanı) ve adı/ölçüsü. Kesim çıktılarına girmez.
+export function lastViewPath(v) { const np = G.clone(v.outline); G.transform(np, (p) => [p[0] + v.at[0], p[1] + v.at[1]]); return np; }
+export function lastItems(project) {
+  const out = [], views = project.last?.views || {};
+  for (const [id, v] of Object.entries(views)) {
+    if (!v) continue;
+    out.push({ layer: 'referans', t: 'path', path: G.toCurve(lastViewPath(v)), last: id });
+    out.push({ layer: 'referans', t: 'text', p: [v.at[0], v.at[1] - 4], h: 3.5, s: `${id === 'alt' ? 'Kalıp alt görünüşü' : 'Kalıp yan görünüşü'} · ${fmt(v.length, 1)} × ${fmt(v.height, 1)} mm`, last: id });
+  }
+  return out;
 }
 export function sketchItems(project) { return project.sketch.paths.filter((np) => np.nodes.length > 1).map((np) => ({ layer: 'yardimci', t: 'path', path: G.toCurve(np), sketch: np.id })); }
 export function projectItems(project, { pieces = null, sketch = true, labels = true } = {}) {

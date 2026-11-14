@@ -14,6 +14,8 @@
     "test:e2e:hand": "node tests/e2e/hand.mjs",
     "test:e2e:ayakkabi": "node tests/e2e/ayakkabi.mjs",
     "test:e2e:tanitim": "node tests/e2e/tanitim.mjs",
+    "test:e2e:ayk-kalip": "node tests/e2e/ayk-kalip.mjs",
+    "test:e2e:ayk-auto": "node tests/e2e/ayk-auto.mjs",
     "test:perf": "node --expose-gc tests/perf.mjs",
     "test:all": "node tests/run-all.mjs && node tests/e2e/run.mjs"
   }
