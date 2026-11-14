@@ -7,10 +7,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0a1120">
 <title>Çizim Atölyesi</title>
-<link rel="stylesheet" href="./acilis/acilis.css?v=20261114a">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./acilis/acilis.css?v=20261114s">
 </head>
 <body>
-<!-- Açılış ekranı: önce kısa çizim animasyonu, sonra Makine / Tekstil seçimi.
+<!-- Açılış ekranı: önce kısa çizim animasyonu, sonra Makine / Tekstil / Ayakkabı seçimi.
      Son seçim hatırlanır (cizim:workspace); bölüm içindeki "Ana ekran" bu sayfaya ?sec=1 ile döner. -->
 <main id="app" data-stage="splash">
   <section id="splash" aria-label="Çizim Atölyesi açılıyor">
@@ -57,10 +58,24 @@
           <em class="last" hidden>Son kullandığın</em>
         </span>
       </a>
+      <a class="door ayakkabi" href="ayakkabi.html" data-ws="ayakkabi">
+        <svg class="art" viewBox="0 0 160 120" aria-hidden="true">
+          <!-- ayakkabı stampası: yan saya sınırı, binme payı (kesik), dikiş, çentik -->
+          <path class="line" d="M14 92 C14 74 30 66 52 60 L84 38 C92 32 104 30 112 34 L120 24 C130 22 140 26 146 34 L148 92 Z"/>
+          <path class="guide dash" d="M20 88 C22 76 34 70 54 64 L86 43 C94 37 104 35 111 39 L122 29 C130 27 138 30 142 36 L143 88"/>
+          <path class="line" d="M84 38 l-3 -4 M120 24 l-1 -5 M60 92 v5"/>
+          <path class="center" d="M10 100 H150"/>
+        </svg>
+        <span class="txt">
+          <b>Ayakkabı Modelhanesi</b>
+          <span>Stampa, saya parçaları, binme ve dikiş payları, çentik eşleştirme, ölçekli PDF / DXF</span>
+          <em class="last" hidden>Son kullandığın</em>
+        </span>
+      </a>
     </div>
     <p class="note">Seçimin hatırlanır. Bölümü değiştirmek için içerideki menüden <b>Ana ekran</b>'a dön.</p>
   </section>
 </main>
-<script type="module" src="./acilis/acilis.js?v=20261114a"></script>
+<script type="module" src="./acilis/acilis.js?v=20261114s"></script>
 </body>
 </html>
