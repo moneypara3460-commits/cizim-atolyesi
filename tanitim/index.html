@@ -112,11 +112,17 @@ pre.gcode i{font-style:normal;color:#7f93a8}
 
 /* tekstil */
 .tex{display:grid;grid-template-columns:minmax(0,1fr) 260px 260px;gap:32px;align-items:start}
+.tex.one{grid-template-columns:minmax(0,1fr) 300px}
+.ws{display:grid;grid-template-columns:300px minmax(0,1fr);gap:48px;align-items:center}
+.ws dl{margin:0;display:grid;gap:18px}
+.ws dt{font:800 22px/1.1 var(--display);text-transform:uppercase}
+.ws dd{margin:4px 0 0;color:var(--muted);font-size:16px}
+.ws dt i{display:inline-block;width:10px;height:10px;margin-right:8px;vertical-align:2px}
 .tex ul{padding-left:20px;margin:0}
 .tex li{margin-bottom:8px}
 
 /* kullanıcılar */
-.who{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.who{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px}
 .who>div{border-top:3px solid var(--ink);padding-top:16px}
 .who p{color:var(--muted);font-size:16px}
 
@@ -156,8 +162,11 @@ footer{border-top:1px solid var(--ink);background:var(--sheet);padding:36px 0 48
 .antet span{font-size:15px;font-weight:500;overflow-wrap:anywhere}
 .fine{font-size:13.5px;color:var(--muted);margin-top:16px;max-width:80ch}
 
+@media (max-width:1100px){
+  .who{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 @media (max-width:860px){
-  .hero .wrap,.story,.trust,.faq,.two{grid-template-columns:minmax(0,1fr)}
+  .hero .wrap,.story,.trust,.faq,.two,.ws,.tex.one{grid-template-columns:minmax(0,1fr)}
   .two>div+div{border-left:0;border-top:1px solid var(--ink)}
   .facts .wrap{grid-template-columns:repeat(2,minmax(0,1fr))}
   .fact:nth-child(3){border-left:0}
@@ -187,9 +196,11 @@ footer{border-top:1px solid var(--ink);background:var(--sheet);padding:36px 0 48
   <div class="wrap">
     <div class="brand">Çizim Atölyesi</div>
     <nav aria-label="Sayfa içi">
+      <a href="#atolyeler">Atölyeler</a>
       <a href="#akis">Nasıl çalışır</a>
       <a href="#moduller">Modüller</a>
       <a href="#tekstil">Tekstil</a>
+      <a href="#ayakkabi">Ayakkabı</a>
       <a href="#guven">Güven</a>
       <a href="#sss">Sorular</a>
     </nav>
@@ -199,13 +210,14 @@ footer{border-top:1px solid var(--ink);background:var(--sheet);padding:36px 0 48
 <div class="hero">
   <div class="wrap">
     <div>
-      <div class="mono">Tarayıcıda çalışan CAD/CAM · kurulum yok</div>
+      <div class="mono">Tarayıcıda çalışan CAD/CAM · üç atölye · kurulum yok</div>
       <h1>Çizimden <em>tezgâha</em>, telefondan.</h1>
       <div class="dim" aria-hidden="true"><b></b><span>390 px · bir telefon ekranı</span><b></b></div>
-      <p class="lede">Çizim Atölyesi ile parçanı ölçüyle tasarlar, dayanımını kontrol eder, CNC tezgâhın nasıl keseceğini izler ve G-kodunu indirirsin. Hepsi bir internet tarayıcısında, telefonda bile çalışır.</p>
+      <p class="lede">Çizim Atölyesi ile parçanı ölçüyle tasarlar, dayanımını kontrol eder, CNC tezgâhın nasıl keseceğini izler ve G-kodunu indirirsin. Aynı uygulamada giysi kalıbı ve ayakkabı stampası da hazırlarsın. Hepsi bir internet tarayıcısında, telefonda bile çalışır.</p>
       <div class="cta">
         <a class="btn main" href="../">Uygulamayı aç</a>
-        <a class="btn" href="../tekstil.html">Tekstil alanını aç</a>
+        <a class="btn" href="../tekstil.html">Tekstil ve Moda</a>
+        <a class="btn" href="../ayakkabi.html">Ayakkabı Modelhanesi</a>
       </div>
     </div>
     <figure>
@@ -218,8 +230,8 @@ footer{border-top:1px solid var(--ink);background:var(--sheet);padding:36px 0 48
 <div class="facts">
   <div class="wrap">
     <div class="fact"><strong>0</strong><span>kurulum. Adresi açman yeter.</span></div>
-    <div class="fact"><strong>443</strong><span>otomatik testten her değişiklikte geçer.</span></div>
-    <div class="fact"><strong>11</strong><span>torna operasyonu, vida açma dahil.</span></div>
+    <div class="fact"><strong>537</strong><span>otomatik testten her değişiklikte geçer.</span></div>
+    <div class="fact"><strong>3</strong><span>atölye: makine, tekstil, ayakkabı.</span></div>
     <div class="fact"><strong>3 → 5</strong><span>eksen CNC freze desteği.</span></div>
   </div>
 </div>
@@ -236,7 +248,7 @@ footer{border-top:1px solid var(--ink);background:var(--sheet);padding:36px 0 48
           <li>Yıllık lisans ücreti</li>
           <li>Kurulum ve güçlü bilgisayar</li>
           <li>Çizim, analiz ve CAM için ayrı programlar</li>
-          <li>Tekstil kalıbı için yine ayrı bir yazılım</li>
+          <li>Tekstil kalıbı ve ayakkabı stampası için yine ayrı yazılımlar</li>
         </ul>
       </div>
       <div>
@@ -245,8 +257,30 @@ footer{border-top:1px solid var(--ink);background:var(--sheet);padding:36px 0 48
           <li>Şu an ücretsiz, hesap açmadan kullanılır</li>
           <li>Tarayıcıda açılır; telefon, tablet, eski dizüstü yeter</li>
           <li>Çizim, analiz, simülasyon ve G-kodu tek yerde</li>
-          <li>Makine ve tekstil çalışma alanı aynı sitede</li>
+          <li>Makine, tekstil ve ayakkabı atölyesi tek uygulamada</li>
         </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="atolyeler" style="padding-top:0">
+  <div class="wrap">
+    <div class="kicker">Atölyeler</div>
+    <h2>Tek uygulama, üç atölye.</h2>
+    <div class="ws">
+      <figure>
+        <div class="phone full"><img src="img/acilis.jpg" alt="Açılış ekranı: Hangi atölyede çalışacaksın? Makine ve Mühendislik, Tekstil ve Moda, Ayakkabı Modelhanesi seçenekleri"></div>
+        <figcaption>Açılış ekranı: atölyeni seç</figcaption>
+      </figure>
+      <div>
+        <p class="intro">Uygulamayı açınca hangi atölyede çalışacağını seçersin. Seçimin hatırlanır; bir dahaki sefere doğrudan o atölye açılır. Atölye değiştirmek için içerideki <b>Ana ekran</b> düğmesine dokunman yeter.</p>
+        <dl>
+          <div><dt><i style="background:#f0a43a"></i>Makine ve Mühendislik</dt><dd>Parça ve montaj tasarımı, teknik resim, dayanım analizi, ağırlık ve maliyet, CNC freze ve torna.</dd></div>
+          <div><dt><i style="background:#ec8fa6"></i>Tekstil ve Moda</dt><dd>Teknik moda çizimi, kalıp, beden serisi, kesim planı, triko ve üretim föyü.</dd></div>
+          <div><dt><i style="background:#d39a5b"></i>Ayakkabı Modelhanesi</dt><dd>Stampa, saya parçaları, binme ve dikiş payları, çentik eşleştirme, ölçekli PDF ve DXF.</dd></div>
+        </dl>
+        <p class="fine">Her atölyenin projeleri ayrı saklanır; biri diğerini etkilemez.</p>
       </div>
     </div>
   </div>
@@ -255,7 +289,7 @@ footer{border-top:1px solid var(--ink);background:var(--sheet);padding:36px 0 48
 <section id="akis" style="padding-top:0">
   <div class="wrap">
     <div class="kicker">Nasıl çalışır</div>
-    <h2>Dört adımda parçadan programa.</h2>
+    <h2>Makine atölyesinde dört adımda parçadan programa.</h2>
 
     <div class="step">
       <div>
@@ -267,6 +301,7 @@ footer{border-top:1px solid var(--ink);background:var(--sheet);padding:36px 0 48
           <li>3B: süpürme, loft, kabuk, dişli, sac metal, profil iskelet</li>
           <li>Montaj: menteşe, kayar eklem, dişli ve kayış bağıntısı</li>
           <li>Kâğıttaki çizimin fotoğrafından 2B çizim</li>
+          <li>Sesli komut ve kamerada parmakla kontrol</li>
         </ul>
       </div>
       <figure>
@@ -342,7 +377,8 @@ kiriş gerilmesi       fark %1,4
     <h2>Uygulamanın içinde neler var.</h2>
     <p class="intro">Her modül ayrı test edilir. Etiketler bugünkü gerçek durumu gösterir.</p>
     <div class="mods">
-      <div class="mod"><div class="mono">2B</div><h3>2B çizim</h3><p>AutoCAD tarzı çizim araçları, ölçülendirme, DXF alma ve verme, fotoğraftan çizim.</p><span class="tag ok">ÇALIŞIYOR</span></div>
+      <div class="mod"><div class="mono">2B</div><h3>2B çizim</h3><p>AutoCAD tarzı çizim araçları: çizgi, yay, kırp, uzat, ofset, ölçülendirme, DXF alma ve verme.</p><span class="tag ok">ÇALIŞIYOR</span></div>
+      <div class="mod"><div class="mono">Fotoğraf</div><h3>Fotoğraftan çizim</h3><p>Kâğıda elle çizilmiş parçanın fotoğrafından çizgi, yay ve ölçü okuyup 2B çizim; tek dokunuşla 3B.</p><span class="tag ok">ÇALIŞIYOR</span></div>
       <div class="mod"><div class="mono">3B</div><h3>3B modelleme</h3><p>Temel şekiller, kroki, süpürme, loft, kabuk, delik deseni, yuvarlama ve pah.</p><span class="tag ok">ÇALIŞIYOR</span></div>
       <div class="mod"><div class="mono">B-Rep</div><h3>Hassas katı motoru</h3><p>Open CASCADE çekirdeği: kesin birleştirme ve çıkarma, doğrulama, onarma, STEP ve IGES.</p><span class="tag ok">ÇALIŞIYOR</span></div>
       <div class="mod"><div class="mono">Montaj</div><h3>Montaj ve mekanizma</h3><p>Eşleşmeler, eklemler, dişli çark, motor, çarpışma kontrolü, montaj sırası ve patlatılmış görünüm.</p><span class="tag ok">ÇALIŞIYOR</span></div>
@@ -351,6 +387,8 @@ kiriş gerilmesi       fark %1,4
       <div class="mod"><div class="mono">CNC · 3 eksen</div><h3>Freze</h3><p>Yüzey alma, kaba boşaltma, ince işleme, delme; talaş simülasyonu ve iş kartı.</p><span class="tag wait">TEZGÂH DENEMESİ BEKLİYOR</span></div>
       <div class="mod"><div class="mono">CNC · 4 / 5 eksen</div><h3>Çok eksenli freze</h3><p>İndeksli ve eş zamanlı işleme, makine kinematiği, hacimsel simülasyon.</p><span class="tag wait">TEZGÂH DENEMESİ BEKLİYOR</span></div>
       <div class="mod"><div class="mono">CNC · Torna</div><h3>Torna</h3><p>2 eksen X/Z, 11 operasyon, takım kütüphanesi, uç yarıçapı telafisi, 3B simülasyon.</p><span class="tag wait">TEZGÂH DENEMESİ BEKLİYOR</span></div>
+      <div class="mod"><div class="mono">Teknik resim</div><h3>Teknik resim</h3><p>Görünüşler, gizli çizgiler, delik ölçüleri, A-A kesit görünüşü; PDF olarak.</p><span class="tag ok">ÇALIŞIYOR</span></div>
+      <div class="mod"><div class="mono">Ses · Kamera</div><h3>Eller serbest kullanım</h3><p>Sesli komutla parça ekleme; ön kamerada parmakla imleç, çizim, sürükleme ve yakınlaştırma.</p><span class="tag wait">KAMERA: GERÇEK CİHAZ DENEMESİ BEKLİYOR</span></div>
     </div>
   </div>
 </section>
@@ -358,7 +396,7 @@ kiriş gerilmesi       fark %1,4
 <section id="tekstil" style="padding-top:0">
   <div class="wrap">
     <div class="kicker">Tekstil ve Moda</div>
-    <h2>Aynı sitede ikinci bir atölye.</h2>
+    <h2>İkinci atölye: konfeksiyon ve triko.</h2>
     <div class="tex">
       <div>
         <p class="intro" style="margin-bottom:18px">Koleksiyondan üretim föyüne kadar konfeksiyon ve triko işini tek projede toplar.</p>
@@ -385,14 +423,41 @@ kiriş gerilmesi       fark %1,4
   </div>
 </section>
 
+<section id="ayakkabi" style="padding-top:0">
+  <div class="wrap">
+    <div class="kicker">Ayakkabı Modelhanesi</div>
+    <h2>Üçüncü atölye: stampadan kesim dosyasına.</h2>
+    <div class="tex one">
+      <div>
+        <p class="intro" style="margin-bottom:18px">Ayakkabı modelistinin stampa ve saya parçası işini milimetre ölçüsüyle yapar; çıktısı kâğıda 1:1 basılır ya da kesim yazılımına gider.</p>
+        <ul>
+          <li>Stampa editörü: çizgi, eğri, Bezier, serbest çizim; uzunluk ve açı yazarak çizim; ızgara ve noktaya yakalama</li>
+          <li>Saya parçaları ayrı ayrı: ön saya, yan saya, dil, astar, takviye; sağ / sol, kopya, ayna</li>
+          <li>Kenar kenar dikiş, binme, katlama, kenar bitirme ve montaj payı; malzeme kalınlığı ve üretim yöntemine göre otomatik öneri</li>
+          <li>Tek ya da çok sıra dikiş çizgisi, çentik, binme noktası, delik, aksesuar, katlama ve merkez çizgileri</li>
+          <li>Parça eşleştirme: birleşecek kenarların uzunluğu ve çentik konumları kontrol edilir</li>
+          <li>Malzeme kütüphanesi (deri, süet, nubuk, suni deri, tekstil, örgü, astar) ve kampre verisi</li>
+          <li>Çıktı: 1:1 PDF (A4, A3, büyük parça sayfalara bölünür), SVG ve 14 katmanlı DXF</li>
+        </ul>
+        <p class="fine">Yeni atölye, ilk aşama. 3B kalıp, kampre hesabı, numara serileme ve kesim yerleşimi sonraki aşamalarda gelecek.</p>
+      </div>
+      <figure>
+        <div class="phone full"><img src="img/ayakkabi.jpg" alt="Ayakkabı Modelhanesi stampa ekranı: ön saya, yan saya ve dil parçaları; kesim çizgisi, binme, montaj ve dikiş çizgileri"></div>
+        <figcaption>Örnek stampa · ön saya, yan saya, dil</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
 <section id="kimler" style="padding-top:0">
   <div class="wrap">
     <div class="kicker">Kimler için</div>
-    <h2>Üç kullanıcı, tek araç.</h2>
+    <h2>Dört kullanıcı, tek araç.</h2>
     <div class="who">
       <div><h3>Küçük CNC atölyeleri</h3><p>Lisans ücreti ödemeden parça çizer, takım yolunu ve süreyi görür, tezgâha uygun G-kodunu alır.</p></div>
       <div><h3>Öğrenciler ve okullar</h3><p>Meslek lisesi ve üniversite öğrencisi kendi telefonunda CAD, analiz ve CNC mantığını baştan sona dener.</p></div>
       <div><h3>Tekstil ve kalıp atölyeleri</h3><p>Kalıbı çizer, bedenlere yayar, kumaşa yerleştirir ve metrajı, maliyeti, föyü çıkarır.</p></div>
+      <div><h3>Ayakkabı modelhaneleri</h3><p>Stampayı çizer, saya parçalarına paylarını verir, eşleşmeyi kontrol eder ve kesim için 1:1 PDF ya da DXF alır.</p></div>
     </div>
   </div>
 </section>
@@ -402,24 +467,25 @@ kiriş gerilmesi       fark %1,4
     <div class="kicker">Güven</div>
     <h2>Her değişiklik sınanır, veri cihazda kalır.</h2>
     <div class="trust">
-      <div><h3>Otomatik test <span>✓</span></h3><p>Kod her güncellendiğinde 443 hesap testi ve 36 tarayıcı testi kendiliğinden çalışır. Biri bile başarısız olursa hata görünür.</p></div>
+      <div><h3>Otomatik test <span>✓</span></h3><p>Kod her güncellendiğinde 463 hesap testi ve 74 tarayıcı testi kendiliğinden çalışır. Biri bile başarısız olursa hata görünür.</p></div>
       <div><h3>Simülasyon = G-kodu <span>✓</span></h3><p>Simülasyon ve G-kodu aynı takım yolundan üretilir. Tornada üretilen kod geri okunur ve simülasyonla hareket hareket karşılaştırılır.</p></div>
-      <div><h3>Veri sende <span>✓</span></h3><p>Sunucu ve hesap yok. Çizimlerin tarayıcında saklanır, sen indirmedikçe hiçbir yere gönderilmez. Uygulama kişisel veri toplamaz.</p></div>
+      <div><h3>Veri sende <span>✓</span></h3><p>Sunucu ve hesap yok. Çizimlerin tarayıcında saklanır, sen indirmedikçe hiçbir yere gönderilmez. Uygulama kişisel veri toplamaz. Tek istisna sesli komut: onu açarsan konuşman tarayıcının ses tanıma hizmetine gider (ayrıntı: Sık sorulanlar).</p></div>
       <div><h3>Güvenlik taraması <span>✓</span></h3><p>Uygulama dış siteden kod yüklemez; kütüphaneler depoda tutulur ve her seferinde doğrulanır. İçerik güvenlik politikası açık, zararlı dosya girişleri sınandı.</p></div>
     </div>
     <div class="tbl">
       <table>
         <thead><tr><th>Denetim</th><th>Sonuç</th><th>Ne gösterir</th></tr></thead>
         <tbody>
-          <tr><td>Hesap testleri</td><td class="n">443 / 443</td><td>Geometri, CAM, torna, analiz ve tekstil hesapları doğru sonuç verir</td></tr>
-          <tr><td>Tarayıcı testleri</td><td class="n">36 / 36</td><td>Gerçek kullanıcı adımları baştan sona çalışır</td></tr>
+          <tr><td>Hesap testleri</td><td class="n">463 / 463</td><td>Geometri, CAM, torna, analiz, tekstil ve ayakkabı hesapları doğru sonuç verir</td></tr>
+          <tr><td>Tarayıcı testleri</td><td class="n">74 / 74</td><td>Gerçek kullanıcı adımları üç atölyede baştan sona çalışır; telefon ekranı dahil</td></tr>
+          <tr><td>Ayakkabı çıktı ölçüsü</td><td class="n">210 × 113 mm</td><td>İndirilen PDF, SVG ve DXF ayrı programlarla ölçüldü; beklenen ölçüyle aynı</td></tr>
           <tr><td>Geometri çekirdeği</td><td class="n">geçti</td><td>Katılar geçerli, hacimler kesin</td></tr>
           <tr><td>Kütüphane bütünlüğü</td><td class="n">geçti</td><td>Depodaki kopyalar resmî paketlerle birebir aynı</td></tr>
           <tr><td>Dış bağlantı</td><td class="n">0</td><td>Uygulama başka siteye istek atmaz</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="fine">Sonuçlar 12 Kasım 2026 tarihli. Testler bilgisayarda telefon ekranı taklit edilerek koşulur.</p>
+    <p class="fine">Sonuçlar 14 Kasım 2026 tarihli. Testler bilgisayarda telefon ekranı taklit edilerek koşulur.</p>
   </div>
 </section>
 
@@ -433,8 +499,10 @@ kiriş gerilmesi       fark %1,4
         <li><strong>İlk çalıştırma dikkat ister.</strong> Kod, yetkin bir operatör gözetiminde, tek blok ve düşük ilerlemeyle denenmelidir.</li>
         <li><strong>Analiz doğrusaldır.</strong> Kalıcı şekil değişimi, temas ve cıvata ön yükü hesaplanmaz. Sonuçlar mühendis onayının yerini tutmaz.</li>
         <li><strong>Tekstilde 3B görünüm bir önizlemedir.</strong> Kumaş dökümü gerçek ölçümle karşılaştırılmadan doğrulanmış sayılmaz.</li>
+        <li><strong>Ayakkabı atölyesi ilk aşamada.</strong> Kampre ve form verme bilgisi yalnız saklanır, hesaplanmaz; 3B kalıp, numara serileme ve kesim yerleşimi henüz yok. DXF çıktısı ölçüsüyle doğrulandı ama henüz bir CAD ya da kesim programında açılarak denenmedi.</li>
+        <li><strong>Parmakla kontrol gerçek kamerada denenmedi.</strong> Tarayıcı testlerinde sahte kamera ve yapay elle çalışıyor; telefon kamerasıyla deneme sırada.</li>
         <li><strong>Bazı biçimler yok.</strong> IGES dışa aktarma ve Stoll / Shima örgü makinesi dosyaları üretilmez.</li>
-        <li><strong>Sıradaki adım pilot kullanım.</strong> Gerçek bir atölyede ve bir okulda deneme, ardından arayüz iyileştirmesi.</li>
+        <li><strong>Sıradaki adım pilot kullanım.</strong> Gerçek bir CNC atölyesinde, bir okulda ve bir ayakkabı modelhanesinde deneme, ardından iyileştirme.</li>
       </ul>
     </div>
   </div>
@@ -463,7 +531,10 @@ kiriş gerilmesi       fark %1,4
       <div><h3>İnternet olmadan çalışır mı?</h3><p>Sayfa bir kez yüklendikten sonra hesaplar cihazında yapılır. İlk açılış ve hassas katı motorunun ilk indirilmesi (10–25 MB) için internet gerekir.</p></div>
       <div><h3>Hangi cihazlarda açılır?</h3><p>Güncel bir tarayıcısı olan telefon, tablet ve bilgisayarda. Büyük modellerde telefonda işlem birkaç saniye sürebilir.</p></div>
       <div><h3>Çizimlerim nerede duruyor?</h3><p>Kendi tarayıcında. Proje dosyasını indirip yedekleyebilir, başka cihazda açabilirsin.</p></div>
-      <div><h3>Başka programlarla dosya alışverişi var mı?</h3><p>Var: STEP, IGES (alma), DXF, STL, 3MF ve tekstilde DXF-AAMA.</p></div>
+      <div><h3>Makine, tekstil ve ayakkabı ayrı uygulama mı?</h3><p>Hayır, tek uygulama. Açılışta atölyeni seçersin, seçimin hatırlanır. Değiştirmek için içerideki Ana ekran düğmesine dokunursun. Projeler her atölyede ayrı saklanır.</p></div>
+      <div><h3>Başka programlarla dosya alışverişi var mı?</h3><p>Var: STEP, IGES (alma), DXF, STL, 3MF; tekstilde DXF-AAMA; ayakkabıda 1:1 PDF, SVG ve katmanlı DXF.</p></div>
+      <div><h3>Kamera ve mikrofon izni istiyor mu?</h3><p>Yalnız sen açarsan. Parmakla kontrolde kamera görüntüsü cihazında işlenir, hiçbir yere gönderilmez. Sesli komut tarayıcının ses tanıma özelliğini kullanır; Chrome gibi tarayıcılarda konuşman, yazıya çevrilmek için tarayıcı şirketinin (ör. Google) sunucusuna gönderilebilir. İstemiyorsan sesli komutu açma.</p></div>
+      <div><h3>Ayakkabı çıktısını yazdırınca ölçü bozulur mu?</h3><p>Yazdırırken "gerçek boyut / %100" seçersen bozulmaz. Her sayfada 50 mm kontrol çizgisi vardır; cetvelle ölçüp doğrulayabilirsin.</p></div>
       <div><h3>G-kodunu doğrudan tezgâhta kullanabilir miyim?</h3><p>Kod standart kumandalara göre üretilir ama henüz gerçek tezgâhta denenmedi. İlk parçayı kumanda simülasyonu ve düşük ilerlemeyle çalıştır.</p></div>
     </div>
     <div class="cta" style="margin-top:44px">
@@ -477,7 +548,7 @@ kiriş gerilmesi       fark %1,4
     <div class="antet">
       <div><small>Proje</small><b>Çizim Atölyesi</b></div>
       <div><small>Geliştiren</small><span>Deniz Kuşaklı</span></div>
-      <div><small>Tarih</small><span>12.11.2026</span></div>
+      <div><small>Tarih</small><span>14.11.2026</span></div>
       <div><small>Ölçek</small><span>1:1 · telefon</span></div>
     </div>
     <p class="fine">Ekran görüntüleri uygulamanın kendisinden alınmıştır. Üretilen programlar ve analiz sonuçları yardımcı araçtır; üretimden önce yetkin kişi tarafından kontrol edilmelidir.</p>
