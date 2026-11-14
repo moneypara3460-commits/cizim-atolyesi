@@ -170,7 +170,7 @@ function balance(valid, items, com, M, tol) {
   const feet = feetPts.map((c) => { const hh = hull2(c); const cx = c.reduce((s, q) => s + q[0], 0) / c.length, cz = c.reduce((s, q) => s + q[1], 0) / c.length; return { c: [cx, cz], n: c.length, size: hh.length >= 3 ? Math.sqrt(polyArea(hh)) : 0 }; });
   const res = { ymin, ymax, H, comHeight: h, hull, feet: [], area: hull.length >= 3 ? polyArea(hull) : 0 };
   if (hull.length < 3) {
-    res.status = 'line'; res.inside = false; res.margin = 0; res.tipDeg = 0;
+    res.status = 'line'; res.inside = false; res.margin = 0; res.tipDeg = 0; res.issues = []; res.width = [0, 0]; res.dir = '';
     res.text = 'Model zemine tek noktada ya da bir çizgi boyunca değiyor; kendi başına dengede durmaz (desteklenmesi gerekir).';
     return res;
   }

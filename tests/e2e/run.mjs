@@ -356,6 +356,36 @@ await T('Analiz: ankastre kiriş statik (FL³/3EI ±3%), ısı enerji dengesi, e
   expect(/ESKİ/.test(await body(page)), 'yük değişince eski sonuç işaretlendi');
 });
 
+await T('Analiz: basınç yükü eklenir (panel çökmez), değeri değiştirilir; ankastre kirişte yayılı yük sehimi (wL⁴/8EI ±6%)', 'J-Analiz', async ({ page }) => {
+  await tab(page, 'dims'); await setK(page, 'w', 200); await setK(page, 'h', 20); await setK(page, 'l', 20); await setK(page, 'r', 0);
+  await tab(page, 'fem');
+  await act(page, 'fm-type-static'); await act(page, 'fm-add-ms'); await page.locator('#tabbody [data-fm="ms.0.sel"]').selectOption('-x');
+  await act(page, 'fm-add-mp'); await page.waitForTimeout(300);
+  const pv = page.locator('#tabbody [data-fm="ml.0.pv"]');
+  expect(await pv.count() === 1 && /Basınç/.test(await body(page)), 'basınç yükü panelde görünür');
+  expect(+(await pv.inputValue()) === 1, 'varsayılan basınç 1');
+  await page.locator('#tabbody [data-fm="ml.0.sel"]').selectOption('+y'); await page.waitForTimeout(200);
+  await pv.fill('0.5'); await pv.dispatchEvent('change'); await page.waitForTimeout(300);
+  await page.locator('#tabbody [data-fm="ml.0.sel"]').selectOption('+y'); await page.waitForTimeout(200);
+  expect(+(await page.locator('#tabbody [data-fm="ml.0.pv"]').inputValue()) === 0.5, 'yer değişince basınç değeri korunur');
+  await act(page, 'fm-solve');
+  await waitText(page, '#tabbody', /En büyük yer değiştirme|⛔/, 180000);
+  const tx = await body(page), m = tx.match(/En büyük yer değiştirme: ([\d,]+) mm/);
+  expect(m, 'sonuç: ' + tx.slice(0, 300));
+  // üst yüzde 0,5 MPa → yayılı yük w = 0,5 × 20 = 10 N/mm; δ = wL⁴ / 8EI (kayma şekil değişimi küçük katkı)
+  const u = parseFloat(m[1].replace(',', '.')), ex = 10 * 200 ** 4 / (8 * 210000 * (20 * 20 ** 3 / 12));
+  expect(Math.abs(u - ex) / ex < 0.06, `sehim ${u} ≠ ${ex.toFixed(4)} (±%6)`);
+});
+
+await T('Ağırlık: yatık silindir (zemine çizgi boyunca değer) — panel çökmez, "kendi başına durmaz" der', 'F-Üretim', async ({ page }) => {
+  await page.locator('#chips .chip').first().click(); await act(page, 'del'); await page.waitForTimeout(300);
+  await act(page, 'add-cylinder'); await page.waitForTimeout(400);
+  await tab(page, 'rot'); await setK(page, 'rz', 90); await page.waitForTimeout(400);
+  await tab(page, 'wgt'); await page.waitForTimeout(500);
+  const tx = await body(page);
+  expect(/Denge analizi/.test(tx) && /kendi başına dengede durmaz/.test(tx), 'denge: ' + tx.slice(0, 300));
+});
+
 /* ---------- K. Proje bütünlüğü ---------- */
 await T('Proje bütünlüğü: parça + malzeme + OCCT parçası + 5 eksen ayarları + analiz sonucu kaydedilip açılır', 'K-Proje', async ({ page }) => {
   await tab(page, 'dims'); await setK(page, 'w', 80); await setK(page, 'h', 20); await setK(page, 'l', 40);
