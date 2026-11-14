@@ -108,6 +108,13 @@ katlama, dikiş, orta çizgi) ve paylar atanır, bağcık delikleri ve yan saya 
 Ayarlar `project.modelRef.auto`'da saklanır; yeniden oluşturma yalnız bu yolla üretilen parçaları değiştirir.
 Sınır: oranlar genel varsayılanlardır, kalıba ve modele göre usta ayarı gerekir; model fotoğrafından çizgi okuma ayrı adımdır.
 
+**Model fotoğrafını yapay zekâyla okuma (yapıldı, Kasım 2026).** `ayk/ai.js` → Supabase fonksiyonu `ayk-model-oku`
+(`supabase/functions/ayk-model-oku`): fotoğraf Claude'a gösterilir; model tipi, burun kapağı, delik sayısı, dil başı /
+bağcık ağzı / yan saya önü / burun çizgisi konumları (% kalıp boyu) ve arka yükseklik oranı JSON olarak döner,
+sınırlar içine kırpılır ve otomatik parça ayarlarına çevrilir. Kötüye kullanım sınırı: IP başına günde 20, toplam 300
+(`public.ai_take`). **Açmak için** Supabase → Edge Functions → Secrets'a `ANTHROPIC_API_KEY` girilmeli; girilmezse
+uygulama "henüz açılmadı" der. Sınır: oranlar tahmindir, en iyi sonuç tam yandan çekilmiş fotoğrafla alınır.
+
 **Aşama 3 — kamerayla tarama.** `future.scan`: ham nokta bulutu / ağ referansı + kalibrasyon (bilinen ölçülü işaret). Depodaki `hand/` kamera altyapısı (izin, önizleme) örnek alınabilir.
 
 **Aşama 4 — fotoğraftan saya tanıma.** Çıktısı doğrudan bu aşamanın veri biçimine yazılmalı: her tanınan parça için `outline` (düğüm yolu, mm), `edges` (pay türü önerisi), `marks`. Ölçek, fotoğraftaki bilinen ölçüden alınmalı. Depodaki `photo2d.js` (elle çizimden çizgi / yay çıkarma) başlangıç olabilir.

@@ -8,6 +8,7 @@ import * as G from '../ayk/geom.js';
 import { checkPiece, netPolygon, cutLine } from '../ayk/build.js';
 import { checkAll } from '../ayk/match.js';
 import { lastView } from './fixtures/kalip-siluet.mjs';
+import { toAuto } from '../ayk/ai.js';
 
 const tests = [];
 const t = (name, fn) => tests.push([name, fn]);
@@ -101,6 +102,25 @@ t('7. Kayıt: otomatik ayarlar temizlenir, projeyle birlikte saklanır', () => {
   const back = M.migrate(JSON.parse(JSON.stringify(p)));
   assert.equal(back.modelRef.auto.type, 'derby'); assert.equal(back.modelRef.auto.params.backH, 66);
   assert.equal(M.migrate({ kind: M.KIND, name: 'eski', pieces: [] }).modelRef.auto.type, '');
+});
+
+t('8. Yapay zekâ okuması → otomatik ayarlar: tip, delik, oranlar, arka yükseklik; uyarılar', () => {
+  const r = toAuto({ type: 'derby', cap: true, eyelets: 6, throat: 63.4, facing: 44, qfront: 55, capAt: 84, backHeightRatio: 0.24, view: 'side', confidence: 'high', notes: 'Kahverengi derby' }, 265);
+  assert.equal(r.type, 'derby');
+  assert.deepEqual(r.params, { cap: true, eyelets: 6, throat: 63.4, facing: 44, qfront: 55, capAt: 84, backH: 64 });
+  assert.deepEqual(r.warnings, []); assert.match(r.summary, /Derby.*burun kapaklı, 6 delik · güven: yüksek — Kahverengi derby/);
+  // loafer: bağcık alanları alınmaz; yandan değil + düşük güven uyarısı
+  const l = toAuto({ type: 'loafer', cap: false, eyelets: 4, throat: 60, facing: 40, qfront: 50, backHeightRatio: 0.2, view: 'other', confidence: 'low' }, 250);
+  assert.equal(l.params.eyelets, undefined); assert.equal(l.params.facing, undefined); assert.equal(l.params.backH, 50);
+  assert.equal(l.warnings.length, 2);
+  // tanınmayan / bozuk yanıt
+  const d = toAuto({ type: 'diger', view: 'side', confidence: 'medium' });
+  assert.equal(d.type, ''); assert.deepEqual(d.params, {}); assert.match(d.warnings[0], /hazır şablon yok/);
+  assert.equal(toAuto(null).type, '');
+  // sonuç doğrudan parça üretiminde kullanılabilir
+  const p = proj(); const g = A.generate(p, { type: r.type, params: r.params });
+  assert.ok(g.pieces.some((pc) => pc.name === 'Burun kapağı'));
+  assert.equal(g.pieces.find((pc) => pc.name === 'Yan saya').marks.filter((m) => m.kind === 'delik').length, 6);
 });
 
 let fail = 0;

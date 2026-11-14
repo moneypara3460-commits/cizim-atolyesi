@@ -11,6 +11,7 @@ import { createEditor } from './editor.js?v=20261114u';
 import { addSample } from './sample.js?v=20261114u';
 import * as LST from './last.js?v=20261114u';
 import * as AUTO from './auto.js?v=20261114u';
+import * as AI from './ai.js?v=20261114u';
 import { saveBlob } from '../tx/download.js?v=20261112u';
 
 const $ = (id) => document.getElementById(id);
@@ -180,6 +181,7 @@ function lastCard(p, mode) {
     <li>Telefonu tam tepeden tut; 60–80 cm yukarıdan çekip yakınlaştır. Yakından çekince kalıbın yüksekliği ölçüyü büyütür.</li>
     <li>Kalıbın gerçek boyunu biliyorsan "Bilinen kalıp boyu"na yaz: ölçü ona göre düzeltilir.</li></ol></details>
   ${mode === 'n' ? `<label class="wide">Model tipi — saya parçaları kalıptan otomatik çıkarılsın<select data-lst="type">${opts({ '': 'Seçmedim (parçaları kendim çizeceğim)', ...Object.fromEntries(Object.entries(AUTO.MODELS).map(([k, v]) => [k, v.name])) }, mr.auto.type)}</select></label>
+  ${mr.photos.length ? `<div class="row"><button type="button" data-act="airead" data-mode="n"${S.aiBusy ? ' disabled' : ''}>${S.aiBusy ? 'Okunuyor…' : '🤖 Model resminden tipi ve çizgileri bul'}</button></div>` : ''}${aiNoteHtml()}
   <p class="small">${mr.auto.type ? (L.views.yan ? '✓ Proje oluşunca saya parçaları bu kalıbın ölçüsünde hazır gelir. Sonra "Saya Parçaları" sayfasından ayarlayıp yeniden oluşturabilirsin.' : '⚠ Otomatik parça için kalıbın <b>yan görünüşü</b> fotoğrafı gerekli.') : 'Model tipi seçersen ön saya, yan saya, dil gibi parçalar kalıptan kendiliğinden çizilir.'}</p>` : ''}
   <h3 style="margin-top:14px">Yapılacak modelin resmi</h3>
   <div class="mthumbs">${mr.photos.map((ph) => `<div class="mthumb"><img src="${esc(ph.img)}" alt="${esc(ph.name || 'Model resmi')}"><button type="button" data-mrm="${esc(ph.id)}" aria-label="Kaldır">×</button></div>`).join('')}</div>
@@ -343,6 +345,32 @@ function pagePieces() {
   return h + '</div>';
 }
 /* ---------- kalıptan otomatik parçalar ---------- */
+function aiNoteHtml() {
+  const n = S.aiNote; if (!n || n.pid !== (S.p?.id || 'yeni')) return '';
+  return `<div class="ainote"><b>Resimden okunan:</b> ${esc(n.summary)}${n.warnings.map((w) => `<br><span class="warn">⚠ ${esc(w)}</span>`).join('')}</div>`;
+}
+async function aiRead(mode) {
+  const T = mode === 'p' ? S.p : S.newDraft; if (!T || S.aiBusy) return;
+  const ph = T.modelRef.photos[0]; if (!ph) return toast('Önce model resmi ekle');
+  S.aiBusy = true; renderSoon();
+  try {
+    const res = await AI.readModelPhoto(ph.img);
+    const L = T.last.views.yan?.length || 260;
+    const out = AI.toAuto(res, L);
+    S.aiNote = { pid: mode === 'p' ? S.p.id : 'yeni', summary: out.summary, warnings: out.warnings };
+    S.aiBusy = false;
+    if (!out.type) { renderSoon(); return toast('Model tanınmadı: ' + out.summary); }
+    if (mode === 'p') {
+      try {
+        edit((q) => { q.modelRef.auto = M.makeAuto({ ...q.modelRef.auto, type: out.type, flipX: q.modelRef.auto.flipX, flipY: q.modelRef.auto.flipY, params: out.params }); if (q.last.views.yan) runAuto(q); });
+        toast(T.last.views.yan ? 'Resimden okundu, parçalar oluşturuldu: ' + AUTO.MODELS[out.type].name : 'Resimden okundu: ' + AUTO.MODELS[out.type].name);
+      } catch (err) { undoLast(); renderSoon(); toast('Parçalar çıkarılamadı: ' + err.message); }
+    } else {
+      applyLast('n', (q) => { q.modelRef.auto = M.makeAuto({ ...q.modelRef.auto, type: out.type, params: out.params }); });
+      toast('Resimden okundu: ' + AUTO.MODELS[out.type].name);
+    }
+  } catch (err) { S.aiBusy = false; renderSoon(); toast('Resim okunamadı: ' + err.message); }
+}
 // Projeye ekler (önceki otomatik parçaların yerine). Hata fırlatabilir.
 function runAuto(q) {
   const a = q.modelRef.auto;
@@ -379,6 +407,8 @@ function autoCard(p) {
   if (!p.last?.views?.yan) return `<div class="card autocard"><h3>Kalıptan otomatik saya parçaları</h3><p class="small">Kalıbın yan görünüşü fotoğrafını "Proje Dosyaları → Kalıp ve model resmi"nden eklersen ön saya, yan saya, dil gibi parçalar kalıp ölçüsünde kendiliğinden çıkarılır.</p><div class="row"><button type="button" data-go="dosyalar">Kalıp fotoğrafı ekle</button></div></div>`;
   const a = p.modelRef.auto;
   let h = `<div class="card autocard"><h3>Kalıptan otomatik saya parçaları</h3><div class="grid"><label>Model tipi<select data-au="type">${opts({ '': 'Seç…', ...Object.fromEntries(Object.entries(AUTO.MODELS).map(([k, v]) => [k, v.name])) }, a.type)}</select></label></div>`;
+  if (p.modelRef.photos.length) h += `<div class="row"><button type="button" data-act="airead" data-mode="p"${S.aiBusy ? ' disabled' : ''}>${S.aiBusy ? 'Okunuyor…' : '🤖 Model resminden oku ve parçaları oluştur'}</button></div>${aiNoteHtml()}`;
+  else h += `<p class="small">Model resmi eklersen (Proje Dosyaları) yapay zekâ model tipini ve çizgi konumlarını resimden tahmin edebilir.</p>`;
   if (!a.type) return h + `<p class="small">Bir model tipi seç: parçalar kalıbın yan çizgisine göre çizilir.</p></div>`;
   const pv = autoPreview(p), m = AUTO.MODELS[a.type], L = p.last.views.yan.length;
   const P = AUTO.cleanParams(a.type, a.params, L);
@@ -655,6 +685,7 @@ main.addEventListener('click', async (e) => {
     if (a === 'auflipx') au.flipX = !au.flipX; else au.flipY = !au.flipY;
   });
   if (a === 'aureset') return edit((q) => { q.modelRef.auto.params = {}; });
+  if (a === 'airead') return aiRead(t.dataset.mode === 'p' ? 'p' : 'n');
   if (a === 'aurun') {
     try {
       let n = 0;

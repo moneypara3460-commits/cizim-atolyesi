@@ -89,6 +89,39 @@ await R.test('Saya Parçaları: önizleme, yön çevirme, ayar değiştirip yeni
   await ctx.close();
 });
 
+await R.test('Model resminden yapay zekâ okuması: tip ve ayarlar uygulanır, parçalar oluşur; hata anlaşılır gösterilir', async () => {
+  const { ctx, p, errs } = await open();
+  let calls = 0, mode = 'ok';
+  await ctx.route('https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/ayk-model-oku', async (r) => {
+    calls++;
+    const body = JSON.parse(r.request().postData() || '{}');
+    if (!/^data:image\/jpeg;base64,/.test(body.image || '')) return r.fulfill({ status: 400, contentType: 'application/json', body: '{"error":"resim yok"}' });
+    if (mode === 'kapali') return r.fulfill({ status: 503, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ error: 'Yapay zekâ okuması henüz açılmadı (anahtar ayarlanmadı).' }) });
+    return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ ok: true, result: { type: 'oxford', cap: true, eyelets: 4, throat: 63, facing: 45, qfront: 50, capAt: 84, backHeightRatio: 0.23, view: 'side', confidence: 'medium', notes: 'Siyah burun kapaklı oxford' } }) });
+  });
+  await p.click('[data-page="yeni"]'); await p.fill('[data-n="name"]', 'YZ oxford'); await p.dispatchEvent('[data-n="name"]', 'change');
+  await p.setInputFiles('[data-lfile="yan"]', FILE); await p.waitForSelector('.lview[data-lview="yan"] .lprev svg');
+  await p.setInputFiles('[data-mfile]', FILE); await p.waitForSelector('.mthumb');
+  // yeni projede: resimden tip bulunur
+  await p.click('[data-act="airead"]');
+  await p.waitForFunction(() => /Oxford.*burun kapaklı, 4 delik · güven: orta/.test(document.querySelector('.ainote')?.textContent || ''));
+  expect(await p.inputValue('[data-lst="type"]') === 'oxford', 'model tipi seçildi');
+  await p.click('[data-act="create"]'); await p.waitForSelector('.ed canvas');
+  await p.waitForFunction(() => window.__ayk.S.p.pieces.length === 4);
+  let s = await state(p);
+  expect(s.names.includes('Burun kapağı') && s.holes === 4 && s.auto.params.backH === 60, JSON.stringify(s));
+  // Saya Parçaları: servis kapalıyken anlaşılır mesaj, parçalar bozulmaz
+  await p.click('[data-page="parcalar"]'); await p.waitForSelector('.autocard [data-act="airead"]');
+  mode = 'kapali';
+  await p.click('.autocard [data-act="airead"]');
+  await p.waitForFunction(() => /henüz açılmadı/.test(document.getElementById('toast').textContent));
+  s = await state(p); expect(s.names.length === 4, 'parçalar değişmedi');
+  expect(calls === 2, 'istek sayısı ' + calls);
+  const real = errs.filter((e) => !/status of 503/.test(e));   // 503 bu testte bilerek döndürülüyor
+  expect(!real.length, real.join(' | '));
+  await ctx.close();
+});
+
 await browser.close(); srv.close(); fs.rmSync(dir, { recursive: true, force: true });
 const sum = R.summary(); fs.mkdirSync(path.join(ROOT, 'reports'), { recursive: true }); fs.writeFileSync(path.join(ROOT, 'reports', 'e2e-ayk-auto.json'), JSON.stringify(sum, null, 1));
 console.log('\n' + JSON.stringify(sum.counts));

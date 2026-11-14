@@ -140,3 +140,5 @@ td input.n { width: 70px; }
 .autocard .aprev { background: #fff; border-radius: 8px; margin: 8px 0; overflow: hidden; }
 .autocard .aprev svg { display: block; width: 100%; height: auto; max-height: 320px; }
 .autocard .warn { color: #fbbf24; }
+.ainote { background: #0f2a1f; border: 1px solid #1f6f4a; border-radius: 8px; padding: 8px 10px; margin: 8px 0; font-size: 13px; }
+.ainote .warn { color: #fbbf24; }
