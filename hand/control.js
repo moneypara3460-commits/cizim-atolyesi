@@ -99,7 +99,7 @@ export class HandControl extends EventTarget {
   // basılı işaretçiyi bırak (sekme arka plana geçti, kalibrasyon başladı vb.)
   idle() {
     const ev = []; this.engine.release(ev);
-    for (const e of ev) this.apply(e);
+    const v = this.view(); for (const e of ev) this.apply(e, v);
     if (this.pointer.down) this.pointer.release(this.pointer.x, this.pointer.y);
     this.cursor.down = false;
   }
@@ -156,17 +156,24 @@ export class HandControl extends EventTarget {
     this.landmarks = landmarks || null;
     // MediaPipe el etiketini aynalanmış görüntüye göre verir; kamera karesi aynalanmadan işlendiği için etiket ters çevrilir
     this.handed = landmarks ? (handedness === 'Left' ? 'Sağ el' : handedness === 'Right' ? 'Sol el' : 'El') : null;
-    const view = { w: window.innerWidth, h: window.innerHeight, aspect: this.camera.aspect, mirror: this.camera.mirror };
+    const view = this.view();
     if (this.calib) { this.calibrate(landmarks, now, view); this.emit('frame'); return; }
     const r = this.engine.update(landmarks, now, view);
-    for (const e of r.events) this.apply(e);
+    for (const e of r.events) this.apply(e, view);
     const g = this.gesture;
-    this.gesture = r.gesture; this.cursor = { x: r.x, y: r.y, visible: r.visible, down: r.down };
+    this.gesture = r.gesture; this.cursor = { x: r.x + view.ox, y: r.y + view.oy, visible: r.visible, down: r.down };
     if (g !== this.gesture) this.emit();
     this.emit('frame');
   }
-  apply(e) {
+  // Ekranda gerçekten görünen alan (visualViewport). Sayfa yana taşarsa ya da yakınlaştırılırsa innerWidth görünen alandan
+  // büyük olur; imleç o zaman ekran dışına kayardı. Motor görünen alanda çalışır, olaylar sayfa koordinatına (ox, oy) kaydırılır.
+  view() {
+    const vv = window.visualViewport, ok = vv && vv.width > 0 && vv.height > 0;
+    return { w: ok ? vv.width : window.innerWidth, h: ok ? vv.height : window.innerHeight, ox: ok ? vv.offsetLeft : 0, oy: ok ? vv.offsetTop : 0, aspect: this.camera.aspect, mirror: this.camera.mirror };
+  }
+  apply(e, view = { ox: 0, oy: 0 }) {
     const p = this.pointer;
+    if ('x' in e) e = { ...e, x: e.x + view.ox, y: e.y + view.oy };
     if (e.type === 'move') p.move(e.x, e.y);
     else if (e.type === 'down') p.press(e.x, e.y);
     else if (e.type === 'up') p.release(e.x, e.y);
@@ -178,8 +185,8 @@ export class HandControl extends EventTarget {
     // motoru çizim kapalı çalıştır: imleç gezer, sayfaya basma gitmez; birleştirme anı köşe olarak alınır
     const draw = this.engine.drawing; this.engine.drawing = false;
     const r = this.engine.update(lm, now, view); this.engine.drawing = draw;
-    for (const e of r.events) if (e.type === 'move') this.pointer.move(e.x, e.y);
-    this.gesture = r.gesture; this.cursor = { x: r.x, y: r.y, visible: r.visible, down: false };
+    for (const e of r.events) if (e.type === 'move') this.pointer.move(e.x + view.ox, e.y + view.oy);
+    this.gesture = r.gesture; this.cursor = { x: r.x + view.ox, y: r.y + view.oy, visible: r.visible, down: false };
     const pin = !!lm && this.engine.pinch.active && this.engine.pinchSince !== null && now - this.engine.pinchSince >= 120;
     if (pin && !this.wasPinch) {
       // köşe: parmaklar açıkken nişan alınan son nokta yerine doğrudan işaret parmağı ucu (ham kamera koordinatı)
