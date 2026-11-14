@@ -100,6 +100,14 @@ Bilinen kalıp boyu girilirse ölçek ona göre düzeltilir. Çizgi stampada ref
 `project.modelRef`: yapılacak modelin resimleri (en çok 6) ve notu; stampada köşedeki "Model" düğmesiyle görünür.
 Sınır: fotoğraf 3D kalıbın gölge/yükseklik etkisini taşır; kesin ölçü için bilinen boy girilmeli.
 
+**Kalıptan otomatik saya parçaları (yapıldı, Kasım 2026).** `ayk/auto.js`: kalıbın yan çizgisi kanonik konuma getirilir
+(topuk solda, burun sağda, taban altta; yön kendiliğinden tahmin edilir, kullanıcı çevirebilir). Kalıp boyuna oranlı model
+çizgileriyle (arka yükseklik, dil başı, bağcık ağzı, yan saya önü, burun kapağı) Derby, Oxford, Loafer ve Spor için yarım
+kalıp parçaları üretilir: ön saya, yan saya, dil, burun kapağı, topuk takviyesi, maske. Kenar türleri (montaj, binme,
+katlama, dikiş, orta çizgi) ve paylar atanır, bağcık delikleri ve yan saya ↔ ön saya eşleşmesi (çentikli) eklenir.
+Ayarlar `project.modelRef.auto`'da saklanır; yeniden oluşturma yalnız bu yolla üretilen parçaları değiştirir.
+Sınır: oranlar genel varsayılanlardır, kalıba ve modele göre usta ayarı gerekir; model fotoğrafından çizgi okuma ayrı adımdır.
+
 **Aşama 3 — kamerayla tarama.** `future.scan`: ham nokta bulutu / ağ referansı + kalibrasyon (bilinen ölçülü işaret). Depodaki `hand/` kamera altyapısı (izin, önizleme) örnek alınabilir.
 
 **Aşama 4 — fotoğraftan saya tanıma.** Çıktısı doğrudan bu aşamanın veri biçimine yazılmalı: her tanınan parça için `outline` (düğüm yolu, mm), `edges` (pay türü önerisi), `marks`. Ölçek, fotoğraftaki bilinen ölçüden alınmalı. Depodaki `photo2d.js` (elle çizimden çizgi / yay çıkarma) başlangıç olabilir.

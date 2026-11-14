@@ -1,8 +1,8 @@
 // Sentetik kalıp fotoğrafı: koyu masa, perspektifli kâğıt, kâğıdın ortasında bilinen ölçüde elips "kalıp".
-// rx, ry: elipsin yarı eksenleri (mm). paperMm: kâğıdın gerçek ölçüsü (uzun, kısa). portrait: kâğıt fotoğrafta dik.
+// rx, ry: elipsin yarı eksenleri (mm). shape(u, v): elips yerine kâğıt üstündeki herhangi bir şekil (mm). paperMm: kâğıdın gerçek ölçüsü (uzun, kısa). portrait: kâğıt fotoğrafta dik.
 import zlib from 'node:zlib';
 
-export function scene({ w = 1200, h = 900, rx = 130, ry = 50, last = [45, 40, 42], paper = [246, 245, 240], bg = [62, 52, 46], paperMm = [297, 210], portrait = false, quad = null } = {}) {
+export function scene({ w = 1200, h = 900, rx = 130, ry = 50, last = [45, 40, 42], paper = [246, 245, 240], bg = [62, 52, 46], paperMm = [297, 210], portrait = false, quad = null, shape = null } = {}) {
   const rgba = new Uint8ClampedArray(w * h * 4);
   for (let i = 0; i < w * h; i++) { rgba[i * 4] = bg[0]; rgba[i * 4 + 1] = bg[1]; rgba[i * 4 + 2] = bg[2]; rgba[i * 4 + 3] = 255; }
   // kâğıt köşeleri (sol üst, sağ üst, sağ alt, sol alt): hafif perspektif
@@ -20,7 +20,7 @@ export function scene({ w = 1200, h = 900, rx = 130, ry = 50, last = [45, 40, 42
   for (let v = 0; v < Sm; v += step) for (let u = 0; u < Lm; u += step) {
     const [x, y] = map(u, v).map(Math.round);
     if (x < 0 || y < 0 || x >= w || y >= h) continue;
-    const inE = rx > 0 && ((u - Lm / 2) / rx) ** 2 + ((v - Sm / 2) / ry) ** 2 <= 1;
+    const inE = shape ? shape(u, v) : rx > 0 && ((u - Lm / 2) / rx) ** 2 + ((v - Sm / 2) / ry) ** 2 <= 1;
     const c = inE ? last : paper, o = (y * w + x) * 4;
     rgba[o] = c[0]; rgba[o + 1] = c[1]; rgba[o + 2] = c[2];
   }

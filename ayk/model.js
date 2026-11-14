@@ -164,11 +164,23 @@ export function makeLast(o = {}) {
   };
 }
 export const MAX_MODEL_PHOTOS = 6;
+// Kalıptan otomatik parça ayarları (hesap ayk/auto.js'de). pieceIds: bu ayarla oluşturulmuş parçalar (yeniden oluşturulunca değiştirilir)
+export const AUTO_TYPES = ['derby', 'oxford', 'loafer', 'spor'];
+export function makeAuto(a = {}) {
+  const params = {};
+  if (a && a.params && typeof a.params === 'object') for (const [k, v] of Object.entries(a.params).slice(0, 16)) if (/^[a-zA-Z]{1,12}$/.test(k) && (typeof v === 'boolean' || Number.isFinite(v))) params[k] = v;
+  return {
+    type: AUTO_TYPES.includes(a?.type) ? a.type : '',
+    flipX: typeof a?.flipX === 'boolean' ? a.flipX : null, flipY: typeof a?.flipY === 'boolean' ? a.flipY : null,
+    params, pieceIds: Array.isArray(a?.pieceIds) ? a.pieceIds.filter((x) => typeof x === 'string').slice(0, 20) : [],
+  };
+}
 export function makeModelRef(o = {}) {
   return {
     photos: (Array.isArray(o.photos) ? o.photos : []).filter((ph) => ph && typeof ph.img === 'string' && IMG_RE.test(ph.img)).slice(0, MAX_MODEL_PHOTOS)
       .map((ph) => ({ id: typeof ph.id === 'string' ? ph.id.slice(0, 40) : uid('ph'), img: ph.img, name: String(ph.name || '').slice(0, 80) })),
     note: String(o.note || '').slice(0, 500),
+    auto: makeAuto(o.auto),
   };
 }
 // alt görünüş varsayılan olarak yan görünüşün altına yerleşir
