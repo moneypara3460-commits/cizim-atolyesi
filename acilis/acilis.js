@@ -1,9 +1,9 @@
-// Açılış ekranı: çizim animasyonu → Makine / Tekstil seçimi. Son seçim hatırlanır.
+// Açılış ekranı: çizim animasyonu → Makine / Tekstil / Ayakkabı seçimi. Son seçim hatırlanır.
 //   ?sec=1            : doğrudan seçim (bölüm içindeki "Ana ekran" buraya döner)
-//   ?ws=makine|tekstil: eski bağlantılar (index.html?ws=makine) — seçimi kaydedip o bölüme gider
+//   ?ws=makine|tekstil|ayakkabi: eski bağlantılar (index.html?ws=makine) — seçimi kaydedip o bölüme gider
 const KEY = 'cizim:workspace';
-const TARGET = { makine: 'yeni/', tekstil: 'tekstil.html' };
-const NAME = { makine: 'Makine ve Mühendislik', tekstil: 'Tekstil ve Moda' };
+const TARGET = { makine: 'yeni/', tekstil: 'tekstil.html', ayakkabi: 'ayakkabi.html' };
+const NAME = { makine: 'Makine ve Mühendislik', tekstil: 'Tekstil ve Moda', ayakkabi: 'Ayakkabı Modelhanesi' };
 const SPLASH_MS = 1500, GO_MS = 2300;
 
 const q = new URLSearchParams(location.search);

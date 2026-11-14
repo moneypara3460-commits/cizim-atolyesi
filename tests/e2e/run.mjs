@@ -476,10 +476,10 @@ await (async () => { if (only.length && !only.some((o) => 'W-Alan'.toLowerCase()
   // bölüm içinden öbür bölüme, eski arayüze ya da eski ?ws bağlantısına giden bağlantı yok
   const crossLinks = (re) => page.evaluate((src) => [...document.querySelectorAll('a[href]')].map((x) => x.getAttribute('href')).filter((h) => new RegExp(src).test(h)), re.source);
   try {
-    // 1) ilk açılış: çizim animasyonu, sonra iki seçenek (kendiliğinden bir yere gitmez)
+    // 1) ilk açılış: çizim animasyonu, sonra üç seçenek (kendiliğinden bir yere gitmez)
     expect(await stage() === 'splash', 'açılış animasyonu');
     await waitStage('pick');
-    expect(await page.locator('.door').count() === 2 && await page.locator('.door.makine').isVisible() && await page.locator('.door.tekstil').isVisible(), 'iki seçenek');
+    expect(await page.locator('.door').count() === 3 && await page.locator('.door.makine').isVisible() && await page.locator('.door.tekstil').isVisible() && await page.locator('.door.ayakkabi').isVisible(), 'üç seçenek (Makine, Tekstil, Ayakkabı)');
     await page.waitForTimeout(2600); expect(/\/$|\/index\.html$/.test(new URL(page.url()).pathname) && await stage() === 'pick', 'seçim beklerken başka sayfaya geçmez');
     // 2) Makine → yeni arayüz
     await page.locator('.door.makine').click(); await page.waitForURL(/\/yeni\//); await waitReady(page);

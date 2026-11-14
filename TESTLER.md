@@ -12,6 +12,7 @@ Kalite raporu (özellik durumu, doğrulama toleransları, performans, hatalar): 
 | `npm run test:coverage` | Birlikte + satır kapsaması (`reports/coverage.json`); kapsama ölçümü testleri 3–6 kat yavaşlatır | ~5 dk |
 | `npm run test:e2e` | Gerçek uygulamayı Chromium'da açıp kullanıcı gibi kullanan uçtan uca senaryolar | ~7 dk |
 | `npm run test:e2e:hand` | Parmakla kontrol: sahte kamera + yapay el ile uçtan uca (iki arayüz, telefon ölçüsü, tekstil) ve depodaki gerçek MediaPipe kopyasının yüklenmesi | ~4 dk |
+| `npm run test:e2e:ayakkabi` | Ayakkabı Modelhanesi: uçtan uca 21 senaryo; indirilen PDF / SVG / DXF'in gerçek ölçüsü dışarıda doğrulanır (`pdftoppm`, `rsvg-convert`, Python PIL gerekir) | ~1 dk |
 | `npm run test:perf` | Ağır hesapların süre / bellek ölçümü (eşik yok, bilgi amaçlı) | ~30 sn |
 | `npm run test:all` | Birim + E2E | ~9 dk |
 
