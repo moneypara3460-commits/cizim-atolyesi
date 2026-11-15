@@ -51,7 +51,13 @@ async function loadPW() {
 export async function launch(opt = {}) {
   const { chromium } = await loadPW();
   const exe = process.env.CHROME || (fs.existsSync('/usr/bin/google-chrome') && !process.env.CI ? '/usr/bin/google-chrome' : undefined);
-  return chromium.launch({ executablePath: exe, args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-gl=swiftshader', '--ignore-gpu-blocklist'], ...opt });
+  const b = await chromium.launch({ executablePath: exe, args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-gl=swiftshader', '--ignore-gpu-blocklist'], ...opt });
+  // Yeni Playwright sürümleri waitForFunction("…") beklemesini sayfanın içinde eval ile çalıştırır; sayfalardan
+  // 'unsafe-eval' kaldırıldığı için (güvenlik) bu yalnız test aracının kendi kodunu engelliyor. bypassCSP yalnız
+  // test aracı içindir; sayfaların güvenlik politikası ayrıca kendi testlerinde (meta etiketi) denetlenir.
+  const nc = b.newContext.bind(b);
+  b.newContext = (o = {}) => nc({ bypassCSP: true, ...o });
+  return b;
 }
 
 // yeni bağlam + sayfa; konsol hataları ve sayfa hataları toplanır

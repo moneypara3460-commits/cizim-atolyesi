@@ -30,6 +30,7 @@ function fakeBackend(state) {
       return ok({ ok: true });
     }
     if (u.pathname === '/auth/v1/logout') return route.fulfill({ status: 204 });
+    if (u.pathname === '/functions/v1/hesap-sil') { state.deleted = { auth, body: JSON.parse(req.postData() || '{}') }; return ok({ ok: true }); }
     return route.fulfill({ status: 404, body: '{}' });
   };
 }
@@ -157,6 +158,28 @@ await R.test('Hesabım sayfası telefonda taşmaz; çıkış oturumu siler', asy
   expect(ov <= 1, 'yatay taşma ' + ov);
   await p.click('#logout'); await p.waitForSelector('#login:not([hidden])');
   expect(await p.evaluate(() => localStorage.getItem('cizim:oturum')) === null, 'oturum silindi');
+  await ctx.close();
+});
+
+await R.test('Hesabımı sil: SİL yazılmadan düğme kapalı; silince sunucuya onaylı istek gider, oturum temizlenir; gizlilik ve hesap silme sayfaları açılır', async () => {
+  const { ctx, p, state, errs } = await ctxWith();
+  await login(p);
+  await p.waitForSelector('#status:not([hidden])');
+  await p.click('details.danger summary');
+  expect(await p.isDisabled('#delacc'), 'onaysız düğme kapalı');
+  await p.fill('#delok', 'sil');
+  expect(!(await p.isDisabled('#delacc')), 'küçük harf "sil" de kabul');
+  await p.click('#delacc');
+  await p.waitForSelector('#login:not([hidden])', { timeout: 10000 });
+  expect(state.deleted && state.deleted.auth === 'Bearer erisim-1' && state.deleted.body.onay === 'SİL', 'istek: ' + JSON.stringify(state.deleted));
+  expect(await p.evaluate(() => localStorage.getItem('cizim:oturum')) === null, 'oturum silindi');
+  for (const pg of ['gizlilik.html', 'hesap-silme.html']) {
+    const r = await p.goto(url + 'tanitim/' + pg); expect(r.ok(), pg + ' açılmadı');
+    const t = await p.textContent('h1'); expect(/Gizlilik|silme/i.test(t), pg + ': ' + t);
+    expect(await p.locator('a[href^="mailto:bakplanla.destek@gmail.com"]').count() > 0, pg + ' iletişim adresi yok');
+    const ov = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth); expect(ov <= 1, pg + ' taşma ' + ov);
+  }
+  expect(!errs.length, errs.join(' | '));
   await ctx.close();
 });
 

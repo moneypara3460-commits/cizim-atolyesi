@@ -173,6 +173,8 @@ await R.test('Giriş yapılmamışsa yapay zekâ isteği sunucuya hiç gitmez, a
   await p.setInputFiles('[data-mfile]', FILE); await p.waitForSelector('.mthumb');
   await p.click('[data-act="airead"]');
   await p.waitForFunction(() => /Google ile giriş yap/.test(document.getElementById('toast').textContent));
+  const csp = await p.getAttribute('meta[http-equiv="Content-Security-Policy"]', 'content');
+  expect(/'wasm-unsafe-eval'/.test(csp) && !/'unsafe-eval'/.test(csp), 'ayakkabı sayfası CSP: ' + csp);
   expect(calls === 0, 'sunucuya istek gitti: ' + calls);
   expect(!errs.length, errs.join(' | '));
   await ctx.close();

@@ -25,6 +25,16 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 $('google').addEventListener('click', () => { location.href = S.loginUrl(location.origin + location.pathname + location.search); });
 $('logout').addEventListener('click', () => { S.logout(); location.replace(location.pathname + location.search); });
 $('restore').addEventListener('click', () => restore(false));
+$('delok').addEventListener('input', (e) => { $('delacc').disabled = e.target.value.trim().toLocaleUpperCase('tr') !== 'SİL'; });
+$('delacc').addEventListener('click', async () => {
+  const b = $('delacc'); b.disabled = true; b.textContent = 'Siliniyor…';
+  try {
+    await S.deleteAccount();
+    try { localStorage.removeItem('cizim:oturum'); localStorage.removeItem('cizim:erisim'); } catch (e) { /* yok */ }
+    toast('Hesabın ve sunucudaki verilerin silindi.');
+    setTimeout(() => location.replace(location.pathname + location.search), 1500);
+  } catch (e) { b.disabled = false; b.textContent = 'Hesabımı kalıcı olarak sil'; toast('Silinemedi: ' + e.message); }
+});
 for (const b of document.querySelectorAll('.period button')) {
   b.addEventListener('click', () => {
     period = b.dataset.period;
