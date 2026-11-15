@@ -175,6 +175,7 @@ export function generateAi(project, ai, { material = null, flipX, flipY } = {}) 
     ], F.toV);
     push(bs.pc);
   }
+  addNotches(pieces);
   return { pieces, frame: { flipX: !!or.flipX, flipY: !!or.flipY, L: F.L } };
 }
 
@@ -183,4 +184,33 @@ export function lastInfo(view, or = guessOrientation(view)) {
   const F = lastFrame(view, or.flipX, or.flipY);
   const top = range(0, F.L, Math.max(10, F.L / 26)).map((x) => [+x.toFixed(0), +(F.bot(x) - F.top(x)).toFixed(0)]);
   return { L: +F.L.toFixed(1), top };
+}
+
+// Parçalar arası hizalama işaretleri: üstteki parçanın alttakine binen kenarına (katlama) çentik konur;
+// alttaki parçada aynı yer kenardaysa çentik, parçanın içindeyse binme noktası olur. Aynı harf iki parçada da yazar.
+export function addNotches(pieces) {
+  let k = 0;
+  const letter = () => { const a = 'ABCDEFGHIJKLMNOPRSTUVYZ'; const s = a[k % a.length] + (k >= a.length ? Math.floor(k / a.length) + 1 : ''); k++; return s; };
+  for (const Q of pieces) {
+    for (const e of G.edges(Q.outline)) {
+      if (Q.edges?.[e.id]?.kind !== 'katlama') continue;
+      const L = G.edgeLength(e); if (L < 15) continue;
+      for (const f of L < 60 ? [0.5] : [1 / 3, 2 / 3]) {
+        const at = +(L * f).toFixed(2), p = G.pointOnEdge(e, at).p;
+        let best = null;
+        for (const P of pieces) {
+          if (P === Q || P.kind === 'Astar' || P.kind === 'Takviye') continue;
+          const loc = G.locateOnEdges(P.outline, p);
+          if (loc && loc.d < 3 && P.edges?.[loc.edge]?.kind !== 'montaj' && (!best || loc.d < best.loc.d)) best = { P, loc, edge: true };
+          else if (!best && G.insidePoly(P.outline.nodes.map((n) => n.p), p)) best = { P, edge: false };
+        }
+        if (!best) continue;
+        const lb = letter();
+        Q.marks.push({ id: mid(), kind: 'centik', edge: e.id, at, label: lb, depth: 3 });
+        if (best.edge) best.P.marks.push({ id: mid(), kind: 'centik', edge: best.loc.edge, at: +best.loc.at.toFixed(2), label: lb, depth: 3 });
+        else best.P.marks.push({ id: mid(), kind: 'binme', p: p.map((v) => +v.toFixed(2)), d: 1.2, label: lb });
+      }
+    }
+  }
+  return pieces;
 }

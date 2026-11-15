@@ -157,7 +157,7 @@ taban = daha düzgün akan çizgi (eğrilik karşılaştırması). Yanlışsa "�
 
 **Sınırlar (dürüst):** parça çizgileri fotoğraftan tahmindir; ilk sonuç ustanın kontrolünden geçmeli, gerekirse Stampa
 Atölyesi'nde düğümler sürüklenerek düzeltilir. Mat ölçeği tepeden olmayan çekimde sapar (bilinen boy bunu düzeltir).
-Parçalar arası çentik / eşleştirme yapay zekâ parçalarında henüz kendiliğinden eklenmiyor. 3B kalıp tarama yok.
+Parçalar arası hizalama: üstteki parçanın binen kenarına A, B … harfli çentik; alttaki parçada aynı yere aynı harfle çentik (kenardaysa) ya da binme noktası (içindeyse). 3B kalıp tarama yok.
 
 Testler: `tests/ayk-aiparts.test.mjs` (6: sentetik mat ölçeği ve eğik kalıp, parça yerleştirme, kenar türleri, iç yan,
 kayıt güvenliği); `tests/e2e/ayk-auto.mjs` 4. senaryo (gerçek kalıbın mat fotoğrafı + sahte sunucu yanıtıyla uçtan uca).
