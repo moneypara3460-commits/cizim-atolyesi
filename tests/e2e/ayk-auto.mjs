@@ -122,6 +122,45 @@ await R.test('Model resminden yapay zekâ okuması: tip ve ayarlar uygulanır, p
   await ctx.close();
 });
 
+await R.test('Kesim matı fotoğrafı + modelden bütün parçalar (yapay zekâ): parçalar, astar, sertlikler oluşur; yeniden oluşturma ve seçenekler', async () => {
+  const { ctx, p, errs } = await open();
+  const MAT = path.join(ROOT, 'tests/fixtures/kalip-mat-yan.jpg');   // gerçek kalıp, yeşil kareli kesim matı üstünde
+  let sent = null;
+  await ctx.route('https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/ayk-parca-cikar', async (r) => {
+    sent = JSON.parse(r.request().postData() || '{}');
+    const L = sent.last.L, H = (x) => { const T = sent.last.top; for (let i = 1; i < T.length; i++) if (x <= T[i][0]) { const f = (x - T[i - 1][0]) / (T[i][0] - T[i - 1][0] || 1); return T[i - 1][1] + f * (T[i][1] - T[i - 1][1]); } return T[T.length - 1][1]; };
+    const pieces = [
+      { name: 'Ön saya', kind: 'ust', layer: 0, poly: [[0.55 * L, H(0.55 * L)], [0.8 * L, H(0.8 * L)], [L - 2, H(L - 2)], [L - 2, 0], [0.55 * L, 0]] },
+      { name: 'Yan saya', kind: 'ust', layer: 0, poly: [[0, 0], [0, 0.7 * H(2)], [0.3 * L, 0.6 * H(0.3 * L)], [0.56 * L, H(0.56 * L) - 12], [0.56 * L, 0]] },
+      { name: 'Bağcık yeri', kind: 'ust', layer: 1, poly: [[0.35 * L, H(0.35 * L) - 10], [0.56 * L, H(0.56 * L) - 10], [0.56 * L, H(0.56 * L) - 28], [0.36 * L, H(0.36 * L) - 30]], holes: [[0.42 * L, H(0.42 * L) - 19], [0.5 * L, H(0.5 * L) - 19]], holeD: 5 },
+    ];
+    return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ ok: true, result: { model: 'Spor ayakkabı', confidence: 'medium', pieces } }) });
+  });
+  await p.click('[data-page="yeni"]'); await p.fill('[data-n="name"]', 'Ümit spor'); await p.dispatchEvent('[data-n="name"]', 'change');
+  await p.selectOption('[data-lst="paper"]', 'MAT');
+  await p.setInputFiles('[data-lfile="yan"]', MAT); await p.waitForSelector('.lview[data-lview="yan"] .lprev svg');
+  await p.fill('[data-lst="lengthMm"]', '268'); await p.dispatchEvent('[data-lst="lengthMm"]', 'change');
+  await p.setInputFiles('[data-mfile]', [MAT, MAT]); await p.waitForSelector('.mthumb');
+  await p.click('[data-act="create"]'); await p.waitForSelector('.ed canvas');
+  await p.click('[data-page="parcalar"]'); await p.waitForSelector('[data-act="aiparts"]');
+  await p.click('[data-act="aiparts"]');
+  await p.waitForFunction(() => window.__ayk.S.p.pieces.length >= 7, null, { timeout: 30000 });
+  expect(sent && sent.images.length === 2 && Math.abs(sent.last.L - 268) < 1.5, 'gönderilen: ' + (sent && sent.images.length + ' resim, L=' + sent.last.L));
+  let names = await p.evaluate(() => window.__ayk.S.p.pieces.map((q) => q.name));
+  for (const n of ['Ön saya', 'Yan saya', 'Bağcık yeri', 'Ön astar', 'Arka astar', 'Kontrfort (topuk sertliği)', 'Burun sertliği']) expect(names.includes(n), n + ' yok: ' + names);
+  // seçenek: astarı kapat → parçalar yeniden oluşur (sunucuya yeni istek yok)
+  sent = null;
+  await p.uncheck('[data-aiopt="lining"]');
+  await p.waitForFunction(() => !window.__ayk.S.p.pieces.some((q) => q.name === 'Ön astar'));
+  expect(sent === null, 'seçenek değişince sunucuya gidilmedi');
+  names = await p.evaluate(() => window.__ayk.S.p.pieces.map((q) => q.name));
+  expect(names.length === 5, 'astarsız 5 parça: ' + names);
+  await p.click('[data-page="stampa"]'); await p.waitForTimeout(400);
+  await p.screenshot({ path: path.join(ROOT, 'reports', 'ayk-yz-parcalar.png') });
+  expect(!errs.length, errs.join(' | '));
+  await ctx.close();
+});
+
 await browser.close(); srv.close(); fs.rmSync(dir, { recursive: true, force: true });
 const sum = R.summary(); fs.mkdirSync(path.join(ROOT, 'reports'), { recursive: true }); fs.writeFileSync(path.join(ROOT, 'reports', 'e2e-ayk-auto.json'), JSON.stringify(sum, null, 1));
 console.log('\n' + JSON.stringify(sum.counts));

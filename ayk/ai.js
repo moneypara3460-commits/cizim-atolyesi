@@ -1,6 +1,6 @@
 // Model fotoğrafını yapay zekâyla okuma (sunucu: supabase/functions/ayk-model-oku). İnternet gerekir.
 // Sonuç otomatik parça ayarlarına çevrilir; usta isterse değiştirir.
-import { MODELS } from './auto.js?v=20261114u';
+import { MODELS } from './auto.js?v=20261115m';
 
 export const AI_URL = 'https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/ayk-model-oku';
 const KEY = 'sb_publishable_urzQtn-1lE1-obSXF_ivQg_wZbQMRDr';   // yayınlanabilir (herkese açık) anahtar
@@ -40,4 +40,27 @@ export function toAuto(res, L = 260) {
   if (type) { bits.push(params.cap ? 'burun kapaklı' : 'burun kapaksız'); if (MODELS[type].lacing && params.eyelets != null) bits.push(params.eyelets + ' delik'); }
   const summary = `${bits.join(', ')} · güven: ${CONF[res?.confidence] || 'düşük'}${res?.notes ? ' — ' + String(res.notes).slice(0, 160) : ''}`;
   return { type, params, summary, warnings };
+}
+
+/* ---------- Modelin bütün parçalarını çıkarma (sunucu: supabase/functions/ayk-parca-cikar) ---------- */
+export const PARTS_URL = 'https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/ayk-parca-cikar';
+// resmi küçült (uzun kenar en çok max px, jpeg) — sunucuya giden boyut ve süre düşsün
+export async function shrink(img, max = 1100) {
+  const im = new Image(); im.src = img; await im.decode();
+  const s = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+  const cv = document.createElement('canvas'); cv.width = Math.round(im.naturalWidth * s); cv.height = Math.round(im.naturalHeight * s);
+  cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+  return cv.toDataURL('image/jpeg', 0.82);
+}
+export async function readModelParts(imgs, last) {
+  if (!imgs.length) throw new Error('Model resmi yok');
+  const images = [];
+  for (const i of imgs.slice(0, 6)) images.push(await shrink(i));
+  let r;
+  try {
+    r = await fetch(PARTS_URL, { method: 'POST', headers: { 'content-type': 'application/json', apikey: KEY }, body: JSON.stringify({ images, last }) });
+  } catch (e) { throw new Error('İnternet bağlantısı yok ya da sunucuya ulaşılamadı'); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.ok) throw new Error(j.error || 'Sunucu hatası (' + r.status + ')');
+  return j.result;
 }

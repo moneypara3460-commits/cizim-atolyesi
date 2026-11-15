@@ -3,7 +3,7 @@
 // kâğıt renginden farklı olan en büyük nesne = kalıp → dış çizgisini izle → mm'ye çevir → sadeleştir.
 // Kalıp beyaz/açık renkliyse renkli (ör. mavi) kâğıt kullanılır: ayırma gri değil renk farkıyla yapılır.
 import { toGray, homography } from '../photo2d.js?v=20261112u';
-import * as G from './geom.js?v=20261114u';
+import * as G from './geom.js?v=20261115m';
 
 export const PAPERS = { A4: [297, 210], A3: [420, 297] };
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -115,10 +115,10 @@ export function segment(rec, sens = 0) {
   const pr = median(R), pg = median(Gr), pb = median(B);
   const d = new Uint8Array(w * h), hist = new Array(256).fill(0);
   for (let i = 0, o = 0; i < d.length; i++, o += 4) {
-    const v = Math.min(255, Math.round(Math.hypot(rgba[o] - pr, rgba[o + 1] - pg, rgba[o + 2] - pb) * 0.75));
+    const v = rec.dist ? rec.dist(rgba[o], rgba[o + 1], rgba[o + 2], pr, pg, pb) : Math.min(255, Math.round(Math.hypot(rgba[o] - pr, rgba[o + 1] - pg, rgba[o + 2] - pb) * 0.75));
     d[i] = v; hist[v]++;
   }
-  let th = otsu(hist, d.length);
+  let th = rec.th ?? otsu(hist, d.length);
   th = Math.max(12, Math.min(200, Math.round(th * (1 - 0.08 * sens))));
   let mask = new Uint8Array(w * h);
   for (let y = m; y < h - m; y++) for (let x = m; x < w - m; x++) mask[y * w + x] = d[y * w + x] > th ? 1 : 0;
@@ -227,4 +227,129 @@ export function scaleView(v, s) {
   if (!(s > 0) || Math.abs(s - 1) < 1e-9) return v;
   G.transform(v.outline, (p) => [p[0] * s, p[1] * s]);
   return { ...v, k: v.k / s, imgAt: [v.imgAt[0] * s, v.imgAt[1] * s], length: v.length * s, height: v.height * s, scale: (v.scale || 1) * s };
+}
+
+/* ---------- Kesim matı üstünde çekilmiş fotoğraf (kâğıtsız) ----------
+   Ölçek matın kareli ızgarasından bulunur (varsayılan 10 mm kare). Fotoğraf tepeden çekilmiş kabul edilir
+   (perspektif düzeltmesi yapılmaz); kesin ölçü için "bilinen kalıp boyu" girilmelidir. */
+function boxBlur1(src, w, h, r) {
+  const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) { let s = 0, n = 0; for (let x = -r; x < w; x++) { if (x + r < w) { s += src[y * w + x + r]; n++; } if (x - r - 1 >= 0) { s -= src[y * w + x - r - 1]; n--; } if (x >= 0) tmp[y * w + x] = s / n; } }
+  for (let x = 0; x < w; x++) { let s = 0, n = 0; for (let y = -r; y < h; y++) { if (y + r < h) { s += tmp[(y + r) * w + x]; n++; } if (y - r - 1 >= 0) { s -= tmp[(y - r - 1) * w + x]; n--; } if (y >= 0) out[y * w + x] = s / n; } }
+  return out;
+}
+// profilin tekrar periyodu (piksel): ortalaması çıkarılmış özilişkinin ilk belirgin tepesi
+export function period(prof, minLag = 5, maxLag = 0) {
+  const n = prof.length; maxLag = maxLag || Math.floor(n / 3);
+  let m = 0; for (const v of prof) m += v; m /= n;
+  const p = prof.map((v) => v - m);
+  let e = 0; for (const v of p) e += v * v; if (!e) return null;
+  const ac = [];
+  for (let lag = 0; lag <= maxLag; lag++) { let s = 0; for (let i = 0; i + lag < n; i++) s += p[i] * p[i + lag]; ac.push(s / e * n / (n - lag)); }
+  let best = null;
+  for (let lag = minLag; lag < maxLag; lag++) {
+    if (ac[lag] > ac[lag - 1] && ac[lag] >= ac[lag + 1] && ac[lag] > 0.12) {
+      // ilk belirgin tepe; parabolle ince ayar
+      const a = ac[lag - 1], b = ac[lag], c = ac[lag + 1], d = a - 2 * b + c;
+      best = { lag: lag + (d ? 0.5 * (a - c) / d : 0), score: b }; break;
+    }
+  }
+  return best;
+}
+export function matScale(rgba, w, h) {
+  const g = new Float32Array(w * h);
+  for (let i = 0, o = 0; i < g.length; i++, o += 4) g[i] = 0.3 * rgba[o] + 0.59 * rgba[o + 1] + 0.11 * rgba[o + 2];
+  const rb = Math.max(4, Math.round(Math.min(w, h) / 150));
+  const bl = boxBlur1(g, w, h, rb);
+  const line = new Float32Array(w * h);
+  for (let i = 0; i < g.length; i++) line[i] = Math.max(0, g[i] - bl[i]);
+  const cols = new Array(w).fill(0), rows = new Array(h).fill(0);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { cols[x] += line[y * w + x]; rows[y] += line[y * w + x]; }
+  const ml = Math.max(5, Math.round(Math.min(w, h) / 120));
+  const a = period(cols, ml), b = period(rows, ml);
+  const ps = [a, b].filter(Boolean);
+  if (!ps.length) return null;
+  // iki yönün periyodu birbirine yakınsa ortalama, değilse daha güçlü olan
+  let px = ps.length === 2 && Math.abs(a.lag - b.lag) / Math.max(a.lag, b.lag) < 0.15 ? (a.lag + b.lag) / 2 : ps.sort((p, q) => q.score - p.score)[0].lag;
+  return { px, line, bl, g, agree: ps.length === 2 && Math.abs(a.lag - b.lag) / Math.max(a.lag, b.lag) < 0.15 };
+}
+export function analyzeMat(rgba, w, h, { gridMm = 10, sens = 0 } = {}) {
+  const sc = matScale(rgba, w, h);
+  if (!sc) return { ok: false, error: 'Matın kareli çizgileri bulunamadı. Matın çizgileri net görünsün, telefonu tam tepeden tut.' };
+  const k = sc.px / gridMm;
+  // ızgara çizgilerini matın rengine boya (ayırmayı bozmasın)
+  const out = new Uint8ClampedArray(rgba);
+  const near = new Float32Array(w * h);
+  for (let i = 0; i < near.length; i++) near[i] = sc.line[i] > 6 ? 1 : 0;
+  const lineMask = boxBlur1(near, w, h, 1);
+  // matın rengi: kenar şeridinin ortancası (çizgiler hariç)
+  const R = [], Gc = [], B = [], band = Math.max(4, Math.round(0.06 * Math.min(w, h)));
+  for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) {
+    if (x > band && x < w - band && y > band && y < h - band) continue;
+    const i = y * w + x; if (lineMask[i] > 0) continue;
+    R.push(rgba[i * 4]); Gc.push(rgba[i * 4 + 1]); B.push(rgba[i * 4 + 2]);
+  }
+  const mr = median(R), mg = median(Gc), mb = median(B);
+  for (let i = 0; i < near.length; i++) {
+    if (lineMask[i] <= 0) continue;
+    const o = i * 4, d = Math.hypot(rgba[o] - mr, rgba[o + 1] - mg, rgba[o + 2] - mb);
+    // çizgi pikseli matın açık tonu ise mat rengine çek; kalıbın üstündeki parlak noktaya dokunma
+    if (d < 120 && sc.g[i] > sc.bl[i]) { out[o] = mr; out[o + 1] = mg; out[o + 2] = mb; }
+  }
+  const warnings = [];
+  if (!sc.agree) warnings.push('Matın kareleri iki yönde aynı ölçülmedi: fotoğraf eğik çekilmiş olabilir. Bilinen kalıp boyunu gir.');
+  warnings.push(`Ölçek matın ${gridMm} mm karelerinden bulundu. Kesin ölçü için bilinen kalıp boyunu gir.`);
+  const seg = matOptions(out, w, h, sens, [mr, mg, mb]);
+  let r = analyzeRectified({ rgba: out, w, h, k, warnings, ...seg }, 0);
+  if (!r.ok) { r.error = r.error.replace(/kâğıt/gi, 'mat'); return r; }
+  // kalıp eğik duruyorsa (mat düz, kalıp çapraz) uzun ekseni yataya çevir
+  const a = mainAngle(r.outline.nodes.map((n) => n.p));
+  if (Math.abs(a) > 0.035) {
+    const rot = rotateRgba(out, w, h, -a, [mr, mg, mb]);
+    const r2 = analyzeRectified({ rgba: rot.rgba, w: rot.w, h: rot.h, k, warnings, ...seg }, 0);
+    if (r2.ok) { r2.warnings.push(`Kalıp ${Math.round(a * 180 / Math.PI)}° eğikti, düzeltildi.`); r = r2; }
+  }
+  return r;
+}
+
+// noktaların ana ekseninin açısı (radyan, x eksenine göre)
+export function mainAngle(pts) {
+  let mx = 0, my = 0; for (const [x, y] of pts) { mx += x; my += y; } mx /= pts.length; my /= pts.length;
+  let sxx = 0, syy = 0, sxy = 0; for (const [x, y] of pts) { sxx += (x - mx) ** 2; syy += (y - my) ** 2; sxy += (x - mx) * (y - my); }
+  let a = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  if (a > Math.PI / 2) a -= Math.PI; if (a < -Math.PI / 2) a += Math.PI;
+  return a;
+}
+// görüntüyü merkez etrafında döndür (tuval büyür, boşluk verilen renkle dolar)
+export function rotateRgba(rgba, w, h, ang, fill = [255, 255, 255]) {
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const W = Math.ceil(Math.abs(w * c) + Math.abs(h * s)), H = Math.ceil(Math.abs(w * s) + Math.abs(h * c));
+  const out = new Uint8ClampedArray(W * H * 4);
+  const cx = w / 2, cy = h / 2, CX = W / 2, CY = H / 2;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const dx = x - CX, dy = y - CY, u = Math.round(c * dx + s * dy + cx), v = Math.round(-s * dx + c * dy + cy), o = (y * W + x) * 4;
+    if (u >= 0 && v >= 0 && u < w && v < h) { const q = (v * w + u) * 4; out[o] = rgba[q]; out[o + 1] = rgba[q + 1]; out[o + 2] = rgba[q + 2]; }
+    else { out[o] = fill[0]; out[o + 1] = fill[1]; out[o + 2] = fill[2]; }
+    out[o + 3] = 255;
+  }
+  return { rgba: out, w: W, h: H };
+}
+
+// Mat üstünde ayırma ayarları: parlaklıktan bağımsız renk farkı ve matın kendi gürültüsüne göre eşik.
+// mat rengi verilmezse görüntünün kenar şeridinden bulunur (kayıtlı görüntüyü yeniden işlerken).
+export function matOptions(rgba, w, h, sens = 0, mat = null) {
+  const band = Math.max(4, Math.round(0.06 * Math.min(w, h)));
+  if (!mat) {
+    const R = [], Gc = [], B = [];
+    for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) { if (x > band && x < w - band && y > band && y < h - band) continue; const o = (y * w + x) * 4; R.push(rgba[o]); Gc.push(rgba[o + 1]); B.push(rgba[o + 2]); }
+    mat = [median(R), median(Gc), median(B)];
+  }
+  const [mr, mg, mb] = mat;
+  const chroma = (r, g, b) => { const s = r + g + b + 1; return [r / s, g / s, b / s]; };
+  const [cr, cg, cb] = chroma(mr, mg, mb);
+  const dist = (r, g, b) => { const [a, c, e] = chroma(r, g, b); const dc = Math.hypot(a - cr, c - cg, e - cb) * 900; const dl = Math.abs(r + g + b - mr - mg - mb) / 3 * 0.35; return Math.min(255, Math.round(dc + dl)); };
+  const ds = [];
+  for (let y = 0; y < h; y += 3) for (let x = 0; x < w; x += 3) { if (x > band && x < w - band && y > band && y < h - band) continue; const o = (y * w + x) * 4; ds.push(dist(rgba[o], rgba[o + 1], rgba[o + 2])); }
+  const md = median(ds), mad = median(ds.map((v) => Math.abs(v - md))) || 1;
+  return { dist, th: Math.max(10, Math.round((md + 4 * mad + 6) * (1 - 0.08 * sens))) };
 }
