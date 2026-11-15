@@ -78,6 +78,10 @@ export const allowedOffline = (bolum) => cacheAllows(cachedAccess(), bolum, Date
 export const verifyPurchase = (productId, purchaseToken) =>
   call('/functions/v1/play-verify', { method: 'POST', body: JSON.stringify({ productId, purchaseToken }) });
 
+// Hesabı ve sunucudaki bütün veriyi siler (geri alınamaz). Google Play aboneliği ayrıca Google Play'den iptal edilir.
+export const deleteAccount = () =>
+  call('/functions/v1/hesap-sil', { method: 'POST', body: JSON.stringify({ onay: 'SİL' }) });
+
 export function logout() {
   const s = getSession();
   store.del(SK); store.del(AK);
