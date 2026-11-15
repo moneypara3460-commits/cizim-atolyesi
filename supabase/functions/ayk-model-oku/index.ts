@@ -1,7 +1,7 @@
 // Ayakkabı Modelhanesi: model fotoğrafından model tipi ve saya çizgisi konumlarını tahmin eder (Claude görsel okuma).
 // İstek: POST { image: "data:image/jpeg;base64,…" }  →  { ok, result: { type, cap, eyelets, throat, facing, qfront, capAt, backHeightRatio, view, confidence, notes } }
 // Gizli ayarlar: ANTHROPIC_API_KEY (zorunlu), AI_MODEL (isteğe bağlı, varsayılan claude-sonnet-5-5)
-// Kötüye kullanım sınırı: kişi (IP) başına günde 20, toplam günde 300 okuma (public.ai_take).
+// Yalnız giriş yapmış kullanıcı (Authorization: Bearer <oturum>). Kötüye kullanım sınırı: hesap başına günde 20, toplam günde 300 okuma (public.ai_take).
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const CORS = {
@@ -62,8 +62,11 @@ Deno.serve(async (req) => {
   const m = typeof body.image === 'string' ? /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(body.image) : null;
   if (!m || m[2].length > 3_500_000) return json(400, { error: 'Resim okunamadı (jpeg/png/webp, en çok ~2,5 MB)' });
 
-  const who = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'bilinmiyor';
-  const { data: allowed, error: le } = await admin.rpc('ai_take', { p_who: 'ip:' + who, p_limit: 20, p_global: 300 });
+  // yalnız giriş yapmış kullanıcı: oturum anahtarı Supabase'e sorularak doğrulanır; sınır hesaba göre (IP taklit edilebilir)
+  const tok = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  const { data: ud, error: ue } = tok ? await admin.auth.getUser(tok) : { data: null, error: true };
+  if (ue || !ud?.user?.id) return json(401, { error: 'Yapay zekâ için önce Google ile giriş yap.' });
+  const { data: allowed, error: le } = await admin.rpc('ai_take', { p_who: 'model:' + ud.user.id, p_limit: 20, p_global: 300 });
   if (le) { console.error(le); return json(500, { error: 'Sınır kontrolü yapılamadı' }); }
   if (!allowed) return json(429, { error: 'Bugünkü okuma sınırına ulaşıldı, yarın tekrar dene.' });
 

@@ -3,9 +3,9 @@
 // Model çizgileri (üst ağız, dil başı, yan saya önü, burun kapağı …) kalıp boyuna oranlı varsayılanlarla kurulur;
 // usta değerleri değiştirip yeniden oluşturabilir ya da parçaları stampada düzeltebilir.
 // Parçalar yarım kalıptır: üst kenarı "orta çizgi" olan parçalar (ön saya, dil, burun) bu çizgiden simetrik açılır.
-import * as G from './geom.js?v=20261115m';
-import { makePiece, setEdgeProp, nextPieceNo } from './model.js?v=20261115m';
-import { makeMatch } from './match.js?v=20261115m';
+import * as G from './geom.js?v=20261115g';
+import { makePiece, setEdgeProp, nextPieceNo } from './model.js?v=20261115g';
+import { makeMatch } from './match.js?v=20261115g';
 
 export const MODELS = {
   derby: { name: 'Derby (açık bağcıklı)', lacing: true },

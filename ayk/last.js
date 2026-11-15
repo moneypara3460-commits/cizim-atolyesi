@@ -3,7 +3,7 @@
 // kâğıt renginden farklı olan en büyük nesne = kalıp → dış çizgisini izle → mm'ye çevir → sadeleştir.
 // Kalıp beyaz/açık renkliyse renkli (ör. mavi) kâğıt kullanılır: ayırma gri değil renk farkıyla yapılır.
 import { toGray, homography } from '../photo2d.js?v=20261112u';
-import * as G from './geom.js?v=20261115m';
+import * as G from './geom.js?v=20261115g';
 
 export const PAPERS = { A4: [297, 210], A3: [420, 297] };
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);

@@ -1,18 +1,18 @@
 // Ayakkabı Modelhanesi — uygulama kabuğu: 8 bölüm, otomatik kayıt, geri al / ileri al.
 // Hesap ve doğrulama saf modüllerde (geom, model, build, match, export); burada yalnız gösterim ve düzenleme.
 // Makine ve Tekstil alanlarının uygulama koduna bağlı değildir (yalnız tekstilin saf eğri / PDF / ofset modüllerini okur).
-import * as G from './geom.js?v=20261115m';
-import * as M from './model.js?v=20261115m';
-import { measure, checkPiece, fmt, netPolygon } from './build.js?v=20261115m';
-import * as X from './match.js?v=20261115m';
-import * as E from './export.js?v=20261115m';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261115m';
-import { createEditor } from './editor.js?v=20261115m';
-import { addSample } from './sample.js?v=20261115m';
-import * as LST from './last.js?v=20261115m';
-import * as AUTO from './auto.js?v=20261115m';
-import * as AI from './ai.js?v=20261115m';
-import * as AIP from './aiparts.js?v=20261115m';
+import * as G from './geom.js?v=20261115g';
+import * as M from './model.js?v=20261115g';
+import { measure, checkPiece, fmt, netPolygon } from './build.js?v=20261115g';
+import * as X from './match.js?v=20261115g';
+import * as E from './export.js?v=20261115g';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261115g';
+import { createEditor } from './editor.js?v=20261115g';
+import { addSample } from './sample.js?v=20261115g';
+import * as LST from './last.js?v=20261115g';
+import * as AUTO from './auto.js?v=20261115g';
+import * as AI from './ai.js?v=20261115g';
+import * as AIP from './aiparts.js?v=20261115g';
 import { saveBlob } from '../tx/download.js?v=20261112u';
 
 const $ = (id) => document.getElementById(id);

@@ -1,7 +1,7 @@
 // Ayakkabı Modelhanesi — proje veri modeli (Aşama 1). Saf modül: DOM ve depolama yok.
 // Birim: mm. Koordinat: y aşağı (ekran gibi); DXF'e yazarken y çevrilir.
 // Proje şeması sürümlüdür (schema); eski kayıtlar migrate() ile yükseltilir.
-import { uid, node, makePath, clone, isP, edges, edgeStarts } from './geom.js?v=20261115m';
+import { uid, node, makePath, clone, isP, edges, edgeStarts } from './geom.js?v=20261115g';
 
 export const SCHEMA = 1;
 export const KIND = 'cizim.ayakkabi';
@@ -268,7 +268,7 @@ export function validateProject(p) {
 export { edgeStarts, node };
 
 /* ---------- parça işlemleri (editör ve parça sayfası ortak) ---------- */
-import { transform as tfPath, cloneNew, rp as roundP } from './geom.js?v=20261115m';
+import { transform as tfPath, cloneNew, rp as roundP } from './geom.js?v=20261115g';
 // afin dönüşüm: sınır, iç çizgiler, serbest işaretler, ölçüler, yazılar. Kenar üzerindeki işaretler kenarla birlikte gider.
 export function transformPiece(pc, f) {
   tfPath(pc.outline, f);

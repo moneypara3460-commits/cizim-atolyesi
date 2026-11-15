@@ -18,8 +18,10 @@ const lv = lastView({ L: 262 }), poly = lv.outline.nodes.map((n) => [n.p[0] + (2
 const FILE = path.join(dir, 'kalip.png');
 fs.writeFileSync(FILE, toPNG(scene({ shape: (u, v) => insidePoly(poly, [u, v]) })));
 
-async function open(view) {
+async function open(view, { login = true } = {}) {
   const ctx = await browser.newContext(view || { viewport: { width: 1280, height: 900 } });
+  // yapay zekâ yalnız giriş yapmış kullanıcıya çalışır: testte sahte (süresi dolmamış) oturum
+  if (login) await ctx.addInitScript(() => localStorage.setItem('cizim:oturum', JSON.stringify({ access_token: 'test-oturum', refresh_token: 'x', expires_at: Math.floor(Date.now() / 1000) + 3600 })));
   await ctx.route('https://unpkg.com/**', (r) => r.abort());
   const p = await ctx.newPage(); const errs = [];
   p.on('pageerror', (e) => errs.push(e.message));
@@ -127,6 +129,7 @@ await R.test('Kesim matı fotoğrafı + modelden bütün parçalar (yapay zekâ)
   const MAT = path.join(ROOT, 'tests/fixtures/kalip-mat-yan.jpg');   // gerçek kalıp, yeşil kareli kesim matı üstünde
   let sent = null;
   await ctx.route('https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/ayk-parca-cikar', async (r) => {
+    if (r.request().headers()['authorization'] !== 'Bearer test-oturum') return r.fulfill({ status: 401, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"error":"oturum yok"}' });
     sent = JSON.parse(r.request().postData() || '{}');
     const L = sent.last.L, H = (x) => { const T = sent.last.top; for (let i = 1; i < T.length; i++) if (x <= T[i][0]) { const f = (x - T[i - 1][0]) / (T[i][0] - T[i - 1][0] || 1); return T[i - 1][1] + f * (T[i][1] - T[i - 1][1]); } return T[T.length - 1][1]; };
     const pieces = [
@@ -157,6 +160,20 @@ await R.test('Kesim matı fotoğrafı + modelden bütün parçalar (yapay zekâ)
   expect(names.length === 5, 'astarsız 5 parça: ' + names);
   await p.click('[data-page="stampa"]'); await p.waitForTimeout(400);
   await p.screenshot({ path: path.join(ROOT, 'reports', 'ayk-yz-parcalar.png') });
+  expect(!errs.length, errs.join(' | '));
+  await ctx.close();
+});
+
+await R.test('Giriş yapılmamışsa yapay zekâ isteği sunucuya hiç gitmez, anlaşılır mesaj çıkar', async () => {
+  const { ctx, p, errs } = await open(undefined, { login: false });
+  let calls = 0;
+  await ctx.route('https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/**', (r) => { calls++; return r.abort(); });
+  await p.click('[data-page="yeni"]'); await p.fill('[data-n="name"]', 'girişsiz'); await p.dispatchEvent('[data-n="name"]', 'change');
+  await p.setInputFiles('[data-lfile="yan"]', FILE); await p.waitForSelector('.lview[data-lview="yan"] .lprev svg');
+  await p.setInputFiles('[data-mfile]', FILE); await p.waitForSelector('.mthumb');
+  await p.click('[data-act="airead"]');
+  await p.waitForFunction(() => /Google ile giriş yap/.test(document.getElementById('toast').textContent));
+  expect(calls === 0, 'sunucuya istek gitti: ' + calls);
   expect(!errs.length, errs.join(' | '));
   await ctx.close();
 });

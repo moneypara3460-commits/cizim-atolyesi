@@ -1,8 +1,8 @@
 // Örnek stampa: alçak kesim derby'nin basitleştirilmiş üç parçası (ön saya, yan saya, dil).
 // Eğitim / deneme amaçlıdır; gerçek bir kalıptan alınmamıştır. Yalnız kullanıcı "Örnek ekle" derse eklenir.
-import { makePath, node, autoSmooth } from './geom.js?v=20261115m';
-import { makePiece, setEdgeProp, nextPieceNo } from './model.js?v=20261115m';
-import { makeMatch } from './match.js?v=20261115m';
+import { makePath, node, autoSmooth } from './geom.js?v=20261115g';
+import { makePiece, setEdgeProp, nextPieceNo } from './model.js?v=20261115g';
+import { makeMatch } from './match.js?v=20261115g';
 
 function outline(spec) {
   // spec: [[x, y, 'k'|'s', brk?]] — k: köşe, s: yumuşak

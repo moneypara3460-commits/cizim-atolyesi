@@ -1,9 +1,9 @@
 // Ayakkabı Modelhanesi — 2B stampa editörü (tuval). Birim mm; ekran yakınlaşması ölçüleri değiştirmez.
 // Bağlam (ctx): 'stampa' (yardımcı çizgiler) ya da bir parçanın kimliği. Yalnız etkin bağlamdaki geometri düzenlenir.
 // Bütün değişiklikler api.begin() (geri al noktası) → değişiklik → api.changed() (otomatik kayıt) sırasıyla yapılır.
-import * as G from './geom.js?v=20261115m';
-import * as M from './model.js?v=20261115m';
-import { pieceItems, sketchItems, lastItems, netPolygon, edgeFrame, markPoint, itemsBox, measure, fmt, checkPiece } from './build.js?v=20261115m';
+import * as G from './geom.js?v=20261115g';
+import * as M from './model.js?v=20261115g';
+import { pieceItems, sketchItems, lastItems, netPolygon, edgeFrame, markPoint, itemsBox, measure, fmt, checkPiece } from './build.js?v=20261115g';
 
 const { C } = G;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
