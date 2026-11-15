@@ -1,15 +1,23 @@
 // Model fotoğrafını yapay zekâyla okuma (sunucu: supabase/functions/ayk-model-oku). İnternet gerekir.
 // Sonuç otomatik parça ayarlarına çevrilir; usta isterse değiştirir.
-import { MODELS } from './auto.js?v=20261115m';
+import { MODELS } from './auto.js?v=20261115g';
 
 export const AI_URL = 'https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/ayk-model-oku';
 const KEY = 'sb_publishable_urzQtn-1lE1-obSXF_ivQg_wZbQMRDr';   // yayınlanabilir (herkese açık) anahtar
+// Yapay zekâ yalnız Google ile giriş yapmış kullanıcıya çalışır (sunucu oturumu doğrular, sınır hesaba göre)
+async function headers() {
+  let s = null;
+  try { s = await (await import('../hesap/session.js')).validSession(); } catch (e) { s = null; }
+  if (!s?.access_token) throw new Error('Yapay zekâ için önce Google ile giriş yap (Ana ekran → Giriş)');
+  return { 'content-type': 'application/json', apikey: KEY, authorization: 'Bearer ' + s.access_token };
+}
 
 export async function readModelPhoto(img) {
   if (typeof img !== 'string' || !img.startsWith('data:image/')) throw new Error('Model resmi yok');
+  const h = await headers();
   let r;
   try {
-    r = await fetch(AI_URL, { method: 'POST', headers: { 'content-type': 'application/json', apikey: KEY }, body: JSON.stringify({ image: img }) });
+    r = await fetch(AI_URL, { method: 'POST', headers: h, body: JSON.stringify({ image: img }) });
   } catch (e) { throw new Error('İnternet bağlantısı yok ya da sunucuya ulaşılamadı'); }
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.ok) throw new Error(j.error || 'Sunucu hatası (' + r.status + ')');
@@ -56,9 +64,10 @@ export async function readModelParts(imgs, last) {
   if (!imgs.length) throw new Error('Model resmi yok');
   const images = [];
   for (const i of imgs.slice(0, 6)) images.push(await shrink(i));
+  const h = await headers();
   let r;
   try {
-    r = await fetch(PARTS_URL, { method: 'POST', headers: { 'content-type': 'application/json', apikey: KEY }, body: JSON.stringify({ images, last }) });
+    r = await fetch(PARTS_URL, { method: 'POST', headers: h, body: JSON.stringify({ images, last }) });
   } catch (e) { throw new Error('İnternet bağlantısı yok ya da sunucuya ulaşılamadı'); }
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.ok) throw new Error(j.error || 'Sunucu hatası (' + r.status + ')');
