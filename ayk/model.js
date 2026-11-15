@@ -1,7 +1,7 @@
 // Ayakkabı Modelhanesi — proje veri modeli (Aşama 1). Saf modül: DOM ve depolama yok.
 // Birim: mm. Koordinat: y aşağı (ekran gibi); DXF'e yazarken y çevrilir.
 // Proje şeması sürümlüdür (schema); eski kayıtlar migrate() ile yükseltilir.
-import { uid, node, makePath, clone, isP, edges, edgeStarts } from './geom.js?v=20261114u';
+import { uid, node, makePath, clone, isP, edges, edgeStarts } from './geom.js?v=20261115m';
 
 export const SCHEMA = 1;
 export const KIND = 'cizim.ayakkabi';
@@ -143,8 +143,8 @@ export function pruneEdges(pc) {
 // Kalıp: yan ve alt (taban) görünüşünün fotoğraftan çıkarılmış ölçülü çizgisi + düzeltilmiş fotoğraf.
 // view: { img: data:image/jpeg…, k: mm başına piksel, w, h: görüntü pikseli, paper, outline: kapalı yol (mm, sol üst 0,0),
 //         imgAt: görüntünün çizgiye göre konumu (mm), at: stampadaki konum (mm), length, height, sens, scale }
-export const LAST_VIEWS = { yan: 'Kalıp yan görünüşü', alt: 'Kalıp alt görünüşü (taban)' };
-export const PAPER_SIZES = { A4: 'A4 (297 × 210 mm)', A3: 'A3 (420 × 297 mm)' };
+export const LAST_VIEWS = { yan: 'Kalıp dış yan görünüşü', ic: 'Kalıp iç yan görünüşü', alt: 'Kalıp alt görünüşü (taban)', ust: 'Kalıp üst görünüşü' };
+export const PAPER_SIZES = { A4: 'A4 (297 × 210 mm)', A3: 'A3 (420 × 297 mm)', MAT: 'Kesim matı (10 mm kareli, kâğıtsız)' };
 const IMG_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 const fin = (v, d = null) => (Number.isFinite(+v) && v !== null && v !== '' ? +v : d);
 export function makeLastView(v) {
@@ -160,7 +160,7 @@ export function makeLast(o = {}) {
   const L = fin(o.lengthMm);
   return {
     name: String(o.name || '').slice(0, 80), lengthMm: L > 0 && L < 600 ? L : null, paper: PAPER_SIZES[o.paper] ? o.paper : 'A4',
-    views: { yan: makeLastView(o.views?.yan), alt: makeLastView(o.views?.alt) },
+    views: Object.fromEntries(Object.keys(LAST_VIEWS).map((id) => [id, makeLastView(o.views?.[id])])),
   };
 }
 export const MAX_MODEL_PHOTOS = 6;
@@ -181,14 +181,43 @@ export function makeModelRef(o = {}) {
       .map((ph) => ({ id: typeof ph.id === 'string' ? ph.id.slice(0, 40) : uid('ph'), img: ph.img, name: String(ph.name || '').slice(0, 80) })),
     note: String(o.note || '').slice(0, 500),
     auto: makeAuto(o.auto),
+    ai: makeAiParts(o.ai),
   };
 }
-// alt görünüş varsayılan olarak yan görünüşün altına yerleşir
+// görünüşler varsayılan olarak alt alta yerleşir (fotoğraflar üst üste binmesin: aralarında 15 mm)
 export function placeLastViews(last) {
-  const y = last.views.yan, a = last.views.alt;
-  // fotoğraflar üst üste binmesin: alt görünüşün fotoğrafı yanınkinin 15 mm altından başlar
-  if (y && a && a.at[0] === 0 && a.at[1] === 0) a.at = [y.at[0], +(y.at[1] + y.imgAt[1] + y.h / y.k + 15 - a.imgAt[1]).toFixed(3)];
+  let prev = null;
+  for (const id of Object.keys(LAST_VIEWS)) {
+    const v = last.views[id]; if (!v) continue;
+    if (prev && v.at[0] === 0 && v.at[1] === 0) v.at = [prev.at[0], +(prev.at[1] + prev.imgAt[1] + prev.h / prev.k + 15 - v.imgAt[1]).toFixed(3)];
+    prev = v;
+  }
   return last;
+}
+// Yapay zekânın modelden çıkardığı parçalar (hesap ayk/aiparts.js). Koordinatlar kalıba göre yüzde:
+// x: topuk arkasından burna mm, y: taban çizgisinden yukarı mm (dış yan görünüş).
+const AI_KINDS = ['ust', 'astar', 'takviye'];
+export function makeAiParts(o) {
+  if (!o || !Array.isArray(o.pieces) || !o.pieces.length) return null;
+  const num = (v, lo, hi) => (Number.isFinite(+v) ? Math.max(lo, Math.min(hi, +v)) : null);
+  const pt = (q) => (Array.isArray(q) && num(q[0], -10, 460) !== null && num(q[1], -10, 600) !== null ? [+num(q[0], -10, 460).toFixed(2), +num(q[1], -10, 600).toFixed(2)] : null);
+  const pieces = o.pieces.slice(0, 40).map((p) => ({
+    name: String(p?.name || 'Parça').replace(/[<>]/g, '').slice(0, 40),
+    kind: AI_KINDS.includes(p?.kind) ? p.kind : 'ust',
+    layer: Math.round(num(p?.layer, 0, 9) ?? 0),
+    poly: (Array.isArray(p?.poly) ? p.poly : []).map(pt).filter(Boolean).slice(0, 60),
+    holes: (Array.isArray(p?.holes) ? p.holes : []).map(pt).filter(Boolean).slice(0, 24),
+    holeD: num(p?.holeD, 2, 12) ?? 5,
+    note: String(p?.note || '').replace(/[<>]/g, '').slice(0, 120),
+  })).filter((p) => p.poly.length >= 3);
+  if (!pieces.length) return null;
+  return {
+    pieces, model: String(o.model || '').replace(/[<>]/g, '').slice(0, 160),
+    confidence: ['high', 'medium', 'low'].includes(o.confidence) ? o.confidence : 'low',
+    pieceIds: Array.isArray(o.pieceIds) ? o.pieceIds.filter((x) => typeof x === 'string').slice(0, 120) : [],
+    flipX: typeof o.flipX === 'boolean' ? o.flipX : null, flipY: typeof o.flipY === 'boolean' ? o.flipY : null,
+    lining: o.lining !== false, stiff: o.stiff !== false,
+  };
 }
 
 /* ---------- proje ---------- */
@@ -239,7 +268,7 @@ export function validateProject(p) {
 export { edgeStarts, node };
 
 /* ---------- parça işlemleri (editör ve parça sayfası ortak) ---------- */
-import { transform as tfPath, cloneNew, rp as roundP } from './geom.js?v=20261114u';
+import { transform as tfPath, cloneNew, rp as roundP } from './geom.js?v=20261115m';
 // afin dönüşüm: sınır, iç çizgiler, serbest işaretler, ölçüler, yazılar. Kenar üzerindeki işaretler kenarla birlikte gider.
 export function transformPiece(pc, f) {
   tfPath(pc.outline, f);

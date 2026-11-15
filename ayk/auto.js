@@ -3,9 +3,9 @@
 // Model çizgileri (üst ağız, dil başı, yan saya önü, burun kapağı …) kalıp boyuna oranlı varsayılanlarla kurulur;
 // usta değerleri değiştirip yeniden oluşturabilir ya da parçaları stampada düzeltebilir.
 // Parçalar yarım kalıptır: üst kenarı "orta çizgi" olan parçalar (ön saya, dil, burun) bu çizgiden simetrik açılır.
-import * as G from './geom.js?v=20261114u';
-import { makePiece, setEdgeProp, nextPieceNo } from './model.js?v=20261114u';
-import { makeMatch } from './match.js?v=20261114u';
+import * as G from './geom.js?v=20261115m';
+import { makePiece, setEdgeProp, nextPieceNo } from './model.js?v=20261115m';
+import { makeMatch } from './match.js?v=20261115m';
 
 export const MODELS = {
   derby: { name: 'Derby (açık bağcıklı)', lacing: true },
@@ -48,7 +48,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 function polyOf(v) { return v.outline.nodes.map((n) => [n.p[0], n.p[1]]); }
 function bboxOf(poly) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const [x, y] of poly) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } return { x0, y0, x1, y1 }; }
 // dikey çizginin kalıpla kesişimi → [üst y, alt y]
-function colRange(poly, x) {
+export function colRange(poly, x) {
   let lo = Infinity, hi = -Infinity;
   for (let i = 0; i < poly.length; i++) {
     const a = poly[i], b = poly[(i + 1) % poly.length];
@@ -83,16 +83,23 @@ export function lastFrame(view, flipX = false, flipY = false) {
 export function guessOrientation(view) {
   const f = lastFrame(view), { L } = f;
   const h = (x) => f.bot(x) - f.top(x);
+  // kalıbın en yüksek yeri (konç / bilek) topuk yarısındadır; burun ucu topuktan incedir (yedek ölçüt)
+  let best = 0, bx = 0;
+  for (let i = 1; i < 60; i++) { const x = (L * i) / 60, v = h(x); if (v > best) { best = v; bx = x; } }
   let a = 0, b = 0;
   for (let i = 1; i <= 6; i++) { a += h(L * 0.015 * i); b += h(L - L * 0.015 * i); }
-  const flipX = a < b;   // sol uç daha inceyse burun soldadır → çevir
+  const flipX = Math.abs(bx - L / 2) > 0.06 * L ? bx > L / 2 : a < b;   // en yüksek yer sağdaysa topuk sağdadır → çevir
   const g = lastFrame(view, flipX, false);
+  // taban çizgisi düzgün akar; üst çizgi (konç tepesi → ağız → burun) iner-çıkar: eğriliği büyük olan üst taraftır
+  const bend = (f) => { let sum = 0; const n = 24; for (let i = 1; i < n; i++) { const x = (k) => L * (0.08 + 0.62 * k / n); sum += Math.abs(f(x(i - 1)) - 2 * f(x(i)) + f(x(i + 1))); } return sum; };
+  const bt = bend(g.top), bb = bend(g.bot);
   const dTop = Math.abs(g.top(0.75 * L) - g.top(0.3 * L)), dBot = Math.abs(g.bot(0.75 * L) - g.bot(0.3 * L));
-  return { flipX, flipY: dBot > dTop };
+  const flipY = Math.abs(bt - bb) > 0.25 * Math.max(bt, bb) ? bb > bt : dBot > dTop;
+  return { flipX, flipY };
 }
 
 /* ---------- eğri yardımcıları ---------- */
-function cubic(p0, p1, p2, p3, n = 24) {
+export function cubic(p0, p1, p2, p3, n = 24) {
   const out = [];
   for (let i = 0; i <= n; i++) {
     const t = i / n, u = 1 - t;
@@ -100,7 +107,7 @@ function cubic(p0, p1, p2, p3, n = 24) {
   }
   return out;
 }
-function catmull(pts, per = 14) {
+export function catmull(pts, per = 14) {
   const out = [];
   for (let i = 0; i < pts.length - 1; i++) {
     const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
@@ -112,7 +119,7 @@ function catmull(pts, per = 14) {
   out.push(pts[pts.length - 1].slice());
   return out;
 }
-const range = (a, b, step = 2) => { const n = Math.max(2, Math.ceil(Math.abs(b - a) / step)); return Array.from({ length: n + 1 }, (_, i) => lerp(a, b, i / n)); };
+export const range = (a, b, step = 2) => { const n = Math.max(2, Math.ceil(Math.abs(b - a) / step)); return Array.from({ length: n + 1 }, (_, i) => lerp(a, b, i / n)); };
 // soldan sağa giden çizgiyi gövdeye doğru (aşağı) d mm kaydır; geri dönen (kendine katlanan) noktalar atılır
 function offsetDown(pts, d) {
   const out = [];
@@ -137,7 +144,7 @@ function atLen(pts, s) {
 
 /* ---------- parça kurucu ---------- */
 // edges: [{ pts, kind, name, stitch? }] ardışık; her kenarın son noktası bir sonrakinin ilk noktasıdır.
-function buildPiece(spec, edgeList, toV) {
+export function buildPiece(spec, edgeList, toV) {
   const nodes = [], starts = [];
   for (const e of edgeList) {
     const pts = G.simplify(e.pts.map(toV), 0.2);
@@ -147,7 +154,7 @@ function buildPiece(spec, edgeList, toV) {
   const np = G.makePath(nodes, true);
   np.nodes.forEach((n, i) => { if (!n.brk) G.autoSmooth(np, i); });
   const pc = makePiece({ ...spec, outline: np });
-  edgeList.forEach((e, j) => setEdgeProp(pc, np.nodes[starts[j]].id, { name: e.name, kind: e.kind, stitch: e.stitch || { on: false } }));
+  edgeList.forEach((e, j) => setEdgeProp(pc, np.nodes[starts[j]].id, { name: e.name, kind: e.kind, stitch: e.stitch || { on: false }, ...(e.corner ? { corner: e.corner } : {}) }));
   return { pc, edgeIds: starts.map((s) => np.nodes[s].id) };
 }
 const mid = () => 'mk' + Math.random().toString(36).slice(2, 8);

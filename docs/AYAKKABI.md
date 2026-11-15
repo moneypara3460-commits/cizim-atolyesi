@@ -128,3 +128,36 @@ uygulama "henüz açılmadı" der. Sınır: oranlar tahmindir, en iyi sonuç tam
 **Aşama 8 — kesim yerleşimi.** `future.nesting`: deri (kusurlu bölge, sırt / karın kalite haritası) ve top malzeme için ayrı stratejiler. Kesim çizgisi `build.cutLine()` ile hazır; tekstildeki `tx/woven/marker.js` başlangıç olabilir.
 
 **Genel kurallar:** her yeni modül `ayk/` altında ayrı dosya; saf hesap modülleri DOM'suz ve Node'da test edilebilir; proje şeması değişirse `SCHEMA` artırılır ve `migrate()` ile eski projeler yükseltilir (testli). Henüz çalışmayan özellik arayüzde çalışıyormuş gibi gösterilmez.
+
+## Ümit Abi'nin istekleri (15.11.2026, sürüm `20261115m`)
+
+**Kesim matı üstünde kalıp fotoğrafı (kâğıtsız).** "Fotoğraftaki kâğıt" → *Kesim matı (10 mm kareli)*. `ayk/last.js → analyzeMat`:
+ölçek matın kare çizgilerinin tekrar aralığından (özilişki) bulunur; ızgara çizgileri mat rengine boyanır; kalıp parlaklıktan
+bağımsız renk farkıyla (gölge ve parlama ayırmayı bozmaz) ve matın kendi gürültüsüne göre eşikle ayrılır; eğik duran kalıp
+uzun ekseni yataya gelecek şekilde döndürülür. Dört görünüş: dış yan, iç yan, alt (taban), üst. Fotoğraf tepeden çekilmiş kabul
+edilir: kesin ölçü için **bilinen kalıp boyu** girilmeli (girilince bütün görünüşler ona göre düzeltilir).
+
+**Model resimleri.** En çok 6 resim (önden, arkadan, üstten, iki yandan önerilir); hepsi birlikte yapay zekâya gider.
+
+**Modelden bütün saya parçaları (yapay zekâ).** Saya Parçaları → "🤖 Bütün parçaları modelden çıkar".
+`ayk/ai.js → readModelParts` resimleri küçültüp (1100 px) kalıp bilgisiyle (boy + her ~10 mm'de üst çizgi yüksekliği)
+`supabase/functions/ayk-parca-cikar`'a gönderir. Sunucu Claude'dan modelin bütün üst parçalarını dış yan görünüşünde
+mm koordinatla (x topuktan, y tabandan) ve kat sırasıyla (0 temel, 1 üstüne dikilen …) ister; marka logoları çizilmez,
+yerine "Logo yeri" dikdörtgeni gelir. `ayk/aiparts.js → generateAi` parçaları kalıbın çizgisine oturtur ve kenar türlerini
+kendisi bulur: tabana inen kenar → kalıba çekme (montaj), orta çizgi → simetri ekseni (yarım kalıp), topuk arkası → arka dikiş,
+üstteki parçanın altında kalan kenar → binme payı, alttaki parçanın üstüne binen kenar → katlama + 2 sıra dikiş, açık kenar →
+kenar + dikiş. Bağcık delikleri işaret olarak eklenir. Ek parçalar (açılıp kapatılabilir): ön ve arka astar (üst parçaların
+kapladığı alandan), kontrfort (topuk sertliği), burun sertliği. İç yan fotoğrafı varsa tabana inen yan parçaların iç yan eşi
+iç yan kalıp çizgisine orantılanarak ayrıca çıkarılır. Yumuşatma keskin köşede kesim çizgisini bozarsa parça düz çizgilerle,
+o da olmazsa pah köşeyle yeniden kurulur. Sonuç `project.modelRef.ai`'de saklanır: seçenek değiştirmek ya da yön çevirmek
+sunucuya yeniden gitmeden parçaları yeniden kurar. Kötüye kullanım sınırı: kişi başına günde 10, toplam 150.
+
+**Kalıp yönü tahmini iyileştirildi** (şablon parçalar da yararlanır): topuk = kalıbın en yüksek yerinin olduğu yarı;
+taban = daha düzgün akan çizgi (eğrilik karşılaştırması). Yanlışsa "↔ Burun yönünü çevir" / "↕ Tabanı çevir".
+
+**Sınırlar (dürüst):** parça çizgileri fotoğraftan tahmindir; ilk sonuç ustanın kontrolünden geçmeli, gerekirse Stampa
+Atölyesi'nde düğümler sürüklenerek düzeltilir. Mat ölçeği tepeden olmayan çekimde sapar (bilinen boy bunu düzeltir).
+Parçalar arası çentik / eşleştirme yapay zekâ parçalarında henüz kendiliğinden eklenmiyor. 3B kalıp tarama yok.
+
+Testler: `tests/ayk-aiparts.test.mjs` (6: sentetik mat ölçeği ve eğik kalıp, parça yerleştirme, kenar türleri, iç yan,
+kayıt güvenliği); `tests/e2e/ayk-auto.mjs` 4. senaryo (gerçek kalıbın mat fotoğrafı + sahte sunucu yanıtıyla uçtan uca).

@@ -79,7 +79,7 @@ t('7. Proje kaydı: kalıp ve model resmi alanları; yalnız jpeg/png/webp kabul
 
 t('8. Eski proje (kalıp alanı yok) açılır; kalıp çizgisi stampada referans katmanında, ölçüsüyle', () => {
   const p = M.migrate({ kind: M.KIND, name: 'Eski', pieces: [] });
-  assert.deepEqual(p.last.views, { yan: null, alt: null }); assert.deepEqual(p.modelRef.photos, []);
+  assert.deepEqual(p.last.views, { yan: null, ic: null, alt: null, ust: null }); assert.deepEqual(p.modelRef.photos, []);
   assert.deepEqual(lastItems(p), []);
   const s = scene({ rx: 130, ry: 50 }); const r = L.analyzeLast(s.rgba, s.w, s.h);
   p.last = M.makeLast({ views: { yan: { img: 'data:image/jpeg;base64,AAAA', k: 3, w: 10, h: 10, outline: r.outline, imgAt: r.imgAt, at: [5, 7], length: r.length, height: r.height } } });
