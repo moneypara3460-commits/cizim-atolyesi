@@ -66,6 +66,11 @@ t('4. Parçalar kalıba oturur: kenar türleri, delikler, astar ve sertlikler; h
   assert.ok(kinds('Bağcık yeri').includes('katlama'), 'bağcık yeri alttaki parçaya biner');
   const by = r.pieces.find((pc) => pc.name === 'Bağcık yeri');
   assert.equal(by.marks.filter((m) => m.kind === 'delik').length, 2);
+  // hizalama: bağcık yerinin binen kenarında çentik, alttaki parçada aynı harfle işaret
+  const cn = by.marks.filter((m) => m.kind === 'centik');
+  assert.ok(cn.length >= 1 && cn.every((m) => m.label), 'bağcık yerinde çentik yok');
+  const other = r.pieces.filter((pc) => pc !== by).flatMap((pc) => pc.marks).filter((m) => m.label === cn[0].label);
+  assert.equal(other.length, 1, 'karşı parçada aynı harfli işaret');
   for (const pc of r.pieces) {
     const bad = checkPiece(pc).filter((x) => x.level === 'hata' || /kesiyor|geometri|dışında/.test(x.msg || ''));
     assert.equal(bad.length, 0, pc.name + ': ' + bad.map((x) => x.msg).join(', '));
