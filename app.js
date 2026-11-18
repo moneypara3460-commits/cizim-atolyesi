@@ -39,6 +39,7 @@ import { machinePose } from './kin.js?v=20261112u';
 import { createOcctUI } from './occt-ui.js?v=20261112u';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
+import { createMekaUI } from './meka/ui.js?v=20261118c';
 
 const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -981,7 +982,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['wgt', 'Ağırlık'], ['cost', 'Maliyet'], ['mfg', 'Üretim'], ['weld', 'Kaynak'], ['asm', 'Montaj planı'], ['sim', '🔮 Gelecek'], ['fem', '📐 Analiz'], ['cam', '⚙ CNC'], ['occt', '🧱 B-Rep']];
+const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['wgt', 'Ağırlık'], ['cost', 'Maliyet'], ['mfg', 'Üretim'], ['weld', 'Kaynak'], ['asm', 'Montaj planı'], ['sim', '🔮 Gelecek'], ['fem', '📐 Analiz'], ['cam', '⚙ CNC'], ['occt', '🧱 B-Rep'], ['meka', '⚡ Mekatronik']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -1216,6 +1217,9 @@ function renderPanel() {
   } else if (tab === 'cost') {
     body = costUI.html();
     hint = 'Maliyet: miktarlar ve süreler modelden hesaplanır, FİYATLARI SEN GİRERSİN (uygulama piyasa fiyatı kullanmaz). Fiyatlar ve saat ücretleri bu cihazda saklanır, her projede kullanılır. Malzemeyi parça başına Ağırlık ya da Dayanım sekmesinden seç; kaynak süresi Kaynak sekmesindeki onaylı plandan gelir.';
+  } else if (tab === 'meka') {
+    body = mekaUI.html();
+    hint = 'Mekatronik Mühendisliği (1. aşama): eksen tahriki (motor + bilyalı vida), rulman ömrü (ISO 281) ve pnömatik silindir (ISO 15552 / 6432) hesapları. Her sonuç formülü ve kaynağıyla PDF hesap raporunda. Değerleri üretici kataloğundan gir.';
   } else if (tab === 'wgt') {
     body = weightUI.html();
     hint = 'Ağırlık her parçanın kendi malzemesi (Dayanım sekmesinde ya da burada seçilir) ve gerçek 3B hacmiyle hesaplanır. Kırmızı-beyaz küre ağırlık merkezidir; kesik çizgi zemine izdüşümü, yeşil / turuncu / kırmızı çizgi destek alanıdır. Model döndürülünce işaret de modelle birlikte döner; parça değişince yeniden hesaplanır.';
@@ -1747,6 +1751,12 @@ function drawWeightMarker() {
   }
   updateLabelScales();
 }
+const mekaUI = createMekaUI({
+  render: () => { if (tab === 'meka') renderPanel(); },
+  toast: (m) => toast(m),
+  name: () => (projName || 'model').replace(/[^\w\-çğıöşüÇĞİÖŞÜ ]+/g, '_'),
+  saveBlob: (b, n) => saveBlob(b, n),
+});
 const weightUI = createWeightUI({
   compute: weightCompute,
   materials: MATERIALS,
@@ -2994,6 +3004,7 @@ document.addEventListener('change', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.wf) { weldUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.wg) { weightUI.input(el, 'change'); return; }
+  if (el.dataset && el.dataset.mk) { mekaUI.input(el); return; }
   if (el.dataset && el.dataset.cf) { costUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.as) { asmUI.input(el, 'change'); return; }
   if (el.dataset && (el.dataset.cs || el.dataset.cn || el.dataset.ct || el.dataset.co)) { camUI.input(el, 'change'); return; }
@@ -3924,6 +3935,7 @@ document.addEventListener('click', (e) => {
   if (act && act.startsWith('wd-') && weldUI.act(act)) return;
   if (act === 'wg-go') { tab = 'wgt'; renderPanel(); return; }
   if (act && act.startsWith('wg-') && weightUI.act(act)) return;
+  if (act && act.startsWith('mk-') && mekaUI.act(act)) return;
   if (act === 'cs-go') { tab = 'cost'; renderPanel(); return; }
   if (act === 'sm-go-tab') { tab = 'sim'; renderPanel(); return; }
   if (act === 'cn-go-tab') { tab = 'cam'; renderPanel(); return; }
