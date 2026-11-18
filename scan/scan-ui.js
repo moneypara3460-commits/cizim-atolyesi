@@ -175,11 +175,11 @@ async function aiHeaders() {
   if (!s?.access_token) throw new Error('Yapay zekâ için önce Google ile giriş yap (Ana ekran → Giriş)');
   return { 'content-type': 'application/json', apikey: PUB_KEY, authorization: 'Bearer ' + s.access_token };
 }
-async function shrinkImg(url, max = 1200) {
-  const im = new Image(); im.src = url; await im.decode();
-  const s = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
-  const cv = document.createElement('canvas'); cv.width = Math.round(im.naturalWidth * s); cv.height = Math.round(im.naturalHeight * s);
-  cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+// Resim dosyası doğrudan bit eşleme olarak çözülür (sayfaya adres / HTML olarak girmez)
+async function shrinkImg(bmp, max = 1200) {
+  const s = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s);
+  cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
   return cv.toDataURL('image/jpeg', 0.85);
 }
 
@@ -196,7 +196,7 @@ async function photoDialog(file, api) {
   root.id = 'sc';
   root.innerHTML = `
     <div class="r"><button data-a="close" class="danger" style="flex:0 0 auto">✕ Kapat</button><div class="ttl">Fotoğraftan tahmini model</div></div>
-    <div class="card" style="text-align:center"><img id="sc-img" alt="" style="max-width:100%;max-height:38vh;border-radius:8px"></div>
+    <div class="card" style="text-align:center"><canvas id="sc-img" style="max-width:100%;max-height:38vh;border-radius:8px"></canvas></div>
     <div class="card">
       <div class="r" style="padding:0">
         <label class="grow">Bilinen en uzun ölçü <input data-s="known" type="number" inputmode="decimal" min="0" step="0.1" placeholder="mm (önerilir)" style="width:120px"></label>
@@ -209,10 +209,12 @@ async function photoDialog(file, api) {
     <div class="r" id="sc-add" style="display:none;padding-bottom:12px"><button data-a="addguess" class="ok grow">✓ Tahmini parçaları ekle</button></div>`;
   document.body.appendChild(root);
   const $ = (id) => root.querySelector('#' + id);
-  const url = URL.createObjectURL(file);
-  $('sc-img').src = url;
+  let bmp = null;
+  try { bmp = await createImageBitmap(file); } catch (e) { bmp = null; }
+  if (!bmp) { root.remove(); api.toast('Resim açılamadı'); return; }
+  { const cv = $('sc-img'), k = Math.min(1, 900 / Math.max(bmp.width, bmp.height)); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k); cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height); }
   let out = null, busy = false;
-  const close = () => { URL.revokeObjectURL(url); root.remove(); };
+  const close = () => { try { bmp.close(); } catch (e) { /* */ } root.remove(); };
   root.addEventListener('click', async (ev) => {
     const a = ev.target.closest('[data-a]')?.dataset.a;
     if (!a) return;
@@ -222,7 +224,7 @@ async function photoDialog(file, api) {
       const known = Number(String(root.querySelector('[data-s="known"]').value).replace(',', '.')) || null;
       const hint = root.querySelector('[data-s="hint"]').value.trim();
       try {
-        const image = await shrinkImg(url);
+        const image = await shrinkImg(bmp);
         const h = await aiHeaders();
         let r;
         try { r = await fetch(PHOTO_URL, { method: 'POST', headers: h, body: JSON.stringify({ image, hint, known: known ? { mm: known } : undefined }) }); }
