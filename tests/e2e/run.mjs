@@ -369,6 +369,43 @@ await T('Mekatronik 3. aşama: kayışlı / kremayer / döner tabla / redüktör
   expect(/^%PDF/.test(pdf.text) && /reduktor\.pdf$/.test(pdf.name), 'redüktör raporu');
 });
 
+await T('Mekatronik 4. aşama elektrik: yük ekle → kesit / koruma / gerilim düşümü; uzun 24 V hatta ince kablo UYGUN DEĞİL; sürücü ürün ağacından gelir; tek hat şeması, kablo listesi, klemens planı, PDF; yenilemede korunur', 'M-Elektrik', async ({ page }) => {
+  await tab(page, 'meka');
+  await act(page, 'mk-v-elek');
+  const ids = async () => page.evaluate(() => [...document.querySelectorAll('#tabbody [data-yuk]')].map((e) => e.dataset.yuk));
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mke="${k}"]`); if (await i.evaluate((e) => e.tagName) === 'SELECT') await i.selectOption(String(v)); else await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(120); };
+  const once = (await ids()).length;
+  await act(page, 'mk-eadd-ac3'); await act(page, 'mk-eadd-dc');
+  const [a3, dc] = (await ids()).slice(once);
+  await set(`y.${a3}.ad`, 'Konveyör motoru'); await set(`y.${a3}.P`, 2200); await set(`y.${a3}.cos`, 0.82); await set(`y.${a3}.eta`, 0.85); await set(`y.${a3}.L`, 20);
+  await set(`y.${dc}.ad`, 'Valf adası'); await set(`y.${dc}.P`, 48); await set(`y.${dc}.L`, 30);
+  let b = await body(page);
+  expect(/✓ UYGUN/.test(b) && /4G0,75/.test(b) && /2x2,5/.test(b), 'otomatik kesit: ' + b.slice(-900).replace(/\s+/g, ' '));
+  expect(await page.locator('#tabbody svg line').count() > 10, 'tek hat şeması çizildi');
+  await set(`y.${dc}.S`, 1.5);
+  b = await body(page);
+  expect(/UYGUN DEĞİL/.test(b) && /Gerilim düşümü %6,8/.test(b), 'ince kablo gerilim düşümü hatası');
+  await set(`y.${dc}.S`, 0);
+  // ürün ağacından sürücü: giriş akımı katalogdan bağlanır
+  await act(page, 'mk-v-agac'); await act(page, 'mk-add-surucu');
+  const sid = await page.evaluate(() => [...document.querySelectorAll('#tabbody [data-mki$=".ad"]')].pop().dataset.mki.split('.')[0]);
+  for (const [f, v] of [['U', 400], ['Ig', 3.2]]) { const i = page.locator(`#tabbody [data-mki="${sid}.deger.${f}"]`); await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(80); }
+  await act(page, 'mk-ed-0'); await act(page, 'mk-v-elek'); await act(page, 'mk-eagac');
+  b = await body(page);
+  expect(/🔗 3,2 A/.test(b), 'sürücü akımı ağaçtan bağlandı: ' + b.slice(0, 300));
+  const kab = await download(page, () => act(page, 'mk-ekablo'));
+  expect(/Konveyör motoru;4G0,75/.test(kab.text) && /kablo_listesi\.csv$/.test(kab.name), 'kablo listesi: ' + kab.text.slice(0, 200));
+  const kle = await download(page, () => act(page, 'mk-eklemens'));
+  expect(/-X2:1;\+24V/.test(kle.text) && /-X1:1;L1/.test(kle.text), 'klemens planı');
+  const pdf = await download(page, () => act(page, 'mk-epdf'));
+  expect(/^%PDF/.test(pdf.text) && /elektrik\.pdf$/.test(pdf.name), 'elektrik PDF');
+  await page.waitForTimeout(1500);
+  await page.reload(); await waitReady(page);
+  await tab(page, 'meka'); await act(page, 'mk-v-elek');
+  b = await body(page);
+  expect(/Konveyör motoru/.test(b) && /Valf adası/.test(b) && /🔗 3,2 A/.test(b), 'yenileme sonrası elektrik projesi');
+});
+
 /* ---------- D. Montaj ---------- */
 await T('Montaj: örnek "Mil ve burç" eşleşmeli montaj, montaj sırası planı, kaydet / aç', 'D-Montaj', async ({ page }) => {
   await act(page, 'guide'); await page.locator('[data-ex="mil"]').click(); await page.waitForTimeout(800);

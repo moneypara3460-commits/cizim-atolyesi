@@ -4,15 +4,15 @@
 
 // Bileşen türleri ve katalog alanları: [anahtar, etiket, birim, zorunlu]
 export const KINDS = {
-  motor: { ad: 'Servo / adım motoru', alanlar: [['Jm', 'Rotor ataleti', 'kg·m²', 1], ['Tn', 'Anma torku', 'N·m', 1], ['Tmax', 'En yüksek tork', 'N·m', 1], ['nmax', 'En yüksek devir', 'dev/dk', 1], ['Pn', 'Anma gücü', 'W'], ['U', 'Besleme gerilimi', 'V'], ['In', 'Anma akımı', 'A'], ['fren', 'Frenli (1 = evet)', '']] },
+  motor: { ad: 'Servo / adım motoru', alanlar: [['Jm', 'Rotor ataleti', 'kg·m²', 1], ['Tn', 'Anma torku', 'N·m', 1], ['Tmax', 'En yüksek tork', 'N·m', 1], ['nmax', 'En yüksek devir', 'dev/dk', 1], ['Pn', 'Anma gücü', 'W'], ['U', 'Besleme gerilimi', 'V'], ['In', 'Anma akımı', 'A'], ['fren', 'Frenli (1 = evet)', ''], ['Pf', 'Fren gücü (24 V)', 'W']] },
   reduktor: { ad: 'Redüktör / kayış kasnak', alanlar: [['i', 'Oran (giriş / çıkış devri)', '', 1], ['eta', 'Verim', '', 1], ['J', 'Girişe göre atalet', 'kg·m²'], ['Tmax', 'İzin verilen en yüksek çıkış torku', 'N·m'], ['T2N', 'Anma çıkış torku', 'N·m'], ['n1max', 'İzin verilen giriş devri', 'dev/dk']] },
   vida: { ad: 'Bilyalı vida', alanlar: [['P', 'Hatve', 'mm', 1], ['d', 'Anma çapı', 'mm', 1], ['dr', 'Diş dibi çapı', 'mm', 1], ['L', 'Yataklar arası boy', 'mm', 1], ['eta', 'Verim', '', 1], ['Ca', 'Dinamik yük sayısı', 'N']] },
   kaplin: { ad: 'Kaplin', alanlar: [['J', 'Atalet', 'kg·m²', 1], ['Tn', 'Anma torku', 'N·m']] },
   rulman: { ad: 'Rulman', alanlar: [['C', 'Dinamik yük sayısı C', 'N', 1], ['C0', 'Statik yük sayısı C0', 'N'], ['makarali', 'Makaralı (1 = evet)', ''], ['d', 'İç çap', 'mm'], ['D', 'Dış çap', 'mm'], ['nlim', 'Sınır devir', 'dev/dk']] },
   silindir: { ad: 'Pnömatik silindir', alanlar: [['D', 'İç çap', 'mm', 1], ['dm', 'Mil çapı', 'mm'], ['strok', 'Strok', 'mm']] },
-  valf: { ad: 'Valf', alanlar: [['U', 'Bobin gerilimi', 'V'], ['Qn', 'Anma debisi', 'NL/dk']] },
-  sensor: { ad: 'Sensör', alanlar: [['U', 'Besleme gerilimi', 'V'], ['menzil', 'Algılama mesafesi', 'mm']] },
-  surucu: { ad: 'Sürücü', alanlar: [['In', 'Sürekli akım', 'A'], ['Imax', 'En yüksek akım', 'A'], ['U', 'Besleme gerilimi', 'V']] },
+  valf: { ad: 'Valf', alanlar: [['U', 'Bobin gerilimi', 'V'], ['Qn', 'Anma debisi', 'NL/dk'], ['P', 'Bobin gücü', 'W']] },
+  sensor: { ad: 'Sensör', alanlar: [['U', 'Besleme gerilimi', 'V'], ['menzil', 'Algılama mesafesi', 'mm'], ['P', 'Güç tüketimi', 'W']] },
+  surucu: { ad: 'Sürücü', alanlar: [['In', 'Sürekli çıkış akımı', 'A'], ['Imax', 'En yüksek akım', 'A'], ['U', 'Besleme gerilimi', 'V'], ['Ig', 'Şebeke giriş akımı', 'A']] },
   diger: { ad: 'Diğer', alanlar: [] },
 };
 // Hesap kartı → hangi bileşen yuvaları beslenir
@@ -47,7 +47,8 @@ export function sanitize(o) {
   }
   for (const t of Object.keys(SLOTS)) for (const [slot] of SLOTS[t]) { const v = o.bag?.[t]?.[slot]; if (ids.has(v)) P.bag[t][slot] = v; }
   P.nextId = Math.max(fin(o.nextId) ? o.nextId : 1, ...P.items.map((i) => i.id + 1), 1);
-  if (o.calc && typeof o.calc === 'object') P.calc = o.calc;   // hesap girdileri (ui doğrular)
+  if (o.calc && typeof o.calc === 'object') P.calc = o.calc;
+  if (o.elek && typeof o.elek === 'object') P.elek = o.elek;   // elektrik (ui elekSanitize ile doğrular)   // hesap girdileri (ui doğrular)
   return P;
 }
 
