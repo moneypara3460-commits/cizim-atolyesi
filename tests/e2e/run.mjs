@@ -306,6 +306,44 @@ await T('Mekatronik Mühendisliği: örnek dolum ünitesi uygun; uzun vida kriti
   expect(/UYGUN DEĞİL/.test(b2) && /Uygun en küçük standart silindir: Ø63 \/ mil Ø20/.test(b2), 'pnömatik öneri: ' + b2.slice(0, 400));
 });
 
+await T('Mekatronik ürün ağacı: motor ekle → katalog değerleri → parçaya ve hesaba bağla → zayıf motor UYGUN DEĞİL; parça listesi (CSV); kütüphane; sayfa yenilenince proje ile geri gelir', 'M-Agac', async ({ page }) => {
+  await page.evaluate(() => { localStorage.removeItem('cizim:meka'); localStorage.removeItem('cizim:meka-lib'); });
+  await tab(page, 'meka');
+  await act(page, 'mk-v-agac');
+  await act(page, 'mk-add-motor');
+  const fill = async (sel, v) => { const i = page.locator(`#tabbody [data-mki="${sel}"]`); await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(120); };
+  const id = await page.evaluate(() => document.querySelector('#tabbody [data-mki$=".ad"]').dataset.mki.split('.')[0]);
+  await fill(id + '.ad', 'Zayıf servo'); await fill(id + '.kod', 'ZS-100');
+  await fill(id + '.deger.Jm', 0.00003); await fill(id + '.deger.Tn', 0.32); await fill(id + '.deger.Tmax', 0.95); await fill(id + '.deger.nmax', 3000);
+  const pid = await page.evaluate(() => window.__app.parts[0].id);
+  const ps = page.locator(`#tabbody [data-mki="${id}.partId"]`); await ps.selectOption(String(pid)); await ps.dispatchEvent('change'); await page.waitForTimeout(150);
+  await act(page, 'mk-ed-0');
+  const b0 = await body(page);
+  expect(/Zayıf servo/.test(b0) && /🔗/.test(b0) && !/eksik:/.test(b0), 'motor kartı: ' + b0.slice(0, 300));
+  await act(page, 'mk-lib-' + id);
+  // hesaba bağla
+  await act(page, 'mk-v-hesap');
+  const sl = page.locator('#tabbody [data-mkb="vida.motor"]'); await sl.selectOption(id); await sl.dispatchEvent('change'); await page.waitForTimeout(200);
+  const b1 = await body(page);
+  expect(/UYGUN DEĞİL/.test(b1) && /Zayıf servo \(ZS-100\)/.test(b1), 'bağlı zayıf motor → uygun değil');
+  // parça listesi
+  await act(page, 'mk-v-liste');
+  const b2 = await body(page);
+  expect(/Zayıf servo/.test(b2) && /UYGUN DEĞİL/.test(b2), 'parça listesinde durum');
+  const csv = await download(page, () => act(page, 'mk-csv'));
+  expect(/ZS-100/.test(csv.text) && /UYGUN DEĞİL/.test(csv.text) && /\.csv$/.test(csv.name), 'CSV');
+  const pdf = await download(page, () => act(page, 'mk-bompdf'));
+  expect(/^%PDF/.test(pdf.text), 'parça listesi PDF');
+  // proje kaydı: sayfa yenilenince ağaç ve bağ geri gelir; kütüphane cihazda
+  await page.waitForTimeout(1500);
+  await page.reload(); await waitReady(page);
+  await tab(page, 'meka'); await act(page, 'mk-v-agac');
+  const b3 = await body(page);
+  expect(/Zayıf servo/.test(b3) && /Kütüphane \(1\)/.test(b3), 'yenileme sonrası ağaç + kütüphane: ' + b3.slice(0, 200));
+  await act(page, 'mk-v-hesap');
+  expect(/UYGUN DEĞİL/.test(await body(page)), 'bağ korunur');
+});
+
 /* ---------- D. Montaj ---------- */
 await T('Montaj: örnek "Mil ve burç" eşleşmeli montaj, montaj sırası planı, kaydet / aç', 'D-Montaj', async ({ page }) => {
   await act(page, 'guide'); await page.locator('[data-ex="mil"]').click(); await page.waitForTimeout(800);

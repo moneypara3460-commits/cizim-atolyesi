@@ -21,7 +21,7 @@ mühendislik ekipleri.
 | Aşama | İçerik | Durum |
 |---|---|---|
 | 1 | Hesap ve seçim motoru: bilyalı vida tahrikli eksen (motor + vida), rulman ömrü (ISO 281), pnömatik silindir (ISO 15552 / 6432); PDF hesap raporu | **Tamam** |
-| 2 | Ürün ağacı ve bileşen kütüphanesi (motor, redüktör, rulman, pnömatik, sensör); montajdaki parçaya bağlama; parça listesi | Sırada |
+| 2 | Ürün ağacı (10 bileşen türü, katalog alanları, zorunlu alan denetimi), model parçasına bağlama, hesaplara bağlama (katalog değeri hesaba geçer, kaynağı raporda), redüktör / kaplin tork ve rulman sınır devri + ISO 76 statik güvenlik kontrolleri, parça listesi (CSV / PDF), cihazda bileşen kütüphanesi; veriler projeyle kaydedilir | **Tamam** |
 | 3 | Kayış / dişli / kremayer eksenleri, döner tabla, redüktör seçimi, mil eğilmesi | |
 | 4 | Elektrik: şema, kablo listesi, klemens planı, güç ve sigorta hesabı | |
 | 5 | Kontrol: PLC giriş / çıkış listesi, adım (sıralama) tasarımı, IEC 61131-3 iskeleti (PLCopen XML) | |
@@ -44,4 +44,17 @@ Test projesi: paketleme makinesi — vidalı mil tahrikli dolum ünitesi + pnöm
 - Rulmanda değiştirilmiş ömür (aISO: yağlama, kirlilik), statik yük (C0) ve X / Y katsayıları kullanıcıdan gelir.
 - Pnömatikte conta sürtünmesi ve basınç düşümü üretici verisiyle düşülmelidir; mil burkulması üretici tablosundan.
 - Vidada geri sürülme verimi ayrı alınmaz (yavaşlamada aynı verim kullanılır; enerji geri beslemesi uyarı olarak çıkar).
-- Girdiler cihazda saklanır, projeye henüz bağlı değildir (2. aşamada ürün ağacına bağlanacak).
+- (2. aşamada giderildi) Girdiler artık projeyle kaydedilir.
+
+## 2. aşama
+
+- **Ürün ağacı**: motor, redüktör / kayış, bilyalı vida, kaplin, rulman, pnömatik silindir, valf, sensör, sürücü, diğer.
+  Her bileşen: ad, ürün kodu, üretici, adet, bağlı model parçası, katalog değerleri (zorunlular `*`), not.
+- **Hesaplara bağlama**: eksen hesabında motor / vida / redüktör / kaplin, rulman hesabında rulman, pnömatikte silindir seçilir.
+  Katalog değeri hesaba geçer (alan 🔗 ile kilitlenir), raporda "KATALOGDAN GELEN DEĞERLER" altında kaynağıyla yazılır.
+  Eksik zorunlu alan uyarı verir; o alan için hesapta girilen değer kullanılır.
+- **Ek kontroller**: redüktör çıkış torku `T·i·η` ≤ izin verilen; kaplin anma torku; rulman sınır devri;
+  statik güvenlik `s0 = C0 / P0`, `P0 = max(Fr, 0,6·Fr + 0,5·Fa)` (ISO 76, bilyalı radyal rulman).
+- **Parça listesi**: türe göre, model parçası ve hesap durumuyla; CSV (Excel, `;`) ve bütün hesaplarla PDF.
+- **Kütüphane**: kullanıcının girdiği bileşenler bu cihazda; aynı ürün kodu güncellenir.
+- Veri projeyle kaydedilir (proje kaydı ve otomatik kayıt); Mekatronik verisi olmayan eski projeler boş ağaçla açılır.
