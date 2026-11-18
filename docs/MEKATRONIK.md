@@ -23,13 +23,15 @@ mühendislik ekipleri.
 | 1 | Hesap ve seçim motoru: bilyalı vida tahrikli eksen (motor + vida), rulman ömrü (ISO 281), pnömatik silindir (ISO 15552 / 6432); PDF hesap raporu | **Tamam** |
 | 2 | Ürün ağacı (10 bileşen türü, katalog alanları, zorunlu alan denetimi), model parçasına bağlama, hesaplara bağlama (katalog değeri hesaba geçer, kaynağı raporda), redüktör / kaplin tork ve rulman sınır devri + ISO 76 statik güvenlik kontrolleri, parça listesi (CSV / PDF), cihazda bileşen kütüphanesi; veriler projeyle kaydedilir | **Tamam** |
 | 3 | Triger kayışlı ve kremayer–pinyon eksenleri (eğim, dış kuvvet, kayış / diş kuvveti sınırı), döner indeksleme tablası (üçgen / yamuk profil), redüktör seçimi (oran, servis katsayısı fs, tepe tork, giriş devri), mil eğilmesi (iki yatak arası / konsol: sehim, yatak eğimi, von Mises statik güvenlik); hepsi ürün ağacına bağlanır | **Tamam** |
-| 4 | Elektrik: şema, kablo listesi, klemens planı, güç ve sigorta hesabı | |
+| 4 | Elektrik: yük listesi (3 faz / 1 faz / 24 V DC, ürün ağacından sürücü, valf, sensör, motor freni), devre akımı, devre kesici seçimi (Ib ≤ In ≤ Iz), kablo kesiti (IEC 60204-1 Tablo 6 + Ek D sıcaklık ve gruplama katsayıları), gerilim düşümü (%5), TN sisteminde otomatik kesme (Zs·Ia ≤ U0), 24 V güç kaynağı, faz dağılımı ve ana besleme, tek hat şeması, kablo listesi ve klemens planı (CSV), PDF rapor | **Tamam** |
 | 5 | Kontrol: PLC giriş / çıkış listesi, adım (sıralama) tasarımı, IEC 61131-3 iskeleti (PLCopen XML) | |
 | 6 | Güvenlik: ISO 12100 risk değerlendirmesi, ISO 13849-1 PLr / PL (doğrulanmış tablolarla), IEC 60204-1 kontrol listesi | |
 | 7 | Benzetim: hareket etüdü ve çevrim süresi; motorun mekanizmayı sürdüğünün kontrolü | |
 | 8 | Gereksinim izlenebilirliği, revizyon / onay geçmişi, STEP AP242 çıktısı | |
 
 3. aşama kaynakları: mil sehim / eğim formülleri — Roark's Formulas for Stress and Strain (basit mesnetli ve konsol kiriş, tekil yük); von Mises ve yatak eğimi önerileri — Shigley, Mechanical Engineering Design, Tablo 7-2 (derin oluklu bilyalı rulman için ~0,001 rad değeri öneri olarak verilir, kesin sınır rulman kataloğundandır). Redüktör servis katsayısı ve kayış izin verilen kuvveti kullanıcı tarafından üretici kataloğundan girilir; uygulama uydurma katalog değeri kullanmaz.
+
+4. aşama kaynakları: IEC 60204-1 Tablo 6 (PVC bakır, 40 °C, B1 / B2 / C / E; 0,75–50 mm²), Ek D sıcaklık ve gruplama katsayıları, 12.5 (%5 gerilim düşümü), Tablo 5 (en küçük kesit) — tablo değerleri ABB "Kabel- und Leitungsdimensionierung" (2CDC400027D0104, DIN EN 60204-1 tablosu) ve Kollmorgen akım taşıma tablosuyla karşılaştırıldı; IEC 60364-4-43 (Ib ≤ In ≤ Iz, I2 ≤ 1,45·Iz), IEC 60364-4-41 (Zs·Ia ≤ U0), IEC 60364-5-54 (koruma iletkeni kesiti), IEC 60898-1 (B 5·In, C 10·In, D 20·In ani açma üst sınırı), IEC 60228 (bakır özdirenci). Tablo dışı durumlarda (60 °C üstü ortam, 14'ten fazla devre, 50 mm² üstü kesit, 63 A üstü devre) uygulama tahmin yapmaz, kullanıcıdan üretici değeri ister. Kapsam dışı: motor yol alma akımı, RCD seçimi, kısa devre kesme kapasitesi, EMC.
 
 Test projesi: paketleme makinesi — vidalı mil tahrikli dolum ünitesi + pnömatik itici (örnek değerler).
 
