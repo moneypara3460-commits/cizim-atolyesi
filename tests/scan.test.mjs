@@ -7,6 +7,7 @@ import { weld, measure, prepare, removeSmallPieces, simplify, scaleToKnown, toTr
 import { toPLY, toGLB } from '../scan/mesh-export.js';
 import { alignToAxes, fitCAD, fitCircle, describe } from '../scan/fit.js';
 import { toSTLBinary } from '../logic.js';
+import { photoToParts, partsBounds } from '../scan/photo-parts.js';
 
 let fail = 0;
 const t = (name, fn) => {
@@ -255,6 +256,41 @@ t('Gidiş-dönüş: tanınan parçaların üçgen ağı yeniden aynı ölçüler
   const again = fit(boxTris(b.w, b.h, b.l));
   assert.deepEqual(again.parts[0], b);
   void toTris;
+});
+
+/* ---------- tek fotoğraftan tahmini model: sunucu yanıtı → uygulama parçaları ---------- */
+const AI = { kind: 'prizmatik', confidence: 'medium', notes: 'Delikli flanşlı braket', parts: [
+  { type: 'box', op: 'add', axis: 'y', w: 100, h: 10, l: 60, x: 5, y: 2, z: -3 },
+  { type: 'cylinder', op: 'add', axis: 'y', d: 30, h: 40, x: 5, y: 12, z: -3 },
+  { type: 'cylinder', op: 'sub', axis: 'y', d: 12, h: 54, x: 5, y: 0, z: -3 },
+  { type: 'cylinder', op: 'sub', axis: 'x', d: 6, h: 104, x: -47, y: 7, z: 10 },
+  { type: 'sketch', op: 'add', axis: 'y', pts: [[-45, 27], [-25, 27], [-25, 37], [-45, 37]], y: 12, h: 5 },
+] };
+
+t('Fotoğraftan model: parçalar zemine ve ortaya oturur, eksenli delik doğru döner, kroki merkeze göre', () => {
+  const r = photoToParts(AI, null);
+  assert.ok(r.ok);
+  const bb = partsBounds(r.parts);
+  near(bb.min[1], 0, 1e-9); near(bb.min[0] + bb.max[0], 0, 1e-9);
+  const xh = r.parts.find((p) => p.op === 'sub' && p.d === 6);
+  assert.equal(xh.rz, -90); assert.ok(!xh.rx);
+  const sk = r.parts.find((p) => p.type === 'sketch');
+  assert.equal(sk.mode, 'extrude'); assert.equal(sk.plane, 'top');
+  near(sk.pts.reduce((a, q) => a + q[0], 0), 0, 1e-6);
+  assert.ok(r.notes.some((n) => /tahmin/i.test(n)));
+});
+
+t('Fotoğraftan model: bilinen en uzun ölçüye göre bütün model ölçeklenir', () => {
+  const r = photoToParts(AI, 150);
+  near(Math.max(...partsBounds(r.parts).size), 150, 0.05);
+  const b = r.parts.find((p) => p.type === 'box');
+  near(b.w, 150, 0.05); near(b.h, 15, 0.05);
+});
+
+t('Fotoğraftan model: katı parçası olmayan ya da ölçüsüz yanıt reddedilir', () => {
+  assert.equal(photoToParts({ parts: [{ type: 'cylinder', op: 'sub', d: 5, h: 5, x: 0, y: 0, z: 0 }] }).ok, false);
+  assert.equal(photoToParts({ parts: [{ type: 'box', op: 'add', x: 0, y: 0, z: 0 }] }).ok, false);
+  assert.equal(photoToParts(null).ok, false);
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');

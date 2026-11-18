@@ -7,7 +7,7 @@
 // iç kademeli delik, flanş delikleri), küre. Tanınmayanlar (açıklanamayan yüzey olarak raporlanır): pah, yuvarlama,
 // eğik yüzler, serbest yüzeyler.
 // Saf fonksiyonlar (tests/scan.test.mjs). Girdi: mesh-tools biçiminde ağ { V, F } (kaynaklanmış, yüzler dışa bakan).
-import { measure, transform, toFloor } from './mesh-tools.js?v=20261118a';
+import { measure, transform, toFloor } from './mesh-tools.js?v=20261118b';
 
 const DEG = Math.PI / 180;
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];

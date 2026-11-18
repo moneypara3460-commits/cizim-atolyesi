@@ -1,9 +1,10 @@
 // Tarama / ağ içe aktarma penceresi: dosya seç → oku, temizle, ölçekle → "CAD'e çevir" (düzenlenebilir parçalar) ya da "Ağ olarak ekle".
 // Kullanım: openScanImport({ addParts(parts, name), addMesh({ pos, x, y, z, h }, name), toast })
 // Telefonda internetsiz çalışır; dosya hiçbir yere gönderilmez.
-import { parseMesh, ACCEPT, MAX_BYTES } from './mesh-import.js?v=20261118a';
-import { prepare, measure, scaleToKnown, simplify, toTris } from './mesh-tools.js?v=20261118a';
-import { alignToAxes, fitCAD, describe } from './fit.js?v=20261118a';
+import { parseMesh, ACCEPT, MAX_BYTES } from './mesh-import.js?v=20261118b';
+import { prepare, measure, scaleToKnown, simplify, toTris } from './mesh-tools.js?v=20261118b';
+import { alignToAxes, fitCAD, describe } from './fit.js?v=20261118b';
+import { photoToParts, partsBounds } from './photo-parts.js?v=20261118b';
 
 const FIT_MAX = 200000;    // tanıma için en çok üçgen (üstü sadeleştirilir)
 const MESH_MAX = 60000;    // projeye ağ olarak kaydedilecek en çok üçgen (kayıt alanı sınırlı)
@@ -162,3 +163,91 @@ async function open(file, api) {
 
 const partName = (n) => (n || 'Tarama').replace(/\.[^.]+$/, '').slice(0, 40) || 'Tarama';
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* ---------- Tek fotoğraftan TAHMİNİ model (yapay zekâ, internet gerekir) ---------- */
+// Kullanım: openPhotoModel({ addParts(parts, name, ext), toast })
+export const PHOTO_URL = 'https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/foto-model';
+const PUB_KEY = 'sb_publishable_urzQtn-1lE1-obSXF_ivQg_wZbQMRDr';   // yayınlanabilir (herkese açık) anahtar
+
+async function aiHeaders() {
+  let s = null;
+  try { s = await (await import('../hesap/session.js')).validSession(); } catch (e) { s = null; }
+  if (!s?.access_token) throw new Error('Yapay zekâ için önce Google ile giriş yap (Ana ekran → Giriş)');
+  return { 'content-type': 'application/json', apikey: PUB_KEY, authorization: 'Bearer ' + s.access_token };
+}
+async function shrinkImg(url, max = 1200) {
+  const im = new Image(); im.src = url; await im.decode();
+  const s = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+  const cv = document.createElement('canvas'); cv.width = Math.round(im.naturalWidth * s); cv.height = Math.round(im.naturalHeight * s);
+  cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+  return cv.toDataURL('image/jpeg', 0.85);
+}
+
+export function openPhotoModel(api) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) photoDialog(f, api); };
+  inp.click();
+}
+
+async function photoDialog(file, api) {
+  if (!document.getElementById('sc-css')) { const st = document.createElement('style'); st.id = 'sc-css'; st.textContent = CSS; document.head.appendChild(st); }
+  const root = document.createElement('div');
+  root.id = 'sc';
+  root.innerHTML = `
+    <div class="r"><button data-a="close" class="danger" style="flex:0 0 auto">✕ Kapat</button><div class="ttl">Fotoğraftan tahmini model</div></div>
+    <div class="card" style="text-align:center"><img id="sc-img" alt="" style="max-width:100%;max-height:38vh;border-radius:8px"></div>
+    <div class="card">
+      <div class="r" style="padding:0">
+        <label class="grow">Bilinen en uzun ölçü <input data-s="known" type="number" inputmode="decimal" min="0" step="0.1" placeholder="mm (önerilir)" style="width:120px"></label>
+      </div>
+      <div class="r" style="padding:6px 0 0"><input data-s="hint" class="grow" maxlength="200" placeholder="Not (isteğe bağlı): ör. alüminyum flanş, 4 delikli"></div>
+      <div class="muted" style="margin-top:6px">Yapay zekâ parçayı temel şekillerle kabaca modeller. Ölçüler <b>tahmindir</b>: en uzun ölçüyü kumpasla ölçüp yazarsan model o ölçüye göre ölçeklenir. Fotoğraf sunucuya gönderilir, işlendikten sonra saklanmaz. Giriş gerekir, günlük hakkı sınırlıdır.</div>
+    </div>
+    <div class="r"><button data-a="guess" class="on grow">🔮 Tahmin et</button></div>
+    <div class="card res" id="sc-res" style="display:none"></div>
+    <div class="r" id="sc-add" style="display:none;padding-bottom:12px"><button data-a="addguess" class="ok grow">✓ Tahmini parçaları ekle</button></div>`;
+  document.body.appendChild(root);
+  const $ = (id) => root.querySelector('#' + id);
+  const url = URL.createObjectURL(file);
+  $('sc-img').src = url;
+  let out = null, busy = false;
+  const close = () => { URL.revokeObjectURL(url); root.remove(); };
+  root.addEventListener('click', async (ev) => {
+    const a = ev.target.closest('[data-a]')?.dataset.a;
+    if (!a) return;
+    if (a === 'close') { close(); return; }
+    if (a === 'guess' && !busy) {
+      busy = true; $('sc-add').style.display = 'none'; $('sc-res').style.display = ''; $('sc-res').textContent = 'Yapay zekâ fotoğrafı inceliyor (10–40 sn)…';
+      const known = Number(String(root.querySelector('[data-s="known"]').value).replace(',', '.')) || null;
+      const hint = root.querySelector('[data-s="hint"]').value.trim();
+      try {
+        const image = await shrinkImg(url);
+        const h = await aiHeaders();
+        let r;
+        try { r = await fetch(PHOTO_URL, { method: 'POST', headers: h, body: JSON.stringify({ image, hint, known: known ? { mm: known } : undefined }) }); }
+        catch (e) { throw new Error('İnternet bağlantısı yok ya da sunucuya ulaşılamadı'); }
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.ok) throw new Error(j.error || 'Sunucu hatası (' + r.status + ')');
+        out = photoToParts(j.result, known);
+        if (!out.ok) throw new Error('Fotoğraftan model çıkarılamadı.');
+        const add = out.parts.filter((p) => p.op === 'add').length, sub = out.parts.length - add;
+        const bb = partsBounds(out.parts);
+        const conf = { high: 'yüksek', medium: 'orta', low: 'düşük' }[j.result.confidence] || 'düşük';
+        $('sc-res').innerHTML = `<b>TAHMİNİ model:</b> ${add} katı${sub ? ', ' + sub + ' boşluk / delik' : ''} · yaklaşık ${nf2(bb.size[0])} × ${nf2(bb.size[1])} × ${nf2(bb.size[2])} mm · güven: ${conf}` +
+          (j.result.notes ? `\n${esc(j.result.notes)}` : '') + (j.result.view ? `\n<span class="muted">Görünüş: ${esc(j.result.view)}</span>` : '') +
+          `\n<span class="warn">${out.notes.map(esc).join('\n')}</span>\n<span class="muted">Bu bir başlangıç modelidir; ölçüleri ve delik yerlerini mutlaka kontrol et.</span>`;
+        $('sc-add').style.display = '';
+      } catch (e) {
+        $('sc-res').innerHTML = '<span class="err">' + esc(e.message || String(e)) + '</span>';
+      } finally { busy = false; }
+      return;
+    }
+    if (a === 'addguess' && out?.ok) {
+      api.addParts(out.parts, 'Tahmini ' + partName(file.name), { minX: partsBounds(out.parts).min[0] });
+      api.toast('Tahmini model eklendi: ölçüleri kontrol et');
+      close();
+    }
+  });
+}
+const nf2 = (v) => (Math.round(v * 10) / 10).toLocaleString('tr-TR');

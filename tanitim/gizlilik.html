@@ -34,6 +34,7 @@ nav a{margin-right:14px}
 <tr><td>Deneme bitiş tarihi, abonelik bilgisi (paket, durum, bitiş tarihi, Google Play satın alma anahtarı ve sipariş numarası)</td><td>Giriş ve satın almada</td><td>Ücretli bölümleri açmak, aboneliği doğrulamak</td><td>Sunucumuzda, hesabını silene kadar</td></tr>
 <tr><td>Günlük yapay zekâ kullanım sayısı</td><td>Yapay zekâ özelliğini kullanınca</td><td>Kötüye kullanımı ve maliyeti sınırlamak</td><td>Sunucumuzda, hesabını silene kadar</td></tr>
 <tr><td>Yapay zekâya gönderdiğin model resimleri</td><td>Yalnız "yapay zekâyla oku" ya da "parçaları çıkar" dediğinde</td><td>Modelin tipini ve saya parçalarını çıkarmak</td><td>Sunucumuz saklamaz; işlenmek üzere Anthropic'e (Claude) iletilir</td></tr>
+<tr><td>Fotoğraftan tahmini model için gönderdiğin parça fotoğrafı ve yazdığın not</td><td>Yalnız "Tek fotoğraftan tahmini model" ekranında "Tahmin et" dediğinde</td><td>Parçanın kaba 3B modelini çıkarmak</td><td>Sunucumuz saklamaz; işlenmek üzere Anthropic'e (Claude) iletilir</td></tr>
 <tr><td>Silinen hesabın e-postasının tek yönlü özeti (SHA-256)</td><td>Hesabını silince</td><td>Aynı hesapla ücretsiz denemenin tekrar tekrar başlatılmasını önlemek</td><td>Sunucumuzda; e-postanın kendisi tutulmaz, özetten e-posta geri çıkarılamaz</td></tr>
 </table>
 
@@ -41,6 +42,7 @@ nav a{margin-right:14px}
 <ul>
 <li>Çizimler, projeler, kalıp ve model fotoğrafları, ayarlar: tarayıcının ya da uygulamanın deposunda.</li>
 <li>Kalıp fotoğrafından kalıp çizgisi çıkarma tamamen cihazında yapılır.</li>
+<li>Tarama dosyalarını (STL, OBJ, PLY, GLB) içe alma ve ağdan CAD'e çevirme tamamen cihazında yapılır; dosya hiçbir yere gönderilmez.</li>
 <li>Kamerayla parmak kontrolü: görüntü cihazında işlenir, kaydedilmez, gönderilmez.</li>
 <li>Sesli komut: açarsan tarayıcının ses tanıma özelliği kullanılır; Chrome gibi tarayıcılarda konuşman yazıya çevrilmek için tarayıcı şirketinin (ör. Google) sunucusuna gidebilir. Bu bizim elimizde değildir; istemiyorsan sesli komutu açma.</li>
 </ul>
@@ -50,7 +52,7 @@ nav a{margin-right:14px}
 <ul>
 <li><b>Supabase</b>: giriş ve veritabanı altyapısı (hesap, abonelik, kullanım sayısı).</li>
 <li><b>Google</b>: Google ile giriş ve Google Play ödemeleri. Ödeme bilgilerin (kart vb.) bize hiç gelmez, Google'da kalır.</li>
-<li><b>Anthropic (Claude)</b>: yalnız yapay zekâ özelliğini kullandığında gönderdiğin model resimleri.</li>
+<li><b>Anthropic (Claude)</b>: yalnız yapay zekâ özelliklerini kullandığında gönderdiğin model ve parça fotoğrafları (ve yazdığın kısa not).</li>
 <li><b>GitHub Pages</b>: web sayfalarının barındırılması.</li>
 </ul>
 <p>Bu sağlayıcıların sunucuları yurt dışında olabilir; verilerin bu nedenle yurt dışına aktarılabilir. Verini satmayız, reklam veya profil çıkarma amacıyla kimseyle paylaşmayız. Yasal bir zorunluluk olursa yetkili makamlarla paylaşılabilir.</p>

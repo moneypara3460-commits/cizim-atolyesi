@@ -38,7 +38,7 @@ import { createLatheUI } from './lathe-ui.js?v=20261112u';
 import { machinePose } from './kin.js?v=20261112u';
 import { createOcctUI } from './occt-ui.js?v=20261112u';
 import { createFemUI } from './fem-ui.js?v=20261112u';
-import { openScanImport } from './scan/scan-ui.js?v=20261118a';
+import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
 
 const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -4043,6 +4043,7 @@ document.addEventListener('click', (e) => {
   if (act === 'redo') { doRedo(); return; }
   if (act === 'stl') { exportSTL(); return; }
   if (act === 'scan-import') { openScanImport({ addParts: scanAddParts, addMesh: scanAddMesh, toast }); return; }
+  if (act === 'photo-model') { openPhotoModel({ addParts: scanAddParts, toast }); return; }
   if (act === 'mic') { toggleMic(); return; }
   if (act === 'projects') { openDialog(); return; }
   if (act === 'guide') { openGuide(); return; }
