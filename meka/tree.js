@@ -48,7 +48,8 @@ export function sanitize(o) {
   for (const t of Object.keys(SLOTS)) for (const [slot] of SLOTS[t]) { const v = o.bag?.[t]?.[slot]; if (ids.has(v)) P.bag[t][slot] = v; }
   P.nextId = Math.max(fin(o.nextId) ? o.nextId : 1, ...P.items.map((i) => i.id + 1), 1);
   if (o.calc && typeof o.calc === 'object') P.calc = o.calc;
-  if (o.elek && typeof o.elek === 'object') P.elek = o.elek;   // elektrik (ui elekSanitize ile doğrular)   // hesap girdileri (ui doğrular)
+  if (o.elek && typeof o.elek === 'object') P.elek = o.elek;
+  if (o.plc && typeof o.plc === 'object') P.plc = o.plc;   // PLC (ui plcSanitize ile doğrular)   // elektrik (ui elekSanitize ile doğrular)   // hesap girdileri (ui doğrular)
   return P;
 }
 

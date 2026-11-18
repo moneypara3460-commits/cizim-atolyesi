@@ -31,7 +31,7 @@ const UI_PATH = process.env.E2E_UI === 'yeni' ? 'yeni/index.html' : undefined;
 // yeni arayüz koşusunda tekstil (ayrı sayfa) ve eski açılış seçimi (yalnız eski arayüzde var) tekrar koşulmaz
 const SKIP_YENI = UI_PATH ? ['t-tekstil', 'w-alan'] : [];
 async function app(view = DESK, empty = false) { const a = await openApp(browser, url, { ...view, path: UI_PATH, init: empty ? NO_GUIDE : NO_GUIDE_BOX }); await waitReady(a.page); return a; }
-const act = async (page, a) => { const b = page.locator(`[data-act="${a}"]:visible`).first(); await b.scrollIntoViewIfNeeded(); await b.click(); };
+const act = async (page, a) => { const b = page.locator(`[data-act="${a}"]:visible`).first(); if (process.env.E2E_ACTLOG) console.log("      act", a); await b.scrollIntoViewIfNeeded(); await b.click(); };
 const tab = async (page, k) => {
   // yeni arayüz: sekme önce alttaki / üstteki bölüm düğmesiyle açılır (Tasarım, Analiz, Üretim); telefonda panel kapalıysa açılır
   const m = await page.evaluate((k) => (window.__shell ? window.__shell.modeOf(k) : null), k);
@@ -404,6 +404,69 @@ await T('Mekatronik 4. aşama elektrik: yük ekle → kesit / koruma / gerilim d
   await tab(page, 'meka'); await act(page, 'mk-v-elek');
   b = await body(page);
   expect(/Konveyör motoru/.test(b) && /Valf adası/.test(b) && /🔗 3,2 A/.test(b), 'yenileme sonrası elektrik projesi');
+});
+
+await T('Mekatronik 5. aşama PLC: örnek dolum istasyonu → denetim temiz, adım şeması, ST ve PLCopen XML (iyi biçimli); bozuk koşul kodu durdurur; sinyal ekle / adım ekle / kilit; ürün ağacından G/Ç; yenilemede korunur', 'M-PLC', async ({ page }) => {
+  await tab(page, 'meka');
+  await act(page, 'mk-v-plc');
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mkp="${k}"]`); const tg = await i.evaluate((e) => e.tagName + (e.type || '')); if (tg.startsWith('SELECT')) await i.selectOption(String(v)); else if (tg === 'INPUTcheckbox') await i.setChecked(!!v); else await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(120); };
+  const hasOrnek = await page.locator('#tabbody [data-act="mk-pornek"]').count();
+  expect(hasOrnek === 1, 'boş projede örnek düğmesi');
+  await act(page, 'mk-pornek');
+  await act(page, 'mk-palt-kod');
+  let b = await body(page);
+  expect(/UYGUN — kod üretilebilir/.test(b) && /END_CONFIGURATION/.test(b) && /Y1_Silindir_Ileri := \(Adim = 10\);/.test(b), 'örnek kod: ' + b.slice(0, 300));
+  expect(await page.locator('#tabbody svg rect').count() >= 6, 'adım şeması');
+  const st = await download(page, () => act(page, 'mk-pst'));
+  expect(/PROGRAM Sira_Ana/.test(st.text) && /\.st$/.test(st.name), 'ST dosyası');
+  const xml = await download(page, () => act(page, 'mk-pxml'));
+  const iyi = await page.evaluate((t) => { const d = new DOMParser().parseFromString(t, 'application/xml'); return !d.querySelector('parsererror') && d.documentElement.namespaceURI === 'http://www.plcopen.org/xml/tc6_0201' && d.getElementsByTagName('variable').length; }, xml.text);
+  expect(iyi > 10, 'PLCopen XML iyi biçimli: ' + iyi);
+  // bozuk koşul → kod üretilmez
+  await act(page, 'mk-palt-adim');
+  const aid = await page.evaluate(() => document.querySelectorAll('#tabbody [data-adim]')[1].dataset.adim);
+  await set(`a.${aid}.kosul`, 'B3_Silindir_Ileri AND');
+  b = await body(page);
+  expect(/eksik/.test(b), 'koşul hatası adımda görünür');
+  await act(page, 'mk-palt-kod');
+  b = await body(page);
+  expect(/HATALAR VAR/.test(b) && (await page.locator('#tabbody [data-act="mk-pst"]').count()) === 0, 'hatalıyken ST düğmesi yok');
+  await act(page, 'mk-palt-adim'); await set(`a.${aid}.kosul`, 'B3_Silindir_Ileri');
+  // yeni sinyal ve adım, kilit
+  await act(page, 'mk-palt-gc'); await act(page, 'mk-padd-DO');
+  const sid = await page.evaluate(() => [...document.querySelectorAll('#tabbody [data-sinyal]')].pop().dataset.sinyal);
+  await set(`s.${sid}.tag`, 'Y3_Kapak');
+  await set(`s.${sid}.tag`, 'Kapak Aç');   // geçersiz ad
+  expect(/Türkçe karakter olmaz/.test(await body(page)), 'geçersiz ad uyarısı');
+  await set(`s.${sid}.tag`, 'Y3_Kapak_Ac');
+  await act(page, 'mk-palt-adim'); await act(page, 'mk-pstep'); await page.waitForTimeout(150);
+  const yeni = await page.evaluate(() => [...document.querySelectorAll('#tabbody [data-adim]')].pop().dataset.adim);
+  await set(`a.${yeni}.kosul`, 'T>=500ms'); await set(`a.${yeni}.cik.${sid}`, true);
+  await act(page, 'mk-palt-kod');
+  b = await body(page);
+  expect(/UYGUN — kod/.test(b) && /Y3_Kapak_Ac := \(Adim = 50\);/.test(b) && /T#500MS/.test(b), 'yeni adım kodda: ' + b.slice(0, 300));
+  // kilit: Y3 ile Y1 birlikte açılamaz → aynı adıma koyunca hata
+  await act(page, 'mk-palt-adim');
+  const y1 = await page.evaluate(() => [...document.querySelectorAll('#tabbody [data-mkp="k.a"] option')].find((o) => o.textContent === 'Y1_Silindir_Ileri').value);
+  await set('k.a', y1); await set('k.b', sid); await act(page, 'mk-pkadd');
+  expect(/Y1_Silindir_Ileri ⟂ Y3_Kapak_Ac/.test(await body(page)), 'kilit eklendi');
+  await set(`a.${yeni}.cik.${y1}`, true);
+  await act(page, 'mk-palt-kod');
+  expect(/adım 50 ikisini birlikte açıyor/.test(await body(page)), 'kilit ihlali');
+  await act(page, 'mk-palt-adim'); await set(`a.${yeni}.cik.${y1}`, false);
+  // ürün ağacından sensör
+  await act(page, 'mk-v-agac'); await act(page, 'mk-add-sensor'); await act(page, 'mk-ed-0');
+  await act(page, 'mk-v-plc'); await act(page, 'mk-palt-gc'); await act(page, 'mk-pagac');
+  expect(/value="Sensor/.test(await page.locator('#tabbody').innerHTML()), 'ağaçtan sensör girişi');
+  await act(page, 'mk-palt-kod');
+  const csv = await download(page, () => act(page, 'mk-pcsv'));
+  expect(/Y3_Kapak_Ac;Dijital çıkış;%QX0\.3;BOOL/.test(csv.text), 'G/Ç CSV: ' + csv.text.slice(0, 300));
+  const pdf = await download(page, () => act(page, 'mk-ppdf'));
+  expect(/^%PDF/.test(pdf.text), 'PLC PDF');
+  await page.waitForTimeout(1500);
+  await page.reload(); await waitReady(page);
+  await tab(page, 'meka'); await act(page, 'mk-v-plc'); await act(page, 'mk-palt-kod');
+  expect(/Y3_Kapak_Ac := \(Adim = 50\);/.test(await body(page)), 'yenileme sonrası PLC projesi');
 });
 
 /* ---------- D. Montaj ---------- */
