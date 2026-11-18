@@ -181,6 +181,61 @@ await T('OCCT: motor yüklenir, model B-Rep doğrulanır, yuvarlama, STEP dışa
   expect(/görüntüsü: açık/.test(await body(page)) !== on0, 'OCCT görüntüsü aç/kapat');
 }, { allowErr: [/OCCT|STEP/] });
 
+/* ---------- C2. Tarama / ağ içe aktarma → CAD ---------- */
+// STL metni: boru (Y ekseni, 64 kenar) ve eğik çatılı takoz (temel şekle oturmaz)
+function stlText(tris) {
+  let s = 'solid t\n';
+  for (let i = 0; i < tris.length; i += 9) s += 'facet normal 0 0 0\nouter loop\n' + [0, 1, 2].map((k) => `vertex ${tris[i + k * 3]} ${tris[i + k * 3 + 1]} ${tris[i + k * 3 + 2]}\n`).join('') + 'endloop\nendfacet\n';
+  return s + 'endsolid t\n';
+}
+function tubeTris(d, di, h, n = 64) {
+  const R = d / 2, r = di / 2, o = [], p = (rr, a, y) => [rr * Math.cos(a), y, rr * Math.sin(a)];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * 2 * Math.PI, b = ((i + 1) / n) * 2 * Math.PI;
+    o.push(...p(R, a, 0), ...p(R, a, h), ...p(R, b, h), ...p(R, a, 0), ...p(R, b, h), ...p(R, b, 0));
+    o.push(...p(r, a, 0), ...p(r, b, h), ...p(r, a, h), ...p(r, a, 0), ...p(r, b, 0), ...p(r, b, h));
+    o.push(...p(r, a, h), ...p(R, b, h), ...p(R, a, h), ...p(r, a, h), ...p(r, b, h), ...p(R, b, h));
+    o.push(...p(r, a, 0), ...p(R, a, 0), ...p(R, b, 0), ...p(r, a, 0), ...p(R, b, 0), ...p(r, b, 0));
+  }
+  return o;
+}
+function wedgeTris() {
+  const P = [[0, 0, 0], [60, 0, 0], [60, 10, 0], [0, 40, 0], [0, 0, 30], [60, 0, 30], [60, 10, 30], [0, 40, 30]];
+  const o = []; for (const [a, b, c, d] of [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]]) for (const i of [a, b, c, a, c, d]) o.push(...P[i]);
+  return o;
+}
+await T('Tarama içe aktarma: STL borudan düzenlenebilir CAD (Boru Ø50/Ø40), serbest şekil ağ olarak, bozuk dosya açık hata', 'C-Tarama', async ({ page }) => {
+  const c0 = await chips(page);
+  await choose(page, () => act(page, 'scan-import'), tmp('boru.stl', stlText(tubeTris(50, 40, 100))));
+  await waitText(page, '#sc-info', /Boyut/, 30000);
+  expect(/kapalı/.test(await page.locator('#sc-info').innerText()), 'ağ kapalı görünür');
+  await page.locator('#sc [data-a="fit"]').click();
+  await waitText(page, '#sc-res', /Tanındı|ğ olarak/i, 30000);
+  const res = await page.locator('#sc-res').innerText();
+  expect(/Tanındı: Boru Ø50 \/ Ø40 × 100 mm/.test(res), 'boru tanındı: ' + res.slice(0, 160));
+  await page.locator('#sc [data-a="addcad"]').click();
+  await page.waitForFunction((n) => document.querySelectorAll('#chips .chip').length > n, c0, { timeout: 30000 });
+  const last = await page.evaluate(() => { const p = window.__app.parts[window.__app.parts.length - 1]; return { type: p.type, d: p.d, di: p.di, h: p.h }; });
+  expect(last.type === 'tube' && Math.abs(last.d - 50) < 0.3 && Math.abs(last.di - 40) < 0.3 && Math.abs(last.h - 100) < 0.2, 'boru parçası düzenlenebilir: ' + JSON.stringify(last));
+  expect(!(await page.locator('#sc').count()), 'pencere kapandı');
+  // serbest şekil: CAD üretilmez, ağ olarak eklenir
+  const c1 = await chips(page);
+  await choose(page, () => act(page, 'scan-import'), tmp('takoz.stl', stlText(wedgeTris())));
+  await waitText(page, '#sc-info', /Boyut/, 30000);
+  await page.locator('#sc [data-a="fit"]').click();
+  await waitText(page, '#sc-res', /ğ olarak/i, 30000);
+  expect(!(await page.locator('#sc-add').isVisible()), 'tanınmayan şekilde CAD düğmesi yok');
+  await page.locator('#sc [data-a="mesh"]').click();
+  await page.waitForFunction((n) => document.querySelectorAll('#chips .chip').length > n, c1, { timeout: 30000 });
+  expect(await page.evaluate(() => window.__app.parts[window.__app.parts.length - 1].type) === 'mesh', 'ağ parçası eklendi');
+  // bozuk dosya
+  const c2 = await chips(page);
+  await choose(page, () => act(page, 'scan-import'), tmp('bozuk.stl', 'merhaba dünya'));
+  await waitText(page, '#sc-info', /Desteklenmeyen|okunamadı/, 30000);
+  await page.locator('#sc [data-a="close"]').click();
+  expect(await chips(page) === c2, 'bozuk dosya parça eklemedi');
+});
+
 /* ---------- D. Montaj ---------- */
 await T('Montaj: örnek "Mil ve burç" eşleşmeli montaj, montaj sırası planı, kaydet / aç', 'D-Montaj', async ({ page }) => {
   await act(page, 'guide'); await page.locator('[data-ex="mil"]').click(); await page.waitForTimeout(800);

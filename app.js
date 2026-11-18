@@ -38,6 +38,7 @@ import { createLatheUI } from './lathe-ui.js?v=20261112u';
 import { machinePose } from './kin.js?v=20261112u';
 import { createOcctUI } from './occt-ui.js?v=20261112u';
 import { createFemUI } from './fem-ui.js?v=20261112u';
+import { openScanImport } from './scan/scan-ui.js?v=20261118a';
 
 const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -1338,6 +1339,38 @@ function addPart(type, op, dims) {
   selOff = null; sel = p.id;
   refreshAll(type === 'frame');
   return p;
+}
+
+// Tarama / ağ içe aktarma (scan/): tanınan parçalar uygulamanın kendi parametrik parçaları olarak eklenir
+// içe alınan parça mevcut modelin yanına konur (üst üste binen ağlarda Boolean işlemi çok yavaşlayabilir)
+function besideModel(minX) {
+  const vis = parts.filter((q) => !q.hidden);
+  if (!vis.length || !lastClean) return 0;
+  if (!lastClean.boundingBox) lastClean.computeBoundingBox();
+  const bb = lastClean.boundingBox;
+  return bb && Number.isFinite(bb.max.x) ? Math.round(bb.max.x + 20 - minX) : 0;
+}
+function scanAddParts(list, name, ext = {}) {
+  if (!list.length) return;
+  commit();
+  const dx = besideModel(ext.minX ?? 0);
+  let first = null, nh = 0;
+  for (const q of list) {
+    const p = { id: nextId++, ...DEFAULTS, ...q, x: (q.x || 0) + dx, name: q.op === 'sub' ? name + ' · delik ' + (++nh) : (first ? name + ' · ' + (parts.length + 1) : name) };
+    parts.push(p);
+    if (!first) first = p;
+  }
+  selOff = null; sel = first.id;
+  refreshAll(true);
+}
+function scanAddMesh(r, name) {
+  commit();
+  const key = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  meshStore.set(key, packMesh(r.pos, null));
+  const dx = besideModel(r.minX ?? r.x);
+  const m = { id: nextId++, type: 'mesh', op: 'add', ...DEFAULTS, x: r.x + dx, y: r.y, z: r.z, h: r.h, mk: key, name };
+  parts.push(m); selOff = null; sel = m.id;
+  refreshAll(true);
 }
 
 // model boşken parça isteyen işlem: kullanıcıya söyle, hiçbir şey yapma
@@ -4009,6 +4042,7 @@ document.addEventListener('click', (e) => {
   if (act === 'undo') { doUndo(); return; }
   if (act === 'redo') { doRedo(); return; }
   if (act === 'stl') { exportSTL(); return; }
+  if (act === 'scan-import') { openScanImport({ addParts: scanAddParts, addMesh: scanAddMesh, toast }); return; }
   if (act === 'mic') { toggleMic(); return; }
   if (act === 'projects') { openDialog(); return; }
   if (act === 'guide') { openGuide(); return; }
