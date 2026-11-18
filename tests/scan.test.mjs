@@ -221,11 +221,23 @@ t('Gürültülü tarama (σ 0,05 mm): kutu yine tanınır, ölçü 0,2 mm içind
   near(r.parts[0].w, 80, 0.2); near(r.parts[0].h, 30, 0.2); near(r.parts[0].l, 50, 0.2);
 });
 
-t('Serbest şekil (eğik yüzlü takoz): CAD üretilmez, neden açıklanır (sahte CAD yok)', () => {
-  // eğik çatılı prizma
+t('Eğik yüzlü takoz: kesit krokisi (5 köşe) olarak tanınır, hacim aynı', () => {
   const P = [[0, 0, 0], [60, 0, 0], [60, 10, 0], [0, 40, 0], [0, 0, 30], [60, 0, 30], [60, 10, 30], [0, 40, 30]];
   const Q = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]];
   const out = []; for (const [a, b, c, d] of Q) for (const i of [a, b, c, a, c, d]) out.push(...P[i]);
+  const r = fit(new Float32Array(out));
+  assert.ok(r.ok, r.reason);
+  assert.equal(r.kind, 'kroki');
+  const sk = r.parts[0];
+  assert.equal(sk.type, 'sketch'); assert.equal(sk.mode, 'extrude');
+  assert.ok(sk.pts.length === 4, 'köşe ' + sk.pts.length);   // yamuk kesit
+  let A2 = 0; for (let i = 0; i < sk.pts.length; i++) { const a = sk.pts[i], b = sk.pts[(i + 1) % sk.pts.length]; A2 += a[0] * b[1] - b[0] * a[1]; }
+  near(Math.abs(A2) / 2 * sk.h, 60 * 30 * (40 + 10) / 2, 30);
+});
+
+t('Serbest şekil (piramit): CAD üretilmez, neden açıklanır (sahte CAD yok)', () => {
+  const P = [[-30, 0, -30], [30, 0, -30], [30, 0, 30], [-30, 0, 30], [5, 45, 8]];
+  const out = []; for (const [a, b, c] of [[0, 1, 2], [0, 2, 3], [0, 4, 1], [1, 4, 2], [2, 4, 3], [3, 4, 0]]) out.push(...P[a], ...P[b], ...P[c]);
   const r = fit(new Float32Array(out));
   assert.equal(r.ok, false);
   assert.equal(r.parts.length, 0);

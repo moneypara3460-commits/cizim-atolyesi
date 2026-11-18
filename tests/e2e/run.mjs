@@ -199,12 +199,17 @@ function tubeTris(d, di, h, n = 64) {
   }
   return o;
 }
+function pyramidTris() {
+  const P = [[-30, 0, -30], [30, 0, -30], [30, 0, 30], [-30, 0, 30], [5, 45, 8]];
+  const o = []; for (const [a, b, c] of [[0, 1, 2], [0, 2, 3], [0, 4, 1], [1, 4, 2], [2, 4, 3], [3, 4, 0]]) o.push(...P[a], ...P[b], ...P[c]);
+  return o;
+}
 function wedgeTris() {
   const P = [[0, 0, 0], [60, 0, 0], [60, 10, 0], [0, 40, 0], [0, 0, 30], [60, 0, 30], [60, 10, 30], [0, 40, 30]];
   const o = []; for (const [a, b, c, d] of [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]]) for (const i of [a, b, c, a, c, d]) o.push(...P[i]);
   return o;
 }
-await T('Tarama içe aktarma: STL borudan düzenlenebilir CAD (Boru Ø50/Ø40), serbest şekil ağ olarak, bozuk dosya açık hata', 'C-Tarama', async ({ page }) => {
+await T('Tarama içe aktarma: STL borudan düzenlenebilir CAD (Boru Ø50/Ø40), eğik takoz kesit krokisi, serbest şekil ağ olarak, bozuk dosya açık hata', 'C-Tarama', async ({ page }) => {
   const c0 = await chips(page);
   await choose(page, () => act(page, 'scan-import'), tmp('boru.stl', stlText(tubeTris(50, 40, 100))));
   await waitText(page, '#sc-info', /Boyut/, 30000);
@@ -218,9 +223,19 @@ await T('Tarama içe aktarma: STL borudan düzenlenebilir CAD (Boru Ø50/Ø40), 
   const last = await page.evaluate(() => { const p = window.__app.parts[window.__app.parts.length - 1]; return { type: p.type, d: p.d, di: p.di, h: p.h }; });
   expect(last.type === 'tube' && Math.abs(last.d - 50) < 0.3 && Math.abs(last.di - 40) < 0.3 && Math.abs(last.h - 100) < 0.2, 'boru parçası düzenlenebilir: ' + JSON.stringify(last));
   expect(!(await page.locator('#sc').count()), 'pencere kapandı');
-  // serbest şekil: CAD üretilmez, ağ olarak eklenir
-  const c1 = await chips(page);
+  // eğik yüzlü takoz: kesit krokisi (düzenlenebilir) olarak eklenir
+  const cw = await chips(page);
   await choose(page, () => act(page, 'scan-import'), tmp('takoz.stl', stlText(wedgeTris())));
+  await waitText(page, '#sc-info', /Boyut/, 30000);
+  await page.locator('#sc [data-a="fit"]').click();
+  await waitText(page, '#sc-res', /Tanındı|ğ olarak/i, 30000);
+  expect(/Kesit krokisi \(4 köşe\)/.test(await page.locator('#sc-res').innerText()), 'takoz kesit krokisi: ' + (await page.locator('#sc-res').innerText()).slice(0, 160));
+  await page.locator('#sc [data-a="addcad"]').click();
+  await page.waitForFunction((n) => document.querySelectorAll('#chips .chip').length > n, cw, { timeout: 30000 });
+  expect(await page.evaluate(() => { const p = window.__app.parts[window.__app.parts.length - 1]; return p.type === 'sketch' && p.mode === 'extrude' && p.pts.length === 4; }), 'kroki parçası eklendi');
+  // serbest şekil (piramit): CAD üretilmez, ağ olarak eklenir
+  const c1 = await chips(page);
+  await choose(page, () => act(page, 'scan-import'), tmp('piramit.stl', stlText(pyramidTris())));
   await waitText(page, '#sc-info', /Boyut/, 30000);
   await page.locator('#sc [data-a="fit"]').click();
   await waitText(page, '#sc-res', /ğ olarak/i, 30000);

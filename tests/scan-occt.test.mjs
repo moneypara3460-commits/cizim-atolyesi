@@ -73,12 +73,42 @@ for (const [name, d0] of Object.entries(CASES)) {
   });
 }
 
-await t('Yuvarlatılmış kutu: CAD üretilmez (yuvarlama tanınmıyor), ağ olarak önerilir', async () => {
-  const { tr } = await meshOf(pos([{ type: 'box', w: 50, h: 30, l: 40, r: 6, op: 'add' }]));
-  const r = fitOf(tr);
-  assert.equal(r.ok, false);
-  assert.match(r.reason, /ağ olarak/);
-});
+/* ---------- 2. sürüm: pah, yuvarlama, koni, eğik yüz, 2,5B kesit ---------- */
+// kroki parçasının hacmi: üstten ekstrüzyon = alan × kalınlık, döndürme = Pappus
+function sketchVol(p) {
+  const loopA = (L) => { let a = 0; for (let i = 0; i < L.length; i++) { const u = L[i], v = L[(i + 1) % L.length]; a += u[0] * v[1] - v[0] * u[1]; } return a / 2; };
+  if (p.mode === 'revolve') { let v = 0; for (let i = 0; i < p.pts.length; i++) { const [u1, v1] = p.pts[i], [u2, v2] = p.pts[(i + 1) % p.pts.length]; v += Math.PI * (v2 - v1) * (u1 * u1 + u1 * u2 + u2 * u2) / 3; } return Math.abs(v); }
+  return (Math.abs(loopA(p.pts)) - (p.more || []).reduce((s, L) => s + Math.abs(loopA(L)), 0)) * p.h;
+}
+const V2 = {
+  'Yuvarlatılmış kutu (R6, bütün kenarlar)': { d: [{ type: 'box', w: 50, h: 30, l: 40, r: 6, op: 'add' }], kind: 'prizmatik', check: (r) => Math.abs(r.parts[0].r - 6) < 0.15 },
+  'Pahlı kutu (4 mm, bütün kenarlar)': { d: [{ type: 'box', w: 50, h: 30, l: 40, c: 4, op: 'add' }], kind: 'prizmatik', check: (r) => Math.abs(r.parts[0].c - 4) < 0.15 },
+  'Pahlı mil (3 mm, iki uç)': { d: [{ type: 'cylinder', d: 40, h: 60, c: 3, op: 'add' }], kind: 'torna', check: (r) => r.parts.filter((p) => p.type === 'cone').length === 2 },
+  'Koni + silindir + eksenel delik': { d: [{ type: 'cylinder', d: 40, h: 30, op: 'add' }, { type: 'cone', d: 40, d2: 20, h: 25, y: 30, op: 'add' }, { type: 'cylinder', d: 12, h: 57, y: -1, op: 'sub' }], kind: 'torna', check: (r) => r.parts.some((p) => p.type === 'cone' && Math.abs(p.d - 40) < 0.2 && Math.abs(p.d2 - 20) < 0.2) },
+  'Yuvarlatılmış mil (R4): döndürme krokisi': { d: [{ type: 'cylinder', d: 40, h: 60, r: 4, op: 'add' }], kind: 'kroki-döndürme', sketch: true },
+  'Eğik yüzlü takoz: kesit krokisi': { d: [{ type: 'box', w: 60, h: 40, l: 30, op: 'add' }, { type: 'box', w: 80, h: 40, l: 40, y: 30, rz: -27, op: 'sub' }], kind: 'kroki', sketch: true, check: (r) => r.parts[0].pts.length === 5 },
+  'Dikey köşeleri R8 plaka: kesit krokisi': { d: [{ type: 'box', w: 60, h: 10, l: 24, op: 'add' }, { type: 'box', w: 44, h: 10, l: 40, op: 'add' }, ...[[-22, -12], [22, -12], [22, 12], [-22, 12]].map(([x, z]) => ({ type: 'cylinder', d: 16, h: 10, x, z, op: 'add' }))], kind: 'kroki', sketch: true, check: (r) => r.parts[0].pts.length >= 12 },
+  'L köşebent + 2 delik: kesit krokisi + delikler': { d: [{ type: 'box', w: 60, h: 8, l: 40, op: 'add' }, { type: 'box', w: 8, h: 50, l: 40, x: -26, op: 'add' }, { type: 'cylinder', d: 8, h: 10, x: 10, y: -1, op: 'sub' }, { type: 'cylinder', d: 6, h: 10, x: -31, y: 30, rz: -90, op: 'sub' }], kind: 'kroki', sketch: true, check: (r) => r.parts[0].pts.length === 6 && r.holes === 2 },
+};
+for (const [name, c] of Object.entries(V2)) {
+  const d = pos(c.d);
+  for (const noise of [0, 0.05]) {
+    await t(name + (noise ? ' — eğik duran, gürültülü (σ 0,05 mm)' : ''), async () => {
+      const { tr, vol } = await meshOf(d, noise ? { rot: [0.5, 0.8], noise } : {});
+      const r = fitOf(tr);
+      assert.ok(r.ok, r.reason);
+      assert.equal(r.kind, c.kind, describe(r));
+      if (c.check) assert.ok(c.check(r), 'ayrıntı · ' + describe(r));
+      let v;
+      if (c.sketch) {
+        v = sketchVol(r.parts[0]);
+        for (const p of r.parts.slice(1)) v -= Math.PI * p.d * p.d / 4 * (p.h - 2);   // delikler (her iki uçta 1 mm uzatılmış)
+      } else { v = K.volume(shape(r.parts)); K.free(); }
+      assert.ok(Math.abs(v - vol) / vol < (noise ? 0.025 : 0.01), 'hacim ' + v.toFixed(0) + ' / ' + vol.toFixed(0) + ' · ' + describe(r));
+      if (!noise && !c.sketch) { const vc = K.volume(K.common(shape(d), shape(r.parts))); K.free(); assert.ok(vc / vol > 0.99, 'ortak hacim %' + (100 * vc / vol).toFixed(2)); }
+    });
+  }
+}
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
 process.exit(fail ? 1 : 0);
