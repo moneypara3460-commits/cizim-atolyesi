@@ -5,3 +5,4 @@ dist/
 .DS_Store
 reports/
 .e2e-libs/
+.build-tools/

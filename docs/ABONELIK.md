@@ -46,11 +46,16 @@ Paketler ve ürün kimlikleri (Play Console'da birebir bu adlarla açılır):
    Konuya "push" aboneliği ekle: `https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/play-rtdn?k=<RTDN_SECRET>`.
    Supabase gizli ayarı: `RTDN_SECRET` (uzun rastgele metin).
 6. **Lisans testçisiyle dene** — Play Console → Lisans testi'ne kendi hesabını ekle; test kartıyla satın al, durum sayfasında görün.
-7. **Kilidi aç** — `hesap/config.js` içinde `PAYWALL = true`.
+7. **Kilidi sertleştir (kilidi açmadan önce, Android paketiyle birlikte)** — 18 Kasım güvenlik incelemesi:
+   - Erişim bilgisi sunucuda imzalansın (Ed25519): `cizim:erisim` önbelleği telefonda elle değiştirilirse geçersiz sayılsın.
+   - Google Play Integrity: uygulama Play'den gelmediyse ya da değiştirildiyse sunucu erişim vermesin.
+   - Kilit denetimi yalnız `hesap/guard.js`'e bağlı kalmasın; bölüm modülleri de denetlesin.
+   - Yalnız `dist/` yayınlansın (`node tools/build.mjs --obfuscate`, CI: "Yayın derlemesi" işi).
+8. **Kilidi aç** — `hesap/config.js` içinde `PAYWALL = true`.
 
 ## Bilinen sınırlar
 
-- Kilit tarayıcı tarafındadır. Kod herkese açık depoda durduğu sürece bilen biri kilidi atlatabilir; abonelik kaydı ise
-  sunucudadır ve sahtelenemez.
+- Kilit tarayıcı tarafındadır. Kaynak kodu gören biri kilidi atlatabilir (7. madde bunu zorlaştırır); abonelik kaydı ise
+  sunucudadır ve sahtelenemez. Yapay zekâ özellikleri sunucuda olduğu için kilit atlatılsa da hesap sınırına tabidir.
 - Satın alma doğrulanamazsa (internet kesilmesi vb.) Google onaylanmamış aboneliği 3 gün içinde iade eder. Uygulama her
   açılışta Play'deki aboneliği sessizce yeniden doğrular; kullanıcı "Satın alımları geri yükle" ile de tetikleyebilir.
