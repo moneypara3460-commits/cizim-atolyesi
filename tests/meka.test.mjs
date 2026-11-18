@@ -1,0 +1,154 @@
+// Çalıştır: node tests/meka.test.mjs
+// Mekatronik hesap motoru. Beklenen değerler formülden BAĞIMSIZ olarak elle hesaplanmıştır (yorumlarda işlem görünür).
+import assert from 'node:assert/strict';
+import { screwAxis, bearingLife, pneumatic, pickCylinder, reportLines, G, SCREW_MOUNT, ISO281_A1, CYL_ROD } from '../meka/calc.js';
+
+let fail = 0;
+const t = (name, fn) => {
+  try { fn(); console.log('ok   ', name); }
+  catch (e) { fail++; console.log('FAIL ', name, '\n     ', String(e.message).split('\n')[0]); }
+};
+const near = (a, b, rel, m = '') => assert.ok(Math.abs(a - b) <= Math.abs(b) * rel + 1e-12, `${m} ${a} ≉ ${b} (±%${rel * 100})`);
+const step = (r, ad) => r.adimlar.find((s) => s.ad.startsWith(ad)).deger;
+
+/* ---------- vida + motor ---------- */
+// Örnek: yatay eksen, m = 50 kg, μ = 0,01, Fdış = 0 → F = 50·9,80665·0,01 = 4,9033 N
+// hatve 10 mm, ηv = 0,9, i = 1, ηr = 1 → T_yük = 4,9033·0,01 / (2π·0,9) = 0,0086711 N·m
+// v = 0,25 m/s → n_vida = 0,25/0,01·60 = 1500 dev/dk; ta = 0,15 s → ω = 157,0796 rad/s, α = 1047,198 rad/s²
+// J_vida = π·7850·0,8·0,02⁴/32 = 9,8646e-5 kg·m²; J_yük = 50·(0,01/2π)² = 1,26651e-4 kg·m²
+// J' = 9,8646e-5 + 1,26651e-4/0,9 + 2e-5 = 2,59369e-4; Jm = 1,2e-4 → oran 2,1614
+// T_h = (1,2e-4 + 2,59369e-4)·1047,198 + 0,0086711 = 0,405950 N·m
+const base = { m: 50, mu: 0.01, aci: 0, Fdis: 0, P: 10, d: 20, dr: 17.5, L: 800, mount: 'sabit-mesnetli', etaS: 0.9, rho: 7850, i: 1, etaG: 1, Jc: 0.00002, strok: 300, v: 0.25, ta: 0.15, td: 0.5, tutma: 'motor', Jm: 0.00012, Tn: 1.27, Tmax: 3.8, nmax: 3000, SF: 1.5, oranSinir: 10 };
+
+t('Vida: kuvvet, yük torku, devir (elle hesap)', () => {
+  const r = screwAxis(base);
+  near(r.sonuc.Fsur, 4.903325, 1e-6, 'F');
+  near(r.sonuc.Tl, 0.0086711, 1e-4, 'T_yük');
+  near(r.sonuc.nS, 1500, 1e-9, 'n_vida');
+  near(r.sonuc.nM, 1500, 1e-9, 'n_motor');
+});
+
+t('Vida: ataletler ve hızlanma torku (elle hesap)', () => {
+  const r = screwAxis(base);
+  near(r.sonuc.Js, 9.8646e-5, 1e-4, 'J_vida');
+  near(r.sonuc.Jl, 1.26651e-4, 1e-4, 'J_yük');
+  near(r.sonuc.Jref, 2.59369e-4, 1e-4, "J'");
+  near(r.sonuc.ratio, 2.1614, 1e-3, 'oran');
+  near(r.sonuc.Tacc, 0.405950, 1e-4, 'T_h');
+});
+
+t('Vida: RMS tork (elle hesap) — tc = (0,3 − 0,25·0,15)/0,25 = 1,05 s, çevrim 1,85 s', () => {
+  const r = screwAxis(base);
+  near(r.sonuc.tc, 1.05, 1e-9); near(r.sonuc.tcyc, 1.85, 1e-9);
+  const Th = 0.405950, Tl = 0.0086711, Ty = -(0.405950 - 0.0086711) + 0.0086711;
+  const rms = Math.sqrt((Th * Th * 0.15 + Tl * Tl * 1.05 + Ty * Ty * 0.15) / 1.85);   // yatay: tutma torku 0
+  near(r.sonuc.Trms, rms, 1e-4);
+  assert.equal(r.uygun, true);
+});
+
+t('Vida: kritik devir ve burkulma [THK] (elle hesap)', () => {
+  const r = screwAxis(base);
+  // n_k = 15,1·17,5/800²·10⁷ = 4128,906 dev/dk; P_k = 10,2·17,5⁴/800²·10⁴ = 14947,64 N
+  near(r.sonuc.nc, 4128.906, 1e-6);
+  near(r.sonuc.Pk, 14947.64, 1e-6);
+  assert.deepEqual(Object.keys(SCREW_MOUNT).map((k) => [SCREW_MOUNT[k].lambda, SCREW_MOUNT[k].eta]), [[3.4, 1.3], [9.7, 5.1], [15.1, 10.2], [21.9, 20.3]]);
+});
+
+t('Vida: uzun ince vidada kritik devir aşılır → HATA, uygun değil', () => {
+  const r = screwAxis({ ...base, L: 2500, v: 1, mount: 'sabit-serbest' });
+  assert.equal(r.uygun, false);
+  assert.ok(r.kontroller.some((c) => !c.ok && c.duzey === 'hata' && /kritik devr/.test(c.metin)));
+});
+
+t('Vida: düşey eksen — yerçekimi torku ve fren uyarısı', () => {
+  const r = screwAxis({ ...base, aci: 90, mu: 0 });
+  near(r.sonuc.Fsur, 50 * G, 1e-9);
+  near(r.sonuc.Thold, (50 * G * 0.01) / (2 * Math.PI * 0.9), 1e-9);   // 0,86711 N·m
+  assert.ok(r.kontroller.some((c) => /kendiliğinden kilitlenmez/.test(c.metin)));
+});
+
+t('Vida: küçük motor → RMS / tepe tork hatası; redüktör (i = 3) ile düzelir', () => {
+  const small = { ...base, m: 300, Tn: 0.32, Tmax: 0.95, Jm: 0.00003 };
+  const a = screwAxis(small);
+  assert.equal(a.uygun, false);
+  const b = screwAxis({ ...small, i: 3, etaG: 0.95, nmax: 6000, P: 20 });
+  assert.ok(b.sonuc.Tpk < a.sonuc.Tpk);
+});
+
+t('Vida: kısa strok → üçgen profil, en yüksek hız düşer', () => {
+  const r = screwAxis({ ...base, strok: 20 });
+  assert.equal(r.sonuc.tc, 0);
+  near(r.sonuc.a, 0.02 / 0.15 / 0.15, 1e-9);
+});
+
+t('Vida: hatalı giriş açık hata verir', () => {
+  assert.throws(() => screwAxis({ ...base, P: 0 }), /Sıfırdan büyük/);
+  assert.throws(() => screwAxis({ ...base, etaS: 1.2 }), /Verim/);
+  assert.throws(() => screwAxis({ ...base, dr: 25 }), /Diş dibi/);
+  assert.throws(() => screwAxis({ ...base, m: NaN }), /Eksik/);
+});
+
+/* ---------- rulman ISO 281 ---------- */
+t('Rulman: L10 = (14000/2000)³ = 343 milyon devir; 1500 dev/dk → 3811,1 saat', () => {
+  const r = bearingLife({ tip: 'bilyali', C: 14000, Fr: 2000, n: 1500, guv: 90, hedef: 3000 });
+  near(r.sonuc.L10, 343, 1e-12);
+  near(r.sonuc.L10h, 343e6 / 90000, 1e-12);
+  assert.equal(r.uygun, true);
+});
+
+t('Rulman: %99 güvenilirlik a1 = 0,25 → 952,8 saat; hedef 3000 saat → HATA', () => {
+  const r = bearingLife({ C: 14000, Fr: 2000, n: 1500, guv: 99, hedef: 3000 });
+  near(r.sonuc.Lnm, 0.25 * 343e6 / 90000, 1e-12);
+  assert.equal(r.uygun, false);
+  assert.deepEqual(ISO281_A1, { 90: 1, 95: 0.64, 96: 0.55, 97: 0.47, 98: 0.37, 99: 0.25 });
+});
+
+t('Rulman: makaralı p = 10/3; X / Y ile eşdeğer yük', () => {
+  const r = bearingLife({ tip: 'makarali', C: 50000, Fr: 4000, Fa: 1000, X: 0.4, Y: 1.6, n: 600, guv: 90, hedef: 1 });
+  near(r.sonuc.P, 0.4 * 4000 + 1.6 * 1000, 1e-12);   // 3200 N
+  near(r.sonuc.L10, (50000 / 3200) ** (10 / 3), 1e-12);
+});
+
+t('Rulman: eksenel yük ama Y = 0 → uyarı; geçersiz güvenilirlik → hata', () => {
+  const r = bearingLife({ C: 14000, Fr: 2000, Fa: 300, n: 1500 });
+  assert.ok(r.kontroller.some((c) => !c.ok && c.duzey === 'uyari' && /Fa\/Fr/.test(c.metin)));
+  assert.throws(() => bearingLife({ guv: 93 }), /Güvenilirlik/);
+});
+
+/* ---------- pnömatik ---------- */
+t('Pnömatik: Ø50/Ø20, 6 bar → itme 1178,10 N, çekme 989,60 N (elle hesap)', () => {
+  const r = pneumatic({ D: 50, p: 6, yuk: 500 });
+  assert.equal(r.giris.d, 20);   // ISO 15552 standart mil
+  near(r.sonuc.Fi, 0.6 * Math.PI * 2500 / 4, 1e-12);          // 1178,097
+  near(r.sonuc.Fc, 0.6 * Math.PI * (2500 - 400) / 4, 1e-12);  // 989,602
+});
+
+t('Pnömatik: hava tüketimi Ø50/Ø20, 100 mm, 6 bar → 2,501 NL/çevrim (elle hesap)', () => {
+  const r = pneumatic({ D: 50, p: 6, strok: 100, yuk: 100, cevrim: 20 });
+  const v = (Math.PI * 2500 / 4 + Math.PI * 2100 / 4) * 100 * (7.013 / 1.013) / 1e6;
+  near(r.sonuc.Vcyc, v, 1e-12); near(v, 2.501, 1e-3);
+  near(r.sonuc.Q, v * 20, 1e-12);
+});
+
+t('Pnömatik: hareketli yükte %70 sınırı; en küçük uygun standart silindir', () => {
+  assert.equal(pneumatic({ D: 50, p: 6, yuk: 900 }).uygun, false);   // 900/1178 = %76
+  assert.equal(pneumatic({ D: 50, p: 6, yuk: 800 }).uygun, true);    // %68
+  const s = pickCylinder(800, 6);
+  assert.equal(s.D, 50); assert.equal(s.d, 20); assert.equal(s.std, 'ISO 15552');
+  assert.equal(pickCylinder(100, 6).std, 'ISO 6432');
+  assert.deepEqual(Object.entries(CYL_ROD).slice(6).map(([D, d]) => [+D, d]), [[32, 12], [40, 16], [50, 20], [63, 20], [80, 25], [100, 25], [125, 32]]);
+});
+
+/* ---------- rapor ---------- */
+t('Rapor: girdiler, her adım (formül + kaynak), kontroller ve kaynak listesi yazılır', () => {
+  const r = screwAxis(base), L = reportLines(r, 'Dolum ünitesi');
+  const s = L.join('\n');
+  assert.match(s, /Dolum ünitesi/);
+  assert.match(s, /UYGUN/);
+  assert.ok(r.adimlar.every((a) => s.includes(a.formul)));
+  assert.match(s, /\[THK\]/);
+  assert.match(s, /üreticinin güncel katalog/);
+});
+
+console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
+process.exit(fail ? 1 : 0);

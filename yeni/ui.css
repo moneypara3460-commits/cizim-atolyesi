@@ -106,7 +106,7 @@ button.ui.primary svg { width: 18px; height: 18px; stroke-width: 2; }
 .logo svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
 button.ui.search { width: 44px; height: 44px; }
 
-#nav { position: fixed; left: 0; right: 0; bottom: 0; height: var(--nav); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+#nav { position: fixed; left: 0; right: 0; bottom: 0; height: var(--nav); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
        background: var(--bg); border-top: 1px solid var(--line); z-index: 20; padding-bottom: env(safe-area-inset-bottom); }
 #nav .ui { flex-direction: column; gap: 3px; height: 100%; border-radius: 0; color: var(--muted); font-size: 12px; position: relative; }
 #nav .ui[aria-current="page"] { color: var(--acc); font-weight: 600; }

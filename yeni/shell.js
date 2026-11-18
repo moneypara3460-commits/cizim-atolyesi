@@ -12,11 +12,12 @@ const MODES = {
   tasarim: ['dims', 'type', 'pos', 'rot', 'copy', 'face', 'edge', 'shell', 'mate', 'link', 'part', 'view', 'sheet', 'anim', 'occt'],
   analiz: ['fem', 'sim', 'str', 'wgt'],
   uretim: ['cam', 'mfg', 'cost', 'weld', 'asm', 'calc'],
+  mekatronik: ['meka'],
 };
 const TAB_MODE = {};
 for (const [m, ks] of Object.entries(MODES)) for (const k of ks) TAB_MODE[k] = m;
-const FIRST = { tasarim: 'dims', analiz: 'fem', uretim: 'cam' };
-const MODE_NAME = { tasarim: 'Tasarım', analiz: 'Analiz', uretim: 'Üretim' };
+const FIRST = { tasarim: 'dims', analiz: 'fem', uretim: 'cam', mekatronik: 'meka' };
+const MODE_NAME = { tasarim: 'Tasarım', analiz: 'Analiz', uretim: 'Üretim', mekatronik: 'Mekatronik' };
 const TAB_LABEL = {
   dims: 'Ölçü', type: 'Tür', pos: 'Konum', rot: 'Döndür', copy: 'Çoğalt', face: 'Yüz', edge: 'Kenar', shell: 'Kabuk', mate: 'Montaj',
   link: 'Bağ', part: 'Parça', view: 'Görünüm', sheet: 'Teknik resim', anim: 'Hareket', occt: 'B-Rep',
@@ -194,6 +195,7 @@ const CMDS = [
   T('sim', 'Sanal test', 'Dayanım, titreşim, ömür, öneriler', 'sanal test gelecek ömür yorulma', 'wave'),
   T('str', 'Dayanım uyarıları', '', 'dayanım büküm uyarı', 'chart'),
   T('wgt', 'Ağırlık ve ağırlık merkezi', '', 'ağırlık kütle kg merkez', 'weight'),
+  T('meka', 'Mekatronik Mühendisliği', 'Motor + vida, rulman ömrü, pnömatik silindir; hesap raporu', 'mekatronik motor servo vida bilyalı rulman ömür pnömatik silindir tork atalet iso 281 15552', 'gear'),
   T('cam', 'CNC freze', '3 eksen takım yolu, simülasyon, G-kodu', 'cnc freze g-kodu gkod takım yolu cam 3 eksen', 'cnc'),
   C('Üretim', 'CNC torna', '11 operasyon, simülasyon, Fanuc G-kodu', 'cnc torna lathe mil vida g-kodu', { lathe: true }, 'lathe', 'Torna'),
   T('mfg', 'Üretilebilirlik kontrolü', '', 'üretilebilirlik üretim kontrol', 'check'),

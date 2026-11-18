@@ -283,6 +283,29 @@ await T('Tek fotoğraftan tahmini model: giriş yoksa sunucuya gitmez; girişte 
   a.net.external.splice(0, a.net.external.length, ...a.net.external.filter((u) => !u.includes('/functions/v1/foto-model')));
 });
 
+await T('Mekatronik Mühendisliği: örnek dolum ünitesi uygun; uzun vida kritik devir hatası; rulman ve pnömatik kartı; PDF hesap raporu', 'M-Mekatronik', async ({ page }) => {
+  await page.evaluate(() => localStorage.removeItem('cizim:meka'));
+  await tab(page, 'meka');
+  await waitText(page, '#tabbody', /Mekatronik Mühendisliği/, 15000);
+  expect(/✓ UYGUN/.test(await body(page)), 'örnek eksen uygun: ' + (await body(page)).slice(0, 300));
+  // uzun vida + yüksek hız → kritik devir hatası
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mk="${k}"]`); await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(150); };
+  await set('vida.L', 2500); await set('vida.v', 1);
+  const b1 = await body(page);
+  expect(/UYGUN DEĞİL/.test(b1) && /kritik devr/.test(b1), 'kritik devir hatası görünür');
+  const pdf = await download(page, () => act(page, 'mk-pdf'));
+  expect(/^%PDF/.test(pdf.text) && /\.pdf$/.test(pdf.name) && pdf.size > 1500, 'PDF hesap raporu: ' + pdf.name + ' ' + pdf.size);
+  await act(page, 'mk-ornek'); expect(/✓ UYGUN/.test(await body(page)), 'örnek değerlere dönüldü');
+  // rulman
+  await act(page, 'mk-k-rulman'); await page.waitForTimeout(150);
+  expect(/Rulman ömrü \(ISO 281\)/.test(await body(page)) && /L10h/.test(await body(page)), 'rulman kartı');
+  // pnömatik: aşırı yük → öneri
+  await act(page, 'mk-k-pnomatik'); await page.waitForTimeout(150);
+  await set('pnomatik.yuk', 900);
+  const b2 = await body(page);
+  expect(/UYGUN DEĞİL/.test(b2) && /Uygun en küçük standart silindir: Ø63 \/ mil Ø20/.test(b2), 'pnömatik öneri: ' + b2.slice(0, 400));
+});
+
 /* ---------- D. Montaj ---------- */
 await T('Montaj: örnek "Mil ve burç" eşleşmeli montaj, montaj sırası planı, kaydet / aç', 'D-Montaj', async ({ page }) => {
   await act(page, 'guide'); await page.locator('[data-ex="mil"]').click(); await page.waitForTimeout(800);
@@ -587,7 +610,7 @@ await (async () => { if (only.length && !only.some((o) => 'W-Alan'.toLowerCase()
     await page.locator('.door.makine').click(); await page.waitForURL(/\/yeni\//); await waitReady(page);
     expect(await page.evaluate(() => localStorage.getItem('cizim:workspace')) === 'makine', 'seçim kaydedildi');
     expect(!(await crossLinks(/tekstil|klasik|index\.html\?ws|\?ws=/)).length, 'makinede tekstile / eski arayüze bağlantı yok: ' + await crossLinks(/tekstil|klasik|\?ws=/));
-    expect(await page.locator('#nav [data-mode]').count() === 3, 'alt gezinme: Tasarım, Analiz, Üretim');
+    expect(await page.locator('#nav [data-mode]').count() === 4, 'alt gezinme: Tasarım, Analiz, Üretim, Mekatronik');
     expect((await page.locator('#m-home').getAttribute('href')) === '../?sec=1', 'menüde Ana ekran');
     // 3) yeniden açılınca hatırlanan bölüme gider
     await page.goto(url); expect(/Makine ve Mühendislik açılıyor/.test(await page.locator('#going').innerText()), 'açılışta hatırlanan bölüm yazar');
