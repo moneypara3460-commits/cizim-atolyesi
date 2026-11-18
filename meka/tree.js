@@ -49,7 +49,8 @@ export function sanitize(o) {
   P.nextId = Math.max(fin(o.nextId) ? o.nextId : 1, ...P.items.map((i) => i.id + 1), 1);
   if (o.calc && typeof o.calc === 'object') P.calc = o.calc;
   if (o.elek && typeof o.elek === 'object') P.elek = o.elek;
-  if (o.plc && typeof o.plc === 'object') P.plc = o.plc;   // PLC (ui plcSanitize ile doğrular)   // elektrik (ui elekSanitize ile doğrular)   // hesap girdileri (ui doğrular)
+  if (o.plc && typeof o.plc === 'object') P.plc = o.plc;
+  if (o.guv && typeof o.guv === 'object') P.guv = o.guv;   // güvenlik (ui guvSanitize ile doğrular)   // PLC (ui plcSanitize ile doğrular)   // elektrik (ui elekSanitize ile doğrular)   // hesap girdileri (ui doğrular)
   return P;
 }
 

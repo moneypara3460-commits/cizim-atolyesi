@@ -2,11 +2,13 @@
 // api: { render(), toast(m), name(), saveBlob(blob, name) }
 // Girdiler bu cihazda saklanır (cizim:meka). Hesaplar meka/calc.js'te; bu dosya yalnız gösterir.
 import { screwAxis, bearingLife, pneumatic, pickCylinder, reportLines, SCREW_DEFAULTS, BEARING_DEFAULTS, PNEU_DEFAULTS, SCREW_MOUNT, ISO281_A1, CYL_ROD, BASLIK, GIRDI_ADI, beltAxis, rackAxis, rotaryTable, gearbox, shaft, BELT_DEFAULTS, RACK_DEFAULTS, TABLE_DEFAULTS, GEARBOX_DEFAULTS, SHAFT_DEFAULTS } from './calc.js?v=20261118f';
-import { KINDS, SLOTS, sanitize, addItem, removeItem, itemById, missing, applyLinks, linkChecks, bomRows, bomCSV, libAdd, libSanitize, HESAP_ADI } from './tree.js?v=20261118g';
+import { KINDS, SLOTS, sanitize, addItem, removeItem, itemById, missing, applyLinks, linkChecks, bomRows, bomCSV, libAdd, libSanitize, HESAP_ADI } from './tree.js?v=20261119a';
 import { pdfDoc } from '../tx/pdf.js?v=20261112u';
 import { createElekUI } from './elec-ui.js?v=20261118f';
 import { createPlcUI } from './plc-ui.js?v=20261118g';
 import { plcSanitize } from './plc.js?v=20261118g';
+import { createGuvUI } from './guv-ui.js?v=20261119a';
+import { guvSanitize } from './guv.js?v=20261119a';
 import { elekSanitize } from './elec.js?v=20261118f';
 
 const KEY = 'cizim:meka';   // 1. aşamada girdiler burada tutuluyordu (geçiş için okunur)
@@ -87,6 +89,7 @@ export function createMekaUI(api) {
     for (const [k, , D] of CARDS) Q.calc[k] = { ...D, ...(c?.[k] && typeof c[k] === 'object' ? c[k] : SAMPLE[k]) };
     Q.elek = elekSanitize(Q.elek);
     Q.plc = plcSanitize(Q.plc);
+    Q.guv = guvSanitize(Q.guv);
     return Q;
   }
   const C = () => P.calc;
@@ -102,6 +105,7 @@ export function createMekaUI(api) {
       return r;
     } catch (e) { return { hata: e.message }; }
   };
+  const guv = createGuvUI({ api, getP: () => P, changed: () => changed(), esc, pdfText });
   const plc = createPlcUI({ api, getP: () => P, changed: () => changed(), esc, pdfText });
   const elek = createElekUI({ api, getP: () => P, changed: () => changed(), esc, nf, pdfText });
   const partName = (id) => (api.parts ? (api.parts().find((q) => q.id === id) || {}).name : '') || '';
@@ -203,8 +207,8 @@ export function createMekaUI(api) {
   }
   function html() {
     let h = '<style>' + CSS + '</style><div class="mk"><div class="lbl h">Mekatronik Mühendisliği</div>';
-    h += '<div class="mk-tabs mk-top">' + [['hesap', '🧮 Hesaplar'], ['agac', '🌳 Ürün ağacı (' + P.items.length + ')'], ['liste', '📋 Parça listesi'], ['elek', '⚡ Elektrik (' + P.elek.yukler.length + ')'], ['plc', '🖥 PLC (' + P.plc.sinyaller.length + ')'], ['kut', '📚 Kütüphane (' + lib.length + ')']].map(([a, t]) => `<button data-act="mk-v-${a}" class="${a === view ? 'on' : ''}">${t}</button>`).join('') + '</div>';
-    h += view === 'plc' ? plc.html() : view === 'elek' ? elek.html() : view === 'agac' ? agacHtml() : view === 'liste' ? listeHtml() : view === 'kut' ? kutHtml() : hesapHtml();
+    h += '<div class="mk-tabs mk-top">' + [['hesap', '🧮 Hesaplar'], ['agac', '🌳 Ürün ağacı (' + P.items.length + ')'], ['liste', '📋 Parça listesi'], ['elek', '⚡ Elektrik (' + P.elek.yukler.length + ')'], ['plc', '🖥 PLC (' + P.plc.sinyaller.length + ')'], ['guv', '🛡 Güvenlik (' + P.guv.tehlikeler.length + ')'], ['kut', '📚 Kütüphane (' + lib.length + ')']].map(([a, t]) => `<button data-act="mk-v-${a}" class="${a === view ? 'on' : ''}">${t}</button>`).join('') + '</div>';
+    h += view === 'guv' ? guv.html() : view === 'plc' ? plc.html() : view === 'elek' ? elek.html() : view === 'agac' ? agacHtml() : view === 'liste' ? listeHtml() : view === 'kut' ? kutHtml() : hesapHtml();
     h += '<div class="mk-card mk-n">Ön tasarım hesabıdır. Motor, vida ve rulman değerlerini üreticinin güncel kataloğundan gir; seçim yetkili mühendis onayıyla kesinleşir. Örnek değerler temsilîdir, gerçek ürün değeri değildir.</div></div>';
     return h;
   }
@@ -212,6 +216,7 @@ export function createMekaUI(api) {
     const d = el.dataset;
     if (d.mke) { elek.input(el); return; }
     if (d.mkp) { plc.input(el); return; }
+    if (d.mky) { guv.input(el); return; }
     if (d.mk) {
       const [k, key] = d.mk.split('.');
       if (!C()[k] || !(key in C()[k] || SEL[key])) return;
@@ -236,6 +241,7 @@ export function createMekaUI(api) {
     if ((m = /^mk-v-(\w+)$/.exec(a))) { view = m[1]; api.render(); return true; }
     if (/^mk-e/.test(a) && elek.act(a)) return true;
     if (/^mk-p/.test(a) && plc.act(a)) return true;
+    if (/^mk-y/.test(a) && guv.act(a)) return true;
     if ((m = /^mk-k-(\w+)$/.exec(a))) { C().kart = m[1]; changed(); return true; }
     if (a === 'mk-ornek') { const k = C().kart; C()[k] = { ...SAMPLE[k] }; changed(); api.toast('Örnek değerler yüklendi (temsilî)'); return true; }
     if ((m = /^mk-add-(\w+)$/.exec(a))) { const it = addItem(P, m[1]); editId = it.id; changed(); return true; }
@@ -277,7 +283,7 @@ export function createMekaUI(api) {
 }
 
 // PDF'e yazılabilir metin (yerleşik yazı tipinde olmayan işaretler okunur karşılıklarıyla)
-const PDF_MAP = { 'Ω': 'Ohm', 'ρ': 'ro', 'Δ': 'Delta', 'φ': 'fi', 'μ': 'mu', 'η': 'eta', 'λ': 'lambda', 'α': 'alfa', 'θ': 'teta', 'π': 'pi', 'ω': 'omega', 'Σ': 'toplam', '√': 'kok', '≤': '<=', '≥': '>=', '✓': '[OK]', '✗': '[X]', '⚠': '[!]', 'ℹ': '[i]', '→': '->', '←': '<-', '⟂': '<>', '′': "'", '−': '-', '⁰': '^0', '¹': '^1', '⁴': '^4', '⁵': '^5', '⁶': '^6', '⁷': '^7', '⁸': '^8', '⁹': '^9', 'Ø': 'Ø' };
+const PDF_MAP = { 'Ω': 'Ohm', 'ρ': 'ro', 'Δ': 'Delta', 'φ': 'fi', 'μ': 'mu', 'η': 'eta', 'λ': 'lambda', 'α': 'alfa', 'θ': 'teta', 'π': 'pi', 'ω': 'omega', 'Σ': 'toplam', '√': 'kok', '≤': '<=', '≥': '>=', '✓': '[OK]', '✗': '[X]', '⚠': '[!]', 'ℹ': '[i]', '→': '->', '←': '<-', '⟂': '<>', '⁻': '^-', '′': "'", '−': '-', '⁰': '^0', '¹': '^1', '⁴': '^4', '⁵': '^5', '⁶': '^6', '⁷': '^7', '⁸': '^8', '⁹': '^9', 'Ø': 'Ø' };
 export const pdfText = (s) => String(s).replace(/[²³·]/g, (c) => ({ '²': '^2', '³': '^3', '·': '*' }[c])).replace(/[^\u0000-\u00ff\u011e\u011f\u0130\u0131\u015e\u015f\u2026\u2014\u2013]/g, (c) => PDF_MAP[c] ?? '?');
 export function reportPdf(lines) {
   const doc = pdfDoc(), W = 210, H = 297, X = 14, maxW = W - 2 * X;
