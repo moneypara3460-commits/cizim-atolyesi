@@ -3,7 +3,7 @@
 //   last.L: kalıp boyu (mm), last.top: topuk arkasından x mm'de kalıbın tabandan üst çizgisine yüksekliği (mm)
 // Yanıt: { ok, result: { model, confidence, pieces: [{ name, kind, layer, poly: [[x, y]…], holes, holeD, note }] } }
 //   x: topuk arkasından burna mm, y: taban (saya-taban birleşim) çizgisinden yukarı mm. Parçalar dış yandan görünüştür.
-// Gizli ayarlar: ANTHROPIC_API_KEY (zorunlu), AI_MODEL (isteğe bağlı). Yalnız giriş yapmış kullanıcı (Authorization: Bearer <oturum>). Sınır: hesap başına günde 10, toplam 150 (public.ai_take).
+// Gizli ayarlar: ANTHROPIC_API_KEY (zorunlu), AI_MODEL (isteğe bağlı). Yalnız giriş yapmış kullanıcı (Authorization: Bearer <oturum>). Sınır (public.ai_take_user): abone günde 10; abone olmayan günde 5 (hesap 24 saatten yeniyse 2); abone olmayanların ortak toplamı 150 — aboneler ortak sınırdan etkilenmez.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const CORS = {
@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
   const tok = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   const { data: ud, error: ue } = tok ? await admin.auth.getUser(tok) : { data: null, error: true };
   if (ue || !ud?.user?.id) return json(401, { error: 'Yapay zekâ için önce Google ile giriş yap.' });
-  const { data: allowed, error: le } = await admin.rpc('ai_take', { p_who: 'parca:' + ud.user.id, p_limit: 10, p_global: 150 });
+  const { data: allowed, error: le } = await admin.rpc('ai_take_user', { p_uid: ud.user.id, p_kind: 'parca', p_paid_limit: 10, p_trial_limit: 5, p_new_limit: 2, p_global: 150 });
   if (le) { console.error(le); return json(500, { error: 'Sınır kontrolü yapılamadı' }); }
   if (!allowed) return json(429, { error: 'Bugünkü parça çıkarma sınırına ulaşıldı, yarın tekrar dene.' });
 
