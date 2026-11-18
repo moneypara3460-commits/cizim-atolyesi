@@ -58,6 +58,8 @@ let sel = 0;
 let selOff = null;
 const hasSel = () => !(selOff != null && selOff === sel) && parts.some((p) => p.id === sel);
 let nextId = 1;
+let mekaPending = null, mekaReady = false;
+const mekaReset = () => { if (mekaReady) mekaUI.setProject(null); else mekaPending = null; };   // proje açılmadan önce: eski projede Mekatronik verisi yoksa boş başlasın   // Mekatronik ürün ağacı (proje verisi); arayüz kurulmadan gelen kayıt bekletilir
 let projName = 'model';
 let tab = 'dims';
 // Model boşken parça isteyen kodlar zararsız bir yer tutucu görür (parça listesinde değildir, seçili sayılmaz: hasSel() false).
@@ -87,7 +89,7 @@ const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan, asm
 // Kaydederken (otomatik kayıt, proje) veri de dosyaya yazılır.
 const meshStore = new Map();
 function snapshotSave() {
-  const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined };   // cam5: 4/5 eksen CNC ayarları
+  const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined, meka: mekaReady ? mekaUI.getProject() : mekaPending };   // cam5: 4/5 eksen CNC ayarları; meka: Mekatronik ürün ağacı ve hesaplar
   const ks = [...new Set(parts.flatMap((q) => [q.mk, q.bk]).filter((k) => k && meshStore.has(k)))];   // bk: OCCT B-Rep metni
   if (ks.length) { o.meshes = {}; ks.forEach((k) => { o.meshes[k] = meshStore.get(k); }); }
   return JSON.stringify(o);
@@ -99,6 +101,8 @@ function restore(s) {
   cleanLinks(parts);
   if (typeof cam5UI !== 'undefined') cam5UI.setCfg(o.cam5);
   femData = o.fem && typeof o.fem === 'object' ? o.fem : null;   // eski projelerde yok: varsayılan (3 eksen)
+  // Mekatronik: yalnız proje kaydında var (geri al anlık görüntüsünde yok → dokunulmaz); 'meka' anahtarı olmayan eski proje boş ağaçla açılır
+  if ('meka' in o) { if (mekaReady) mekaUI.setProject(o.meka || null); else mekaPending = o.meka || null; }
   if (!Array.isArray(parts)) parts = [];
   if (!parts.find((p) => p.id === sel)) sel = parts.length ? parts[0].id : 0;
 }
@@ -1756,7 +1760,18 @@ const mekaUI = createMekaUI({
   toast: (m) => toast(m),
   name: () => (projName || 'model').replace(/[^\w\-çğıöşüÇĞİÖŞÜ ]+/g, '_'),
   saveBlob: (b, n) => saveBlob(b, n),
+  parts: () => parts.map((q, i) => ({ id: q.id, name: partName(q, i) })),
+  changed: () => scheduleSave(),
+  focusPart: (id) => {
+    const b = lastBrushes.find((x) => x.p.id === id);
+    if (!b) { toast('Bağlı parça modelde yok (silinmiş ya da gizli)'); return; }
+    selOff = null; sel = id; refreshOverlays();
+    if (!b.geo.boundingBox) b.geo.computeBoundingBox();
+    fit(b.geo.boundingBox.clone().expandByScalar(b.geo.boundingBox.getSize(new THREE.Vector3()).length() * 0.3));
+    renderPanel();
+  },
 });
+mekaUI.setProject(mekaPending); mekaReady = true;
 const weightUI = createWeightUI({
   compute: weightCompute,
   materials: MATERIALS,
@@ -3004,7 +3019,7 @@ document.addEventListener('change', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.wf) { weldUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.wg) { weightUI.input(el, 'change'); return; }
-  if (el.dataset && el.dataset.mk) { mekaUI.input(el); return; }
+  if (el.dataset && (el.dataset.mk || el.dataset.mkb || el.dataset.mkl || el.dataset.mki)) { mekaUI.input(el); return; }
   if (el.dataset && el.dataset.cf) { costUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.as) { asmUI.input(el, 'change'); return; }
   if (el.dataset && (el.dataset.cs || el.dataset.cn || el.dataset.ct || el.dataset.co)) { camUI.input(el, 'change'); return; }
@@ -3918,7 +3933,7 @@ document.addEventListener('click', (e) => {
   if (t.dataset.color !== undefined) { commit(); cur().color = t.dataset.color || undefined; refreshAll(); return; }
   if (t.dataset.open) {
     const all = loadProjects(), pr = all[t.dataset.open];
-    if (pr) { commit(); restore(pr.data); projName = t.dataset.open; closeDialog(); refreshAll(true); toast('Açıldı: ' + projName); }
+    if (pr) { commit(); mekaReset(); restore(pr.data); projName = t.dataset.open; closeDialog(); refreshAll(true); toast('Açıldı: ' + projName); }
     return;
   }
   if (t.dataset.delp) {
@@ -4326,7 +4341,7 @@ function openGuide() {
 /* ================= Başlangıç ================= */
 try {
   const a = JSON.parse(localStorage.getItem('cizim:auto') || 'null');
-  if (a && a.snap) { restore(a.snap); projName = a.projName || 'model'; }
+  if (a && a.snap) { mekaReset(); restore(a.snap); projName = a.projName || 'model'; }
 } catch (e) { /* bozuk kayıt: varsayılanla devam */ }
 
 // test / hata ayıklama için küçük kanca (arayüzü etkilemez)

@@ -1,6 +1,7 @@
 // Çalıştır: node tests/meka.test.mjs
 // Mekatronik hesap motoru. Beklenen değerler formülden BAĞIMSIZ olarak elle hesaplanmıştır (yorumlarda işlem görünür).
 import assert from 'node:assert/strict';
+import { emptyProject, sanitize, addItem, removeItem, applyLinks, linkChecks, bomRows, bomCSV, libAdd, libSanitize, missing } from '../meka/tree.js';
 import { screwAxis, bearingLife, pneumatic, pickCylinder, reportLines, G, SCREW_MOUNT, ISO281_A1, CYL_ROD } from '../meka/calc.js';
 
 let fail = 0;
@@ -148,6 +149,73 @@ t('Rapor: girdiler, her adım (formül + kaynak), kontroller ve kaynak listesi y
   assert.ok(r.adimlar.every((a) => s.includes(a.formul)));
   assert.match(s, /\[THK\]/);
   assert.match(s, /üreticinin güncel katalog/);
+});
+
+/* ---------- 2. aşama: ürün ağacı ---------- */
+function demo() {
+  const P = emptyProject();
+  const m = addItem(P, 'motor'); m.ad = 'Servo 400 W'; m.kod = 'M-400'; Object.assign(m.deger, { Jm: 0.00025, Tn: 1.27, Tmax: 3.8, nmax: 3000 });
+  const v = addItem(P, 'vida'); v.kod = 'BV-1610'; Object.assign(v.deger, { P: 10, d: 16, dr: 13.2, L: 450, eta: 0.92 });
+  const k = addItem(P, 'kaplin'); Object.assign(k.deger, { J: 0.00001, Tn: 2 });
+  const r = addItem(P, 'reduktor'); Object.assign(r.deger, { i: 3, eta: 0.95, J: 0.00002, Tmax: 6 });
+  P.bag.vida = { motor: m.id, vida: v.id, kaplin: k.id, reduktor: r.id };
+  return { P, m, v, k, r };
+}
+t('Ürün ağacı: bağlı bileşenlerin katalog değerleri hesaba geçer, kaynağı yazılır', () => {
+  const { P } = demo();
+  const a = applyLinks('vida', { ...base }, P);
+  assert.equal(a.giris.Jm, 0.00025); assert.equal(a.giris.P, 10); assert.equal(a.giris.etaS, 0.92); assert.equal(a.giris.i, 3); assert.equal(a.giris.etaG, 0.95);
+  near(a.giris.Jc, 0.00003, 1e-12);   // kaplin + redüktör giriş ataleti
+  assert.match(a.kaynak.Jm, /Servo 400 W \(M-400\)/);
+  assert.equal(a.eksik.length, 0);
+});
+t('Ürün ağacı: eksik zorunlu katalog alanı raporlanır; frenli motor tutmayı frene çevirir', () => {
+  const { P, m, v } = demo();
+  delete v.deger.dr; m.deger.fren = 1;
+  const a = applyLinks('vida', { ...base }, P);
+  assert.ok(a.eksik.some((e) => /Diş dibi/.test(e)));
+  assert.equal(a.giris.dr, base.dr);
+  assert.equal(a.giris.tutma, 'fren');
+  assert.deepEqual(missing(v), ['Diş dibi çapı']);
+});
+t('Ürün ağacı: redüktör çıkış torku (T·i·η) ve kaplin torku kontrolü', () => {
+  const { P, r } = demo();
+  const res = screwAxis(applyLinks('vida', { ...base, m: 18, aci: 90 }, P).giris);
+  const red = linkChecks('vida', res, P).find((x) => /Redüktör/.test(x.metin));
+  near(+red.metin.match(/tepe tork ([0-9.]+)/)[1], res.sonuc.Tpk * 3 * 0.95, 0.01);
+  r.deger.Tmax = 0.1;
+  assert.equal(linkChecks('vida', res, P).find((x) => /Redüktör/.test(x.metin)).ok, false);
+});
+t('Ürün ağacı: rulman sınır devri ve ISO 76 statik güvenlik (P0 = max(Fr, 0,6Fr + 0,5Fa))', () => {
+  const P = emptyProject(); const b = addItem(P, 'rulman'); Object.assign(b.deger, { C: 14000, C0: 6550, nlim: 1000 }); P.bag.rulman = { rulman: b.id };
+  const res = bearingLife(applyLinks('rulman', { Fr: 2000, Fa: 3000, X: 0.56, Y: 1.4, n: 1500 }, P).giris);
+  const c = linkChecks('rulman', res, P);
+  assert.equal(c.find((x) => /sınır devri/.test(x.metin)).ok, false);
+  near(+c.find((x) => /s0/.test(x.metin)).metin.match(/= ([0-9.]+) \(/)[1], 6550 / 2700, 0.005);
+});
+t('Ürün ağacı: bileşen silinince bağları da kalkar; bozuk proje verisi temizlenir', () => {
+  const { P, v } = demo();
+  removeItem(P, v.id);
+  assert.equal(P.bag.vida.vida, undefined);
+  const Q = sanitize({ items: [{ id: 1, kind: 'motor', deger: { Jm: 'x', Tn: 2 } }, { id: 1, kind: 'motor' }, { id: 2, kind: 'uzay' }, null], bag: { vida: { motor: 1, vida: 99 } }, nextId: -5 });
+  assert.equal(Q.items.length, 1); assert.deepEqual(Q.items[0].deger, { Tn: 2 }); assert.equal(Q.bag.vida.motor, 1); assert.equal(Q.bag.vida.vida, undefined); assert.equal(Q.nextId, 2);
+  assert.deepEqual(sanitize('bozuk').items, []);
+});
+t('Parça listesi: türe göre sıralı, model parçası, hesap durumu; CSV (Excel uyumlu ;)', () => {
+  const { P, m } = demo(); m.partId = 7;
+  addItem(P, 'sensor').ad = 'Endüktif; sensör "M12"';
+  const rows = bomRows(P, (id) => (id === 7 ? 'Motor gövdesi' : ''), { vida: true });
+  assert.deepEqual(rows.map((r) => r.tur), ['Servo / adım motoru', 'Redüktör / kayış kasnak', 'Bilyalı vida', 'Kaplin', 'Sensör']);
+  assert.equal(rows[0].parca, 'Motor gövdesi'); assert.equal(rows[0].durum, 'uygun'); assert.equal(rows[4].durum, '—');
+  const csv = bomCSV(rows);
+  assert.ok(csv.startsWith('﻿No;Tür;'));
+  assert.ok(csv.includes('"Endüktif; sensör ""M12"""'));
+});
+t('Kütüphane: aynı ürün kodu güncellenir, tekrar eklenmez; bozuk kayıt atılır', () => {
+  const { m } = demo();
+  const lib = libAdd([], m); m.deger.Tn = 1.5; libAdd(lib, m);
+  assert.equal(lib.length, 1); assert.equal(lib[0].deger.Tn, 1.5);
+  assert.equal(libSanitize([...lib, { kind: 'yok' }, 5]).length, 1);
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
