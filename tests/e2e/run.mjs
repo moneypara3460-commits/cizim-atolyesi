@@ -454,7 +454,7 @@ await T('Sağlamlık: bozuk otomatik kayıt ve bozuk proje kaydı uygulamayı ç
   if (has) { await page.locator('[data-open="bozuk"]').click(); await page.waitForTimeout(500); }
   expect(await chips(page) >= 1 && (await page.locator('#chips').innerText()).length > 0, 'bozuk proje açılınca model kaybolmadı');
   void before;
-}, { allowErr: [/bozuk|JSON|Unexpected|parts/i] });
+}, { allowErr: [/bozuk|JSON|Unexpected|parts|\.map is not a function/i] });   // derlenmiş kodda değişken adı kısalır (parts → t)
 
 /* ---------- performans: büyük model ---------- */
 await T('Performans: 40 parçalı model yeniden kurma süresi', 'P-Performans', async ({ page }) => {

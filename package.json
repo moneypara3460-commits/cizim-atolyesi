@@ -7,6 +7,8 @@
   },
   "scripts": {
     "test": "node tests/run-all.mjs --no-wasm",
+    "build": "node tools/build.mjs",
+    "build:koruma": "node tools/build.mjs --obfuscate",
     "test:wasm": "node tests/run-all.mjs --only-wasm",
     "test:unit": "node tests/run-all.mjs",
     "test:coverage": "node tests/run-all.mjs --coverage",

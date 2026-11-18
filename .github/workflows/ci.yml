@@ -184,3 +184,55 @@ jobs:
           name: vendor-npm
           path: /tmp/vendor-out/
           if-no-files-found: warn
+
+  # Yayın derlemesi (kod koruma): dist/ = küçültülmüş + karıştırılmış kod. Kaynak değişmez.
+  # Derlenmiş kodun kaynakla aynı çalıştığı, aynı birim ve uçtan uca testlerle dist/ üzerinde denetlenir.
+  yayin-derlemesi:
+    name: Yayın derlemesi (küçültme + karıştırma) ve derlenmiş kodda testler
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Derleme araçları (sürümler sabit, depoya girmez)
+        run: |
+          mkdir -p .build-tools && cd .build-tools
+          echo '{"name":"build-tools","private":true}' > package.json
+          npm install --no-audit --no-fund esbuild@0.28.2 javascript-obfuscator@4.1.1
+      - name: Derle (testlerle birlikte)
+        run: node tools/build.mjs --obfuscate --with-tests
+      - name: Derlenmiş kodda birim + OCCT testleri
+        working-directory: dist
+        run: node tests/run-all.mjs 2>&1 | tee ../reports-dist-unit.log
+        shell: bash -o pipefail {0}
+      - name: Uçtan uca test araçları
+        run: |
+          mkdir -p .e2e-libs && cd .e2e-libs
+          echo '{"name":"e2e-libs","private":true}' > package.json
+          npm install --no-audit --no-fund --legacy-peer-deps three@0.160.0 three-mesh-bvh@0.6.0 three-bvh-csg@0.0.7 playwright@1.49.1
+          npx playwright install --with-deps chromium
+      - name: Derlenmiş kodda uçtan uca testler
+        working-directory: dist
+        env:
+          E2E_LIBS: ${{ github.workspace }}/.e2e-libs/node_modules
+          PLAYWRIGHT_MODULE: ${{ github.workspace }}/.e2e-libs/node_modules/playwright
+        run: |
+          node tests/e2e/run.mjs
+          E2E_UI=yeni node tests/e2e/run.mjs
+          node tests/e2e/hesap.mjs
+          node tests/e2e/ayk-auto.mjs
+          node tests/e2e/ayk-kalip.mjs
+          node tests/e2e/tanitim.mjs
+        shell: bash -o pipefail {0}
+      - name: Derlemeyi yükle (yalnız uygulama dosyaları)
+        if: success()
+        run: rm -rf dist/tests dist/supabase dist/reports
+      - name: dist/ yükle
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cizim-atolyesi-dist
+          path: dist/
+          retention-days: 14
