@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     const { error: e0 } = await admin.from('deneme_kullanildi').upsert({ email_hash: h }, { onConflict: 'email_hash' });
     if (e0) { console.error(e0); return json(500, { error: 'Silme yapılamadı, tekrar dene.' }); }
   }
-  const { error: e1 } = await admin.from('ai_usage').delete().or(`who.eq.model:${uid},who.eq.parca:${uid}`);
+  const { error: e1 } = await admin.from('ai_usage').delete().or(`who.eq.model:${uid},who.eq.parca:${uid},who.eq.modelp:${uid},who.eq.parcap:${uid}`);
   if (e1) { console.error(e1); return json(500, { error: 'Silme yapılamadı, tekrar dene.' }); }
   const { error: e2 } = await admin.auth.admin.deleteUser(uid);
   if (e2) { console.error(e2); return json(500, { error: 'Silme yapılamadı, tekrar dene.' }); }
