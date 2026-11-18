@@ -26,8 +26,13 @@ const OBF = args.has('--obfuscate'), WITH_TESTS = args.has('--with-tests');
 const SKIP_DIRS = new Set(['.git', '.github', 'node_modules', 'dist', 'docs', 'tools', 'supabase', 'reports', '.e2e-libs', '.build-tools', 'tests']);
 const SKIP_FILES = new Set(['App.js', 'viewerHtml.js', 'package.json', 'package-lock.json', '.gitignore', 'README.md', 'SECURITY.md', 'TESTLER.md']);
 
-// Ağır hesap dosyaları: karıştırmada akış bozma kapalı (performans korunur), yalnız ad/metin gizleme
-const HEAVY = /^(cam5?|cam5-worker|coll5|post5|lathe|fea2?|fea-worker|fem-worker|fem-run|cutopt|photo2d|occt|occt-ops|occt-worker|export3d|weight|mfgcheck|sketch|cad2d|cad2d-geom|kin|mech|welds|scan\/.*|tx\/sim3d\/.*|tx\/woven\/(marker|pattern|grade)|ayk\/(last|geom|auto|build|match)|hand\/tracker)\.js$/;
+// Karıştırma düzeyi (CI ölçümü: hesap dosyalarında metin dizisi şifreleme CAM testini ~5 kat yavaşlattı, PDF ikili
+// metinlerini bozdu). Bu yüzden:
+//  - Arayüz dosyaları (LIGHT): adlar anlamsızlaşır + metinler şifreli diziye taşınır.
+//  - Hesap / çıktı dosyaları (geri kalan her şey): yalnız adlar anlamsızlaşır, metinler ve akış olduğu gibi kalır
+//    (performans ve PDF / DXF / G-kodu çıktıları birebir aynı).
+// Akış bozma (control flow flattening) hiçbir dosyada açılmaz: etkileşimi yavaşlatır, koruması sınırlıdır.
+const LIGHT = /^(app\.js|[a-z0-9]+-ui\.js|yeni\/.*|acilis\/.*|hesap\/(?!config\.js).*|tx\/app\.js|tx\/(sketch-ui|knit\/chart-ui|woven\/(marker|pattern)-ui)\.js|ayk\/(app|editor|ai)\.js|hand\/(ui|control|pointer)\.js|scan\/scan-ui\.js|photoimport\.js)$/;
 
 function tools() {
   const bases = [process.env.BUILD_TOOLS, path.join(ROOT, '.build-tools', 'node_modules')].filter(Boolean);
@@ -67,14 +72,14 @@ async function main() {
       loader: 'js', format: 'esm', target: 'es2022', minify: true, legalComments: 'none', charset: 'utf8',
     });
     if (obf) {
-      const heavy = HEAVY.test(rel);
+      const light = LIGHT.test(rel);
       min = obf.obfuscate(min, {
         target: rel.includes('worker') ? 'browser-no-eval' : 'browser',
         compact: true, sourceMap: false, selfDefending: false, debugProtection: false, disableConsoleOutput: false,
         renameGlobals: false, identifierNamesGenerator: 'hexadecimal', transformObjectKeys: false,
-        stringArray: true, stringArrayEncoding: ['base64'], stringArrayThreshold: heavy ? 0.5 : 0.8,
+        stringArray: light, stringArrayEncoding: light ? ['base64'] : [], stringArrayThreshold: 0.75,
         stringArrayWrappersCount: 1, splitStrings: false, numbersToExpressions: false, simplify: true,
-        controlFlowFlattening: !heavy, controlFlowFlatteningThreshold: 0.25, deadCodeInjection: false,
+        controlFlowFlattening: false, deadCodeInjection: false, unicodeEscapeSequence: false,
         reservedStrings: ['^\\./', '^\\.\\./', '\\?v=', 'import\\.meta'],
       }).getObfuscatedCode();
     }
