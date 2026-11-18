@@ -1,8 +1,8 @@
 // Mekatronik Mühendisliği — sekme arayüzü (1. aşama: hesap ve seçim motoru).
 // api: { render(), toast(m), name(), saveBlob(blob, name) }
 // Girdiler bu cihazda saklanır (cizim:meka). Hesaplar meka/calc.js'te; bu dosya yalnız gösterir.
-import { screwAxis, bearingLife, pneumatic, pickCylinder, reportLines, SCREW_DEFAULTS, BEARING_DEFAULTS, PNEU_DEFAULTS, SCREW_MOUNT, ISO281_A1, CYL_ROD, BASLIK, GIRDI_ADI } from './calc.js?v=20261118d';
-import { KINDS, SLOTS, sanitize, addItem, removeItem, itemById, missing, applyLinks, linkChecks, bomRows, bomCSV, libAdd, libSanitize } from './tree.js?v=20261118d';
+import { screwAxis, bearingLife, pneumatic, pickCylinder, reportLines, SCREW_DEFAULTS, BEARING_DEFAULTS, PNEU_DEFAULTS, SCREW_MOUNT, ISO281_A1, CYL_ROD, BASLIK, GIRDI_ADI, beltAxis, rackAxis, rotaryTable, gearbox, shaft, BELT_DEFAULTS, RACK_DEFAULTS, TABLE_DEFAULTS, GEARBOX_DEFAULTS, SHAFT_DEFAULTS } from './calc.js?v=20261118e';
+import { KINDS, SLOTS, sanitize, addItem, removeItem, itemById, missing, applyLinks, linkChecks, bomRows, bomCSV, libAdd, libSanitize, HESAP_ADI } from './tree.js?v=20261118e';
 import { pdfDoc } from '../tx/pdf.js?v=20261112u';
 
 const KEY = 'cizim:meka';   // 1. aşamada girdiler burada tutuluyordu (geçiş için okunur)
@@ -19,6 +19,29 @@ const F_SCREW = [
   ['Motor (katalogdan)', [['Jm', 'Rotor ataleti', 'kg·m²', 0.000001], ['Tn', 'Anma torku', 'N·m', 0.01], ['Tmax', 'En yüksek tork', 'N·m', 0.01], ['nmax', 'En yüksek devir', 'dev/dk', 100], ['SF', 'Güvenlik katsayısı (RMS)', '', 0.1], ['oranSinir', 'İzin verilen atalet oranı', ': 1', 1]]],
 ];
 const F_BEAR = [['Rulman', [['tip', 'Tip'], ['C', 'Dinamik yük sayısı C (katalog)', 'N', 100], ['Fr', 'Radyal yük Fr', 'N', 10], ['Fa', 'Eksenel yük Fa', 'N', 10], ['X', 'X katsayısı', '', 0.01], ['Y', 'Y katsayısı', '', 0.01], ['n', 'Devir', 'dev/dk', 10], ['guv', 'Güvenilirlik'], ['hedef', 'Hedef ömür', 'saat', 1000]]]];
+const F_MOTOR = ['Motor (katalogdan)', [['Jm', 'Rotor ataleti', 'kg·m²', 0.000001], ['Tn', 'Anma torku', 'N·m', 0.01], ['Tmax', 'En yüksek tork', 'N·m', 0.01], ['nmax', 'En yüksek devir', 'dev/dk', 100], ['SF', 'Güvenlik katsayısı (RMS)', '', 0.1], ['oranSinir', 'İzin verilen atalet oranı', ': 1', 1]]];
+const F_LIN = (kayis) => [
+  ['Yük', [['m', 'Taşınan kütle', 'kg', 0.1], ['mu', 'Kılavuz sürtünme katsayısı μ', '', 0.001], ['aci', 'Eğim (0 yatay, 90 düşey)', '°', 1], ['Fdis', 'Dış kuvvet (işlem kuvveti)', 'N', 1]]],
+  [kayis ? 'Triger kayış ve kasnaklar' : 'Kremayer ve pinyon', [['Dp', kayis ? 'Kasnak bölüm çapı' : 'Pinyon bölüm çapı (modül × diş sayısı)', 'mm', 0.1], ['Jp', kayis ? 'Kasnak ataleti (her biri; tahrik + avara)' : 'Pinyon ataleti', 'kg·m²', 0.000001], ...(kayis ? [['mb', 'Kayış kütlesi', 'kg', 0.01]] : []), ['eta', 'Verim η', '', 0.01], ['Fizin', kayis ? 'Kayışın izin verilen çekme kuvveti (katalog)' : 'İzin verilen teğetsel kuvvet (katalog)', 'N', 10]]],
+  ['Aktarma', [['i', 'Oran (motor devri / ' + (kayis ? 'kasnak' : 'pinyon') + ' devri)', '', 0.1], ['etaG', 'Redüktör verimi', '', 0.01], ['Jc', 'Kaplin + redüktör giriş ataleti', 'kg·m²', 0.000001]]],
+  ['Hareket', [['strok', 'Strok', 'mm', 1], ['v', 'En yüksek hız', 'm/s', 0.01], ['ta', 'Hızlanma = yavaşlama süresi', 's', 0.01], ['td', 'Bekleme süresi', 's', 0.1], ['tutma', 'Beklemede yükü tutan']]],
+  F_MOTOR,
+];
+const F_TABLE = [
+  ['Tabla ve yük', [['M', 'Tabla kütlesi (dolu disk)', 'kg', 0.1], ['Dt', 'Tabla çapı', 'mm', 1], ['Jek', 'Fikstür + parça ataleti', 'kg·m²', 0.0001], ['Tsur', 'Tabla yatağı sürtünme torku', 'N·m', 0.1]]],
+  ['İndeksleme', [['aci', 'Bir adımda dönüş açısı', '°', 1], ['tm', 'Hareket süresi', 's', 0.01], ['ka', 'Hızlanma payı (ta / t_hareket, en çok 0,5)', '', 0.01], ['td', 'Bekleme (işlem) süresi', 's', 0.1]]],
+  ['Aktarma', [['i', 'Redüktör oranı', '', 1], ['etaG', 'Redüktör verimi', '', 0.01], ['Jc', 'Kaplin + redüktör giriş ataleti', 'kg·m²', 0.000001]]],
+  F_MOTOR,
+];
+const F_GEAR = [
+  ['Uygulamanın istediği (eksen / tabla hesabından)', [['T2rms', 'Sürekli (RMS) çıkış torku', 'N·m', 0.1], ['T2tepe', 'Tepe çıkış torku', 'N·m', 0.1], ['n2', 'Çıkış devri', 'dev/dk', 1], ['n1', 'Motor devri', 'dev/dk', 100], ['fs', 'Servis katsayısı fs (katalog tablosundan)', '', 0.05]]],
+  ['Redüktör (katalogdan)', [['i', 'Oran', '', 1], ['T2N', 'Anma çıkış torku', 'N·m', 1], ['T2max', 'En yüksek çıkış torku', 'N·m', 1], ['n1max', 'İzin verilen giriş devri', 'dev/dk', 100], ['eta', 'Verim', '', 0.01]]],
+];
+const F_SHAFT = [
+  ['Yükleme', [['durum', 'Yükleme durumu'], ['F', 'Kuvvet (bileşke)', 'N', 10], ['L', 'Yataklar arası / konsol boyu', 'mm', 1], ['a', 'Yükün sol yatağa uzaklığı', 'mm', 1], ['T', 'İletilen tork', 'N·m', 0.1]]],
+  ['Mil ve malzeme', [['d', 'Mil çapı', 'mm', 0.5], ['E', 'Elastisite modülü (çelik 210 000)', 'MPa', 1000], ['Re', 'Akma dayanımı Re (malzeme)', 'MPa', 5], ['Sgerek', 'İstenen statik güvenlik', '', 0.1]]],
+  ['Sınırlar', [['yIzin', 'İzin verilen sehim (0 = kontrol yok)', 'mm', 0.01], ['tIzin', 'İzin verilen yatak eğimi (0 = kontrol yok)', 'rad', 0.0001]]],
+];
 const F_PNEU = [['Silindir', [['D', 'İç çap (standart)'], ['strok', 'Strok', 'mm', 1], ['p', 'Çalışma basıncı', 'bar', 0.5], ['yuk', 'Yük', 'N', 10], ['yon', 'Kuvvet yönü'], ['dinamik', 'Yük tipi'], ['cevrim', 'Çevrim sayısı', '/dk', 1]]]];
 
 const SEL = {
@@ -29,12 +52,21 @@ const SEL = {
   D: Object.keys(CYL_ROD).map((k) => [k, 'Ø' + k + ' (' + (k <= 25 ? 'ISO 6432' : 'ISO 15552') + ', mil Ø' + CYL_ROD[k] + ')']),
   yon: [['itme', 'İtme'], ['cekme', 'Çekme']],
   dinamik: [['1', 'Hareketli yük (%70 sınırı)'], ['0', 'Sıkma / statik (%85 sınırı)']],
+  durum: [['iki-mesnet', 'İki yatak arası tekil yük'], ['konsol', 'Konsol (ankastre), uçta yük']],
 };
 const SAMPLE = {   // test projesi: paketleme makinesi dolum ünitesi (temsilî değerler; gerçek katalogla değiştir)
   vida: { ...SCREW_DEFAULTS, m: 18, aci: 90, mu: 0.005, Fdis: 150, P: 10, d: 16, dr: 13.2, L: 450, mount: 'sabit-mesnetli', strok: 200, v: 0.3, ta: 0.12, td: 0.8, tutma: 'motor', i: 1, etaG: 1, Jm: 0.00012, Tn: 1.27, Tmax: 3.8, nmax: 3000 },
   rulman: { ...BEARING_DEFAULTS, C: 9950, Fr: 1200, n: 1800, guv: 95, hedef: 20000 },
   pnomatik: { ...PNEU_DEFAULTS, D: 32, strok: 80, p: 6, yuk: 250, cevrim: 30 },
+  kayis: { ...BELT_DEFAULTS },
+  kremayer: { ...RACK_DEFAULTS },
+  tabla: { ...TABLE_DEFAULTS },
+  reduktor: { ...GEARBOX_DEFAULTS },
+  mil: { ...SHAFT_DEFAULTS, d: 25 },
 };
+const CARDS = [['vida', '⚙ Vidalı eksen', SCREW_DEFAULTS], ['kayis', '➰ Kayışlı eksen', BELT_DEFAULTS], ['kremayer', '⚙ Kremayer', RACK_DEFAULTS], ['tabla', '◴ Döner tabla', TABLE_DEFAULTS], ['reduktor', '⚙ Redüktör', GEARBOX_DEFAULTS], ['mil', '━ Mil', SHAFT_DEFAULTS], ['rulman', '◎ Rulman', BEARING_DEFAULTS], ['pnomatik', '⇆ Pnömatik', PNEU_DEFAULTS]];
+const DEFS = { vida: () => F_SCREW, kayis: () => F_LIN(true), kremayer: () => F_LIN(false), tabla: () => F_TABLE, reduktor: () => F_GEAR, mil: () => F_SHAFT, rulman: () => F_BEAR, pnomatik: () => F_PNEU };
+const RUN = { vida: screwAxis, kayis: beltAxis, kremayer: rackAxis, tabla: rotaryTable, reduktor: gearbox, mil: shaft, rulman: bearingLife, pnomatik: (g) => pneumatic({ ...g, d: null, dinamik: !!g.dinamik }) };
 
 // api: { render(), toast(m), name(), saveBlob(blob, name), parts() → [{ id, name }], changed() (kaydet + geri al noktası), focusPart(id) }
 export function createMekaUI(api) {
@@ -47,12 +79,8 @@ export function createMekaUI(api) {
     const Q = sanitize(o);
     let old = null; try { old = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { old = null; }   // 1. aşama: girdiler cihazdaydı
     const c = Q.calc && typeof Q.calc === 'object' ? Q.calc : old && old.vida ? old : null;
-    Q.calc = {
-      kart: ['vida', 'rulman', 'pnomatik'].includes(c?.kart) ? c.kart : 'vida',
-      vida: { ...SCREW_DEFAULTS, ...(c?.vida && typeof c.vida === 'object' ? c.vida : SAMPLE.vida) },
-      rulman: { ...BEARING_DEFAULTS, ...(c?.rulman && typeof c.rulman === 'object' ? c.rulman : SAMPLE.rulman) },
-      pnomatik: { ...PNEU_DEFAULTS, ...(c?.pnomatik && typeof c.pnomatik === 'object' ? c.pnomatik : SAMPLE.pnomatik) },
-    };
+    Q.calc = { kart: CARDS.some(([k]) => k === c?.kart) ? c.kart : 'vida' };
+    for (const [k, , D] of CARDS) Q.calc[k] = { ...D, ...(c?.[k] && typeof c[k] === 'object' ? c[k] : SAMPLE[k]) };
     return Q;
   }
   const C = () => P.calc;
@@ -61,7 +89,7 @@ export function createMekaUI(api) {
   const run = (k) => {
     try {
       const g = linked(k).giris;
-      const r = k === 'vida' ? screwAxis(g) : k === 'rulman' ? bearingLife(g) : pneumatic({ ...g, d: null, dinamik: !!g.dinamik });
+      const r = RUN[k](g);
       const extra = linkChecks(k, r, P).map((c) => ({ ...c, duzey: c.ok ? 'tamam' : c.duzey }));
       r.kontroller = [...r.kontroller, ...extra];
       r.uygun = r.kontroller.every((c) => c.ok || c.duzey !== 'hata');
@@ -88,6 +116,14 @@ export function createMekaUI(api) {
     const s = r.sonuc, rows = k === 'vida'
       ? [['Motor devri', nf(s.nM, 0) + ' dev/dk'], ['Vida devri / kritik devir', nf(s.nS, 0) + ' / ' + nf(s.nc, 0) + ' dev/dk'], ['En büyük eksenel kuvvet / burkulma', nf(s.Fmax, 0) + ' / ' + nf(s.Pk, 0) + ' N'],
         ['Yük torku (sabit hız)', nf(s.Tl) + ' N·m'], ['Hızlanma torku', nf(s.Tacc) + ' N·m'], ['En yüksek tork', nf(s.Tpk) + ' N·m'], ['RMS tork', nf(s.Trms) + ' N·m'], ['Atalet oranı', nf(s.ratio, 2) + ' : 1'], ['Çevrim süresi', nf(s.tcyc, 2) + ' s']]
+      : k === 'kayis' || k === 'kremayer'
+        ? [['Motor devri', nf(s.nM, 0) + ' dev/dk'], [k === 'kayis' ? 'Kayış kuvveti (en büyük)' : 'Teğetsel kuvvet (en büyük)', nf(s.Fmax, 0) + ' N'], ['Yük torku', nf(s.Tl) + ' N·m'], ['Hızlanma torku', nf(s.Tacc) + ' N·m'], ['En yüksek tork', nf(s.Tpk) + ' N·m'], ['RMS tork', nf(s.Trms) + ' N·m'], ['Atalet oranı', nf(s.ratio, 2) + ' : 1'], ['Çevrim süresi', nf(s.tcyc, 2) + ' s']]
+      : k === 'tabla'
+        ? [['Tabla + yük ataleti', nf(s.JT, 5) + ' kg·m²'], ['Tabla en yüksek hızı', nf(s.nT, 1) + ' dev/dk'], ['Motor devri', nf(s.nM, 0) + ' dev/dk'], ['Hızlanma torku', nf(s.Tacc) + ' N·m'], ['En yüksek tork', nf(s.Tpk) + ' N·m'], ['RMS tork', nf(s.Trms) + ' N·m'], ['Atalet oranı', nf(s.ratio, 2) + ' : 1']]
+      : k === 'reduktor'
+        ? [['Gereken oran', nf(s.iGer, 2)], ['Giriş devri', nf(s.n1, 0) + ' dev/dk'], ['Sürekli tork × fs', nf(s.T2s, 1) + ' N·m'], ['Motordan istenen tepe tork', nf(s.T1) + ' N·m']]
+      : k === 'mil'
+        ? [['Yatak tepkileri', nf(s.R1, 0) + (s.R2 != null ? ' / ' + nf(s.R2, 0) : '') + ' N'], ['En büyük moment', nf(s.M / 1000, 2) + ' N·m'], ['En büyük sehim', nf(s.y, 4) + ' mm'], ['Yatak / uç eğimi', nf(Math.max(s.t1, s.t2 ?? 0), 5) + ' rad'], ['Eğilme / burulma gerilmesi', nf(s.sb, 1) + ' / ' + nf(s.tau, 1) + ' MPa'], ['von Mises', nf(s.sv, 1) + ' MPa'], ['Statik güvenlik', nf(s.S, 2)]]
       : k === 'rulman'
         ? [['Eşdeğer yük P', nf(s.P, 0) + ' N'], ['L10', nf(s.L10, 1) + ' milyon devir'], ['L10h', nf(s.L10h, 0) + ' saat'], ['Güvenilirliğe göre (a1 = ' + s.a1 + ')', nf(s.Lnm, 0) + ' saat']]
         : [['İtme kuvveti (teorik)', nf(s.Fi, 0) + ' N'], ['Çekme kuvveti (teorik)', nf(s.Fc, 0) + ' N'], ['Yük oranı', '%' + nf(s.oran * 100, 0)], ['Hava (çevrim başına)', nf(s.Vcyc, 3) + ' NL'], ['Hava tüketimi', nf(s.Q, 1) + ' NL/dk']];
@@ -98,7 +134,7 @@ export function createMekaUI(api) {
     return h;
   }
   function slotsHtml(k) {
-    const sl = SLOTS[k];
+    const sl = SLOTS[k] || [];
     let h = '<div class="mk-g">Bağlı bileşenler (ürün ağacından)</div><div class="mk-grid">';
     for (const [slot, kind] of sl) {
       const cur = P.bag[k][slot];
@@ -110,10 +146,10 @@ export function createMekaUI(api) {
     return h;
   }
   function hesapHtml() {
-    const k = C().kart, defs = k === 'vida' ? F_SCREW : k === 'rulman' ? F_BEAR : F_PNEU, kaynak = linked(k).kaynak;
-    let h = '<div class="mk-tabs">' + [['vida', '⚙ Eksen: motor + vida'], ['rulman', '◎ Rulman ömrü'], ['pnomatik', '⇆ Pnömatik silindir']].map(([a, t]) => `<button data-act="mk-k-${a}" class="${a === k ? 'on' : ''}">${t}</button>`).join('') + '</div>';
+    const k = C().kart, defs = DEFS[k](), kaynak = linked(k).kaynak;
+    let h = '<div class="mk-tabs">' + CARDS.map(([a, t]) => `<button data-act="mk-k-${a}" class="${a === k ? 'on' : ''}">${t}</button>`).join('') + '</div>';
     h += `<div class="mk-card mk-t">${esc(BASLIK[k])}</div>`;
-    h += slotsHtml(k);
+    if ((SLOTS[k] || []).length) h += slotsHtml(k);
     for (const [g, fs] of defs) h += `<div class="mk-g">${esc(g)}</div><div class="mk-grid">` + fs.map((f) => field(k, f, kaynak)).join('') + '</div>';
     h += results(k, run(k));
     h += `<div class="mk-btns"><button data-act="mk-pdf">📄 Hesap raporu (PDF)</button><button data-act="mk-ornek">↺ Örnek değerler (dolum ünitesi)</button></div>`;
@@ -122,7 +158,7 @@ export function createMekaUI(api) {
   function itemHtml(it) {
     const K = KINDS[it.kind], miss = missing(it);
     if (editId !== it.id) {
-      const used = Object.entries(P.bag).filter(([, sl]) => Object.values(sl).includes(it.id)).map(([t]) => ({ vida: 'eksen', rulman: 'rulman', pnomatik: 'pnömatik' }[t]));
+      const used = Object.entries(P.bag).filter(([, sl]) => Object.values(sl).includes(it.id)).map(([t]) => HESAP_ADI[t] || t);
       return `<div class="mk-card mk-it"><div class="mk-ih"><b>${esc(it.ad)}</b> <i>${esc(K.ad)}${it.kod ? ' · ' + esc(it.kod) : ''}${it.uretici ? ' · ' + esc(it.uretici) : ''} · ${it.adet} adet</i></div>` +
         `<div class="mk-im">${it.partId != null ? '🔗 ' + esc(partName(it.partId) || '(silinmiş parça)') : 'Model parçasına bağlı değil'}${used.length ? ' · hesap: ' + esc(used.join(', ')) : ''}${miss.length ? ' · <span class="mk-c uyari">⚠ eksik: ' + esc(miss.join(', ')) + '</span>' : ''}</div>` +
         `<div class="mk-btns"><button data-act="mk-ed-${it.id}">✎ Düzenle</button>${it.partId != null ? `<button data-act="mk-go-${it.id}">◎ Parçayı göster</button>` : ''}<button data-act="mk-lib-${it.id}">⭳ Kütüphaneye kaydet</button><button data-act="mk-del-${it.id}" class="mk-dg">🗑 Sil</button></div></div>`;
@@ -144,7 +180,7 @@ export function createMekaUI(api) {
     for (const [k, l] of groups) h += `<div class="mk-g">${esc(KINDS[k].ad)} (${l.reduce((s, it) => s + it.adet, 0)})</div>` + l.map(itemHtml).join('');
     return h;
   }
-  function status() { const o = {}; for (const k of ['vida', 'rulman', 'pnomatik']) { const has = Object.keys(P.bag[k]).length; if (has) { const r = run(k); o[k] = r.hata ? false : r.uygun; } } return o; }
+  function status() { const o = {}; for (const [k] of CARDS) { const has = Object.keys(P.bag[k] || {}).length; if (has) { const r = run(k); o[k] = r.hata ? false : r.uygun; } } return o; }
   function listeHtml() {
     const rows = bomRows(P, partName, status());
     if (!rows.length) return '<div class="mk-card mk-n">Parça listesi ürün ağacından oluşur. Önce Ürün ağacı sekmesinden bileşen ekle.</div>';
@@ -199,7 +235,7 @@ export function createMekaUI(api) {
     if ((m = /^mk-ldel-(\d+)$/.exec(a))) { lib.splice(Number(m[1]), 1); saveLib(); api.render(); return true; }
     if (a === 'mk-csv') { api.saveBlob(new Blob([bomCSV(bomRows(P, partName, status()))], { type: 'text/csv;charset=utf-8' }), (api.name() || 'proje') + '_parca_listesi.csv'); api.toast('Parça listesi indirildi'); return true; }
     if (a === 'mk-pdf' || a === 'mk-bompdf') {
-      const kinds = a === 'mk-pdf' ? [C().kart] : ['vida', 'rulman', 'pnomatik'].filter((k) => Object.keys(P.bag[k]).length || k === C().kart);
+      const kinds = a === 'mk-pdf' ? [C().kart] : CARDS.map(([k]) => k).filter((k) => Object.keys(P.bag[k] || {}).length || k === C().kart);
       const lines = [];
       if (a === 'mk-bompdf') {
         lines.push('ÇİZİM ATÖLYESİ — MEKATRONİK MÜHENDİSLİĞİ PARÇA LİSTESİ', api.name() || '', '');

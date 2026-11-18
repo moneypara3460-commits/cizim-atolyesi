@@ -344,6 +344,31 @@ await T('Mekatronik ürün ağacı: motor ekle → katalog değerleri → parça
   expect(/UYGUN DEĞİL/.test(await body(page)), 'bağ korunur');
 });
 
+await T('Mekatronik 3. aşama: kayışlı / kremayer / döner tabla / redüktör / mil kartları açılır ve sonuç verir; mil eğimi sınırı aşılınca UYGUN DEĞİL; redüktör ürün ağacından bağlanır', 'M-Asama3', async ({ page }) => {
+  await page.evaluate(() => { localStorage.removeItem('cizim:meka'); });
+  await tab(page, 'meka');
+  for (const [k, re] of [['kayis', /Triger kayış/], ['kremayer', /Kremayer–pinyon/], ['tabla', /Döner tabla/], ['reduktor', /Redüktör seçimi/], ['mil', /Mil: eğilme/]]) {
+    await act(page, 'mk-k-' + k); await page.waitForTimeout(150);
+    const b = await body(page);
+    expect(re.test(b) && /UYGUN/.test(b) && !/Eksik ya da geçersiz/.test(b), k + ' kartı: ' + b.slice(0, 200));
+  }
+  // mil: çapı küçült → eğim sınırı aşılır
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mk="${k}"]`); await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(150); };
+  await set('mil.d', 18);
+  const bm = await body(page);
+  expect(/UYGUN DEĞİL/.test(bm) && /eğim/.test(bm), 'mil eğim hatası');
+  // redüktör: ürün ağacından bağla
+  await act(page, 'mk-v-agac'); await act(page, 'mk-add-reduktor');
+  const id = await page.evaluate(() => document.querySelector('#tabbody [data-mki$=".ad"]').dataset.mki.split('.')[0]);
+  for (const [f, v] of [['i', 10], ['eta', 0.95], ['Tmax', 30], ['T2N', 15], ['n1max', 4500]]) { const i = page.locator(`#tabbody [data-mki="${id}.deger.${f}"]`); await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(80); }
+  await act(page, 'mk-ed-0'); await act(page, 'mk-v-hesap'); await act(page, 'mk-k-reduktor');
+  const sl = page.locator('#tabbody [data-mkb="reduktor.reduktor"]'); await sl.selectOption(id); await sl.dispatchEvent('change'); await page.waitForTimeout(200);
+  const br = await body(page);
+  expect(/UYGUN DEĞİL/.test(br) && /anma çıkış torku 15/.test(br), 'bağlı redüktör zayıf: ' + br.slice(0, 300));
+  const pdf = await download(page, () => act(page, 'mk-pdf'));
+  expect(/^%PDF/.test(pdf.text) && /reduktor\.pdf$/.test(pdf.name), 'redüktör raporu');
+});
+
 /* ---------- D. Montaj ---------- */
 await T('Montaj: örnek "Mil ve burç" eşleşmeli montaj, montaj sırası planı, kaydet / aç', 'D-Montaj', async ({ page }) => {
   await act(page, 'guide'); await page.locator('[data-ex="mil"]').click(); await page.waitForTimeout(800);

@@ -172,13 +172,170 @@ export function pickCylinder(yuk, p, yon = 'itme', dinamik = true) {
   return null;
 }
 
+/* ======================= 3. aşama ======================= */
+// Ortak: motor milindeki hızlanma / sabit hız / yavaşlama / bekleme torkları ve motor kontrolleri.
+// J: motor + motora indirgenmiş toplam atalet (kg·m²), w: motor en yüksek açısal hızı (rad/s)
+function motorDuty(R, x, Jtot, w, ta, tc, td, Tl, Th, nM) {
+  const alpha = R.s('Motor açısal ivmesi', 'α = ω / ta', w / ta, 'rad/s²', 'Dinamik');
+  const Tacc = R.s('Hızlanma torku', 'T_h = J_toplam·α + T_yük', Jtot * alpha + Tl, 'N·m', 'Dinamik');
+  const Tdec = R.s('Yavaşlama torku', 'T_y = −J_toplam·α + T_yük', -Jtot * alpha + Tl, 'N·m', 'Dinamik');
+  const tcyc = 2 * ta + tc + td;
+  const Tpk = R.s('En yüksek tork', 'T_tepe = max(|T_h|, |T_y|)', Math.max(Math.abs(Tacc), Math.abs(Tdec)), 'N·m', 'Dinamik');
+  const Trms = R.s('Etkin (RMS) tork', 'T_rms = √((T_h²·ta + T_yük²·tc + T_y²·ta + T_b²·tb) / tçevrim)', Math.sqrt((Tacc ** 2 * ta + Tl ** 2 * tc + Tdec ** 2 * ta + Th ** 2 * td) / tcyc), 'N·m', 'Dinamik');
+  const ratio = R.s('Atalet oranı', "k = (J_toplam − J_motor) / J_motor", (Jtot - x.Jm) / x.Jm, '—', 'Dinamik');
+  R.c(nM <= x.nmax, 'hata', `Motor devri ${nM.toFixed(0)} dev/dk, motorun en yüksek devri ${x.nmax} dev/dk`);
+  R.c(Trms * x.SF <= x.Tn, 'hata', `RMS tork × güvenlik (${Trms.toFixed(3)} × ${x.SF} = ${(Trms * x.SF).toFixed(3)} N·m), motor anma torku ${x.Tn} N·m`);
+  R.c(Tpk <= x.Tmax, 'hata', `En yüksek tork ${Tpk.toFixed(3)} N·m, motorun en yüksek torku ${x.Tmax} N·m`);
+  if (Tpk <= x.Tmax) R.c(Tpk <= 0.8 * x.Tmax, 'uyari', `En yüksek tork motor sınırının %${Math.round((100 * Tpk) / x.Tmax)}'i: sürücü akım sınırını ve sıcaklığı kontrol et`);
+  R.c(ratio <= x.oranSinir, 'uyari', `Atalet oranı ${ratio.toFixed(1)} : 1, hedef ≤ ${x.oranSinir} : 1 (üreticinin değeri esastır)`);
+  if (Tdec < 0) R.c(true, 'bilgi', 'Yavaşlamada motor frenliyor (geri besleme enerjisi): sürücünün fren direnci kapasitesini kontrol et');
+  return { alpha, Tacc, Tdec, Tpk, Trms, ratio, tcyc };
+}
+function profile(R, x, s, v) {
+  let vp = v, tc;
+  if (v * x.ta >= s) { vp = s / x.ta; tc = 0; R.c(true, 'bilgi', 'Hareket kısa: hız profili üçgen, ulaşılan en yüksek hız ' + vp.toFixed(3)); }
+  else tc = (s - v * x.ta) / v;
+  R.s('Sabit hızda geçen süre', 'tc = (s − v·ta) / v', tc, 's', 'Dinamik');
+  R.s('Çevrim süresi', 'tçevrim = 2·ta + tc + tbekleme', 2 * x.ta + tc + x.td, 's', 'Dinamik');
+  return { vp, tc };
+}
+const MOTOR_KEYS = ['Jm', 'Tn', 'Tmax', 'nmax', 'SF', 'oranSinir'];
+const MOTOR_DEF = { Jm: 0.00012, Tn: 1.27, Tmax: 3.8, nmax: 3000, SF: 1.5, oranSinir: 10 };
+const bad = (m) => { throw Object.assign(new Error(m), { user: true }); };
+function positive(x, keys) { const n = keys.filter((k) => !(x[k] > 0)); if (n.length) bad('Sıfırdan büyük olmalı: ' + n.join(', ')); }
+
+/* ---------- Kayış (triger) ve kremayer–pinyon tahrikli doğrusal eksen ---------- */
+// tur: 'kayis' (iki kasnak: tahrik + avara, aynı çap) | 'kremayer' (tek pinyon)
+export const BELT_DEFAULTS = { m: 10, mu: 0.1, aci: 0, Fdis: 0, Dp: 50, Jp: 0.00005, mb: 0.3, eta: 0.95, i: 1, etaG: 1, Jc: 0.00002, strok: 800, v: 1, ta: 0.2, td: 0.5, tutma: 'motor', Fizin: 0, ...MOTOR_DEF };
+export const RACK_DEFAULTS = { m: 40, mu: 0.05, aci: 0, Fdis: 0, Dp: 40, Jp: 0.00003, mb: 0, eta: 0.95, i: 5, etaG: 0.95, Jc: 0.00002, strok: 1500, v: 1, ta: 0.25, td: 0.5, tutma: 'motor', Fizin: 0, ...MOTOR_DEF };
+
+export function linearDrive(input, tur = 'kayis') {
+  const x = { ...(tur === 'kayis' ? BELT_DEFAULTS : RACK_DEFAULTS), ...input };
+  need(x, ['m', 'mu', 'aci', 'Fdis', 'Dp', 'Jp', 'mb', 'eta', 'i', 'etaG', 'Jc', 'strok', 'v', 'ta', 'td', 'Fizin', ...MOTOR_KEYS]);
+  positive(x, ['m', 'Dp', 'eta', 'i', 'etaG', 'strok', 'v', 'ta', ...MOTOR_KEYS]);
+  if (x.eta > 1 || x.etaG > 1) bad('Verim 0 ile 1 arasında olmalı');
+  if (x.Jp < 0 || x.mb < 0 || x.Jc < 0) bad('Atalet ve kütle negatif olamaz');
+  const R = rec(), th = (x.aci * PI) / 180, r = x.Dp / 2000, nP = tur === 'kayis' ? 2 : 1;
+  const { vp, tc } = profile(R, x, x.strok / 1000, x.v);
+  const a = R.s('İvme', 'a = v / ta', vp / x.ta, 'm/s²', 'Dinamik');
+  const F = R.s('Sürtünme + eğim + dış kuvvet (sabit hız)', 'F = m·g·(sin θ + μ·cos θ) + Fdış', x.m * G * (Math.sin(th) + x.mu * Math.cos(th)) + x.Fdis, 'N', 'Dinamik');
+  const Fmax = R.s(tur === 'kayis' ? 'Kayışta en büyük çekme kuvveti' : 'Dişlide en büyük teğetsel kuvvet', 'F_max = F + (m + m_kayış)·a', F + (x.m + x.mb) * a, 'N', 'Dinamik');
+  const nK = R.s(tur === 'kayis' ? 'Kasnak devri' : 'Pinyon devri', 'n = v / (π·Dp) · 60', (vp / (PI * x.Dp / 1000)) * 60, 'dev/dk', 'Dinamik');
+  const nM = R.s('Motor devri', 'n_motor = n·i', nK * x.i, 'dev/dk', 'Dinamik');
+  const w = (nM * 2 * PI) / 60;
+  const Jl = R.s('Doğrusal kütlenin kasnağa indirgenmiş ataleti', 'J_yük = (m + m_kayış)·r²', (x.m + x.mb) * r * r, 'kg·m²', 'Dinamik');
+  const Jref = R.s('Motora indirgenmiş yük ataleti', `J' = (${nP}·J_kasnak/ηr + J_yük/(η·ηr)) / i² + J_kaplin`, (nP * x.Jp / x.etaG + Jl / (x.eta * x.etaG)) / x.i ** 2 + x.Jc, 'kg·m²', 'Dinamik');
+  const Tl = R.s('Yük torku (sabit hız)', 'T_yük = F·r / (η·i·ηr)', (F * r) / (x.eta * x.i * x.etaG), 'N·m', 'Dinamik');
+  const Fh = x.tutma === 'motor' ? x.m * G * Math.sin(th) + x.Fdis : 0;
+  const Th = R.s('Beklemede tutma torku', x.tutma === 'motor' ? 'T_b = (m·g·sin θ + Fdış)·r / (η·i·ηr)' : 'Fren tutar: T_b = 0', (Fh * r) / (x.eta * x.i * x.etaG), 'N·m', 'Dinamik');
+  const d = motorDuty(R, x, x.Jm + Jref, w, x.ta, tc, x.td, Tl, Th, nM);
+  if (x.Fizin > 0) R.c(Fmax <= x.Fizin, 'hata', `${tur === 'kayis' ? 'Kayış' : 'Kremayer–pinyon'} kuvveti ${Fmax.toFixed(0)} N, katalogdaki izin verilen ${x.Fizin} N`);
+  else R.c(false, 'uyari', `${tur === 'kayis' ? 'Kayışın izin verilen çekme kuvveti' : 'Kremayer–pinyonun izin verilen teğetsel kuvveti'} girilmedi: ${Fmax.toFixed(0)} N'u katalogla karşılaştır`);
+  if (tur === 'kayis') R.c(true, 'bilgi', 'Kayış esner: konumlama hassasiyeti ve rezonans için kayış rijitliği üretici verisiyle ayrıca kontrol edilmelidir. Ön gerdirme yatak yükü olarak rulman hesabına eklenmelidir.');
+  else R.c(true, 'bilgi', 'Dişli boşluğu (backlash) konumlama hassasiyetini etkiler; diş dibi / yüzey dayanımı (ISO 6336) üretici tablosuyla kontrol edilmelidir.');
+  if (x.aci >= 45 && x.tutma !== 'fren') R.c(true, 'bilgi', 'Eğik / düşey eksen: elektrik kesilince yük düşer, frenli motor ya da mekanik kilit gerekir');
+  return { tur, giris: x, sonuc: { a, F, Fmax, nK, nM, Jl, Jref, Tl, Th, ...d }, adimlar: R.steps, kontroller: R.checks, uygun: R.checks.every((c) => c.ok || c.duzey !== 'hata') };
+}
+export const beltAxis = (inp) => linearDrive(inp, 'kayis');
+export const rackAxis = (inp) => linearDrive(inp, 'kremayer');
+
+/* ---------- Döner tabla (indeksleme) ---------- */
+export const TABLE_DEFAULTS = { M: 20, Dt: 300, Jek: 0, aci: 90, tm: 0.5, ka: 1 / 3, td: 1, Tsur: 0.5, i: 10, etaG: 0.9, Jc: 0.00002, ...MOTOR_DEF };
+export function rotaryTable(input) {
+  const x = { ...TABLE_DEFAULTS, ...input };
+  need(x, ['M', 'Dt', 'Jek', 'aci', 'tm', 'ka', 'td', 'Tsur', 'i', 'etaG', 'Jc', ...MOTOR_KEYS]);
+  positive(x, ['Dt', 'aci', 'tm', 'i', 'etaG', ...MOTOR_KEYS]);
+  if (!(x.ka > 0 && x.ka <= 0.5)) bad('Hızlanma payı 0 ile 0,5 arasında olmalı (ta = pay × hareket süresi)');
+  if (x.etaG > 1) bad('Verim 0 ile 1 arasında olmalı');
+  if (x.M < 0 || x.Jek < 0 || x.Tsur < 0) bad('Kütle, atalet ve sürtünme torku negatif olamaz');
+  const R = rec();
+  const Jt = R.s('Tabla ataleti (dolu disk)', 'J_tabla = M·D² / 8', (x.M * (x.Dt / 1000) ** 2) / 8, 'kg·m²', 'Dinamik');
+  const JT = R.s('Tabla + yük ataleti', 'J = J_tabla + J_ek', Jt + x.Jek, 'kg·m²', 'Dinamik');
+  const ta = R.s('Hızlanma süresi', 'ta = pay·t_hareket', x.ka * x.tm, 's', 'Dinamik');
+  const wT = R.s('Tablanın en yüksek açısal hızı', 'ω = θ / (t_hareket − ta)', ((x.aci * PI) / 180) / (x.tm - ta), 'rad/s', 'Dinamik');
+  const nT = R.s('Tabla devri', 'n = ω·60 / 2π', (wT * 60) / (2 * PI), 'dev/dk', 'Dinamik');
+  const nM = R.s('Motor devri', 'n_motor = n·i', nT * x.i, 'dev/dk', 'Dinamik');
+  const Jref = R.s('Motora indirgenmiş atalet', "J' = J / (i²·ηr) + J_kaplin", JT / (x.i ** 2 * x.etaG) + x.Jc, 'kg·m²', 'Dinamik');
+  const Tl = R.s('Sürtünme torku (motorda)', 'T_yük = T_sürtünme / (i·ηr)', x.Tsur / (x.i * x.etaG), 'N·m', 'Dinamik');
+  const tc = x.tm - 2 * ta;
+  const d = motorDuty(R, x, x.Jm + Jref, nM * 2 * PI / 60, ta, tc, x.td, Tl, 0, nM);
+  R.s('Çevrim süresi', 'tçevrim = t_hareket + tbekleme', x.tm + x.td, 's', 'Dinamik');
+  R.c(true, 'bilgi', 'Tabla dolu disk kabul edildi; fikstür ve parçaların ataleti "ek atalet" olarak girilmelidir (montajdan Ağırlık sekmesiyle hesaplanabilir). Konumda tutma için fren / kilit pimi ayrıca değerlendirilmelidir.');
+  return { tur: 'tabla', giris: x, sonuc: { Jt, JT, ta, wT, nT, nM, Jref, Tl, ...d }, adimlar: R.steps, kontroller: R.checks, uygun: R.checks.every((c) => c.ok || c.duzey !== 'hata') };
+}
+
+/* ---------- Redüktör seçimi (katalog değerleriyle) ---------- */
+export const GEARBOX_DEFAULTS = { T2rms: 20, T2tepe: 45, n2: 300, n1: 3000, fs: 1.25, i: 10, T2N: 40, T2max: 80, n1max: 4500, eta: 0.95 };
+export function gearbox(input) {
+  const x = { ...GEARBOX_DEFAULTS, ...input };
+  need(x, ['T2rms', 'T2tepe', 'n2', 'n1', 'fs', 'i', 'T2N', 'T2max', 'n1max', 'eta']);
+  positive(x, ['T2rms', 'T2tepe', 'n2', 'n1', 'fs', 'i', 'T2N', 'T2max', 'n1max', 'eta']);
+  if (x.eta > 1) bad('Verim 0 ile 1 arasında olmalı');
+  if (x.fs < 1) bad('Servis (işletme) katsayısı 1\'den küçük olamaz');
+  const R = rec();
+  const iGer = R.s('Gereken oran', 'i_gerek = n1 / n2', x.n1 / x.n2, '—', 'Dinamik');
+  const n1 = R.s('Seçilen oranla giriş devri', 'n1 = n2·i', x.n2 * x.i, 'dev/dk', 'Dinamik');
+  const T2s = R.s('Servis katsayılı sürekli tork', 'T2·fs', x.T2rms * x.fs, 'N·m', 'Katalog');
+  const T1 = R.s('Motordan istenen tepe tork', 'T1 = T2_tepe / (i·η)', x.T2tepe / (x.i * x.eta), 'N·m', 'Dinamik');
+  R.c(T2s <= x.T2N, 'hata', `Sürekli çıkış torku × fs = ${T2s.toFixed(1)} N·m, redüktör anma çıkış torku ${x.T2N} N·m`);
+  R.c(x.T2tepe <= x.T2max, 'hata', `Tepe çıkış torku ${x.T2tepe} N·m, redüktörün izin verilen en yüksek çıkış torku ${x.T2max} N·m`);
+  R.c(n1 <= x.n1max, 'hata', `Giriş devri ${n1.toFixed(0)} dev/dk, redüktörün izin verilen giriş devri ${x.n1max} dev/dk`);
+  R.c(Math.abs(x.i - iGer) / iGer <= 0.1, 'uyari', `Seçilen oran ${x.i}, gereken ${iGer.toFixed(2)}: çıkış devri ${(x.n1 / x.i).toFixed(0)} dev/dk olur`);
+  R.c(true, 'bilgi', 'Servis katsayısı fs üreticinin kataloğundan (yük tipi, günlük çalışma saati, saatteki kalkış sayısı) alınmalıdır. Çıkış milindeki radyal / eksenel yük ve ısıl kapasite katalogdan ayrıca kontrol edilmelidir.');
+  return { tur: 'reduktor', giris: x, sonuc: { iGer, n1, T2s, T1 }, adimlar: R.steps, kontroller: R.checks, uygun: R.checks.every((c) => c.ok || c.duzey !== 'hata') };
+}
+
+/* ---------- Mil: eğilme, sehim, yatak açısı, statik gerilme ---------- */
+// Dolu yuvarlak mil. Durum: 'iki-mesnet' (iki yatak arası, a mesafesinde tekil yük) | 'konsol' (ankastre, uçta tekil yük)
+export const SHAFT_DEFAULTS = { durum: 'iki-mesnet', F: 1000, L: 200, a: 100, d: 20, T: 20, E: 210000, Re: 355, Sgerek: 2, yIzin: 0, tIzin: 0.001 };
+export function shaft(input) {
+  const x = { ...SHAFT_DEFAULTS, ...input };
+  need(x, ['F', 'L', 'a', 'd', 'T', 'E', 'Re', 'Sgerek', 'yIzin', 'tIzin']);
+  positive(x, ['L', 'd', 'E', 'Re', 'Sgerek']);
+  if (x.F < 0 || x.T < 0) bad('Kuvvet ve tork negatif olamaz (büyüklük gir)');
+  const R = rec(), iki = x.durum !== 'konsol';
+  if (iki && !(x.a > 0 && x.a < x.L)) bad('Yük yatakların arasında olmalı (0 < a < L)');
+  const I = R.s('Atalet momenti', 'I = π·d⁴ / 64', (PI * x.d ** 4) / 64, 'mm⁴', 'Mukavemet');
+  const Wb = R.s('Eğilme direnç momenti', 'Wb = π·d³ / 32', (PI * x.d ** 3) / 32, 'mm³', 'Mukavemet');
+  const Wt = R.s('Burulma direnç momenti', 'Wt = π·d³ / 16', (PI * x.d ** 3) / 16, 'mm³', 'Mukavemet');
+  let M, y, t1, t2 = null, R1, R2;
+  const F = x.F, L = x.L, EI = x.E * I;
+  if (iki) {
+    const a = x.a, b = L - a, s = Math.min(a, b);
+    R1 = R.s('Sol yatak tepkisi', 'R1 = F·b / L', (F * b) / L, 'N', 'Mukavemet');
+    R2 = R.s('Sağ yatak tepkisi', 'R2 = F·a / L', (F * a) / L, 'N', 'Mukavemet');
+    M = R.s('En büyük eğilme momenti', 'M = F·a·b / L', (F * a * b) / L, 'N·mm', 'Mukavemet');
+    y = R.s('En büyük sehim', 'y_max = F·s·(L² − s²)^1,5 / (9·√3·E·I·L)   (s = kısa kol)', (F * s * (L * L - s * s) ** 1.5) / (9 * Math.sqrt(3) * EI * L), 'mm', 'Mukavemet');
+    R.s('Yük altındaki sehim', 'y_F = F·a²·b² / (3·E·I·L)', (F * a * a * b * b) / (3 * EI * L), 'mm', 'Mukavemet');
+    t1 = R.s('Sol yatakta eğim', 'θ1 = F·b·(L² − b²) / (6·E·I·L)', (F * b * (L * L - b * b)) / (6 * EI * L), 'rad', 'Mukavemet');
+    t2 = R.s('Sağ yatakta eğim', 'θ2 = F·a·(L² − a²) / (6·E·I·L)', (F * a * (L * L - a * a)) / (6 * EI * L), 'rad', 'Mukavemet');
+  } else {
+    R1 = R.s('Ankastre tepki', 'R = F', F, 'N', 'Mukavemet');
+    M = R.s('En büyük eğilme momenti (ankastre)', 'M = F·L', F * L, 'N·mm', 'Mukavemet');
+    y = R.s('Uç sehimi', 'y = F·L³ / (3·E·I)', (F * L ** 3) / (3 * EI), 'mm', 'Mukavemet');
+    t1 = R.s('Uçta eğim', 'θ = F·L² / (2·E·I)', (F * L * L) / (2 * EI), 'rad', 'Mukavemet');
+  }
+  const sb = R.s('Eğilme gerilmesi', 'σ = M / Wb', M / Wb, 'MPa', 'Mukavemet');
+  const tau = R.s('Burulma gerilmesi', 'τ = T / Wt   (T N·mm)', (x.T * 1000) / Wt, 'MPa', 'Mukavemet');
+  const sv = R.s('Eşdeğer gerilme (von Mises)', 'σv = √(σ² + 3·τ²)', Math.sqrt(sb * sb + 3 * tau * tau), 'MPa', 'Mukavemet');
+  const S = R.s('Statik güvenlik', 'S = Re / σv', sv > 0 ? x.Re / sv : Infinity, '—', 'Mukavemet');
+  R.c(S >= x.Sgerek, 'hata', `Statik güvenlik ${Number.isFinite(S) ? S.toFixed(2) : '∞'}, istenen ≥ ${x.Sgerek}`);
+  if (x.yIzin > 0) R.c(y <= x.yIzin, 'hata', `Sehim ${y.toFixed(4)} mm, izin verilen ${x.yIzin} mm`);
+  const tmax = Math.max(t1, t2 ?? 0);
+  if (x.tIzin > 0) R.c(tmax <= x.tIzin, 'hata', `${iki ? 'Yatakta' : 'Uçta'} eğim ${tmax.toFixed(5)} rad, izin verilen ${x.tIzin} rad (Shigley Tablo 7-2 yol gösterici değerler: sabit bilyalı rulman 0,001–0,003; silindirik makaralı 0,0008–0,0012; konik makaralı 0,0005–0,0012 rad)`);
+  R.c(true, 'bilgi', 'Statik kontroldür. Dönen milde eğilme gerilmesi değişkendir: yorulma (DIN 743 / Shigley, kama yuvası, kademe ve çentik etkileri) ayrıca kontrol edilmelidir. Kendi ağırlığı ve kayış / dişli kuvvetinin yönü kullanıcı girdisine bağlıdır.');
+  return { tur: 'mil', giris: x, sonuc: { I, Wb, Wt, R1, R2, M, y, t1, t2, sb, tau, sv, S }, adimlar: R.steps, kontroller: R.checks, uygun: R.checks.every((c) => c.ok || c.duzey !== 'hata') };
+}
+
 /* ======================= Rapor ======================= */
 export const KAYNAK = {
   Dinamik: 'Newton mekaniği ve dönen kütle eylemsizliği (genel mühendislik bilgisi)',
   THK: 'Bilyalı vida kritik devir ve burkulma formülleri (THK genel katalog; ISO 3408 ile uyumlu sık kullanılan biçim)',
   'ISO 281': 'ISO 281:2007 Rulmanlar — Dinamik yük sayıları ve nominal ömür',
+  Mukavemet: 'Mukavemet: kiriş eğilmesi, sehim ve eğim (Roark / Shigley), von Mises eşdeğer gerilmesi',
+  Katalog: 'Üretici kataloğu değerleri (kullanıcı girdisi)',
 };
-export const BASLIK = { vida: 'Bilyalı vida tahrikli eksen: motor ve vida seçimi', rulman: 'Rulman ömrü (ISO 281)', pnomatik: 'Pnömatik silindir seçimi (ISO 15552 / ISO 6432)' };
+export const BASLIK = { vida: 'Bilyalı vida tahrikli eksen: motor ve vida seçimi', rulman: 'Rulman ömrü (ISO 281)', pnomatik: 'Pnömatik silindir seçimi (ISO 15552 / ISO 6432)', kayis: 'Triger kayış tahrikli eksen: motor ve kayış', kremayer: 'Kremayer–pinyon tahrikli eksen: motor ve dişli', tabla: 'Döner tabla (indeksleme): motor ve redüktör', reduktor: 'Redüktör seçimi (katalog değerleriyle)', mil: 'Mil: eğilme, sehim, yatak eğimi ve statik gerilme' };
 
 // rapordaki girdi adları ve birimleri
 export const GIRDI_ADI = {
@@ -187,7 +344,11 @@ export const GIRDI_ADI = {
   Jc: ['Kaplin ataleti', 'kg·m²'], strok: ['Strok', 'mm'], v: ['En yüksek hız', 'm/s'], ta: ['Hızlanma / yavaşlama süresi', 's'], td: ['Bekleme süresi', 's'], tutma: ['Beklemede tutan', ''],
   Jm: ['Motor rotor ataleti', 'kg·m²'], Tn: ['Motor anma torku', 'N·m'], Tmax: ['Motor en yüksek torku', 'N·m'], nmax: ['Motor en yüksek devri', 'dev/dk'], SF: ['Güvenlik katsayısı (RMS)', ''], oranSinir: ['İzin verilen atalet oranı', ': 1'],
   tip: ['Rulman tipi', ''], C: ['Dinamik yük sayısı C', 'N'], Fr: ['Radyal yük Fr', 'N'], Fa: ['Eksenel yük Fa', 'N'], X: ['X katsayısı', ''], Y: ['Y katsayısı', ''], n: ['Devir', 'dev/dk'], guv: ['Güvenilirlik', '%'], hedef: ['Hedef ömür', 'saat'],
-  D: ['Silindir iç çapı', 'mm'], p: ['Çalışma basıncı', 'bar'], yuk: ['Yük', 'N'], yon: ['Kuvvet yönü', ''], dinamik: ['Hareketli yük', ''], cevrim: ['Çevrim sayısı', '/dk'], eta: ['Kuvvet verimi', ''],
+  Dp: ['Kasnak / pinyon bölüm çapı', 'mm'], Jp: ['Kasnak / pinyon ataleti (her biri)', 'kg·m²'], mb: ['Kayış kütlesi', 'kg'], Fizin: ['İzin verilen kayış / dişli kuvveti', 'N'],
+  M: ['Tabla kütlesi', 'kg'], Jek: ['Fikstür + parça ataleti', 'kg·m²'], tm: ['Hareket süresi', 's'], ka: ['Hızlanma payı', ''], Tsur: ['Tabla sürtünme torku', 'N·m'],
+  T2rms: ['Sürekli (RMS) çıkış torku', 'N·m'], T2tepe: ['Tepe çıkış torku', 'N·m'], n2: ['Çıkış devri', 'dev/dk'], n1: ['Motor devri', 'dev/dk'], fs: ['Servis katsayısı fs', ''], T2N: ['Redüktör anma çıkış torku', 'N·m'], T2max: ['Redüktör en yüksek çıkış torku', 'N·m'], n1max: ['İzin verilen giriş devri', 'dev/dk'],
+  durum: ['Yükleme durumu', ''], F: ['Kuvvet', 'N'], a: ['Yükün sol yatağa uzaklığı', 'mm'], T: ['İletilen tork', 'N·m'], E: ['Elastisite modülü', 'MPa'], Re: ['Akma dayanımı Re', 'MPa'], Sgerek: ['İstenen statik güvenlik', ''], yIzin: ['İzin verilen sehim (0 = kontrol yok)', 'mm'], tIzin: ['İzin verilen eğim (0 = kontrol yok)', 'rad'],
+  D: ['Silindir iç çapı', 'mm'], Dt: ['Tabla çapı', 'mm'], p: ['Çalışma basıncı', 'bar'], yuk: ['Yük', 'N'], yon: ['Kuvvet yönü', ''], dinamik: ['Hareketli yük', ''], cevrim: ['Çevrim sayısı', '/dk'], eta: ['Kuvvet verimi', ''],
 };
 const num = (v) => (Math.abs(v) >= 1000 ? v.toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : Math.abs(v) >= 1 ? v.toLocaleString('tr-TR', { maximumFractionDigits: 3 }) : v.toLocaleString('tr-TR', { maximumSignificantDigits: 4 }));
 export function reportLines(r, proje = '') {
