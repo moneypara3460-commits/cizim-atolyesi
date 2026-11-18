@@ -22,12 +22,14 @@ mühendislik ekipleri.
 |---|---|---|
 | 1 | Hesap ve seçim motoru: bilyalı vida tahrikli eksen (motor + vida), rulman ömrü (ISO 281), pnömatik silindir (ISO 15552 / 6432); PDF hesap raporu | **Tamam** |
 | 2 | Ürün ağacı (10 bileşen türü, katalog alanları, zorunlu alan denetimi), model parçasına bağlama, hesaplara bağlama (katalog değeri hesaba geçer, kaynağı raporda), redüktör / kaplin tork ve rulman sınır devri + ISO 76 statik güvenlik kontrolleri, parça listesi (CSV / PDF), cihazda bileşen kütüphanesi; veriler projeyle kaydedilir | **Tamam** |
-| 3 | Kayış / dişli / kremayer eksenleri, döner tabla, redüktör seçimi, mil eğilmesi | |
+| 3 | Triger kayışlı ve kremayer–pinyon eksenleri (eğim, dış kuvvet, kayış / diş kuvveti sınırı), döner indeksleme tablası (üçgen / yamuk profil), redüktör seçimi (oran, servis katsayısı fs, tepe tork, giriş devri), mil eğilmesi (iki yatak arası / konsol: sehim, yatak eğimi, von Mises statik güvenlik); hepsi ürün ağacına bağlanır | **Tamam** |
 | 4 | Elektrik: şema, kablo listesi, klemens planı, güç ve sigorta hesabı | |
 | 5 | Kontrol: PLC giriş / çıkış listesi, adım (sıralama) tasarımı, IEC 61131-3 iskeleti (PLCopen XML) | |
 | 6 | Güvenlik: ISO 12100 risk değerlendirmesi, ISO 13849-1 PLr / PL (doğrulanmış tablolarla), IEC 60204-1 kontrol listesi | |
 | 7 | Benzetim: hareket etüdü ve çevrim süresi; motorun mekanizmayı sürdüğünün kontrolü | |
 | 8 | Gereksinim izlenebilirliği, revizyon / onay geçmişi, STEP AP242 çıktısı | |
+
+3. aşama kaynakları: mil sehim / eğim formülleri — Roark's Formulas for Stress and Strain (basit mesnetli ve konsol kiriş, tekil yük); von Mises ve yatak eğimi önerileri — Shigley, Mechanical Engineering Design, Tablo 7-2 (derin oluklu bilyalı rulman için ~0,001 rad değeri öneri olarak verilir, kesin sınır rulman kataloğundandır). Redüktör servis katsayısı ve kayış izin verilen kuvveti kullanıcı tarafından üretici kataloğundan girilir; uygulama uydurma katalog değeri kullanmaz.
 
 Test projesi: paketleme makinesi — vidalı mil tahrikli dolum ünitesi + pnömatik itici (örnek değerler).
 

@@ -5,7 +5,7 @@
 // Bileşen türleri ve katalog alanları: [anahtar, etiket, birim, zorunlu]
 export const KINDS = {
   motor: { ad: 'Servo / adım motoru', alanlar: [['Jm', 'Rotor ataleti', 'kg·m²', 1], ['Tn', 'Anma torku', 'N·m', 1], ['Tmax', 'En yüksek tork', 'N·m', 1], ['nmax', 'En yüksek devir', 'dev/dk', 1], ['Pn', 'Anma gücü', 'W'], ['U', 'Besleme gerilimi', 'V'], ['In', 'Anma akımı', 'A'], ['fren', 'Frenli (1 = evet)', '']] },
-  reduktor: { ad: 'Redüktör / kayış kasnak', alanlar: [['i', 'Oran (giriş / çıkış devri)', '', 1], ['eta', 'Verim', '', 1], ['J', 'Girişe göre atalet', 'kg·m²'], ['Tmax', 'İzin verilen çıkış torku', 'N·m']] },
+  reduktor: { ad: 'Redüktör / kayış kasnak', alanlar: [['i', 'Oran (giriş / çıkış devri)', '', 1], ['eta', 'Verim', '', 1], ['J', 'Girişe göre atalet', 'kg·m²'], ['Tmax', 'İzin verilen en yüksek çıkış torku', 'N·m'], ['T2N', 'Anma çıkış torku', 'N·m'], ['n1max', 'İzin verilen giriş devri', 'dev/dk']] },
   vida: { ad: 'Bilyalı vida', alanlar: [['P', 'Hatve', 'mm', 1], ['d', 'Anma çapı', 'mm', 1], ['dr', 'Diş dibi çapı', 'mm', 1], ['L', 'Yataklar arası boy', 'mm', 1], ['eta', 'Verim', '', 1], ['Ca', 'Dinamik yük sayısı', 'N']] },
   kaplin: { ad: 'Kaplin', alanlar: [['J', 'Atalet', 'kg·m²', 1], ['Tn', 'Anma torku', 'N·m']] },
   rulman: { ad: 'Rulman', alanlar: [['C', 'Dinamik yük sayısı C', 'N', 1], ['C0', 'Statik yük sayısı C0', 'N'], ['makarali', 'Makaralı (1 = evet)', ''], ['d', 'İç çap', 'mm'], ['D', 'Dış çap', 'mm'], ['nlim', 'Sınır devir', 'dev/dk']] },
@@ -20,12 +20,18 @@ export const SLOTS = {
   vida: [['motor', 'motor'], ['vida', 'vida'], ['reduktor', 'reduktor'], ['kaplin', 'kaplin']],
   rulman: [['rulman', 'rulman']],
   pnomatik: [['silindir', 'silindir']],
+  kayis: [['motor', 'motor'], ['reduktor', 'reduktor'], ['kaplin', 'kaplin']],
+  kremayer: [['motor', 'motor'], ['reduktor', 'reduktor'], ['kaplin', 'kaplin']],
+  tabla: [['motor', 'motor'], ['reduktor', 'reduktor'], ['kaplin', 'kaplin']],
+  reduktor: [['reduktor', 'reduktor']],
+  mil: [],
 };
 
 const fin = (v) => typeof v === 'number' && Number.isFinite(v);
 const str = (v, n = 80) => (typeof v === 'string' ? v.slice(0, n) : '');
 
-export function emptyProject() { return { items: [], bag: { vida: {}, rulman: {}, pnomatik: {} }, nextId: 1 }; }
+export const HESAP_ADI = { vida: 'vidalı eksen', kayis: 'kayışlı eksen', kremayer: 'kremayer ekseni', tabla: 'döner tabla', reduktor: 'redüktör', mil: 'mil', rulman: 'rulman', pnomatik: 'pnömatik' };
+export function emptyProject() { const bag = {}; for (const k of Object.keys(SLOTS)) bag[k] = {}; return { items: [], bag, nextId: 1 }; }
 
 // Proje verisini temizler (bozuk / eski kayıt uygulamayı çökertmesin)
 export function sanitize(o) {
@@ -73,9 +79,9 @@ export function applyLinks(tur, giris, P) {
     }
     for (const m of missing(it)) eksik.push(it.ad + ': ' + m);
   };
-  if (tur === 'vida') {
+  if (tur === 'vida' || tur === 'kayis' || tur === 'kremayer' || tur === 'tabla') {
     use('motor', [['Jm', 'Jm'], ['Tn', 'Tn'], ['Tmax', 'Tmax'], ['nmax', 'nmax']]);
-    use('vida', [['P', 'P'], ['d', 'd'], ['dr', 'dr'], ['L', 'L'], ['eta', 'etaS']]);
+    if (tur === 'vida') use('vida', [['P', 'P'], ['d', 'd'], ['dr', 'dr'], ['L', 'L'], ['eta', 'etaS']]);
     use('reduktor', [['i', 'i'], ['eta', 'etaG']]);
     // kaplin ve redüktör giriş ataleti motor milinde toplanır
     const k = itemById(P, b.kaplin), r = itemById(P, b.reduktor);
@@ -84,6 +90,8 @@ export function applyLinks(tur, giris, P) {
     if (k) for (const m of missing(k)) eksik.push(k.ad + ': ' + m);
     const m = itemById(P, b.motor);
     if (m && m.deger.fren === 1) { out.tutma = 'fren'; kaynak.tutma = m.ad; }
+  } else if (tur === 'reduktor') {
+    use('reduktor', [['i', 'i'], ['eta', 'eta'], ['T2N', 'T2N'], ['Tmax', 'T2max'], ['n1max', 'n1max']]);
   } else if (tur === 'rulman') {
     use('rulman', [['C', 'C'], ['makarali', 'tip', (v) => (v === 1 ? 'makarali' : 'bilyali')]]);
   } else if (tur === 'pnomatik') {
@@ -97,13 +105,13 @@ export function linkChecks(tur, r, P) {
   const out = [], b = P.bag[tur] || {};
   if (!r || r.hata) return out;
   const red = itemById(P, b.reduktor);
-  if (tur === 'vida' && red && fin(red.deger.Tmax)) {
+  if (['vida', 'kayis', 'kremayer', 'tabla'].includes(tur) && red && fin(red.deger.Tmax)) {
     // redüktör çıkış torku = motor torku × i × η
     const Tout = r.sonuc.Tpk * r.giris.i * r.giris.etaG;
     out.push({ ok: Tout <= red.deger.Tmax, duzey: 'hata', metin: `Redüktör çıkışında tepe tork ${Tout.toFixed(2)} N·m, izin verilen ${red.deger.Tmax} N·m (${red.ad})` });
   }
   const kap = itemById(P, b.kaplin);
-  if (tur === 'vida' && kap && fin(kap.deger.Tn)) out.push({ ok: r.sonuc.Tpk <= kap.deger.Tn, duzey: 'hata', metin: `Kaplinden geçen tepe tork ${r.sonuc.Tpk.toFixed(2)} N·m, kaplin anma torku ${kap.deger.Tn} N·m (${kap.ad})` });
+  if (['vida', 'kayis', 'kremayer', 'tabla'].includes(tur) && kap && fin(kap.deger.Tn)) out.push({ ok: r.sonuc.Tpk <= kap.deger.Tn, duzey: 'hata', metin: `Kaplinden geçen tepe tork ${r.sonuc.Tpk.toFixed(2)} N·m, kaplin anma torku ${kap.deger.Tn} N·m (${kap.ad})` });
   const ru = itemById(P, b.rulman);
   if (tur === 'rulman' && ru && fin(ru.deger.nlim)) out.push({ ok: r.giris.n <= ru.deger.nlim, duzey: 'hata', metin: `Devir ${r.giris.n} dev/dk, rulman sınır devri ${ru.deger.nlim} dev/dk (${ru.ad})` });
   if (tur === 'rulman' && ru && fin(ru.deger.C0)) {
@@ -123,7 +131,7 @@ export function bomRows(P, partName = () => '', calcStatus = {}) {
     return {
       no: i + 1, tur: KINDS[it.kind].ad, ad: it.ad, kod: it.kod, uretici: it.uretici, adet: it.adet,
       parca: it.partId != null ? partName(it.partId) || '(silinmiş parça)' : '',
-      hesap: used.length ? used.map((t) => ({ vida: 'eksen', rulman: 'rulman', pnomatik: 'pnömatik' }[t])).join(', ') : '',
+      hesap: used.length ? used.map((t) => HESAP_ADI[t] || t).join(', ') : '',
       durum: !used.length ? '—' : st.includes(false) ? 'UYGUN DEĞİL' : st.length ? 'uygun' : '—',
       eksik: missing(it).join(', '),
     };

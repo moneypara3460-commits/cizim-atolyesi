@@ -2,6 +2,7 @@
 // Mekatronik hesap motoru. Beklenen değerler formülden BAĞIMSIZ olarak elle hesaplanmıştır (yorumlarda işlem görünür).
 import assert from 'node:assert/strict';
 import { emptyProject, sanitize, addItem, removeItem, applyLinks, linkChecks, bomRows, bomCSV, libAdd, libSanitize, missing } from '../meka/tree.js';
+import { beltAxis, rackAxis, rotaryTable, gearbox, shaft } from '../meka/calc.js';
 import { screwAxis, bearingLife, pneumatic, pickCylinder, reportLines, G, SCREW_MOUNT, ISO281_A1, CYL_ROD } from '../meka/calc.js';
 
 let fail = 0;
@@ -216,6 +217,56 @@ t('Kütüphane: aynı ürün kodu güncellenir, tekrar eklenmez; bozuk kayıt at
   const lib = libAdd([], m); m.deger.Tn = 1.5; libAdd(lib, m);
   assert.equal(lib.length, 1); assert.equal(lib[0].deger.Tn, 1.5);
   assert.equal(libSanitize([...lib, { kind: 'yok' }, 5]).length, 1);
+});
+
+/* ---------- 3. aşama ---------- */
+t('Mil (iki mesnet, ortada 1000 N, L 200, Ø20): M 50 000 N·mm, y 0,10105 mm, σ 63,66 MPa, θ 0,0015158 rad (elle hesap)', () => {
+  const r = shaft({ durum: 'iki-mesnet', F: 1000, L: 200, a: 100, d: 20, T: 20, E: 210000, Re: 355, Sgerek: 2, tIzin: 0.001 });
+  // I = π·20⁴/64 = 7853,98; y = F·L³/(48·E·I) = 8e9 / 7,9168e10 = 0,101051 (orta yük: y_max = y_F)
+  near(r.sonuc.I, 7853.98, 1e-6); near(r.sonuc.M, 50000, 1e-12); near(r.sonuc.y, 1000 * 200 ** 3 / (48 * 210000 * 7853.9816), 1e-6);
+  near(r.sonuc.sb, 63.662, 1e-4); near(r.sonuc.tau, 12.732, 1e-4); near(r.sonuc.sv, Math.sqrt(63.662 ** 2 + 3 * 12.732 ** 2), 1e-4);
+  near(r.sonuc.t1, 0.0015158, 1e-4);   // 1000·100·30000 / (6·210000·7853,98·200)
+  assert.equal(r.uygun, false);   // eğim 0,0015 > 0,001 rad
+  assert.ok(r.kontroller.some((c) => !c.ok && /eğim/.test(c.metin)));
+});
+t('Mil: yük kenara yakın (a = 50) → R1 = 750, R2 = 250 N; konsol uç yükü y = F·L³/(3EI)', () => {
+  const r = shaft({ F: 1000, L: 200, a: 50, d: 20, T: 0, tIzin: 0 });
+  near(r.sonuc.R1, 750, 1e-12); near(r.sonuc.R2, 250, 1e-12); near(r.sonuc.M, 1000 * 50 * 150 / 200, 1e-12);
+  // y_max (s = 50): F·s·(L² − s²)^1,5 / (9√3·E·I·L)
+  near(r.sonuc.y, 1000 * 50 * (40000 - 2500) ** 1.5 / (9 * Math.sqrt(3) * 210000 * 7853.9816 * 200), 1e-6);
+  const k = shaft({ durum: 'konsol', F: 200, L: 100, d: 20, T: 0, tIzin: 0 });
+  near(k.sonuc.y, 200 * 1e6 / (3 * 210000 * 7853.9816), 1e-6); near(k.sonuc.M, 20000, 1e-12);
+  assert.throws(() => shaft({ a: 250 }), /yatakların arasında/);
+});
+t('Kayış ekseni: F = 10·g·0,1 = 9,807 N; T_yük = F·0,025/0,95 = 0,25807 N·m; n = 1/(π·0,05)·60 = 381,97 dev/dk', () => {
+  const r = beltAxis({ m: 10, mu: 0.1, Dp: 50, v: 1, eta: 0.95, i: 1, etaG: 1 });
+  near(r.sonuc.F, 9.80665, 1e-9); near(r.sonuc.Tl, 0.258070, 1e-5); near(r.sonuc.nK, 381.972, 1e-5);
+  // J_yük = (10 + 0,3)·0,025² = 0,0064375; J' = (2·5e-5 + 0,0064375/0,95)/1 + 2e-5 = 0,00689632
+  near(r.sonuc.Jl, 0.0064375, 1e-9); near(r.sonuc.Jref, 0.0068963, 1e-4);
+  assert.ok(r.kontroller.some((c) => !c.ok && c.duzey === 'uyari' && /girilmedi/.test(c.metin)));
+  assert.equal(beltAxis({ Fizin: 10 }).uygun, false);
+});
+t('Kremayer ekseni: tek pinyon ataleti; redüktör oranı devri ve ataleti böler', () => {
+  const a = rackAxis({ i: 1, etaG: 1 }), b = rackAxis({ i: 5, etaG: 1 });
+  near(b.sonuc.nM, a.sonuc.nM * 5, 1e-12);
+  near(b.sonuc.Jref - b.giris.Jc, (a.sonuc.Jref - a.giris.Jc) / 25, 1e-9);
+  near(a.sonuc.Jref - a.giris.Jc, 0.00003 + 40 * 0.02 ** 2 / 0.95, 1e-9);
+});
+t('Döner tabla: 90° / 0,5 s, ka = 1/3 → ω = 4,7124 rad/s, α = 28,274 rad/s²; J = 20·0,3²/8 = 0,225; i = 10 → 450 dev/dk', () => {
+  const r = rotaryTable({ M: 20, Dt: 300, aci: 90, tm: 0.5, ka: 1 / 3, i: 10, etaG: 0.9, Jek: 0, Tsur: 0.5 });
+  near(r.sonuc.Jt, 0.225, 1e-12); near(r.sonuc.wT, 4.712389, 1e-6); near(r.sonuc.nM, 450, 1e-9);
+  near(r.sonuc.alpha, 4.712389 * 10 / (0.5 / 3), 1e-6);   // motorda α = ω·i / ta = 282,74
+  near(r.sonuc.Jref, 0.225 / (100 * 0.9) + 0.00002, 1e-9);
+  near(r.sonuc.Tacc, (0.00012 + 0.00252) * 282.7433 + 0.5 / 9, 1e-5);
+  assert.throws(() => rotaryTable({ ka: 0.7 }), /Hızlanma payı/);
+});
+t('Redüktör: oran, fs ile sürekli tork, tepe tork, giriş devri kontrolleri', () => {
+  const r = gearbox({ T2rms: 20, T2tepe: 45, n2: 300, n1: 3000, fs: 1.25, i: 10, T2N: 40, T2max: 80, n1max: 4500, eta: 0.95 });
+  near(r.sonuc.iGer, 10, 1e-12); near(r.sonuc.T2s, 25, 1e-12); near(r.sonuc.T1, 45 / 9.5, 1e-12);
+  assert.equal(r.uygun, true);
+  assert.equal(gearbox({ T2rms: 35, fs: 1.25 }).uygun, false);   // 43,75 > 40
+  assert.equal(gearbox({ i: 20, n2: 300, n1max: 4500 }).uygun, false);   // 6000 > 4500
+  assert.throws(() => gearbox({ fs: 0.8 }), /Servis/);
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
