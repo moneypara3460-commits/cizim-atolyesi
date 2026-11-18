@@ -7,7 +7,7 @@
 // iç kademeli delik, flanş delikleri), küre. Tanınmayanlar (açıklanamayan yüzey olarak raporlanır): pah, yuvarlama,
 // eğik yüzler, serbest yüzeyler.
 // Saf fonksiyonlar (tests/scan.test.mjs). Girdi: mesh-tools biçiminde ağ { V, F } (kaynaklanmış, yüzler dışa bakan).
-import { measure, transform, toFloor } from './mesh-tools.js?v=20261118a';
+import { measure, transform, toFloor } from './mesh-tools.js?v=20261118b';
 
 const DEG = Math.PI / 180;
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -162,17 +162,32 @@ export function analyze(m, opt = {}) {
   // düz yüzler: eksene dik (normal ± eksen)
   const planeAx = new Int8Array(n).fill(-1);
   for (let t = 0; t < n; t++) for (let k = 0; k < 3; k++) if (Math.abs(N[t * 3 + k]) > planeCos) planeAx[t] = k;
+  // büyük düz bölgeler (kutu yüzleri): aynı eksene dik, aynı düzlemde, bağlı yüzler; silindir büyütmeye katılmaz.
+  // (küçük düz şeritler — kaba çokgen deliğin eksene paralel kenarları — katılır)
+  const flatBig = new Uint8Array(n);
+  {
+    const seen = new Uint8Array(n), totA = A.reduce((s2, a) => s2 + a, 0);
+    for (let s = 0; s < n; s++) {
+      if (seen[s] || planeAx[s] < 0) continue;
+      const k = planeAx[s], reg = [s]; seen[s] = 1; let ar = 0;
+      for (let i = 0; i < reg.length; i++) {
+        const t = reg[i]; ar += A[t];
+        for (const u of nb[t]) if (!seen[u] && planeAx[u] === k && Math.abs(C[u * 3 + k] - C[t * 3 + k]) < tolPos) { seen[u] = 1; reg.push(u); }
+      }
+      if (ar > 0.004 * totA) for (const t of reg) flatBig[t] = 1;
+    }
+  }
   // silindir bölgeleri: her eksen için o eksene paralel (normal eksene dik) yüzlerden bölge büyütme
   const cyl = [];
   for (let k = 0; k < 3; k++) {
     const seen = new Uint8Array(n);
     for (let s = 0; s < n; s++) {
-      if (seen[s] || Math.abs(N[s * 3 + k]) > latSin) continue;
+      if (seen[s] || Math.abs(N[s * 3 + k]) > latSin || flatBig[s]) continue;   // büyük düz yüzler (kutu yüzleri) silindire katılmaz
       const reg = [s]; seen[s] = 1;
       for (let i = 0; i < reg.length; i++) {
         const t = reg[i];
         for (const u of nb[t]) {
-          if (seen[u] || Math.abs(N[u * 3 + k]) > latSin) continue;
+          if (seen[u] || Math.abs(N[u * 3 + k]) > latSin || flatBig[u]) continue;
           if (N[t * 3] * N[u * 3] + N[t * 3 + 1] * N[u * 3 + 1] + N[t * 3 + 2] * N[u * 3 + 2] < grow) continue;
           seen[u] = 1; reg.push(u);
         }
@@ -216,7 +231,7 @@ export function analyze(m, opt = {}) {
   }
   // birleşmeden kalan dar yaylar (yuvarlama, pah, gürültü) silindir sayılmaz
   const cylOut = cyl.filter((c) => c.span >= 90 && c.rms <= Math.max(tolPos, c.R * 0.03));
-  return { fd, info, planeAx, cyl: cylOut, tolPos, diag };
+  return { fd, info, planeAx, cyl: cylOut, arcs: cyl, tolPos, diag, m };
 }
 
 const r1 = (v, s) => (s ? Math.round(v / s) * s : v);
@@ -224,7 +239,7 @@ const fmt = (v) => (Math.round(v * 100) / 100).toLocaleString('tr-TR');
 
 // Ana işlev: hizalanmış ağdan parça listesi. Dönüş: { ok, kind, parts, quality, notes, reason }
 // parts: uygulama parçası alanları (type, op, w, h, l, d, di, x, y, z, rx, rz). Ağ zaten hizalı ve yere oturmuş olmalı (alignToAxes).
-export function fitCAD(m, opt = {}) {
+function fitBasic(m, opt = {}) {
   const snap = opt.snap ?? 0.1;
   const an = analyze(m, opt), { info, planeAx, cyl, tolPos, fd } = an;
   const { n, A, C } = fd;
@@ -295,6 +310,13 @@ export function fitCAD(m, opt = {}) {
   } else if (boxOK) {
     kind = 'prizmatik';
     base = [{ type: 'box', op: 'add', w: r1(S[0], snap), h: r1(S[1], snap), l: r1(S[2], snap), x: r1((mn[0] + mx[0]) / 2, snap), y: r1(mn[1], snap), z: r1((mn[2] + mx[2]) / 2, snap) }];
+    // bütün kenarlarda eşit yuvarlama ya da pah (uygulamadaki kutunun r / c ölçüsü)
+    const ef = boxEdges(an, mn, mx);
+    if (ef) {
+      if (ef.r) base[0].r = r1(ef.r, snap); else base[0].c = r1(ef.c, snap);
+      for (const t of ef.faces) explained[t] = 1;
+      kind = 'prizmatik';
+    }
   } else {
     return { ok: false, kind: null, parts: [], notes, reason: 'Şekil kutu, silindir, boru ya da küreye oturmadı (eğik yüz, serbest yüzey ya da çok gürültülü tarama). Ağ olarak eklenebilir.', quality: null, analysis: summary(an) };
   }
@@ -328,6 +350,7 @@ export function fitCAD(m, opt = {}) {
   const coverage = total ? ex / total : 0;
   let fitVol = 0;
   for (const p of base) fitVol += volOf(p);
+  if (base[0] && base[0].type === 'box' && (base[0].r || base[0].c)) fitVol = boxEdgeVol(base[0]);
   for (const p of holeParts) fitVol -= Math.PI * p._hole.R * p._hole.R * Math.min(p._hole.len, S[p._hole.axis]);
   const volErr = info.closed && info.volume > 0 ? Math.abs(fitVol - info.volume) / info.volume : null;
   const quality = { coverage, volErr, unexplained: 1 - coverage, faces: n };
@@ -355,12 +378,391 @@ function summary(an) {
 // Okunur özet: "Kutu 80 × 60 × 40 mm · 3 delik (Ø10 ×2, Ø6)"
 export function describe(r) {
   if (!r.ok) return r.reason;
-  const b = r.parts.filter((p) => p.op === 'add'), h = r.parts.filter((p) => p.op === 'sub');
-  const head = r.kind === 'prizmatik' ? 'Kutu ' + fmt(b[0].w) + ' × ' + fmt(b[0].l) + ' × ' + fmt(b[0].h) + ' mm'
-    : r.kind === 'boru' ? 'Boru Ø' + fmt(b[0].d) + ' / Ø' + fmt(b[0].di) + ' × ' + fmt(b[0].h) + ' mm'
-      : r.kind === 'küre' ? 'Küre Ø' + fmt(b[0].d) + ' mm'
-        : 'Torna parçası: ' + b.map((p) => 'Ø' + fmt(p.d) + '×' + fmt(p.h)).join(' + ') + ' mm';
-  if (!h.length) return head;
-  const g = new Map(); for (const p of h) g.set(p.d, (g.get(p.d) || 0) + 1);
-  return head + ' · ' + h.length + ' delik (' + [...g].map(([d, c]) => 'Ø' + fmt(d) + (c > 1 ? ' ×' + c : '')).join(', ') + ')';
+  const b = r.parts.filter((p) => p.op !== 'sub'), h = r.parts.filter((p) => p.op === 'sub');
+  const dia = (p) => p.type === 'cone' ? 'Ø' + fmt(p.d) + '→Ø' + fmt(p.d2) + '×' + fmt(p.h) : 'Ø' + fmt(p.d) + '×' + fmt(p.h);
+  const edge = (p) => (p.r ? ', kenarlar R' + fmt(p.r) : p.c ? ', kenarlar ' + fmt(p.c) + ' mm pah' : '');
+  let head;
+  if (r.kind === 'prizmatik') head = 'Kutu ' + fmt(b[0].w) + ' × ' + fmt(b[0].l) + ' × ' + fmt(b[0].h) + ' mm' + edge(b[0]);
+  else if (r.kind === 'boru') head = 'Boru Ø' + fmt(b[0].d) + ' / Ø' + fmt(b[0].di) + ' × ' + fmt(b[0].h) + ' mm';
+  else if (r.kind === 'küre') head = 'Küre Ø' + fmt(b[0].d) + ' mm';
+  else if (r.kind === 'kroki') { const s = b[0], bb = s.pts.reduce((a, [u, v]) => [Math.min(a[0], u), Math.max(a[1], u), Math.min(a[2], v), Math.max(a[3], v)], [Infinity, -Infinity, Infinity, -Infinity]); head = 'Kesit krokisi (' + s.pts.length + ' köşe) ' + fmt(bb[1] - bb[0]) + ' × ' + fmt(bb[3] - bb[2]) + ' mm, kalınlık ' + fmt(s.h) + ' mm'; }
+  else if (r.kind === 'kroki-döndürme') { const s = b[0], R = Math.max(...s.pts.map((p) => p[0])), H = Math.max(...s.pts.map((p) => p[1])); head = 'Döndürme krokisi Ø' + fmt(2 * R) + ' × ' + fmt(H) + ' mm (' + s.pts.length + ' nokta)'; }
+  else head = 'Torna parçası: ' + b.map(dia).join(' + ') + ' mm';
+  const inner = r.kind === 'torna' ? h.filter((p) => p.type === 'cone' || (!p.rx && !p.rz && Math.abs(p.x - b[0].x) < 1e-6 && Math.abs(p.z - b[0].z) < 1e-6)) : [];
+  const holes = h.filter((p) => !inner.includes(p));
+  let tail = inner.length ? ' · iç: ' + inner.map(dia).join(' + ') : '';
+  if (holes.length) { const g = new Map(); for (const p of holes) g.set(p.d, (g.get(p.d) || 0) + 1); tail += ' · ' + holes.length + ' delik (' + [...g].map(([d, c]) => 'Ø' + fmt(d) + (c > 1 ? ' ×' + c : '')).join(', ') + ')'; }
+  return head + tail;
+}
+
+/* ======================= 2. sürüm: pah, yuvarlama, eğik yüz ======================= */
+
+// Kutunun 12 kenarında eşit yuvarlama ya da 45° pah var mı? { r } | { c } ve bu yüzlerin listesi; yoksa null
+function boxEdges(an, mn, mx) {
+  const { fd, arcs, tolPos } = an, { n, N, A, C } = fd;
+  const tol = Math.max(tolPos * 2, 0.3);
+  // pah: iki bileşeni ±0,707 olan düz yüzler
+  const ch = new Map();
+  for (let t = 0; t < n; t++) {
+    const nn = [N[t * 3], N[t * 3 + 1], N[t * 3 + 2]];
+    const big = [0, 1, 2].filter((k) => Math.abs(nn[k]) > 0.6 && Math.abs(nn[k]) < 0.8);
+    if (big.length !== 2 || Math.abs(nn[3 - big[0] - big[1]]) > 0.1) continue;
+    const corner = [0, 0, 0];
+    for (const k of big) corner[k] = nn[k] > 0 ? mx[k] : mn[k];
+    let d = 0; for (const k of big) d += nn[k] * (corner[k] - C[t * 3 + k]);
+    const key = (3 - big[0] - big[1]) + ':' + big.map((k) => Math.sign(nn[k])).join(':');
+    const e = ch.get(key) || { a: 0, s: 0, faces: [] };
+    e.a += A[t]; e.s += A[t] * d * Math.SQRT2; e.faces.push(t); ch.set(key, e);
+  }
+  if (ch.size >= 12) {
+    const cs = [...ch.values()].map((e) => e.s / e.a).sort((a, b) => a - b), c = cs[cs.length >> 1];
+    if (c > 0.1 && cs.every((x) => Math.abs(x - c) <= Math.max(tol, c * 0.15))) {
+      const faces = [...ch.values()].flatMap((e) => e.faces);
+      for (let t = 0; t < n; t++) {   // köşe üçgenleri
+        const nn = [N[t * 3], N[t * 3 + 1], N[t * 3 + 2]];
+        if ([0, 1, 2].every((k) => Math.abs(Math.abs(nn[k]) - 0.577) < 0.1)) faces.push(t);
+      }
+      // gerçek pah: geriye düz olmayan başka yüz kalmamalı (yuvarlamanın 45° civarı şeritleri pah sanılmasın)
+      const holeF = new Uint8Array(n); for (const cc of an.cyl) if (!cc.convex) for (const t of cc.faces) holeF[t] = 1;
+      const fs = new Uint8Array(n); for (const t of faces) fs[t] = 1;
+      let rest = 0, all = 0; for (let t = 0; t < n; t++) { all += A[t]; if (!fs[t] && !holeF[t] && an.planeAx[t] < 0) rest += A[t]; }
+      if (rest <= 0.02 * all) return { c, faces };
+    }
+  }
+  // yuvarlama: yuvarlatılmış kutunun işaretli uzaklık işlevine (SDF) en iyi oturan R. Düz olmayan yüzler (delikler hariç) bu
+  // yüzeyde olmalı; hepsi oturursa 12 kenar + 8 köşe eşit R ile yuvarlatılmış demektir.
+  {
+    const holeF = new Uint8Array(n); for (const c of an.cyl) if (!c.convex) for (const t of c.faces) holeF[t] = 1;
+    const ids = []; let ar = 0, all = 0;
+    for (let t = 0; t < n; t++) { all += A[t]; if (an.planeAx[t] < 0 && !holeF[t]) { ids.push(t); ar += A[t]; } }
+    if (ar > 0.02 * all) {
+      const c = [0, 1, 2].map((k) => (mn[k] + mx[k]) / 2), hf = [0, 1, 2].map((k) => (mx[k] - mn[k]) / 2);
+      const err = (R) => {
+        let e = 0, w = 0;
+        for (const t of ids) {
+          let q2 = 0, qm = -Infinity;
+          for (let k = 0; k < 3; k++) { const q = Math.abs(C[t * 3 + k] - c[k]) - (hf[k] - R); if (q > 0) q2 += q * q; if (q > qm) qm = q; }
+          const d = Math.sqrt(q2) + Math.min(qm, 0) - R; e += A[t] * d * d; w += A[t];   // yuvarlatılmış kutu SDF
+        }
+        return Math.sqrt(e / w);
+      };
+      let lo = 0.05, hi = Math.min(...hf) * 0.98;
+      for (let it = 0; it < 60; it++) { const m1 = lo + (hi - lo) / 3, m2 = hi - (hi - lo) / 3; if (err(m1) < err(m2)) hi = m2; else lo = m1; }
+      const R = (lo + hi) / 2, e = err(R);
+      // yüz ağırlık merkezleri eğri yüzün biraz içinde kalır (kiriş): R'nin %4'üne kadar sapma kabul
+      if (e <= Math.max(tolPos, R * 0.04)) return { r: R, faces: ids };
+    }
+  }
+  return null;
+}
+function boxEdgeVol(p) {
+  const { w, h, l } = p;
+  if (p.r) { const r = p.r, a = w - 2 * r, b = h - 2 * r, c = l - 2 * r; return a * b * c + 2 * r * (a * b + a * c + b * c) + Math.PI * r * r * (a + b + c) + 4 / 3 * Math.PI * r ** 3; }
+  const c = p.c; return w * h * l - 2 * c * c * (w + h + l) + (8 / 3) * c ** 3;   // 12 üçgen prizma, köşe bindirmesi
+}
+
+/* ---------- düzlem kesiti ---------- */
+// Ağı düzlemle keser; kapalı döngüleri 2B ([u, v]) verir. Düzlem: nokta P0, normal Nn; 2B eksenler U, Vv.
+export function section(m, P0, Nn, U, Vv) {
+  const { V, F } = m, segs = [];
+  const d = new Float64Array(V.length / 3);
+  for (let i = 0; i < d.length; i++) d[i] = (V[i * 3] - P0[0]) * Nn[0] + (V[i * 3 + 1] - P0[1]) * Nn[1] + (V[i * 3 + 2] - P0[2]) * Nn[2];
+  const P2 = (a, b) => { const t = d[a] / (d[a] - d[b]); const x = V[a * 3] + t * (V[b * 3] - V[a * 3]) - P0[0], y = V[a * 3 + 1] + t * (V[b * 3 + 1] - V[a * 3 + 1]) - P0[1], z = V[a * 3 + 2] + t * (V[b * 3 + 2] - V[a * 3 + 2]) - P0[2]; return [x * U[0] + y * U[1] + z * U[2], x * Vv[0] + y * Vv[1] + z * Vv[2]]; };
+  for (let i = 0; i < F.length; i += 3) {
+    const v = [F[i], F[i + 1], F[i + 2]], s = v.map((k) => d[k] > 0);
+    if (s[0] === s[1] && s[1] === s[2]) continue;
+    const pts = [];
+    for (let k = 0; k < 3; k++) { const a = v[k], b = v[(k + 1) % 3]; if ((d[a] > 0) !== (d[b] > 0)) pts.push(P2(a, b)); }
+    if (pts.length === 2) segs.push(pts);
+  }
+  // uç noktaları eşleştirerek döngü kur
+  const key = (p) => Math.round(p[0] * 1e4) + ',' + Math.round(p[1] * 1e4);
+  const at = new Map();
+  segs.forEach((sg, i) => { for (const p of sg) { const k = key(p); (at.get(k) || at.set(k, []).get(k)).push(i); } });
+  const used = new Uint8Array(segs.length), loops = [];
+  for (let i = 0; i < segs.length; i++) {
+    if (used[i]) continue;
+    used[i] = 1;
+    const loop = [segs[i][0], segs[i][1]];
+    let cur = segs[i][1];
+    for (let guard = 0; guard < segs.length; guard++) {
+      const cand = (at.get(key(cur)) || []).find((j) => !used[j]);
+      if (cand === undefined) break;
+      used[cand] = 1;
+      const sg = segs[cand], nx = key(sg[0]) === key(cur) ? sg[1] : sg[0];
+      if (key(nx) === key(loop[0])) { cur = null; break; }
+      loop.push(nx); cur = nx;
+    }
+    if (loop.length >= 3) loops.push(loop);
+  }
+  return loops;
+}
+const area2 = (L) => { let s = 0; for (let i = 0; i < L.length; i++) { const a = L[i], b = L[(i + 1) % L.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; };
+// Douglas-Peucker (kapalı döngü)
+export function simplifyLoop(L, tol) {
+  if (L.length < 4) return L;
+  let far = 0, fd = -1;
+  for (let i = 1; i < L.length; i++) { const d = Math.hypot(L[i][0] - L[0][0], L[i][1] - L[0][1]); if (d > fd) { fd = d; far = i; } }
+  const dp = (pts) => {
+    if (pts.length < 3) return pts;
+    const [a, b] = [pts[0], pts[pts.length - 1]], L2 = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1e-12;
+    let mi = 0, md = -1;
+    for (let i = 1; i < pts.length - 1; i++) { const d = Math.abs((b[0] - a[0]) * (a[1] - pts[i][1]) - (a[0] - pts[i][0]) * (b[1] - a[1])) / L2; if (d > md) { md = d; mi = i; } }
+    if (md <= tol) return [a, b];
+    const l = dp(pts.slice(0, mi + 1)), r = dp(pts.slice(mi));
+    return [...l.slice(0, -1), ...r];
+  };
+  const A1 = dp(L.slice(0, far + 1)), B1 = dp([...L.slice(far), L[0]]);
+  const out = [...A1.slice(0, -1), ...B1.slice(0, -1)];
+  // aynı doğru üzerindeki ara noktaları at (başlangıç noktası dahil)
+  for (let ch = true; ch && out.length > 3;) {
+    ch = false;
+    for (let i = 0; i < out.length; i++) {
+      const a = out[(i + out.length - 1) % out.length], p = out[i], b = out[(i + 1) % out.length];
+      const L2 = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1e-12;
+      if (Math.abs((b[0] - a[0]) * (a[1] - p[1]) - (a[0] - p[0]) * (b[1] - a[1])) / L2 <= tol) { out.splice(i, 1); ch = true; break; }
+    }
+  }
+  return out;
+}
+// yarım düzleme (u ≥ 0) kırpma (Sutherland-Hodgman)
+function clipU(L) {
+  const out = [];
+  for (let i = 0; i < L.length; i++) {
+    const a = L[i], b = L[(i + 1) % L.length], ia = a[0] >= 0, ib = b[0] >= 0;
+    if (ia) out.push(a);
+    if (ia !== ib) { const t = a[0] / (a[0] - b[0]); out.push([0, a[1] + t * (b[1] - a[1])]); }
+  }
+  return out;
+}
+
+/* ---------- dönel parça: kesit profilinden silindir + koni kademeleri ya da döndürme krokisi ---------- */
+function fitTurnedProfile(m, opt) {
+  const snap = opt.snap ?? 0.1;
+  const an = analyze(m, opt), { info, fd, cyl, tolPos } = an, { n, N, A, C } = fd;
+  // eksen: en büyük dışbükey Y silindiri ya da sınır kutusu ortası
+  const big = cyl.filter((c) => c.axis === 1 && c.convex).reduce((b, c) => (!b || c.R > b.R ? c : b), null);
+  const cx = big ? big.cv : (info.min[0] + info.max[0]) / 2, cz = big ? big.cu : (info.min[2] + info.max[2]) / 2;
+  if (Math.abs(info.size[0] - info.size[2]) > Math.max(tolPos * 4, info.size[0] * 0.04)) return null;
+  // eksen dışı delikler (flanş) ve çapraz delikler ayrı
+  const holes = cyl.filter((c) => c.full && !c.convex && !(c.axis === 1 && Math.hypot(c.cv - cx, c.cu - cz) <= tolPos * 3));
+  const inHole = new Uint8Array(n); for (const c of holes) for (const t of c.faces) inHole[t] = 1;
+  // dönel simetri: yüz normali, eksenden geçen düzlemde olmalı
+  let sym = 0, tot = 0;
+  for (let t = 0; t < n; t++) {
+    tot += A[t]; if (inHole[t]) { sym += A[t]; continue; }
+    const rx = C[t * 3] - cx, rz = C[t * 3 + 2] - cz, r = Math.hypot(rx, rz);
+    if (r < tolPos) { sym += A[t]; continue; }
+    const tang = (-rz * N[t * 3] + rx * N[t * 3 + 2]) / r;
+    if (Math.abs(tang) < 0.17 || Math.abs(N[t * 3 + 1]) > 0.985) sym += A[t];
+  }
+  if (sym < 0.9 * tot) return null;
+  // kesit: delikleri kesmeyen açıyı bul (en büyük profil alanı)
+  let prof = null, best = -1;
+  for (let i = 0; i < 16; i++) {
+    const th = (i / 16) * 2 * Math.PI + 0.05, U = [Math.cos(th), 0, Math.sin(th)];
+    const loops = section(m, [cx, 0, cz], [-Math.sin(th), 0, Math.cos(th)], U, [0, 1, 0]).map(clipU).filter((L) => L.length >= 3);
+    for (const L of loops) { const a = Math.abs(area2(L)); if (a > best) { best = a; prof = L; } }
+  }
+  if (!prof) return null;
+  const tolS = Math.max(0.05, tolPos * 0.5);
+  prof = simplifyLoop(prof, tolS);
+  const y0 = info.min[1], y1 = info.max[1];
+  // kırılma yükseklikleri, her aralıkta dış ve iç yarıçap (aralığın iki ucunda)
+  const ys = [...new Set(prof.map((p) => p[1]))].sort((a, b) => a - b).filter((y, i, a) => i === 0 || y - a[i - 1] > tolS);
+  const radiiAt = (y) => {
+    const xs = [];
+    for (let i = 0; i < prof.length; i++) {
+      const a = prof[i], b = prof[(i + 1) % prof.length];
+      if ((a[1] > y) !== (b[1] > y)) xs.push(a[0] + (y - a[1]) / (b[1] - a[1]) * (b[0] - a[0]));
+    }
+    xs.sort((p, q) => p - q);
+    return xs.length >= 2 ? { ri: xs[xs.length - 2] > tolS ? xs[xs.length - 2] : 0, ro: xs[xs.length - 1] } : null;
+  };
+  const segs = [];
+  for (let i = 0; i + 1 < ys.length; i++) {
+    const a = ys[i], b = ys[i + 1], e = Math.min(tolS, (b - a) / 4);
+    const lo = radiiAt(a + e), hi = radiiAt(b - e);
+    if (!lo || !hi) return null;
+    // ölçüm aralığın biraz içinde: uçlara doğrusal uzat
+    const ex = (p, q) => { const k = (q - p) / (b - a - 2 * e); return [p - k * e, q + k * e]; };
+    const [ro0, ro1] = ex(lo.ro, hi.ro), [ri0, ri1] = lo.ri && hi.ri ? ex(lo.ri, hi.ri) : [lo.ri, hi.ri];
+    segs.push({ a, b, ro0, ro1, ri0, ri1 });
+  }
+  const same = (p, q) => Math.abs(p - q) <= Math.max(tolS * 2, 0.05);
+  // aynı silindiri ardışık aralıklarda birleştir
+  const mergeRuns = (get0, get1) => {
+    const out = [];
+    for (const s of segs) {
+      const r0 = get0(s), r1 = get1(s), last = out[out.length - 1];
+      if (last && same(last.r0, last.r1) && same(r0, r1) && same(last.r1, r0) && Math.abs(last.b - s.a) < 1e-9) { last.b = s.b; continue; }
+      out.push({ a: s.a, b: s.b, r0, r1 });
+    }
+    return out;
+  };
+  const outer = mergeRuns((s) => s.ro0, (s) => s.ro1), inner = mergeRuns((s) => s.ri0, (s) => s.ri1).filter((s) => s.r0 > 0 || s.r1 > 0);
+  const cones = (L) => L.filter((s) => !same(s.r0, s.r1));
+  const consecutiveCones = (L) => L.some((s, i) => i && !same(s.r0, s.r1) && !same(L[i - 1].r0, L[i - 1].r1));
+  const notes = [];
+  let parts = [], kind;
+  if (outer.length + inner.length > 14 || consecutiveCones(outer) || consecutiveCones(inner)) {
+    // yuvarlama / eğri profil: tek döndürme krokisi (düzenlenebilir noktalar)
+    kind = 'kroki-döndürme';
+    const pts = prof.map(([u, v]) => [r1(u, snap / 10 || 0.01), r1(v - y0, snap / 10 || 0.01)]);
+    parts.push({ type: 'sketch', mode: 'revolve', plane: 'front', h: 0, x: r1(cx, snap), y: r1(y0, snap), z: r1(cz, snap), pts });
+    notes.push('Profilde yuvarlama ya da eğri var: parça, noktaları düzenlenebilen bir döndürme krokisi olarak eklendi.');
+  } else {
+    kind = 'torna';
+    const seg = (s, op, ext) => {
+      const ya = s.a - (ext && Math.abs(s.a - y0) < tolS * 4 ? 1 : 0), yb = s.b + (ext && Math.abs(s.b - y1) < tolS * 4 ? 1 : 0);
+      const base = { op, x: r1(cx, snap), y: r1(ya, snap), z: r1(cz, snap), h: r1(yb - ya, snap) };
+      if (same(s.r0, s.r1)) return { type: 'cylinder', d: r1(2 * (s.r0 + s.r1) / 2, snap), ...base };
+      // uzatılan uçta yarıçap aynı eğimle sürer
+      const k = (s.r1 - s.r0) / (s.b - s.a), r0 = s.r0 - k * (s.a - ya), rr1 = s.r1 + k * (yb - s.b);
+      return { type: 'cone', d: r1(2 * Math.max(r0, 0), snap), d2: r1(2 * Math.max(rr1, 0), snap), ...base };
+    };
+    for (const s of outer) parts.push(seg(s, 'add', false));
+    for (const s of inner) parts.push(seg(s, 'sub', true));
+    const nc = cones(outer).length + cones(inner).length;
+    if (nc) notes.push(nc + ' konik yüz (pah / koni) tanındı.');
+  }
+  // eksen dışı delikler: temel hesaptaki gibi
+  const hp = holeParts(an, holes, snap);
+  parts.push(...hp.parts); notes.push(...hp.notes);
+  // doğrulama: profil hacmi (Pappus) − delikler
+  let vol = 0;
+  for (let i = 0; i < prof.length; i++) { const [u1, v1] = prof[i], [u2, v2] = prof[(i + 1) % prof.length]; vol += Math.PI * (v2 - v1) * (u1 * u1 + u1 * u2 + u2 * u2) / 3; }
+  vol = Math.abs(vol);
+  for (const c of holes) vol -= Math.PI * c.R * c.R * (c.b - c.a);
+  const volErr = info.closed && info.volume > 0 ? Math.abs(vol - info.volume) / info.volume : null;
+  const quality = { coverage: sym / tot, volErr, unexplained: 1 - sym / tot, faces: n };
+  if (volErr != null && volErr > (opt.maxVolErr ?? 0.08)) return { ok: false, kind, parts: [], notes, quality, reason: 'Dönel parçaya benziyor ama hacim farkı %' + Math.round(volErr * 100) + '. Ağ olarak eklenmesi önerilir.' };
+  return { ok: true, kind, parts, quality, notes, holes: hp.parts.length, analysis: summary(an) };
+}
+
+// Delik parçaları: açık uç, uçtaki taban yüzü yoksa anlaşılır (kör delik tabanı varsa o uç kapalı)
+function holeParts(an, list, snap) {
+  const { fd, planeAx, tolPos } = an, { n, A, C } = fd;
+  const parts = [], notes = [];
+  for (const c of list) {
+    const k = c.axis, [iu, iv] = UV[k];
+    const capAt = (at) => {
+      let a = 0;
+      for (let t = 0; t < n; t++) if (planeAx[t] === k && Math.abs(C[t * 3 + k] - at) <= tolPos * 2 && Math.hypot(C[t * 3 + iu] - c.cu, C[t * 3 + iv] - c.cv) < c.R * 0.95) a += A[t];
+      return a > Math.PI * c.R * c.R * 0.3;
+    };
+    const openLo = !capAt(c.a), openHi = !capAt(c.b);
+    if (!openLo && !openHi) { notes.push('İçeride kalan silindirik boşluk (Ø' + fmt(2 * c.R) + ') eklenmedi'); continue; }
+    const a = openLo ? c.a - 1 : c.a, b = openHi ? c.b + 1 : c.b, len = b - a;
+    const p = { type: 'cylinder', op: 'sub', d: r1(2 * c.R, snap), h: r1(len, snap), x: 0, y: 0, z: 0, rx: 0, rz: 0 };
+    const cen = [0, 0, 0]; cen[iu] = c.cu; cen[iv] = c.cv;
+    if (k === 1) { p.x = cen[0]; p.z = cen[2]; p.y = a; }
+    else if (k === 0) { p.y = cen[1]; p.z = cen[2]; p.rz = -90; p.x = a; }   // rz = -90: +Y → +X
+    else { p.x = cen[0]; p.y = cen[1]; p.rx = 90; p.z = a; }                 // rx = +90: +Y → +Z
+    p.x = r1(p.x, snap); p.y = r1(p.y, snap); p.z = r1(p.z, snap);
+    parts.push(p);
+  }
+  return { parts, notes };
+}
+
+/* ---------- 2,5B parça: bir eksen boyunca sabit kesit (eğik yüzler, L / T profil, yuvarlatılmış köşe) → üstten kroki ---------- */
+function fitExtrusion(m, opt) {
+  const snap = opt.snap ?? 0.1;
+  const an = analyze(m, opt), { info, fd, planeAx, cyl, tolPos } = an, { n, N, A, C } = fd;
+  const cosT = Math.cos(15 * DEG), sinT = Math.sin(15 * DEG);   // tarama gürültüsünde küçük üçgenlerin normali sapar
+  const y0 = info.min[1], y1 = info.max[1], H = y1 - y0;
+  if (!(H > tolPos * 2)) return null;
+  const cross = cyl.filter((c) => c.full && !c.convex && c.axis !== 1);
+  const inCross = new Uint8Array(n); for (const c of cross) for (const t of c.faces) inCross[t] = 1;
+  let ok = 0, tot = 0, capsOff = 0;
+  for (let t = 0; t < n; t++) {
+    tot += A[t];
+    const ny = Math.abs(N[t * 3 + 1]);
+    if (inCross[t]) { ok += A[t]; continue; }
+    if (ny > cosT) { ok += A[t]; const y = C[t * 3 + 1]; if (Math.abs(y - y0) > tolPos * 2 && Math.abs(y - y1) > tolPos * 2) capsOff += A[t]; continue; }
+    if (ny < sinT) ok += A[t];
+  }
+  if (ok < 0.97 * tot || capsOff > 0.02 * tot) return null;   // ara yükseklikte basamak / cep var: tek kesitle anlatılamaz
+  // kalınlık: alt ve üst kapak yüzlerinin ortalama yüksekliği (gürültüdeki uç noktalar değil)
+  let la = 0, ls = 0, ha = 0, hs = 0;
+  for (let t = 0; t < n; t++) {
+    if (Math.abs(N[t * 3 + 1]) <= cosT) continue;
+    const y = C[t * 3 + 1];
+    if (y - y0 <= tolPos * 3) { la += A[t]; ls += A[t] * y; } else if (y1 - y <= tolPos * 3) { ha += A[t]; hs += A[t] * y; }
+  }
+  const Y0 = la ? ls / la : y0, Y1 = ha ? hs / ha : y1;
+  // kesit: çapraz delikleri kesmeyen yükseklik (en büyük alan)
+  let loops = null, best = -1;
+  for (const f of [0.5, 0.3, 0.7, 0.15, 0.85, 0.42, 0.58]) {
+    const L = section(m, [0, y0 + H * f, 0], [0, 1, 0], [1, 0, 0], [0, 0, 1]);
+    const a = L.reduce((s, l) => s + area2(l), 0);
+    if (L.length && Math.abs(a) > best) { best = Math.abs(a); loops = L; }
+  }
+  if (!loops) return null;
+  const tolS = Math.max(0.05, tolPos * 0.5);
+  loops = loops.map((L) => simplifyLoop(L, tolS)).filter((L) => L.length >= 3 && Math.abs(area2(L)) > tolS * tolS * 4);
+  loops.sort((p, q) => Math.abs(area2(q)) - Math.abs(area2(p)));
+  let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+  for (const L of loops) for (const [u, v] of L) { u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); }
+  const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2, q = (x) => Math.round(x * 1000) / 1000;
+  const rel = (L) => L.map(([u, v]) => [q(u - cu), q(v - cv)]);
+  const sk = { type: 'sketch', mode: 'extrude', plane: 'top', op: 'add', h: r1(Y1 - Y0, snap), x: r1(cu, 0.001), y: r1(Y0, snap), z: r1(cv, 0.001), pts: rel(loops[0]) };
+  if (loops.length > 1) sk.more = loops.slice(1).map(rel);
+  const hp = holeParts(an, cross, snap);
+  // doğrulama
+  let area = 0;   // dış döngüler artı, delikler eksi (iç içe derinliğe göre)
+  for (let i = 0; i < loops.length; i++) {
+    let depth = 0; for (let j = 0; j < loops.length; j++) if (j !== i && Math.abs(area2(loops[j])) > Math.abs(area2(loops[i])) && pip(loops[i][0], loops[j])) depth++;
+    area += (depth % 2 ? -1 : 1) * Math.abs(area2(loops[i]));
+  }
+  let vol = area * (Y1 - Y0); for (const c of cross) vol -= Math.PI * c.R * c.R * (c.b - c.a);
+  const volErr = info.closed && info.volume > 0 ? Math.abs(vol - info.volume) / info.volume : null;
+  const quality = { coverage: ok / tot, volErr, unexplained: 1 - ok / tot, faces: n };
+  if (volErr != null && volErr > (opt.maxVolErr ?? 0.08)) return null;
+  // dikdörtgen kesit + yuvarlak delikler → kutu ve silindir delikler (ölçüleri doğrudan düzenlenir)
+  const L0 = loops[0], axisRect = L0.length === 4 && L0.every((p, i) => { const r = L0[(i + 1) % 4]; return Math.abs(r[0] - p[0]) <= tolS * 3 || Math.abs(r[1] - p[1]) <= tolS * 3; });
+  const circ = loops.slice(1).map((L) => { const c = fitCircle(L); return c && L.length >= 8 && c.rms <= Math.max(tolS, c.R * 0.03) ? c : null; });
+  if (axisRect && circ.every(Boolean)) {
+    const H2 = Y1 - Y0;
+    const box = { type: 'box', op: 'add', w: r1(u1 - u0, snap), h: r1(H2, snap), l: r1(v1 - v0, snap), x: r1(cu, snap), y: r1(Y0, snap), z: r1(cv, snap) };
+    const yh = circ.map((c) => ({ type: 'cylinder', op: 'sub', d: r1(2 * c.R, snap), h: r1(H2 + 2, snap), x: r1(c.cu, snap), y: r1(Y0 - 1, snap), z: r1(c.cv, snap), rx: 0, rz: 0 }));
+    return { ok: true, kind: 'prizmatik', parts: [box, ...yh, ...hp.parts], quality, notes: hp.notes, holes: yh.length + hp.parts.length, analysis: summary(an) };
+  }
+  const inclined = loops[0].some((p, i) => { const r = loops[0][(i + 1) % loops[0].length]; const dx = Math.abs(r[0] - p[0]), dz = Math.abs(r[1] - p[1]); return dx > tolS * 4 && dz > tolS * 4; });
+  const notes = ['Parça, sabit kesitli bir kroki (üstten ekstrüzyon) olarak eklendi: köşe noktaları ve kalınlık düzenlenebilir.'];
+  if (inclined) notes.push('Eğik yüzler tanındı.');
+  notes.push(...hp.notes);
+  return { ok: true, kind: 'kroki', parts: [sk, ...hp.parts], quality, notes, holes: hp.parts.length + Math.max(0, loops.length - 1), analysis: summary(an) };
+}
+function pip(pt, poly) {
+  let inside = false; const [x, y] = pt;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside; }
+  return inside;
+}
+
+// Eksen döndürmeleri: k ekseni Y'ye (sağ el kuralı korunur)
+const TO_Y = { 1: (x, y, z) => [x, y, z], 2: (x, y, z) => [x, z, -y], 0: (x, y, z) => [-y, x, z] };
+
+// Ana işlev: hizalanmış ağdan parça listesi. Sırayla: temel şekiller (+ eşit pah / yuvarlama) → dönel profil → 2,5B kesit.
+// Dönüş: { ok, kind, parts, quality, notes, reason }. parts: uygulama parçası alanları. Ağ hizalı ve yere oturmuş olmalı (alignToAxes).
+export function fitCAD(m, opt = {}) {
+  const a = fitBasic(m, opt);
+  // temel şekil kusursuz oturduysa başka arama yok
+  if (a.ok && a.quality.coverage >= 0.995 && !(a.quality.volErr > 0.005)) return a;
+  const cands = a.ok ? [a] : [];
+  const b = fitTurnedProfile(m, opt);
+  if (b && b.ok) cands.push(b);
+  for (const k of [1, 2, 0]) {
+    const mk = k === 1 ? m : toFloor(transform(m, TO_Y[k]));
+    const c = fitExtrusion(mk, opt);
+    if (c && c.ok) cands.push(k === 1 ? c : { ...c, notes: [...c.notes, 'Parça, kesit ekseni dikey olacak şekilde çevrildi.'] });
+  }
+  if (!cands.length) return b && !b.ok ? b : a;
+  // sıra önemli: temel şekil (ölçüleri en kolay düzenlenen) → dönel profil → kesit krokisi. İyi oturan ilk aday seçilir;
+  // hiçbiri iyi değilse en iyi oturan.
+  const good = (r) => r.quality.coverage >= 0.92 && !(r.quality.volErr > 0.02);
+  const g = cands.find(good);
+  if (g) return g;
+  const score = (r) => r.quality.coverage - 2 * (r.quality.volErr || 0);
+  return cands.reduce((p, q) => (score(q) > score(p) ? q : p));
 }

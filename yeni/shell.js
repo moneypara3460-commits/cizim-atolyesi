@@ -169,6 +169,7 @@ const CMDS = [
   C('Tasarım', 'Kare delik aç', '', 'delik kare cep', { act: 'hole-square' }, 'sqhole'),
   C('Tasarım', '2B çizim', 'AutoCAD tarzı çizim, DXF', '2b çizim dxf autocad', { act: 'cad2d' }, 'draw'),
   C('Tasarım', 'Tarama / STL içe aktar', 'STL, OBJ, PLY, GLB → düzenlenebilir CAD ya da ağ', 'tarama stl obj ply glb içe aktar mesh ağ fotogrametri photo cad tersine mühendislik', { act: 'scan-import' }, 'cube'),
+  C('Tasarım', 'Tek fotoğraftan tahmini model', 'Yapay zekâ ile kaba 3B model (internet, giriş gerekir)', 'fotoğraf foto resim tahmini model yapay zeka 3b photo', { act: 'photo-model' }, 'eye'),
   T('dims', 'Ölçüler', 'Seçili parçanın boyutları', 'ölçü boyut çap yükseklik genişlik', 'ruler'),
   T('type', 'Tür değiştir', 'Parçanın şeklini değiştir', 'tür şekil', 'cube'),
   T('pos', 'Konum', 'X, Y, Z konumu', 'konum yer taşı', 'move'),

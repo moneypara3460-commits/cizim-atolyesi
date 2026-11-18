@@ -1,7 +1,7 @@
 // Ağ dışa aktarma: PLY (ikili) ve GLB (glTF 2.0 ikili). Girdi: üçgen listesi (mm, Y yukarı).
 // STL, OBJ, 3MF, STEP zaten var (logic.js, export3d.js); bunlar tarama / görselleştirme programları için eklendi.
 // Saf fonksiyonlar (tests/scan.test.mjs).
-import { weld } from './mesh-tools.js?v=20261118a';
+import { weld } from './mesh-tools.js?v=20261118b';
 
 export function toPLY(tris) {
   const m = weld(tris), nv = m.V.length / 3, nf = m.F.length / 3;

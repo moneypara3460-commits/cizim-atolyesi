@@ -199,12 +199,17 @@ function tubeTris(d, di, h, n = 64) {
   }
   return o;
 }
+function pyramidTris() {
+  const P = [[-30, 0, -30], [30, 0, -30], [30, 0, 30], [-30, 0, 30], [5, 45, 8]];
+  const o = []; for (const [a, b, c] of [[0, 1, 2], [0, 2, 3], [0, 4, 1], [1, 4, 2], [2, 4, 3], [3, 4, 0]]) o.push(...P[a], ...P[b], ...P[c]);
+  return o;
+}
 function wedgeTris() {
   const P = [[0, 0, 0], [60, 0, 0], [60, 10, 0], [0, 40, 0], [0, 0, 30], [60, 0, 30], [60, 10, 30], [0, 40, 30]];
   const o = []; for (const [a, b, c, d] of [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]]) for (const i of [a, b, c, a, c, d]) o.push(...P[i]);
   return o;
 }
-await T('Tarama içe aktarma: STL borudan düzenlenebilir CAD (Boru Ø50/Ø40), serbest şekil ağ olarak, bozuk dosya açık hata', 'C-Tarama', async ({ page }) => {
+await T('Tarama içe aktarma: STL borudan düzenlenebilir CAD (Boru Ø50/Ø40), eğik takoz kesit krokisi, serbest şekil ağ olarak, bozuk dosya açık hata', 'C-Tarama', async ({ page }) => {
   const c0 = await chips(page);
   await choose(page, () => act(page, 'scan-import'), tmp('boru.stl', stlText(tubeTris(50, 40, 100))));
   await waitText(page, '#sc-info', /Boyut/, 30000);
@@ -218,9 +223,19 @@ await T('Tarama içe aktarma: STL borudan düzenlenebilir CAD (Boru Ø50/Ø40), 
   const last = await page.evaluate(() => { const p = window.__app.parts[window.__app.parts.length - 1]; return { type: p.type, d: p.d, di: p.di, h: p.h }; });
   expect(last.type === 'tube' && Math.abs(last.d - 50) < 0.3 && Math.abs(last.di - 40) < 0.3 && Math.abs(last.h - 100) < 0.2, 'boru parçası düzenlenebilir: ' + JSON.stringify(last));
   expect(!(await page.locator('#sc').count()), 'pencere kapandı');
-  // serbest şekil: CAD üretilmez, ağ olarak eklenir
-  const c1 = await chips(page);
+  // eğik yüzlü takoz: kesit krokisi (düzenlenebilir) olarak eklenir
+  const cw = await chips(page);
   await choose(page, () => act(page, 'scan-import'), tmp('takoz.stl', stlText(wedgeTris())));
+  await waitText(page, '#sc-info', /Boyut/, 30000);
+  await page.locator('#sc [data-a="fit"]').click();
+  await waitText(page, '#sc-res', /Tanındı|ğ olarak/i, 30000);
+  expect(/Kesit krokisi \(4 köşe\)/.test(await page.locator('#sc-res').innerText()), 'takoz kesit krokisi: ' + (await page.locator('#sc-res').innerText()).slice(0, 160));
+  await page.locator('#sc [data-a="addcad"]').click();
+  await page.waitForFunction((n) => document.querySelectorAll('#chips .chip').length > n, cw, { timeout: 30000 });
+  expect(await page.evaluate(() => { const p = window.__app.parts[window.__app.parts.length - 1]; return p.type === 'sketch' && p.mode === 'extrude' && p.pts.length === 4; }), 'kroki parçası eklendi');
+  // serbest şekil (piramit): CAD üretilmez, ağ olarak eklenir
+  const c1 = await chips(page);
+  await choose(page, () => act(page, 'scan-import'), tmp('piramit.stl', stlText(pyramidTris())));
   await waitText(page, '#sc-info', /Boyut/, 30000);
   await page.locator('#sc [data-a="fit"]').click();
   await waitText(page, '#sc-res', /ğ olarak/i, 30000);
@@ -234,6 +249,38 @@ await T('Tarama içe aktarma: STL borudan düzenlenebilir CAD (Boru Ø50/Ø40), 
   await waitText(page, '#sc-info', /Desteklenmeyen|okunamadı/, 30000);
   await page.locator('#sc [data-a="close"]').click();
   expect(await chips(page) === c2, 'bozuk dosya parça eklemedi');
+});
+
+await T('Tek fotoğraftan tahmini model: giriş yoksa sunucuya gitmez; girişte (sahte sunucu) tahmini parçalar bilinen ölçüyle eklenir', 'C-Foto', async (a) => {
+  const { page } = a;
+  const png = path.join(ROOT, 'tanitim/img/cad.jpg');
+  let calls = 0, body = null;
+  await page.route('https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/foto-model', async (r) => {
+    calls++; body = JSON.parse(r.request().postData() || '{}');
+    await r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ ok: true, result: { kind: 'torna', confidence: 'medium', view: 'yandan', notes: 'Delikli burç', parts: [{ type: 'cylinder', op: 'add', axis: 'y', d: 40, h: 60, x: 0, y: 0, z: 0 }, { type: 'cylinder', op: 'sub', axis: 'y', d: 20, h: 64, x: 0, y: -2, z: 0 }] } }) });
+  });
+  // giriş yok: açık mesaj, istek gitmez
+  await choose(page, () => act(page, 'photo-model'), png);
+  await page.locator('#sc [data-a="guess"]').click();
+  await waitText(page, '#sc-res', /giriş yap/i, 30000);
+  expect(calls === 0, 'girişsiz istek gitmedi');
+  await page.locator('#sc [data-a="close"]').click();
+  // sahte oturum
+  await page.evaluate(() => localStorage.setItem('cizim:oturum', JSON.stringify({ access_token: 'test-oturum', refresh_token: 'x', expires_at: Math.floor(Date.now() / 1000) + 3600 })));
+  const c0 = await chips(page);
+  await choose(page, () => act(page, 'photo-model'), png);
+  await page.locator('#sc [data-s="known"]').fill('90');
+  await page.locator('#sc [data-a="guess"]').click();
+  await waitText(page, '#sc-res', /TAHMİNİ model/, 30000);
+  expect(calls === 1 && /^data:image\/jpeg;base64,/.test(body.image) && body.known.mm === 90, 'istek: küçültülmüş jpeg + bilinen ölçü');
+  await page.locator('#sc [data-a="addguess"]').click();
+  await page.waitForFunction((n) => document.querySelectorAll('#chips .chip').length >= n + 2, c0, { timeout: 30000 });
+  const ps = await page.evaluate(() => window.__app.parts.slice(-2).map((p) => ({ type: p.type, op: p.op, d: p.d, h: p.h, name: p.name })));
+  expect(ps[0].type === 'cylinder' && Math.abs(ps[0].h - 90) < 0.1 && Math.abs(ps[0].d - 60) < 0.1 && /^Tahmini/.test(ps[0].name), 'ölçeklenmiş tahmini parça: ' + JSON.stringify(ps));
+  expect(ps[1].op === 'sub' && Math.abs(ps[1].d - 30) < 0.1, 'delik ölçeklendi');
+  await page.evaluate(() => localStorage.removeItem('cizim:oturum'));
+  // sahte sunucuya giden istek bilerek yapıldı (başka dış istek olmamalı)
+  a.net.external.splice(0, a.net.external.length, ...a.net.external.filter((u) => !u.includes('/functions/v1/foto-model')));
 });
 
 /* ---------- D. Montaj ---------- */
