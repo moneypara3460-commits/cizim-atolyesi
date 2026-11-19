@@ -316,7 +316,7 @@ export function gcListesi(P) {
 }
 const csvq = (v) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 export function gcCSV(rows) {
-  return '﻿' + [['Sinyal', 'Tür', 'Adres', 'Veri tipi', 'Açıklama', 'Adres kaynağı'].join(';'), ...rows.map((r) => [r.tag, r.turAd, r.adres, r.tip, r.aciklama, r.elle ? 'elle' : 'otomatik'].map(csvq).join(';'))].join('\r\n');
+  return '\ufeff' + [['Sinyal', 'Tür', 'Adres', 'Veri tipi', 'Açıklama', 'Adres kaynağı'].join(';'), ...rows.map((r) => [r.tag, r.turAd, r.adres, r.tip, r.aciklama, r.elle ? 'elle' : 'otomatik'].map(csvq).join(';'))].join('\r\n');
 }
 // Adım şeması (GRAFCET benzeri): çizim ilkelleri mm, y aşağı
 export function adimSemasi(P) {

@@ -109,7 +109,7 @@ t('Ürün ağacından G/Ç; proje verisi temizliği; listeler, şema ve rapor', 
   assert.deepEqual(Q.adimlar[0].cikislar, [1]); assert.deepEqual(Q.kilitler, [[1, 2]]); assert.equal(Q.nextId, 6);
   const R = plcOrnek(), rows = gcListesi(R);
   assert.deepEqual(rows.map((r) => r.adres).slice(0, 5), ['%IX0.0', '%IX0.1', '%IX0.2', '%IX0.3', '%QX0.0']);
-  assert.match(gcCSV(rows), /^﻿Sinyal;Tür;Adres/); assert.match(gcCSV(rows), /Y1_Silindir_Ileri;Dijital çıkış;%QX0\.0;BOOL/);
+  assert.match(gcCSV(rows), /^\ufeffSinyal;Tür;Adres/); assert.match(gcCSV(rows), /Y1_Silindir_Ileri;Dijital çıkış;%QX0\.0;BOOL/);
   const sm = adimSemasi(R); assert.ok(sm.prims.length > 20 && sm.h > 100);
   const L = plcRapor(R, 'Dolum'); assert.ok(L.some((l) => /ADIMLAR/.test(l)) && L.some((l) => /Adım 40/.test(l)) && /UYGUN/.test(L[2]));
 });

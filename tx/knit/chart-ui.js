@@ -3,7 +3,10 @@ import * as K from './chart.js?v=20261112u';
 import { saveBlob } from '../download.js?v=20261112u';
 import { drawChartCanvas, chartPDF } from './chart-export.js?v=20261112u';
 
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+// Renk yalnız #rrggbb biçiminde sayfaya yazılır; başka her değer gri olur.
+const safeHex = (h) => { const m = /^#([0-9a-fA-F]{6})$/.exec(String(h ?? '')); return '#' + (m ? parseInt(m[1], 16) : 0xcccccc).toString(16).padStart(6, '0'); };
+const int = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : 0);
 const PAL = ['k', 'p', 't', 'm', 'yo', 'k2t', 'ssk', 'c2R', 'c2L', 'c4R', 'c4L', 'c6R', 'c6L', 'x'];
 
 export function openChartEditor(ch, { onChange, toast, meta = {} }) {
@@ -39,7 +42,7 @@ export function openChartEditor(ch, { onChange, toast, meta = {} }) {
   function bars() {
     root.querySelector('#kcx-tools').innerHTML = [['paint', '🖌 Boya'], ['rect', '▭ Alan doldur'], ['repeat', '⟲ Tekrar alanı'], ['row', '☰ Sıra bilgisi'], ['pan', '✋ Kaydır']].map(([k, l]) => `<button data-k="tool" data-v="${k}" class="${S.tool === k ? 'on' : ''}">${l}</button>`).join('');
     root.querySelector('#kcx-st').innerHTML = PAL.map((k) => { const s = K.STITCHES[k]; return `<button data-k="stitch" data-v="${k}" class="${S.color == null && S.stitch === k ? 'on' : ''}" title="${esc(s.label)}">${s.cable ? (s.dir === 'L' ? '⤬' : '⤫') + s.cable / 2 + '/' + s.cable / 2 + (s.dir === 'L' ? '←' : '→') : esc(s.sym || (k === 'x' ? '▒' : '□'))}</button>`; }).join('') +
-      ch.palette.map((p, i) => `<button data-k="color" data-v="${i}" class="${S.color === i ? 'on' : ''}"><span class="sw" style="background:${p.hex}"></span></button>`).join('') + '<button data-k="add-color">+ Renk</button>';
+      ch.palette.map((p, i) => `<button data-k="color" data-v="${i}" class="${S.color === i ? 'on' : ''}"><span class="sw" style="background:${safeHex(p.hex)}"></span></button>`).join('') + '<button data-k="add-color">+ Renk</button>';
   }
   function resize() { const r = cv.getBoundingClientRect(); S.dpr = window.devicePixelRatio || 1; cv.width = Math.max(1, r.width * S.dpr); cv.height = Math.max(1, r.height * S.dpr); draw(); }
   function fit() { const r = cv.getBoundingClientRect(); S.c = Math.max(3, Math.min(40, Math.floor(Math.min((r.width - 40) / ch.w, (r.height - 34) / ch.h)))); S.ox = Math.max(6, (r.width - 30 - ch.w * S.c) / 2); S.oy = 22; draw(); }
@@ -105,10 +108,10 @@ export function openChartEditor(ch, { onChange, toast, meta = {} }) {
     root.querySelector('[data-k="undo"]').disabled = !undo.length; root.querySelector('[data-k="redo"]').disabled = !redo.length;
     bars();
     const iss = K.validateChart(ch), s = K.rowStats(ch, Math.min(S.row, ch.h - 1));
-    pane.innerHTML = `<div class="grp"><label class="f"><span>Ad</span><input data-c="name" value="${esc(ch.name)}"></label><label class="f"><span>Genişlik (ilmek)</span><input data-c="w" inputmode="numeric" value="${ch.w}"></label><label class="f"><span>Yükseklik (sıra)</span><input data-c="h" inputmode="numeric" value="${ch.h}"></label></div>
-      <div class="small">${ch.repeat ? `Tekrar: ${ch.repeat.w} ilmek × ${ch.repeat.h} sıra (kırmızı çerçeve)` : 'Tekrar alanı yok: bütün desen tekrar sayılır'} · ${ch.w * ch.h} hücre</div>
+    pane.innerHTML = `<div class="grp"><label class="f"><span>Ad</span><input data-c="name" value="${esc(ch.name)}"></label><label class="f"><span>Genişlik (ilmek)</span><input data-c="w" inputmode="numeric" value="${int(ch.w)}"></label><label class="f"><span>Yükseklik (sıra)</span><input data-c="h" inputmode="numeric" value="${int(ch.h)}"></label></div>
+      <div class="small">${ch.repeat ? `Tekrar: ${int(ch.repeat.w)} ilmek × ${int(ch.repeat.h)} sıra (kırmızı çerçeve)` : 'Tekrar alanı yok: bütün desen tekrar sayılır'} · ${int(ch.w) * int(ch.h)} hücre</div>
       ${S.tool === 'row' ? `<div class="small">Sıra ${S.row + 1}: ${Object.entries(s.counts).filter(([c]) => c !== 'c+').map(([c, n]) => `${n} ${esc(K.STITCHES[c]?.label || c)}`).join(', ')}${Object.keys(s.floats).length ? ' · en uzun atlama: ' + Object.entries(s.floats).map(([c, f]) => `${esc(ch.palette[c].name)} ${f}`).join(', ') : ''}</div>` : ''}
-      ${S.color != null ? `<div class="grp"><label class="f"><span>Renk adı</span><input data-p="name" value="${esc(ch.palette[S.color].name)}"></label><label class="f" style="flex:0 0 70px"><span>Renk</span><input type="color" data-p="hex" value="${ch.palette[S.color].hex}"></label></div>` : ''}
+      ${S.color != null ? `<div class="grp"><label class="f"><span>Renk adı</span><input data-p="name" value="${esc(ch.palette[S.color].name)}"></label><label class="f" style="flex:0 0 70px"><span>Renk</span><input type="color" data-p="hex" value="${safeHex(ch.palette[S.color].hex)}"></label></div>` : ''}
       <h4 style="margin:8px 0 2px;font-size:13px">Kontrol</h4>${iss.length ? iss.slice(0, 30).map((x) => `<div class="issue ${x.level}">${x.level === 'hata' ? '⛔' : '⚠'} ${esc(x.msg)}</div>`).join('') + (iss.length > 30 ? `<div class="small">… ${iss.length - 30} daha</div>` : '') : '<div class="small">✅ Saç örgüleri tam, sıralarda ilmek sayısı dengeli, atlama iplikleri sınırda.</div>'}
       <h4 style="margin:8px 0 2px;font-size:13px">Çıktı</h4><div class="grp"><button data-k="pdf">⬇ PDF şema</button><button data-k="png">⬇ PNG</button><button data-k="csv">⬇ CSV</button><button data-k="txt">⬇ Yazılı talimat</button></div>
       <div class="small">Yazılı talimat gidiş-dönüş örgü içindir (çift sıralar arka yüzden, düz / ters yer değiştirir). Makine programı değildir: makineye özgü çıktı Aşama 8'de, yalnız doğrulanan makineler için.</div>`;
@@ -144,7 +147,11 @@ export function openChartEditor(ch, { onChange, toast, meta = {} }) {
       if (!(n >= 1 && n <= (k === 'w' ? 400 : 1000))) { toast(k === 'w' ? '1–400 ilmek' : '1–1000 sıra'); renderPane(); return; }
       push(); K.resize(ch, w, h); fit(); changed(); return;
     }
-    if (el.dataset.p && S.color != null) { push(); ch.palette[S.color][el.dataset.p] = el.value; changed(); }
+    if (el.dataset.p && S.color != null) {
+      const k = el.dataset.p;
+      if (k === 'hex') { push(); ch.palette[S.color].hex = safeHex(el.value); changed(); }
+      else if (k === 'name') { push(); ch.palette[S.color].name = String(el.value).slice(0, 40); changed(); }
+    }
   });
   const ro = new ResizeObserver(() => resize()); ro.observe(cv);
   renderPane(); resize(); fit();

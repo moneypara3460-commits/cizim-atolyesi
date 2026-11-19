@@ -74,7 +74,7 @@ t('Sistem: 2 × 24 V 1 A + 4 A 3 faz + 2 A 1 faz → güç kaynağı ≥ 2,5 A, 
   const kp = klemensPlani(s); assert.equal(kp.length, 11);
   assert.deepEqual(kp.filter((r) => r.klemens.startsWith('-X2')).map((r) => r.klemens + ' ' + r.potansiyel), ['-X2:1 +24V', '-X2:2 0V', '-X2:3 +24V', '-X2:4 0V']);
   assert.equal(kp.find((r) => r.hedef === 'Fan' && r.damar === 'L').potansiyel, 'L2');
-  assert.ok(/^﻿Kablo;/.test(kabloCSV(kl)) && /-W4;Konveyör;4G0,75/.test(kabloCSV(kl)));
+  assert.ok(/^\ufeffKablo;/.test(kabloCSV(kl)) && /-W4;Konveyör;4G0,75/.test(kabloCSV(kl)));
   assert.ok(/-X1:1;L1;-F4;-W4;L1;Konveyör/.test(klemensCSV(kp)) && /-X1:5;L2;-F5;-W5;L;Fan/.test(klemensCSV(kp)));
   // güç kaynağı yeterli girilirse uyarı kalkar, yetersizse hata
   assert.equal(elekSystem({ ...E, ayar: { ...E.ayar, psuIn: 5 } }).kontroller[0].ok, true);

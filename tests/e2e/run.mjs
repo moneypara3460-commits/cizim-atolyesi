@@ -519,6 +519,45 @@ await T('Mekatronik 6. aşama güvenlik: örnek risk kaydı → PLr risk grafiğ
   expect(/IEC 60204-1 10\.7: uygun değil/.test(await body(page)), 'yenileme sonrası güvenlik projesi');
 });
 
+await T('Mekatronik 7. aşama benzetim: örnek çevrim 3,817 s, çizelge ve hız grafiği; kayışlı eksen kartından tahrik; kilit ihlali yakalanır; motor devir sınırı; CSV ve PDF; yenilemede korunur', 'M-Benzetim', async ({ page }) => {
+  await tab(page, 'meka');
+  await act(page, 'mk-v-sim');
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mks="${k}"]`); const tg = await i.evaluate((e) => e.tagName); if (tg === 'SELECT') await i.selectOption(String(v)); else await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(120); };
+  await act(page, 'mk-sornek');
+  let b = await body(page);
+  expect(/✓ UYGUN/.test(b) && /3,817 s/.test(b) && /943,2 adet/.test(b), 'örnek çevrim: ' + b.slice(0, 300));
+  expect((await page.locator('#tabbody svg rect').count()) === 5 && (await page.locator('#tabbody svg line').count()) > 200, 'çizelge ve hız grafiği');
+  // kilit ihlali: itici taşıma ile birlikte
+  await act(page, 'mk-salt-hareket');
+  const hs = await page.evaluate(() => [...document.querySelectorAll('#tabbody [data-hareket]')].map((e) => e.dataset.hareket));
+  await set(`h.${hs[1]}.basla`, 'birlikte');
+  await act(page, 'mk-salt-cevrim');
+  b = await body(page);
+  expect(/UYGUN DEĞİL/.test(b) && /birlikte çalışıyor/.test(b), 'kilit ihlali');
+  await act(page, 'mk-salt-hareket'); await set(`h.${hs[1]}.basla`, 'sonra');
+  // kayışlı eksen kartından tahrik al
+  await act(page, 'mk-v-hesap'); await act(page, 'mk-k-kayis'); await act(page, 'mk-v-sim');
+  await act(page, 'mk-salt-tahrik'); await act(page, 'mk-skart-kayis');
+  b = await body(page);
+  expect(/Kayışlı eksen kartı/.test(b), 'karttan tahrik: ' + b.slice(0, 200));
+  // motor sınırı: örnek eksende en yüksek devri düşür
+  const tid = await page.evaluate(() => document.querySelector('#tabbody [data-tahrik]').dataset.tahrik);
+  await set(`t.${tid}.nmax`, 200);
+  await act(page, 'mk-salt-cevrim');
+  b = await body(page);
+  expect(/UYGUN DEĞİL/.test(b) && /en yüksek motor devri 306 ≤ 200/.test(b), 'devir sınırı');
+  await act(page, 'mk-salt-tahrik'); await set(`t.${tid}.nmax`, 3000); await act(page, 'mk-salt-cevrim');
+  expect(/✓ UYGUN/.test(await body(page)), 'sınır geri alındı');
+  const csv = await download(page, () => act(page, 'mk-scsv'));
+  expect(/^﻿?Zaman \(s\);Kayışlı taşıma ekseni hız \(mm\/s\);İtici silindir hız \(mm\/s\)/.test(csv.text) && /benzetim\.csv$/.test(csv.name), 'CSV: ' + csv.text.slice(0, 150));
+  const pdf = await download(page, () => act(page, 'mk-spdf'));
+  expect(/^%PDF/.test(pdf.text), 'benzetim PDF');
+  await page.waitForTimeout(1500);
+  await page.reload(); await waitReady(page);
+  await tab(page, 'meka'); await act(page, 'mk-v-sim');
+  expect(/3,817 s/.test(await body(page)), 'yenileme sonrası benzetim');
+});
+
 /* ---------- D. Montaj ---------- */
 await T('Montaj: örnek "Mil ve burç" eşleşmeli montaj, montaj sırası planı, kaydet / aç', 'D-Montaj', async ({ page }) => {
   await act(page, 'guide'); await page.locator('[data-ex="mil"]').click(); await page.waitForTimeout(800);

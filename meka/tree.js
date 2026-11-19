@@ -47,10 +47,9 @@ export function sanitize(o) {
   }
   for (const t of Object.keys(SLOTS)) for (const [slot] of SLOTS[t]) { const v = o.bag?.[t]?.[slot]; if (ids.has(v)) P.bag[t][slot] = v; }
   P.nextId = Math.max(fin(o.nextId) ? o.nextId : 1, ...P.items.map((i) => i.id + 1), 1);
-  if (o.calc && typeof o.calc === 'object') P.calc = o.calc;
-  if (o.elek && typeof o.elek === 'object') P.elek = o.elek;
-  if (o.plc && typeof o.plc === 'object') P.plc = o.plc;
-  if (o.guv && typeof o.guv === 'object') P.guv = o.guv;   // güvenlik (ui guvSanitize ile doğrular)   // PLC (ui plcSanitize ile doğrular)   // elektrik (ui elekSanitize ile doğrular)   // hesap girdileri (ui doğrular)
+  // Hesap girdileri, elektrik, PLC, güvenlik ve benzetim verisi burada yalnız taşınır; ui.js her birini kendi
+  // temizleme işleviyle (elekSanitize, plcSanitize, guvSanitize, simSanitize) doğrular.
+  for (const k of ['calc', 'elek', 'plc', 'guv', 'sim']) if (o[k] && typeof o[k] === 'object') P[k] = o[k];
   return P;
 }
 
@@ -143,7 +142,7 @@ export function bomRows(P, partName = () => '', calcStatus = {}) {
 export function bomCSV(rows) {
   const head = ['No', 'Tür', 'Ad', 'Ürün kodu', 'Üretici', 'Adet', 'Model parçası', 'Hesap', 'Durum', 'Eksik katalog bilgisi'];
   const q = (v) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  return '﻿' + [head, ...rows.map((r) => [r.no, r.tur, r.ad, r.kod, r.uretici, r.adet, r.parca, r.hesap, r.durum, r.eksik])].map((l) => l.map(q).join(';')).join('\r\n') + '\r\n';
+  return '\ufeff' + [head, ...rows.map((r) => [r.no, r.tur, r.ad, r.kod, r.uretici, r.adet, r.parca, r.hesap, r.durum, r.eksik])].map((l) => l.map(q).join(';')).join('\r\n') + '\r\n';
 }
 
 // Kütüphane (cihazda): aynı kod + tür tekrar eklenmez, günceller
