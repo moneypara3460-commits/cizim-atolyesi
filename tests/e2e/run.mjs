@@ -229,6 +229,60 @@ await T('Kenar: kutunun tek kenarı (B-Rep) yuvarlanır, hacim kesin; silindirin
   expect(/Geçerlikatı/.test(tx2) && /58[.,]59/.test(tx2), 'silindir pah hacmi 58,599 cm³: ' + tx2.slice(0, 300));
 }, { allowErr: [/OCCT/] });
 
+/* ---------- C-Delik: delik sihirbazı (ISO tablolarından kılavuz / kademeli delik) ---------- */
+await T('Delik sihirbazı: M8 kılavuz kör delik (Ø6,8, 118° uç, diş bilgisi), B-Rep hacmi kesin; sil (yardımcılarla), M6 kademeli boydan boya', 'C-Delik', async ({ page }) => {
+  await tab(page, 'face');
+  // varsayılan kutu 80 × 40 × 60: üst yüze (y = 40) dokun
+  const [x, y] = await scrOf(page, [10, 40, 5]);
+  await page.mouse.click(x, y);
+  await page.waitForFunction(() => /Basit delik/.test(document.querySelector('#tabbody').textContent), null, { timeout: 10000 });
+  await act(page, 'fmode-hw');
+  await page.selectOption('#tabbody select[data-hw="tur"]', 'klavuz');
+  await page.selectOption('#tabbody select[data-hw="olcu"]', 'M8');
+  await page.locator('#tabbody input[data-c="hwDer"]').fill('20'); await page.locator('#tabbody input[data-c="hwDer"]').dispatchEvent('change');
+  const sum = await page.locator('#tabbody [data-hwsum]').textContent();
+  expect(/M8 kılavuz/.test(sum) && /Matkap Ø6,8/.test(sum) && /M8-6H ↧ 16,25/.test(sum), 'özet: ' + sum);
+  await act(page, 'face-hw');
+  await page.waitForTimeout(400);
+  const st = await page.evaluate(() => window.__app.parts.map((q) => ({ id: q.id, type: q.type, op: q.op, d: q.d, d2: q.d2, h: q.h, aux: !!q.aux, parent: q.parent, name: q.name || '', th: q.hole && q.hole.thread })));
+  const main = st.find((q) => q.th);
+  expect(st.length === 3 && main && main.type === 'cylinder' && main.op === 'sub' && main.d === 6.8 && Math.abs(main.h - 21) < 1e-9 && /M8 kılavuz/.test(main.name), 'gövde: ' + JSON.stringify(st));
+  expect(main.th.boy === 16.25 && main.th.olcu === 'M8' && main.th.adim === 1.25, 'diş bilgisi: ' + JSON.stringify(main.th));
+  const tip = st.find((q) => q.aux);
+  expect(tip && tip.type === 'cone' && tip.parent === main.id && tip.d === 6.8 && tip.d2 === 0, 'uç konisi: ' + JSON.stringify(tip));
+  // B-Rep hacmi: 80·40·60 − π·3,4²·20 − π·3,4²·(3,4 / tan 59°) / 3 = 191 248,9 mm³
+  await tab(page, 'occt'); await act(page, 'oc-model'); await waitText(page, '#tabbody', /Geçerli katı|Sorunlu/, 120000);
+  const tx = (await body(page)).replace(/\s/g, '');
+  expect(/Geçerlikatı/.test(tx) && /191[.,]25/.test(tx), 'B-Rep hacim 191,25 cm³: ' + tx.slice(0, 300));
+  // delik taşınınca uç konisi de gelir (Konum sekmesi, X + 7)
+  await page.locator('#chips .chip', { hasText: 'M8 kılavuz' }).first().click();
+  await tab(page, 'pos');
+  const x0 = await page.evaluate(() => window.__app.parts.map((q) => q.x));
+  await page.locator('#tabbody input[data-k="x"]').fill(String(x0[1] + 7)); await page.locator('#tabbody input[data-k="x"]').dispatchEvent('change');
+  await page.waitForTimeout(300);
+  const x1 = await page.evaluate(() => window.__app.parts.map((q) => q.x));
+  expect(Math.abs(x1[1] - x0[1] - 7) < 1e-6 && Math.abs(x1[2] - x0[2] - 7) < 1e-6, 'uç konisi delikle taşındı: ' + JSON.stringify([x0, x1]));
+  // delik seçiliyken sil: uç konisi de gider
+  await act(page, 'del'); await page.waitForTimeout(300);
+  const after = await page.evaluate(() => window.__app.parts.map((q) => q.type));
+  expect(after.length === 1 && after[0] === 'box', 'silinince yardımcı parçalar da gitti: ' + JSON.stringify(after));
+  // M6 kademeli boydan boya
+  await tab(page, 'face');
+  const [x2, y2] = await scrOf(page, [-15, 40, -10]);
+  await page.mouse.click(x2, y2);
+  await page.waitForFunction(() => /Delik sihirbazı/.test(document.querySelector('#tabbody').textContent), null, { timeout: 10000 });
+  await page.selectOption('#tabbody select[data-hw="tur"]', 'kademe');
+  await page.selectOption('#tabbody select[data-hw="olcu"]', 'M6');
+  await act(page, 'hw-thru');
+  await act(page, 'face-hw'); await page.waitForTimeout(400);
+  const st2 = await page.evaluate(() => window.__app.parts.map((q) => ({ type: q.type, d: q.d, aux: !!q.aux })));
+  expect(st2.length === 3 && st2[1].d === 6.6 && st2[2].d === 11.25 && st2[2].aux, 'kademeli: ' + JSON.stringify(st2));
+  await tab(page, 'occt'); await act(page, 'oc-model'); await waitText(page, '#tabbody', /Geçerli katı|Sorunlu/, 120000);
+  // 192 000 − π·3,3²·40 − π·(5,625² − 3,3²)·6 = 190 240,4 mm³
+  const tx2 = (await body(page)).replace(/\s/g, '');
+  expect(/Geçerlikatı/.test(tx2) && /190[.,]24/.test(tx2), 'kademeli hacim 190,24 cm³: ' + tx2.slice(0, 300));
+}, { allowErr: [/OCCT/] });
+
 /* ---------- C2. Tarama / ağ içe aktarma → CAD ---------- */
 // STL metni: boru (Y ekseni, 64 kenar) ve eğik çatılı takoz (temel şekle oturmaz)
 function stlText(tris) {
