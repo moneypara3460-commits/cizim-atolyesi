@@ -333,6 +333,60 @@ await T('Teknik resim: kılavuz deliğin diş yazısı, Ø10 H7 geçme, ISO 2768
   expect(fit === 'H7', 'geçme toleransı parçada kaldı');
 });
 
+/* ---------- C-Standart: standart parça kütüphanesi (vida deliğe oturur, somun B-Rep hacmi, parça listesi) ---------- */
+await T('Standart parça: M8 kademeli deliğe ISO 4762 M8×30 (eksene ortalanır, baş kademede), lokmayla silinir; ISO 4032 somun hacmi kesin; parça listesi', 'C-Standart', async ({ page }) => {
+  await tab(page, 'face');
+  let [x, y] = await scrOf(page, [20, 40, 10]);
+  await page.mouse.click(x, y);
+  await page.waitForFunction(() => /Basit delik/.test(document.querySelector('#tabbody').textContent), null, { timeout: 10000 });
+  await act(page, 'fmode-hw');
+  await page.selectOption('#tabbody select[data-hw="tur"]', 'kademe'); await page.selectOption('#tabbody select[data-hw="olcu"]', 'M8');
+  await act(page, 'hw-thru'); await act(page, 'face-hw'); await page.waitForTimeout(300);
+  // deliğin 9 mm yanına (kademenin dışı, üst yüz) dokun: vida deliğin eksenine ortalanmalı
+  await tab(page, 'face');
+  [x, y] = await scrOf(page, [20, 40, 19]);
+  await page.mouse.click(x, y);
+  await page.waitForFunction(() => /Standart parça/.test(document.querySelector('#tabbody').textContent), null, { timeout: 10000 });
+  await act(page, 'fmode-lib');
+  await page.selectOption('#tabbody select[data-spk="tur"]', 'vida'); await page.selectOption('#tabbody select[data-spk="olcu"]', 'M8'); await page.selectOption('#tabbody select[data-spk="boy"]', '30');
+  expect(/ISO 4762 M8×30/.test(await page.locator('#tabbody [data-spsum]').textContent()), 'özet');
+  await act(page, 'face-std'); await page.waitForTimeout(300);
+  const st = await page.evaluate(() => window.__app.parts.map((q) => ({ id: q.id, type: q.type, op: q.op, name: q.name || '', x: q.x, y: q.y, z: q.z, aux: !!q.aux, parent: q.parent, std: q.std })));
+  const sc = st.find((q) => q.std), sk = st.find((q) => q.aux && q.parent === (sc && sc.id));
+  expect(sc && sc.type === 'sketch' && Math.abs(sc.x - 20) < 1e-6 && Math.abs(sc.z - 10) < 1e-6 && Math.abs(sc.y - 2) < 1e-6, 'vida eksende, baş kademe tabanında (taban y = 40 − 8 − 30): ' + JSON.stringify(sc));
+  expect(sk && sk.op === 'sub' && Math.abs(sk.y - 36) < 1e-6, 'lokma başta (y = 32 + 8 − 4): ' + JSON.stringify(sk));
+  expect(/(deliğin eksenine ortalandı)/.test(await page.evaluate(() => document.querySelector('#toast').textContent)), 'ortalama bildirildi');
+  // vida silinince lokması da gider
+  await page.locator('#chips .chip', { hasText: 'ISO 4762 M8×30' }).first().click();
+  await act(page, 'del'); await page.waitForTimeout(300);
+  expect(!(await page.evaluate(() => window.__app.parts.some((q) => /ISO 4762/.test(q.name || '')))), 'vida ve lokma silindi');
+  // delikleri de sil, kutunun üstüne M8 somun: B-Rep hacmi = kutu + (altıgen − 48 kenarlı delik) · 6,8
+  await page.evaluate(() => { const A = window.__app; A.parts.splice(1); A.refreshAll(true); });
+  await page.waitForTimeout(300);
+  await tab(page, 'face');
+  [x, y] = await scrOf(page, [-20, 40, -10]);
+  await page.mouse.click(x, y);
+  await page.waitForFunction(() => /Standart parça/.test(document.querySelector('#tabbody').textContent), null, { timeout: 10000 });
+  await page.selectOption('#tabbody select[data-spk="tur"]', 'somun'); await page.selectOption('#tabbody select[data-spk="olcu"]', 'M8');
+  await act(page, 'face-std'); await page.waitForTimeout(300);
+  await tab(page, 'occt'); await act(page, 'oc-model'); await waitText(page, '#tabbody', /Geçerli katı|Sorunlu/, 120000);
+  // 192 000 + ((√3/2)·13² − 24·4²·sin 7,5°)·6,8 = 192 654,4 mm³
+  const tx = (await body(page)).replace(/\s/g, '');
+  expect(/Geçerlikatı/.test(tx) && /192[.,]65/.test(tx), 'somunlu hacim 192,65 cm³: ' + tx.slice(0, 300));
+  // rulman ve parça listesi
+  await tab(page, 'face');
+  [x, y] = await scrOf(page, [20, 40, 10]);
+  await page.mouse.click(x, y);
+  await page.waitForFunction(() => /Standart parça/.test(document.querySelector('#tabbody').textContent), null, { timeout: 10000 });
+  await page.selectOption('#tabbody select[data-spk="tur"]', 'rulman'); await page.selectOption('#tabbody select[data-spk="olcu"]', '6204');
+  await act(page, 'face-std'); await page.waitForTimeout(300);
+  await tab(page, 'sheet'); await act(page, 'sheet-make');
+  await page.waitForFunction(() => window.__app.sheetInfo && document.querySelector('#sheetov canvas'), null, { timeout: 30000 });
+  const bom = await page.evaluate(() => window.__app.sheetInfo.bom.map((r) => [r.ad, r.olcu]));
+  expect(JSON.stringify(bom) === JSON.stringify([['', '80 × 60 × 40'], ['ISO 4032 M8', 'M8 (s 13, m 6,8)'], ['Rulman 6204', '20 × 47 × 14 (sadeleştirilmiş)']]), 'parça listesi: ' + JSON.stringify(bom));
+  await page.locator('[data-sh="close"]').click();
+}, { allowErr: [/OCCT/] });
+
 /* ---------- C2. Tarama / ağ içe aktarma → CAD ---------- */
 // STL metni: boru (Y ekseni, 64 kenar) ve eğik çatılı takoz (temel şekle oturmaz)
 function stlText(tris) {

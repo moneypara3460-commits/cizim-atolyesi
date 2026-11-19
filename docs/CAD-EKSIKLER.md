@@ -7,7 +7,7 @@ Sıra kolaydan zora. Her madde ayrı PR; tam test (birim, gerçek OCCT, iki aray
 | 6 | Her şekle radyüs / pah (tek tek kenar) | **Tamam** (19.11.2026) |
 | 2 | Delik sihirbazı / diş (işaretli diş) | **Tamam** (19.11.2026) |
 | 3 | Teknik resim: tolerans, pürüzlülük, parça listesi | **Tamam** (19.11.2026) |
-| 1 | Standart parça kütüphanesi (doğrulanmış ölçü tablolarıyla) | Bekliyor |
+| 1 | Standart parça kütüphanesi (doğrulanmış ölçü tablolarıyla) | **Tamam** (20.11.2026) |
 | 8 | Sac metal: flanş, köşe kapatma | Bekliyor |
 | 4 | Kroki kısıtları ve serbest eğri | Bekliyor |
 | 5 | Parametrik geçmiş ve varyantlar | Bekliyor |
@@ -92,3 +92,27 @@ ISO 286-1 IT6…IT11 (Wikipedia ISO 286 Tablo 1, Wevolver, GlobalSpec, RoyMech);
 
 **Doğrulama:** `tests/teknik.test.mjs` (tablo sınırları, H sapmaları, yazılar, parça listesi, delik tablosu), uçtan uca
 `C-Resim` (iki arayüzde: M8 kılavuz + Ø10 H7 + ikinci parça → resim bilgisi, tablolar, ayarların yeniden yüklemede kalması).
+
+## 1. Standart parça kütüphanesi
+
+**Yüz** sekmesi → yüze dokun → **🧰 Standart parça**. Kod: `stdparca.js` (tablolar ve parça tarifleri, saf hesap),
+`app.js` (`faceStdPart`, `holeMouthNear`).
+
+- **Alyan başlı vida ISO 4762** M3–M24, boy 6–120 mm (anma boyları): gövde + baş tek dönel parça, altıgen lokma ona bağlı
+  yardımcı oyuk (vida silinince o da silinir, vidayla taşınır).
+- **Altıgen somun ISO 4032** M3–M24 (altıgen prizma, ortasında delik), **düz pul ISO 7089** M3–M24 (halka),
+  **sabit bilyalı rulman** 6000–6006, 6200–6206, 6300–6305 (d × D × B halka, sadeleştirilmiş).
+- Parça dokunulan yüze oturur (vida başı yüzeyde, gövdesi içeri). Yakında yüze dik bir delik varsa (ağız, kademe ya da havşa
+  çapı + 3 mm içinde) parça deliğin eksenine ortalanır; kademeli delikte vida başı kademenin tabanına oturur.
+- Parça listesinde (teknik resim) ad ve standart ölçü yazısı görünür (`ISO 4762 M8×30`, `M8 (s 13, m 6,8)`,
+  `20 × 47 × 14 (sadeleştirilmiş)`); aynı parçalar adetle.
+- Diş modellenmez (vida gövdesi anma çapında). Malzeme projenin varsayılanıdır; Parça sekmesinden değiştirilebilir.
+
+**Tablo kaynakları** (`stdparca.js` başında, her tablo en az iki kaynak): ISO 4762 (TR Fastenings / Farnell veri sayfası,
+Keller & Kalmbach, iki katalog), ISO 4032 (Wermac, H&B Bolt, ISO 4032 resmî örnek sayfa), ISO 7089 (JC Fasteners,
+fasteners.eu, BOLTS, McMaster-Carr), rulman ana ölçüleri (Miki Pulley JIS çizelgesi, MRO Supply, igus). 6306 doğrulanamadığı
+için konmadı. Ek çapraz denetim: pul iç çapı ISO 273 ince serisiyle, kademe derinliği vida baş yüksekliğiyle birebir aynı.
+
+**Doğrulama:** `tests/stdparca.test.mjs` (kaynak değerleri, tablo tutarlılığı, standartlar arası uyum, Pappus ile vida hacmi,
+altıgen alanı ve anahtar ağzı), uçtan uca `C-Standart` (iki arayüzde: kademeli deliğe vida — eksen ve oturma yüksekliği,
+lokmayla silme, somunlu B-Rep hacmi 192,65 cm³, rulman ve parça listesi).
