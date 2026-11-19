@@ -1,8 +1,8 @@
 // 3D kalıp (STL / OBJ): dosyayı oku, birimi ve yönü bul, sakla, görünüşleri (dış yan, iç yan, alt, üst) tam ölçüsünde çıkar.
 // Kalıp koordinatı (mm): x topuk arkasından buruna, z yukarı (taban altta), y = z × x. Dış yan "outer" (+1 / −1) işaretli y yönündedir.
 // Saf hesap: tarayıcı ya da Node fark etmez (görüntüye çevirme app.js'de).
-import * as G from './geom.js?v=20261119b';
-import { traceBoundary, smoothLoop, simplifyLoop } from './last.js?v=20261119b';
+import * as G from './geom.js?v=20261119c';
+import { traceBoundary, smoothLoop, simplifyLoop } from './last.js?v=20261119c';
 
 export const UNITS = { mm: 1, cm: 10, m: 1000, in: 25.4 };
 export const UNIT_NAMES = { mm: 'milimetre', cm: 'santimetre', m: 'metre', in: 'inç' };

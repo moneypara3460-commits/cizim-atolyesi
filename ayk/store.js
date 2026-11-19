@@ -1,7 +1,7 @@
 // Ayakkabı projeleri deposu: tarayıcıda IndexedDB ("cizim-ayk"), testlerde bellek.
 // Makine (localStorage) ve tekstil (IndexedDB "cizim-tx") projelerinden ayrıdır; birbirini okumaz, yazmaz.
 // put: otomatik kayıt (revizyon açmaz) · commit: revizyon (tam kopya, son MAX_REVS)
-import { migrate, makeMaterial, DEFAULT_MATERIALS } from './model.js?v=20261119b';
+import { migrate, makeMaterial, DEFAULT_MATERIALS } from './model.js?v=20261119c';
 
 export const MAX_REVS = 30;
 export function memoryBackend() {
