@@ -3,10 +3,10 @@
 // Kenar türleri kendiliğinden bulunur: tabana inen kenar = kalıba çekme (montaj), orta çizgi = simetri ekseni,
 // üstteki parçanın altında kalan kenar = binme payı, alttaki parçanın üstüne binen kenar = katlama + dikiş, açık kenar = kenar + dikiş.
 // Ayrıca isteğe bağlı: astar (ön + arka), kontrfort (topuk sertliği), burun sertliği. İç yan fotoğrafı varsa yan parçaların iç yan eşi.
-import * as G from './geom.js?v=20261115g';
-import { nextPieceNo } from './model.js?v=20261115g';
-import { measure } from './build.js?v=20261115g';
-import { lastFrame, guessOrientation, catmull, range, buildPiece, colRange } from './auto.js?v=20261115g';
+import * as G from './geom.js?v=20261119b';
+import { nextPieceNo } from './model.js?v=20261119b';
+import { measure } from './build.js?v=20261119b';
+import { lastFrame, guessOrientation, catmull, range, buildPiece, colRange } from './auto.js?v=20261119b';
 
 const TOL = 3.5;               // tabana "değiyor" sayılma mesafesi (mm)
 const TOLC = 6;               // orta çizgiye değiyor sayılma mesafesi (yapay zekâ yüksekliği 10 mm aralıklı tablodan okur)

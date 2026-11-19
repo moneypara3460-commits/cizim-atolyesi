@@ -1,6 +1,6 @@
 // Model fotoğrafını yapay zekâyla okuma (sunucu: supabase/functions/ayk-model-oku). İnternet gerekir.
 // Sonuç otomatik parça ayarlarına çevrilir; usta isterse değiştirir.
-import { MODELS } from './auto.js?v=20261115g';
+import { MODELS } from './auto.js?v=20261119b';
 
 export const AI_URL = 'https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/ayk-model-oku';
 const KEY = 'sb_publishable_urzQtn-1lE1-obSXF_ivQg_wZbQMRDr';   // yayınlanabilir (herkese açık) anahtar

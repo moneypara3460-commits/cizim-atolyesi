@@ -135,6 +135,12 @@ jobs:
           PLAYWRIGHT_MODULE: ${{ github.workspace }}/.e2e-libs/node_modules/playwright
         run: node tests/e2e/ayk-auto.mjs 2>&1 | tee reports-e2e-ayk-auto.log
         shell: bash -o pipefail {0}
+      - name: E2E — Ayakkabı 3D kalıp (STL / OBJ)
+        if: always()
+        env:
+          PLAYWRIGHT_MODULE: ${{ github.workspace }}/.e2e-libs/node_modules/playwright
+        run: node tests/e2e/ayk-3d.mjs 2>&1 | tee reports-e2e-ayk-3d.log
+        shell: bash -o pipefail {0}
       - name: Raporları yükle (ekran görüntüleri dahil)
         if: always()
         uses: actions/upload-artifact@v4
@@ -150,6 +156,7 @@ jobs:
             reports-e2e-hesap.log
             reports-e2e-ayk-kalip.log
             reports-e2e-ayk-auto.log
+            reports-e2e-ayk-3d.log
           if-no-files-found: warn
 
   # Üçüncü taraf kütüphaneler depoda (vendor/) birebir kopya olarak durur; uygulama dış siteden kod yüklemez.
@@ -224,6 +231,7 @@ jobs:
           node tests/e2e/hesap.mjs
           node tests/e2e/ayk-auto.mjs
           node tests/e2e/ayk-kalip.mjs
+          node tests/e2e/ayk-3d.mjs
           node tests/e2e/tanitim.mjs
         shell: bash -o pipefail {0}
       - name: Derlemeyi yükle (yalnız uygulama dosyaları)

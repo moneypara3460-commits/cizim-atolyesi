@@ -2,9 +2,9 @@
 // Parçanın net çizgisi (stampa) + kenar türüne göre paylar → kesim çizgisi; dikiş, çentik, binme noktası, ölçü, yazı.
 // Ekran, PDF, SVG ve DXF aynı çizim listesini (items) kullanır: ekranda görülen ile dosyaya yazılan aynıdır.
 //   item: { layer, piece, t:'path', path } | { t:'poly', pts, closed } | { t:'circle', c, r } | { t:'text', p, s, h, ang, align }
-import * as G from './geom.js?v=20261115g';
+import * as G from './geom.js?v=20261119b';
 import { cutPolygon, selfIntersections, removeLoops } from '../tx/woven/pattern.js?v=20261112u';
-import { edgeProp, allowValue, LINE_KINDS, MARK_KINDS, SIDES, ALLOW } from './model.js?v=20261115g';
+import { edgeProp, allowValue, LINE_KINDS, MARK_KINDS, SIDES, ALLOW } from './model.js?v=20261119b';
 
 const { C } = G;
 const TOL = 0.05;

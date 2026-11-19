@@ -3,9 +3,9 @@
 //   match = { id, name, a:{ piece, edge }, b:{ piece, edge }, reverse, kind:'dikis'|'binme', tol }
 //   reverse: true ise B kenarı ters yönde eşlenir (çoğu dikişte kenarlar karşılıklı ters yürür).
 // Kontroller: kenar uzunluk farkı, çentik sayısı ve konumları, binme noktası konumları (etiketle ya da sırayla eşlenir).
-import * as G from './geom.js?v=20261115g';
-import { uid } from './geom.js?v=20261115g';
-import { edgeProp } from './model.js?v=20261115g';
+import * as G from './geom.js?v=20261119b';
+import { uid } from './geom.js?v=20261119b';
+import { edgeProp } from './model.js?v=20261119b';
 
 export const MATCH_KINDS = { dikis: 'Dikiş (yan yana)', binme: 'Binme (üst üste)' };
 export function makeMatch(o = {}) { return { id: o.id || uid('mt'), name: String(o.name || '').slice(0, 60), a: o.a, b: o.b, reverse: o.reverse ?? true, kind: MATCH_KINDS[o.kind] ? o.kind : 'dikis', tol: Number.isFinite(o.tol) ? o.tol : 0.5 }; }

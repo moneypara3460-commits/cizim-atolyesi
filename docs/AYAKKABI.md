@@ -92,7 +92,7 @@ Derleme adımı olmayan saf JavaScript ES modülleri, HTML Canvas 2D, IndexedDB.
 
 ## 7. İkinci aşamaya geçiş için teknik hazırlık
 
-**Aşama 2 — 3D kalıp yükleme, görüntüleme, ölçüm.** Projede `future.last3d` alanı ayrıldı (şu an `null`). Önerilen kayıt: `{ file: { name, format: 'stl'|'obj'|'step', bytesRef }, units: 'mm', transform, landmarks: { burunUcu, topukArka, kemer, ... }, measures: { boy, genislik, ... } }`. Büyük ikili dosya proje JSON'una gömülmez; IndexedDB'de ayrı anahtar (`f:<proje>:<dosya>`) olarak tutulur, projede yalnız referans durur. Depo zaten three.js 0.160.0 (vendor/) ve STL / OCCT (STEP) okuyucularını içeriyor; Aşama 2 bunları `ayk/` içinden salt okunur kullanabilir. 3B görünüm ayrı bir modül (`ayk/last3d.js`) olmalı, 2B editöre bağımlı olmamalı.
+**Aşama 2 — 3D kalıp yükleme, görüntüleme, ölçüm.** Yapıldı (19.11.2026): `project.last.mesh`, bkz. aşağıda "3D kalıp". `future.last3d` alanı kullanılmıyor (eski kayıtlarla uyum için duruyor).
 
 **Kalıp fotoğrafı (yapıldı, Kasım 2026).** `project.last`: yan ve alt görünüşün kâğıt (A4/A3) üstünde çekilmiş
 fotoğrafından ölçülü dış çizgi (`ayk/last.js`: kâğıt bulma → perspektif düzeltme → renk farkıyla ayırma → sınır izleme → mm).
@@ -157,7 +157,7 @@ taban = daha düzgün akan çizgi (eğrilik karşılaştırması). Yanlışsa "�
 
 **Sınırlar (dürüst):** parça çizgileri fotoğraftan tahmindir; ilk sonuç ustanın kontrolünden geçmeli, gerekirse Stampa
 Atölyesi'nde düğümler sürüklenerek düzeltilir. Mat ölçeği tepeden olmayan çekimde sapar (bilinen boy bunu düzeltir).
-Parçalar arası hizalama: üstteki parçanın binen kenarına A, B … harfli çentik; alttaki parçada aynı yere aynı harfle çentik (kenardaysa) ya da binme noktası (içindeyse). 3B kalıp tarama yok.
+Parçalar arası hizalama: üstteki parçanın binen kenarına A, B … harfli çentik; alttaki parçada aynı yere aynı harfle çentik (kenardaysa) ya da binme noktası (içindeyse). Kamerayla 3B tarama yok; 3D kalıp dosyası (STL / OBJ) yüklenebilir (aşağıda).
 
 Testler: `tests/ayk-aiparts.test.mjs` (9: sentetik mat ölçeği ve eğik kalıp, parça yerleştirme, kenar türleri, iç yan,
 kayıt güvenliği, çizgi yumuşatma, mat çizgisinin kalıba yapışmaması, taşan yapay zekâ çizgisinin kırpılması);
@@ -184,3 +184,38 @@ model çizgileri kalıbın dışına taşıyordu.
   Ölçüt: net çizgi kalıp kenarını en çok 0,5 mm aşabilir (düğümler arası eğri payı).
 - Bu sırada bulunan gizli hata düzeltildi: çentik eşleştirmede önce "parçanın içinde" bulunan, sonra kenarda bulunan
   parça karşılaştırılınca hata veriyordu (`addNotches`).
+
+## 3D kalıp — STL / OBJ (19.11.2026, sürüm `20261119b`)
+
+Proje Dosyaları (ya da Yeni Proje) → Kalıp ve model resmi → **3D kalıp yükle**. Kalıbın 3D taraması ya da çizimi
+yüklenince dört görünüş (dış yan, iç yan, alt, üst) fotoğrafsız, tam ölçüsünde çıkar; bundan sonrası (stampa altlığı,
+otomatik ve yapay zekâlı parçalar) fotoğraftaki gibi çalışır. Model resimleri (en çok 6) aynı kartta eklenir.
+
+`ayk/last3d.js` (saf hesap) ve `ayk/last3d-worker.js` (ağır işler arka planda; işçi açılamazsa aynı kod sayfada çalışır):
+
+- **Okuma:** ikili ve yazı biçimli STL (başı "solid" diye başlayan ikili dosya boyutundan tanınır), OBJ (çokgen yüzler
+  yelpaze üçgenlere bölünür, eksi / göreli sıra numaraları, `v/vt/vn`). En çok 3 milyon üçgen, 150 MB.
+- **Birim:** kalıbın en uzun ölçüsünü 80–450 mm aralığına düşüren birim (mm, cm, inç, m). Hem cm hem inç olabilen ölçüde
+  projedeki numaradan beklenen boya en yakın olan seçilir. Kartta değiştirilebilir.
+- **Yön:** uzun eksen yüzey dağılımının ana ekseni; düşey eksen, uzun eksene dik düzlemde normallerin toplandığı doğrultu,
+  konç yüzünden eğik çıkan uzun eksene göre ±35° taranarak düz yüz alanı en büyük olan. Taban, kesitte düz olan uçtur
+  (normalin yönüne bakılmaz: üçgen sırası ters dosyada da çalışır). Topuk konç tarafı (en yüksek yer), x ekseni topuk
+  arkasından burun ucuna. Dış / iç yan tahmindir: burun ucu, topuk ortası → tarak ortası doğrusuna göre iç yana kaçıktır.
+  Kartta: ↔ burun / topuk, ↕ taban / üst, ⟳ 90°, dış / iç yan düğmeleri; önizleme parmakla döndürülür.
+- **Saklama:** kaynak (aynı noktadaki köşeler birleşir), en çok 60 000 üçgene sadeleştirme (köşe kümeleme + kuadrik konum,
+  Lindstrom 2000: uçlar ve kenarlar içe çekilmez; ölçü sapması deneyde < 0,4 mm), 16 bit nicemleme (kutu / 65535 ≈ 0,004 mm).
+  Proje JSON'unda base64 (60 000 üçgende ≈ 0,7 MB); yedek dosyasıyla birlikte taşınır. Kapalılık (açık kenar) asıl yüzeyde denetlenir.
+- **Görünüşler:** dik izdüşüm, 5 piksel / mm (yanlış birimde görüntü 3000 pikseli geçmez), kaplanan alan → sınır izleme →
+  yarım piksel dışa düzeltme. Deneyde boy / yükseklik / genişlik 3D ölçüyle ±0,15 mm. Görünüş kaydında `src: '3d'`.
+- **Numara denetimi (yaklaşık):** EU numarası kalıp boyunun Paris noktası (2/3 cm) cinsinden değeridir → beklenen boy =
+  numara × 6,667 mm. UK yetişkin: (numara + 25) ÷ 3 inç. US erkek ≈ UK + 1 kabulüyle (resmî standart değil; kadın numarasında
+  ≈ 13 mm kısa beklenir). Mondopoint ayak boyudur; kalıp tipik olarak 13–17 mm uzundur. Fark 10 mm'ye kadar uyumlu, 10–25 mm
+  uyarı (burun biçimi bu kadar fark yaratabilir), 25 mm üstü "birim ya da numara yanlış olabilir" (uyan birim önerilir).
+
+Sınırlar (dürüst): iç / dış yan ve yön tahmindir, önizlemeden kontrol edilmeli. Görünüşler dik izdüşümdür (fotoğraftaki
+perspektif yok). Yüzey açınımı, sanal bantlama ve forme bir sonraki işlerdir (1c, 1d).
+
+Testler: `tests/ayk-last3d.test.mjs` (10: okuma, birim, 12 duruş + ters üçgen sırasıyla yön, çevirme, ~500 000 üçgen
+sadeleştirme, saklama ve bozuk kayıt, görünüş ölçüleri, 3D görünüşten derby, numara denetimi, arka plan işi);
+`tests/e2e/ayk-3d.mjs` (4: yeni projede STL → derby parçaları; birim, yön düğmeleri, yeniden açma; yazı STL / OBJ / inç,
+bozuk dosya, telefon; işçi açılamazsa sayfada). Deneme kalıbı sentetiktir (`tests/fixtures/kalip-3d.mjs`, ölçüleri temsilî).
