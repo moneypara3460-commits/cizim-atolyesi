@@ -469,6 +469,56 @@ await T('Mekatronik 5. aşama PLC: örnek dolum istasyonu → denetim temiz, ad�
   expect(/Y3_Kapak_Ac := \(Adim = 50\);/.test(await body(page)), 'yenileme sonrası PLC projesi');
 });
 
+await T('Mekatronik 6. aşama güvenlik: örnek risk kaydı → PLr risk grafiğinden; cihaz verisi boşken DOĞRULANMADI; üretici PL / PFHD girilince toplam PFHD ve PL; zayıf cihaz PLr altında kalır; IEC 60204-1 listesi; MTTFD yardımcı; rapor ve CSV; yenilemede korunur', 'M-Guvenlik', async ({ page }) => {
+  await tab(page, 'meka');
+  await act(page, 'mk-v-guv');
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mky="${k}"]`); const tg = await i.evaluate((e) => e.tagName + (e.type || '')); if (tg.startsWith('SELECT')) await i.selectOption(String(v)); else if (tg === 'INPUTcheckbox') await i.setChecked(!!v); else await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(120); };
+  await act(page, 'mk-yornek');
+  let b = await body(page);
+  expect((await page.locator('#tabbody [data-tehlike]').count()) === 4 && /PLr d/.test(b), 'örnek risk kaydı');
+  // risk grafiği: ilk tehlikeyi S1 F1 P1 yap → PLr a; geri al
+  const tid = await page.evaluate(() => document.querySelector('#tabbody [data-tehlike]').dataset.tehlike);
+  await set(`t.${tid}.S`, 'S1'); await set(`t.${tid}.F`, 'F1'); await set(`t.${tid}.P`, 'P1');
+  expect(/PLr a/.test(await body(page)), 'S1F1P1 → a');
+  await set(`t.${tid}.S`, 'S2'); await set(`t.${tid}.F`, 'F2'); await set(`t.${tid}.P`, 'P2');
+  expect(/PLr e/.test(await body(page)), 'S2F2P2 → e');
+  await set(`t.${tid}.dusuk`, true);
+  expect(/gerekçe yazılmalı/.test(await body(page)), 'gerekçesiz indirim yok');
+  await set(`t.${tid}.gerekce`, 'Tehlikeli olay yalnız arıza ile oluşur, kayıt yok');
+  expect(/PLr d \(indirimli, grafik e\)/.test(await body(page)), 'gerekçeli indirim');
+  // işlevler: veri yok → doğrulanmadı
+  await act(page, 'mk-yalt-islev');
+  b = await body(page);
+  expect((b.match(/DOĞRULANMADI/g) || []).length === 2 && /PL ve PFHD değeri girilmedi/.test(b), 'veri yokken doğrulanmadı');
+  const [fid, alts] = await page.evaluate(() => { const f = document.querySelector('#tabbody [data-islev]'); return [f.dataset.islev, [...f.querySelectorAll('[data-alt]')].map((a) => a.dataset.alt)]; });
+  for (const a of alts) { await set(`a.${fid}.${a}.PL`, 'e'); await set(`a.${fid}.${a}.PFH`, '2,5e-8'); }
+  b = await body(page);
+  expect(/✓ DOĞRULANDI · PLr d · PL e/.test(b) && /7,50×10⁻⁸/.test(b), 'üç PL e cihaz: ' + b.slice(0, 300));
+  await set(`a.${fid}.${alts[0]}.PL`, 'c'); await set(`a.${fid}.${alts[0]}.PFH`, '2e-6');
+  b = await body(page);
+  expect(/DOĞRULANMADI · PLr d · PL c/.test(b) && /Ulaşılan PL c ≥ gereken PLr d/.test(b), 'zayıf giriş cihazı');
+  await set(`a.${fid}.${alts[0]}.PL`, 'e'); await set(`a.${fid}.${alts[0]}.PFH`, '5e-7');
+  expect(/tutarsız/.test(await body(page)), 'tutarsız üretici verisi');
+  // MTTFD yardımcı
+  await set('y.B10d', 26400); await set('y.tcycle', 3600);
+  expect(/150 yıl · yüksek/.test(await body(page)), 'MTTFD 150 yıl');
+  // IEC 60204-1
+  await act(page, 'mk-yalt-liste');
+  await set('k.10.7.durum', 'degil');
+  expect(/uygun değil 1/.test(await body(page)), 'kontrol listesi');
+  await act(page, 'mk-yalt-rapor');
+  b = await body(page);
+  expect(/UYGUN DEĞİL/.test(b) && /IEC 60204-1 10\.7: uygun değil/.test(b), 'özet');
+  const pdf = await download(page, () => act(page, 'mk-ypdf'));
+  expect(/^%PDF/.test(pdf.text) && /guvenlik\.pdf$/.test(pdf.name), 'güvenlik PDF');
+  const csv = await download(page, () => act(page, 'mk-ycsv'));
+  expect(/^﻿?No;Tehlike türü/.test(csv.text) && /S2;F2;P2;e;evet/.test(csv.text), 'risk CSV: ' + csv.text.slice(0, 200));
+  await page.waitForTimeout(1500);
+  await page.reload(); await waitReady(page);
+  await tab(page, 'meka'); await act(page, 'mk-v-guv'); await act(page, 'mk-yalt-rapor');
+  expect(/IEC 60204-1 10\.7: uygun değil/.test(await body(page)), 'yenileme sonrası güvenlik projesi');
+});
+
 /* ---------- D. Montaj ---------- */
 await T('Montaj: örnek "Mil ve burç" eşleşmeli montaj, montaj sırası planı, kaydet / aç', 'D-Montaj', async ({ page }) => {
   await act(page, 'guide'); await page.locator('[data-ex="mil"]').click(); await page.waitForTimeout(800);
