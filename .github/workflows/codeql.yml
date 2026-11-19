@@ -34,3 +34,12 @@ jobs:
         uses: github/codeql-action/autobuild@v3
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
+        with:
+          output: codeql-sonuc
+      - name: Sonuç dosyasını sakla (SARIF)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif
+          path: codeql-sonuc
+          retention-days: 14
