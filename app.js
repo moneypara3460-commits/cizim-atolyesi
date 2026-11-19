@@ -37,6 +37,7 @@ import { createCam5UI } from './cam5-ui.js?v=20261112u';
 import { createLatheUI } from './lathe-ui.js?v=20261112u';
 import { machinePose } from './kin.js?v=20261112u';
 import { createOcctUI } from './occt-ui.js?v=20261119d';
+import * as DLK from './delik.js?v=20261119e';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
 import { createMekaUI } from './meka/ui.js?v=20261119c';
@@ -80,7 +81,9 @@ const section = { on: false, axis: 'x', pos: 0, flip: false };
 const cp = { n: 3, dx: 40, dy: 0, dz: 0, cn: 6, ang: 360, touched: false, shape: 'round', fd: 10, fw: 10, fl: 10, depth: 5, es: 3,
   pat: 'single', px: 3, py: 2, sx: 20, sy: 20, pn: 6, pr: 20,            // delik deseni
   wall: 2, openTop: true, openBot: false,                                 // kabuk
-  mgap: 0, mrot: 0, mcenter: true, mtype: 'coinc', mval: 0, mang: 90, mflip: false };                                      // montaj // çoğaltma + yüz ayarları (mm)
+  mgap: 0, mrot: 0, mcenter: true, mtype: 'coinc', mval: 0, mang: 90, mflip: false,
+  fmode: 'basic',                                                         // yüz sekmesi: basit delik / delik sihirbazı
+  hwTur: 'klavuz', hwOlcu: 'M6', hwAdim: 1, hwSeri: 'orta', hwStd: 'iso15065', hwBoydan: false, hwDer: 12, hwUc: true, hwDis: 0, hwKad: 0 };                                      // montaj // çoğaltma + yüz ayarları (mm)
 
 const hist = new History();
 let weldPlan = null;   // Akıllı Kaynak Planlama: { welds, set, symbols, ver }
@@ -1097,8 +1100,17 @@ function renderPanel() {
     if (!face) {
       body = '<div class="lbl" style="flex:1 0 100%">Modelde bir yüze dokun.</div>';
       hint = 'Dokunduğun yüz sarı renkte işaretlenir; delik, çıkıntı ya da kroki o yüze dik oluşur.';
+    } else if (cp.fmode === 'hw') {
+      body = btn('Basit delik / çıkıntı', 'fmode-basic') + btn('🔩 Delik sihirbazı', 'fmode-hw', true) + holeWizardHtml() +
+        '<div class="lbl" style="flex:1 0 100%">Desen</div>' +
+        btn('Tek', 'pat-single', cp.pat === 'single') + btn('Izgara', 'pat-grid', cp.pat === 'grid') + btn('Daire', 'pat-circ', cp.pat === 'circ') +
+        (cp.pat === 'grid' ? cfield('Sütun', 'px', 'num') + cfield('Satır', 'py', 'num') + cfield('Aralık 1', 'sx') + cfield('Aralık 2', 'sy') : '') +
+        (cp.pat === 'circ' ? cfield('Adet', 'pn', 'num') + cfield('Daire yarıçapı', 'pr') : '') +
+        btn('⬇ Delik aç (sihirbaz)', 'face-hw');
+      hint = 'Ölçüler ISO tablolarından gelir (diş adımı ISO 261, geçiş deliği ISO 273, havşa ISO 15065 / ISO 10642, kademe ASME B18.3.1M). Diş modelde helis olarak çizilmez: delik matkap çapında açılır, diş bilgisi deliğe yazılır (SolidWorks\'teki gibi işaretli delik).';
     } else {
-      body = btn('○ Yuvarlak', 'fshape-round', cp.shape === 'round') + btn('□ Kare', 'fshape-square', cp.shape === 'square') +
+      body = btn('Basit delik / çıkıntı', 'fmode-basic', true) + btn('🔩 Delik sihirbazı', 'fmode-hw') +
+        btn('○ Yuvarlak', 'fshape-round', cp.shape === 'round') + btn('□ Kare', 'fshape-square', cp.shape === 'square') +
         (cp.shape === 'round' ? cfield('Çap', 'fd') : cfield('Genişlik', 'fw') + cfield('Derinlik (yatay)', 'fl')) +
         cfield('Derinlik / yükseklik', 'depth') +
         '<div class="lbl" style="flex:1 0 100%">Desen (delik / çıkıntı için)</div>' +
@@ -1287,6 +1299,7 @@ function renderPanel() {
   } else {
     const fl = fieldsFor(p);
     body = fl.map(([l, k, kd]) => field(l, k, p, kd)).join('') + (p.type === 'sketch' && !p.gear ? btn('✎ Krokiyi düzenle', 'sketch-edit') : '') + (p.gear ? gearInfo(p) : '');
+    if (p.hole && p.hole.label) body = '<div class="lbl" style="flex:1 0 100%">🔩 <b>' + esc(p.hole.label) + '</b>' + (p.hole.thread ? ' · diş ' + esc(DLK.disYazisi(p.hole.thread)) : '') + '</div>' + body;
     if (p.type === 'sheet') {
       const c = sheetCalc(p);
       body += (p.seg || []).map((sg, i) => '<div class="lbl h">' + (i + 1) + '. kenar</div>' +
@@ -1392,7 +1405,11 @@ function removeCur() {
   const i = parts.indexOf(cur());
   if (i < 0) return false;
   commit();
+  const gone = parts[i];
   parts.splice(i, 1);
+  // parçaya bağlı yardımcı parçalar (delik sihirbazının kademe / havşa / uç kesicileri, kabuk boşluğu) onunla gider
+  const aux = descendantsOf(parts, gone.id).filter((q) => q.aux);
+  for (const q of aux) parts.splice(parts.indexOf(q), 1);
   cleanLinks(parts);
   selOff = null; sel = parts.length ? parts[0].id : 0;
   refreshAll();
@@ -2695,6 +2712,81 @@ function faceFeature(op) {
   refreshAll();
   toast((op === 'sub' ? 'Delik açıldı' : 'Çıkıntı eklendi') + (offs.length > 1 ? ' (' + offs.length + ' adet)' : ''));
 }
+/* ---- delik sihirbazı: ISO tablolarından düz / kılavuz / kademeli / havşa delik ---- */
+const hwOpts = () => ({ tur: cp.hwTur, olcu: cp.hwOlcu, adim: cp.hwAdim, seri: cp.hwSeri, havsaStd: cp.hwStd, boydan: cp.hwBoydan,
+  derinlik: cp.hwDer, uc: cp.hwUc, disBoyu: cp.hwDis, kademeDer: cp.hwKad });
+// tür / ölçü değişince geçersiz kalan seçimleri düzelt (ör. ölçü değişince kaba adıma dön)
+function hwSync() {
+  const o = DLK.normalize(hwOpts());
+  cp.hwTur = o.tur; cp.hwOlcu = o.olcu; cp.hwAdim = o.adim; cp.hwSeri = o.seri; cp.hwStd = o.havsaStd;
+}
+const hwThrough = () => (lastClean && lastClean.boundingBox ? lastClean.boundingBox.getSize(new THREE.Vector3()).length() : 1000) + 2;
+const nfmm = (v) => String(Math.round(v * 1000) / 1000).replace('.', ',');
+function holeWizardHtml() {
+  hwSync();
+  const o = DLK.normalize(hwOpts()), pick = (key, label, opts, cur, wide) => `<label class="f${wide ? ' w2' : ''}"><span>${label}</span><select data-hw="${key}">` +
+    opts.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(cur) ? ' selected' : ''}>${esc(t)}</option>`).join('') + '</select></label>';
+  let h = pick('tur', 'Delik türü', Object.entries(DLK.TURLER), o.tur, true);
+  if (o.tur === 'havsa') h += pick('std', 'Vida başı', Object.entries(DLK.HAVSA_STD), o.havsaStd, true);
+  h += pick('olcu', 'Vida', DLK.olculer(o.tur, o.havsaStd).map((m) => [m, m.replace('.', ',')]), o.olcu);
+  if (o.tur === 'klavuz') h += pick('adim', 'Adım', DLK.adimlar(o.olcu).map((p, i) => [p, nfmm(p) + ' mm' + (i ? ' (ince)' : ' (kaba)')]), o.adim);
+  else h += pick('seri', 'Geçiş (ISO 273)', Object.entries(DLK.SERI_AD), o.seri);
+  h += btn('Kör', 'hw-blind', !o.boydan) + btn('Boydan boya', 'hw-thru', o.boydan);
+  if (!o.boydan) {
+    h += cfield('Derinlik', 'hwDer') + btn('118° matkap ucu: ' + (o.uc ? 'evet' : 'hayır'), 'hw-uc', o.uc);
+    if (o.tur === 'klavuz') h += cfield('Diş boyu (0: derinlik − 3 adım)', 'hwDis');
+  }
+  if (o.tur === 'kademe') h += cfield('Kademe derinliği (0: baş yüksekliği)', 'hwKad');
+  const k = DLK.delikKesiti(o, hwThrough());
+  h += '<div class="lbl" data-hwsum="1" style="flex:1 0 100%">' + (k.hata ? '⚠ ' + esc(k.hata)
+    : '<b>' + esc(k.label) + '</b><br>Matkap Ø' + nfmm(k.d) + (k.thread ? ' · diş ' + esc(DLK.disYazisi(k.thread)) : '') +
+      (k.warn && k.warn.length ? '<br>⚠ ' + esc(k.warn.join(' · ')) : '')) + '</div>';
+  return h;
+}
+// yüze oturan ama malzemenin içine bakan parça (matkap ucu konisi): yerel Y = −normal
+function faceTransformIn(localX, localZ, inward) {
+  const qUp = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), face.normal);
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), face.normal.clone().negate());
+  const p = face.point.clone().add(new THREE.Vector3(localX, 0, localZ).applyQuaternion(qUp)).addScaledVector(face.normal, -inward);
+  const [rx, ry, rz] = quatToEulerXYZ([q.x, q.y, q.z, q.w]);
+  const r4 = (v) => Math.round(v * 1e4) / 1e4 + 0;
+  return { x: r4(p.x), y: r4(p.y), z: r4(p.z), rx, ry, rz };
+}
+const HW_ROL = { kademe: 'kademe', havsa: 'havşa', uc: 'matkap ucu' };
+function faceHoleWizard() {
+  if (!face) return;
+  hwSync();
+  const k = DLK.delikKesiti(hwOpts(), hwThrough());
+  if (k.hata) { toast(k.hata); return; }
+  const offs = faceOffsets();
+  if (offs.length > 64) { toast('Desen en fazla 64 delik olabilir'); return; }
+  commit();
+  let last = null;
+  offs.forEach(([ox, oz], i) => {
+    let main = null;
+    for (const sg of k.segs) {
+      const h = sg.top - sg.bottom, uc = sg.rol === 'uc';
+      const p = newPart(nextId++, sg.kind === 'cyl' ? 'cylinder' : 'cone', 'sub', null);
+      if (sg.kind === 'cyl') Object.assign(p, { d: sg.d, h });
+      else if (uc) Object.assign(p, { d: sg.dTop, d2: 0, h });                 // taban delik dibinde, sivri uç içeri bakar
+      else Object.assign(p, { d: sg.dBottom, d2: sg.dTop, h });
+      Object.assign(p, { r: 0, c: 0, tp: 0 }, uc ? faceTransformIn(ox, oz, -sg.top) : faceTransform(ox, oz, -sg.bottom));
+      if (!main) {
+        main = p;
+        p.name = k.label + (offs.length > 1 ? ' (' + (i + 1) + '/' + offs.length + ')' : '');
+        p.hole = { ...k.o, d: k.d, thread: k.thread, label: k.label };
+      } else {
+        Object.assign(p, { name: k.label + ' · ' + HW_ROL[sg.rol], aux: true, parent: main.id, joint: { type: 'fixed', axis: 'y', pv: [0, 0, 0], val: 0 } });
+      }
+      parts.push(p);
+    }
+    last = main;
+  });
+  selOff = null; sel = last.id;
+  clearFace();
+  refreshAll();
+  toast('Delik açıldı: ' + k.label + (offs.length > 1 ? ' · ' + offs.length + ' adet' : ''));
+}
 function faceSketch(op) {
   if (!face) return;
   const f = { point: face.point.clone(), normal: face.normal.clone() };
@@ -2989,6 +3081,7 @@ document.addEventListener('change', (e) => {
   if (el.dataset && el.dataset.as) { asmUI.input(el, 'change'); return; }
   if (el.dataset && (el.dataset.cs || el.dataset.cn || el.dataset.ct || el.dataset.co)) { camUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.oc) { occtUI.input(el); return; }
+  if (el.dataset && el.dataset.c && el.dataset.c.startsWith('hw') && tab === 'face') { renderPanel(); return; }   // delik sihirbazı özeti güncellensin
   if (el.dataset && el.dataset.c5) { cam5UI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.lz) { latheUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.fm && el.dataset.fm !== 'frame' && !el.dataset.fm.startsWith('me.')) { femUI.input(el); return; }
@@ -3989,6 +4082,10 @@ document.addEventListener('click', (e) => {
   if (act === 'bake') { bakeAll(); return; }
   if (act === 'sheet-make') { makeSheet(false); return; }
   if (act === 'edges') { settings.edges = settings.edges === false; afterSettings(); return; }
+  if (act === 'fmode-basic' || act === 'fmode-hw') { cp.fmode = act.slice(6); renderPanel(); return; }
+  if (act === 'face-hw') { faceHoleWizard(); return; }
+  if (act === 'hw-blind' || act === 'hw-thru') { cp.hwBoydan = act === 'hw-thru'; renderPanel(); return; }
+  if (act === 'hw-uc') { cp.hwUc = !cp.hwUc; renderPanel(); return; }
   if (act === 'face-hole') { faceFeature('sub'); return; }
   if (act === 'face-boss') { faceFeature('add'); return; }
   if (act === 'face-sk-cut') { faceSketch('sub'); return; }
@@ -4143,6 +4240,13 @@ document.addEventListener('input', (e) => {
   }
   if (d.pmat) { commit(); cur().mat = el.value; refreshAll(); return; }
   if (d.pf) { commit(); cur().pf = el.value; refreshAll(); return; }
+  if (d.hw) {
+    const key = { tur: 'hwTur', std: 'hwStd', olcu: 'hwOlcu', adim: 'hwAdim', seri: 'hwSeri' }[d.hw];
+    if (!key) return;
+    cp[key] = key === 'hwAdim' ? +el.value : el.value;
+    if (key === 'hwOlcu' || key === 'hwTur') cp.hwAdim = 0;   // yeni ölçüde kaba adım
+    hwSync(); renderPanel(); return;
+  }
   if (d.mc) { mechInput(el); return; }
   if (d.an) {
     const [key, which] = d.an.split(','), st = anim.cfg[key], dd = animDrivers().find((x) => x.key === key);

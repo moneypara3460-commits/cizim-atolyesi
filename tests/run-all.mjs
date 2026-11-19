@@ -12,7 +12,7 @@ const OUT = path.join(ROOT, 'reports');
 const args = process.argv.slice(2);
 const cov = args.includes('--coverage'), noWasm = args.includes('--no-wasm'), onlyWasm = args.includes('--only-wasm');
 const filt = args.filter((a) => !a.startsWith('--'));
-const WASM = new Set(['occt.test.mjs', 'scan-occt.test.mjs', 'meka-step.test.mjs', 'occt-kenar.test.mjs']);
+const WASM = new Set(['occt.test.mjs', 'scan-occt.test.mjs', 'meka-step.test.mjs', 'occt-kenar.test.mjs', 'occt-delik.test.mjs']);
 let files = fs.readdirSync(path.join(ROOT, 'tests')).filter((f) => f.endsWith('.test.mjs')).sort();
 if (noWasm) files = files.filter((f) => !WASM.has(f));
 if (onlyWasm) files = files.filter((f) => WASM.has(f));
