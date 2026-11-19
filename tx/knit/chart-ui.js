@@ -3,9 +3,9 @@ import * as K from './chart.js?v=20261112u';
 import { saveBlob } from '../download.js?v=20261112u';
 import { drawChartCanvas, chartPDF } from './chart-export.js?v=20261112u';
 
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 // Renk yalnız #rrggbb biçiminde sayfaya yazılır; başka her değer gri olur.
-const safeHex = (h) => { const m = /^#([0-9a-fA-F]{6})$/.exec(String(h ?? '')); return m ? '#' + m[1].toLowerCase() : '#cccccc'; };
+const safeHex = (h) => { const m = /^#([0-9a-fA-F]{6})$/.exec(String(h ?? '')); return '#' + (m ? parseInt(m[1], 16) : 0xcccccc).toString(16).padStart(6, '0'); };
 const int = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : 0);
 const PAL = ['k', 'p', 't', 'm', 'yo', 'k2t', 'ssk', 'c2R', 'c2L', 'c4R', 'c4L', 'c6R', 'c6L', 'x'];
 
