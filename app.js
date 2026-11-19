@@ -1154,7 +1154,7 @@ function renderPanel() {
     const J = p.joint || { type: 'fixed' };
     const kids = parts.filter((q) => q.parent === p.id && !q.aux);
     body = `<label class="f w2" style="flex:1 0 100%"><span>Bağlı olduğu üst parça</span><select data-link="parent"><option value="">— bağsız —</option>` +
-      cand.map((q) => `<option value="${q.id}"${p.parent === q.id ? ' selected' : ''}>${esc(partName(q, parts.indexOf(q)))}</option>`).join('') + `</select></label>`;
+      cand.map((q) => `<option value="${esc(q.id)}"${p.parent === q.id ? ' selected' : ''}>${esc(partName(q, parts.indexOf(q)))}</option>`).join('') + `</select></label>`;
     if (p.parent != null) {
       body += btn('Sabit', 'jt-fixed', J.type === 'fixed') + btn('Menteşe (döner)', 'jt-hinge', J.type === 'hinge') + btn('Kayar', 'jt-slide', J.type === 'slide');
       if (J.type !== 'fixed') {
@@ -1163,8 +1163,8 @@ function renderPanel() {
         body += '<div class="lbl" style="flex:1 0 100%">Eksen (üst parçanın ekseni)</div>' +
           btn('X', 'jx-x', J.axis === 'x') + btn('Y', 'jx-y', J.axis === 'y') + btn('Z', 'jx-z', J.axis === 'z') +
           btn(linkPick ? '📍 Modele dokun…' : '📍 Eksen noktasını seç', 'jpick', linkPick) +
-          `<label class="f w2" style="flex:1 0 100%"><span data-jl>${isH ? 'Açı' : 'Kayma'}: ${isH ? fmtNum(J.val || 0, 1) + '°' : lenText(J.val || 0)}</span>` +
-          `<input type="range" data-j="val" min="${-R}" max="${R}" step="${isH ? 1 : R / 200}" value="${J.val || 0}"></label>` +
+          `<label class="f w2" style="flex:1 0 100%"><span data-jl>${isH ? 'Açı' : 'Kayma'}: ${esc(isH ? fmtNum(Number(J.val) || 0, 1) + '°' : lenText(Number(J.val) || 0))}</span>` +
+          `<input type="range" data-j="val" min="${-R}" max="${R}" step="${isH ? 1 : R / 200}" value="${esc(Number(J.val) || 0)}"></label>` +
           btn('Başlangıca dön', 'jreset');
       }
       body += btn('Bağı kaldır', 'j-unlink');
@@ -3310,7 +3310,7 @@ function mechPanel() {
     const unitA = A && A.joint && A.joint.type === 'slide' ? 'mm' : '°', unitB = B && B.joint && B.joint.type === 'slide' ? 'mm' : '°';
     h += `<div style="flex:1 0 100%;display:flex;gap:6px;align-items:center;background:#111a2e;border:1px solid #1e293b;border-radius:10px;padding:7px 9px;font-size:13.5px"><span style="flex:1"><b>${esc(COUPLINGS[c.t].name)}</b>: ${esc(nm(c.a))} → ${esc(nm(c.b))}<br><span style="color:#94a3b8">1 ${unitA} → ${fmtNum(k, 4)} ${unitB}${c.t === 'gear' || c.t === 'igear' ? ' · z ' + esc(c.z1) + ' / ' + esc(c.z2) : ''}${!A || !B ? ' · ⚠ eklem yok' : ''}</span></span><button data-act="mc-del-${i}" class="danger" style="flex:0 0 auto;padding:8px 10px">Sil</button></div>`;
   }
-  const F = mechForm, opts = (sel2, filt) => '<option value="">— seç —</option>' + J.filter(filt).map((q) => `<option value="${q.id}"${String(sel2) === String(q.id) ? ' selected' : ''}>${esc(partName(q, parts.indexOf(q)))} (${typ(q)})</option>`).join('');
+  const F = mechForm, opts = (sel2, filt) => '<option value="">— seç —</option>' + J.filter(filt).map((q) => `<option value="${esc(q.id)}"${String(sel2) === String(q.id) ? ' selected' : ''}>${esc(partName(q, parts.indexOf(q)))} (${typ(q)})</option>`).join('');
   const T = COUPLINGS[F.t], fromOK = (q) => T.from === 'any' || q.joint.type === T.from, toOK = (q) => T.to === 'any' || q.joint.type === T.to;
   h += `<label class="f w2" style="flex:1 0 100%"><span>Yeni bağıntı türü</span><select data-mc="t">${Object.entries(COUPLINGS).map(([k, v]) => `<option value="${k}"${F.t === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>`;
   h += `<label class="f"><span>Sürücü (1)</span><select data-mc="a">${opts(F.a, fromOK)}</select></label><label class="f"><span>Sürülen (2)</span><select data-mc="b">${opts(F.b, toOK)}</select></label>`;
@@ -3327,7 +3327,7 @@ function mechPanel() {
   h += '<div class="lbl h">Motor (sürekli dönüş)</div>';
   if (!H.length) h += '<div class="lbl" style="flex:1 0 100%">Motor için döner (menteşe) eklem gerekir.</div>';
   else {
-    h += `<label class="f"><span>Motor eklemi</span><select data-mc="motor">${'<option value="">— seç —</option>' + H.map((q) => `<option value="${q.id}"${M.id === q.id ? ' selected' : ''}>${esc(partName(q, parts.indexOf(q)))}</option>`).join('')}</select></label>` +
+    h += `<label class="f"><span>Motor eklemi</span><select data-mc="motor">${'<option value="">— seç —</option>' + H.map((q) => `<option value="${esc(q.id)}"${M.id === q.id ? ' selected' : ''}>${esc(partName(q, parts.indexOf(q)))}</option>`).join('')}</select></label>` +
       `<label class="f"><span>Devir (d/dk, − ters)</span><input type="number" step="any" data-mc="rpm" value="${esc(M.rpm ?? 30)}"></label>`;
     h += (anim.playing && anim.motor ? btn('⏹ Durdur', 'an-stop', true) : btn('▶ Motorla çalıştır', 'an-motor')) + btn(anim.rec ? '⏺ Kaydediliyor…' : '🎬 Video (1 tur)', 'an-motor-rec', !!anim.rec);
     if (M.id && M.rpm) {
