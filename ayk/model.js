@@ -1,7 +1,8 @@
 // Ayakkabı Modelhanesi — proje veri modeli (Aşama 1). Saf modül: DOM ve depolama yok.
 // Birim: mm. Koordinat: y aşağı (ekran gibi); DXF'e yazarken y çevrilir.
 // Proje şeması sürümlüdür (schema); eski kayıtlar migrate() ile yükseltilir.
-import { uid, node, makePath, clone, isP, edges, edgeStarts } from './geom.js?v=20261115g';
+import { uid, node, makePath, clone, isP, edges, edgeStarts } from './geom.js?v=20261119b';
+import { sanitizeStored as meshSanitize } from './last3d.js?v=20261119b';
 
 export const SCHEMA = 1;
 export const KIND = 'cizim.ayakkabi';
@@ -142,7 +143,7 @@ export function pruneEdges(pc) {
 /* ---------- kalıp ve model resmi ---------- */
 // Kalıp: yan ve alt (taban) görünüşünün fotoğraftan çıkarılmış ölçülü çizgisi + düzeltilmiş fotoğraf.
 // view: { img: data:image/jpeg…, k: mm başına piksel, w, h: görüntü pikseli, paper, outline: kapalı yol (mm, sol üst 0,0),
-//         imgAt: görüntünün çizgiye göre konumu (mm), at: stampadaki konum (mm), length, height, sens, scale }
+//         imgAt: görüntünün çizgiye göre konumu (mm), at: stampadaki konum (mm), length, height, sens, scale, src?: '3d' }
 export const LAST_VIEWS = { yan: 'Kalıp dış yan görünüşü', ic: 'Kalıp iç yan görünüşü', alt: 'Kalıp alt görünüşü (taban)', ust: 'Kalıp üst görünüşü' };
 export const PAPER_SIZES = { A4: 'A4 (297 × 210 mm)', A3: 'A3 (420 × 297 mm)', MAT: 'Kesim matı (10 mm kareli, kâğıtsız)' };
 const IMG_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
@@ -154,6 +155,7 @@ export function makeLastView(v) {
     paper: PAPER_SIZES[v.paper] ? v.paper : 'A4', outline: { ...v.outline, closed: true },
     imgAt: isP(v.imgAt) ? v.imgAt : [0, 0], at: isP(v.at) ? v.at : [0, 0],
     length: fin(v.length, 0), height: fin(v.height, 0), sens: Math.max(-5, Math.min(5, Math.round(fin(v.sens, 0)))), scale: fin(v.scale, 1) > 0 ? +v.scale : 1,
+    ...(v.src === '3d' ? { src: '3d' } : {}),   // 3D kalıptan çıkarıldı (fotoğraf değil)
   };
 }
 export function makeLast(o = {}) {
@@ -161,6 +163,7 @@ export function makeLast(o = {}) {
   return {
     name: String(o.name || '').slice(0, 80), lengthMm: L > 0 && L < 600 ? L : null, paper: PAPER_SIZES[o.paper] ? o.paper : 'A4',
     views: Object.fromEntries(Object.keys(LAST_VIEWS).map((id) => [id, makeLastView(o.views?.[id])])),
+    mesh: meshSanitize(o.mesh),   // 3D kalıp (STL / OBJ'den, mm, yönü bulunmuş; ayk/last3d.js)
   };
 }
 export const MAX_MODEL_PHOTOS = 6;
@@ -268,7 +271,7 @@ export function validateProject(p) {
 export { edgeStarts, node };
 
 /* ---------- parça işlemleri (editör ve parça sayfası ortak) ---------- */
-import { transform as tfPath, cloneNew, rp as roundP } from './geom.js?v=20261115g';
+import { transform as tfPath, cloneNew, rp as roundP } from './geom.js?v=20261119b';
 // afin dönüşüm: sınır, iç çizgiler, serbest işaretler, ölçüler, yazılar. Kenar üzerindeki işaretler kenarla birlikte gider.
 export function transformPiece(pc, f) {
   tfPath(pc.outline, f);

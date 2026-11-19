@@ -1,18 +1,20 @@
 // Ayakkabı Modelhanesi — uygulama kabuğu: 8 bölüm, otomatik kayıt, geri al / ileri al.
 // Hesap ve doğrulama saf modüllerde (geom, model, build, match, export); burada yalnız gösterim ve düzenleme.
 // Makine ve Tekstil alanlarının uygulama koduna bağlı değildir (yalnız tekstilin saf eğri / PDF / ofset modüllerini okur).
-import * as G from './geom.js?v=20261115g';
-import * as M from './model.js?v=20261115g';
-import { measure, checkPiece, fmt, netPolygon } from './build.js?v=20261115g';
-import * as X from './match.js?v=20261115g';
-import * as E from './export.js?v=20261115g';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261115g';
-import { createEditor } from './editor.js?v=20261115g';
-import { addSample } from './sample.js?v=20261115g';
-import * as LST from './last.js?v=20261119a';
-import * as AUTO from './auto.js?v=20261115g';
-import * as AI from './ai.js?v=20261115g';
-import * as AIP from './aiparts.js?v=20261119a';
+import * as G from './geom.js?v=20261119b';
+import * as M from './model.js?v=20261119b';
+import { measure, checkPiece, fmt, netPolygon } from './build.js?v=20261119b';
+import * as X from './match.js?v=20261119b';
+import * as E from './export.js?v=20261119b';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261119b';
+import { createEditor } from './editor.js?v=20261119b';
+import { addSample } from './sample.js?v=20261119b';
+import * as LST from './last.js?v=20261119b';
+import * as AUTO from './auto.js?v=20261119b';
+import * as AI from './ai.js?v=20261119b';
+import * as AIP from './aiparts.js?v=20261119b';
+import * as L3 from './last3d.js?v=20261119b';
+import { run as l3run } from './last3d-worker.js?v=20261119b';
 import { saveBlob } from '../tx/download.js?v=20261112u';
 
 const $ = (id) => document.getElementById(id);
@@ -112,13 +114,13 @@ async function render() {
   if (S.page !== 'stampa' && S.editor) { S.editor.destroy(); S.editor = null; }
   const pg = S.page;
   if (pg === 'projeler') { const html = await pageProjects(); if (S.page === pg) main.innerHTML = html; return; }
-  if (pg === 'yeni') { main.innerHTML = pageNew(); return; }
+  if (pg === 'yeni') { main.innerHTML = pageNew(); drawL3(); return; }
   if (pg === 'malzeme') { main.innerHTML = pageMaterials(); return; }
   if (pg === 'ayarlar') { main.innerHTML = pageSettings(); return; }
   if (!S.p) { main.innerHTML = needProject(); return; }
   if (pg === 'stampa') return mountEditor();
   if (pg === 'parcalar') { main.innerHTML = pagePieces(); return; }
-  if (pg === 'dosyalar') { const html = await pageFiles(); if (S.page === pg) main.innerHTML = html; return; }
+  if (pg === 'dosyalar') { const html = await pageFiles(); if (S.page === pg) { main.innerHTML = html; drawL3(); } return; }
   if (pg === 'aktar') { main.innerHTML = pageExport(); return; }
 }
 
@@ -161,18 +163,125 @@ function lastSvg(v) {
   const d = 'M' + v.outline.nodes.map((n) => n.p.map((c) => +c.toFixed(2)).join(' ')).join('L') + 'Z';
   return `<svg viewBox="${f1(x).replace(',', '.')} ${f1(y).replace(',', '.')} ${f1(w).replace(',', '.')} ${f1(h).replace(',', '.')}" role="img" aria-label="Kalıp çizgisi"><image href="${esc(v.img)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="none"/><path d="${d}" fill="none" stroke="#facc15" stroke-width="${+(Math.max(w, h) / 250).toFixed(2)}"/></svg>`;
 }
+// 3D kalıp (STL / OBJ) kutusu
+const sgn = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + f1(Math.abs(v));
+function last3dHtml(p) {
+  const m = p.last.mesh;
+  let h = `<div class="l3d"><b>3D kalıp dosyası (STL / OBJ)</b>`;
+  if (!m) return h + `<p class="small">Kalıbın 3D taraması ya da çizimi varsa yükle: dört görünüş fotoğrafsız, tam ölçüsünde çıkar.</p>
+    <div class="row"><label class="btn">3D kalıp yükle<input type="file" accept=".stl,.obj" data-l3file="1" hidden></label>${S.lbusy === '3d' ? '<span class="small">işleniyor…</span>' : ''}</div></div>`;
+  const d = { length: m.bb[3] - m.bb[0], width: m.bb[4] - m.bb[1], height: m.bb[5] - m.bb[2] };
+  const sc = L3.sizeCheck(d.length, p.size, p.sizeSystem, m.unit);
+  h += `<canvas class="l3prev" data-l3prev="1" aria-label="3D kalıp önizlemesi (parmakla çevrilir)"></canvas>
+    <p class="small">${esc(m.name || 'kalıp')} · ${m.m.toLocaleString('tr-TR')} üçgen${m.inTris > m.m ? ` (dosyada ${m.inTris.toLocaleString('tr-TR')}; sadeleştirildi)` : ''} · boy <b>${f1(d.length)}</b> × genişlik <b>${f1(d.width)}</b> × yükseklik <b>${f1(d.height)}</b> mm</p>
+    ${m.open ? `<p class="small warn">⚠ Yüzeyde ${m.open.toLocaleString('tr-TR')} açık kenar var (model kapalı değil). Görünüşler yine çıkar.</p>` : ''}
+    <p class="small${sc && sc.level !== 'ok' ? ' warn' : ''}" data-l3size="1">${sc ? `${sc.level === 'ok' ? '✓' : '⚠'} Numara ${esc(p.size)} (${esc(p.sizeSystem)}): beklenen kalıp boyu ≈ ${f1(sc.expected)} mm (${esc(sc.how)}); fark ${sgn(sc.diff)} mm — ${esc(sc.msg)}.` : 'Numara girilmemiş ya da okunamadı: boy denetimi yapılmadı.'}</p>
+    <div class="grid"><label>Dosyanın birimi<select data-l3unit="1">${opts(Object.fromEntries(Object.entries(L3.UNIT_NAMES).map(([k, v]) => [k, v + ' (' + k + ')'])), m.unit)}</select></label></div>
+    <div class="row"><button type="button" data-l3="toe">↔ Burun / topuk çevir</button><button type="button" data-l3="sole">↕ Taban / üst çevir</button><button type="button" data-l3="rot">⟳ 90° döndür</button><button type="button" data-l3="side">Dış / iç yanı değiştir</button>${S.lbusy === '3d' ? '<span class="small">işleniyor…</span>' : ''}</div>
+    <div class="row"><label class="btn">Başka 3D kalıp<input type="file" accept=".stl,.obj" data-l3file="1" hidden></label><button type="button" class="danger" data-l3="rm">3D kalıbı kaldır</button></div>
+    <p class="small">Önizleme önce dış yanı gösterir; parmakla çevirebilirsin. Yön (taban altta, konç topuk tarafında) yanlış bulunduysa düğmelerle düzelt: dört görünüş yeniden çıkar. İç / dış yan tahmindir (burun ucunun kaçıklığından): görünüşlere bakıp gerekirse değiştir.</p></div>`;
+  return h;
+}
+const l3cache = { key: null, mesh: null };
+function meshOf(st) {
+  const key = st.bb.join(',') + '|' + st.idx.length + '|' + st.pos;   // nicemleme kutuya görelidir: ölçek değişince pos aynı kalabilir
+  if (l3cache.key !== key) { l3cache.mesh = L3.decodeMesh(st); l3cache.key = key; }
+  return l3cache.mesh;
+}
+// önizleme: parmakla çevrilir (yaw: z ekseni etrafında, pitch: yükseklik açısı)
+const l3view = { yaw: 2.2, pitch: 0.35 };
+function drawL3() {
+  const cv = document.querySelector('canvas[data-l3prev]'); if (!cv) return;
+  const T = lastTarget(cv.closest('.lastcard')?.dataset.lmode); if (!T?.last?.mesh) return;
+  try {
+    const m = meshOf(T.last.mesh), dpr = Math.min(2, window.devicePixelRatio || 1);
+    const W = Math.max(200, Math.min(900, Math.round((cv.clientWidth || 320) * dpr))), H = Math.round(W * 0.5);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    const { yaw, pitch } = l3view, c = [Math.cos(pitch) * Math.cos(yaw), Math.cos(pitch) * Math.sin(yaw), Math.sin(pitch)];
+    const f = [-c[0], -c[1], -c[2]], zf = f[2], u = [-zf * f[0], -zf * f[1], 1 - zf * f[2]];
+    const r = L3.render(m, { f, u }, { fit: { w: W, h: H }, margin: 10, bg: [246, 245, 240] });
+    cv.getContext('2d').putImageData(new ImageData(r.rgba, W, H), 0, 0);
+  } catch (err) { /* önizleme çizilemezse sayfa çalışmaya devam eder */ }
+}
+let l3drag = null, l3raf = 0;
+document.addEventListener('pointerdown', (e) => { const cv = e.target.closest?.('canvas[data-l3prev]'); if (!cv) return; l3drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture?.(e.pointerId); });
+document.addEventListener('pointermove', (e) => {
+  if (!l3drag) return;
+  l3view.yaw -= (e.clientX - l3drag.x) * 0.012; l3view.pitch = Math.max(-1.45, Math.min(1.45, l3view.pitch + (e.clientY - l3drag.y) * 0.012));
+  l3drag = { x: e.clientX, y: e.clientY };
+  if (!l3raf) l3raf = requestAnimationFrame(() => { l3raf = 0; drawL3(); });
+});
+document.addEventListener('pointerup', () => { l3drag = null; });
+document.addEventListener('pointercancel', () => { l3drag = null; });
+// ağır iş arka planda (işçi açılamazsa sayfada)
+let l3w = null, l3seq = 0; const l3wait = new Map();
+function l3call(op, args, transfer = []) {   // girdi kopyalanır (aktarılmaz): işçi düşerse sayfada yeniden kullanılabilsin
+  try {
+    if (!l3w) {
+      l3w = new Worker(new URL('./last3d-worker.js?v=20261119b', import.meta.url), { type: 'module' });
+      l3w.onmessage = (e) => { const w = l3wait.get(e.data.id); if (!w) return; l3wait.delete(e.data.id); e.data.ok ? w.res(e.data.out) : w.rej(new Error(e.data.error)); };
+      // işçi açılamazsa (eski tarayıcı) bekleyen işler sayfada yapılır
+      l3w.onerror = (e) => { e.preventDefault?.(); l3w = 'yok'; for (const w of l3wait.values()) { try { w.res(l3run(w.op, w.args)); } catch (err) { w.rej(err); } } l3wait.clear(); };
+    }
+    if (l3w === 'yok') throw new Error('işçi yok');
+    const id = ++l3seq;
+    return new Promise((res, rej) => { l3wait.set(id, { res, rej, op, args }); l3w.postMessage({ id, op, args }, transfer); });
+  } catch (err) { return new Promise((res) => setTimeout(res, 0)).then(() => l3run(op, args)); }
+}
+function putViews(last, views) {
+  for (const [id, r] of Object.entries(views)) {
+    last.views[id] = M.makeLastView({ img: rgbaToJpeg(r.rec.rgba, r.rec.w, r.rec.h, 0.85), k: r.rec.k, w: r.rec.w, h: r.rec.h, paper: last.paper, outline: r.outline, imgAt: r.imgAt, at: [0, 0], length: r.length, height: r.height, sens: 0, scale: 1, src: '3d' });
+    fixScale(last, id);
+  }
+  M.placeLastViews(last);
+}
+function putMesh(last, enc, meta) { last.mesh = M.makeLast({ mesh: { ...enc, ...meta } }).mesh; if (!last.mesh) throw new Error('3D kalıp kaydedilemedi'); }
+async function onLast3d(el, mode, act) {
+  const T = lastTarget(mode); if (!T) return;
+  const busy = async () => { S.lbusy = '3d'; render(); await new Promise((r) => setTimeout(r, 30)); };
+  const done = () => { S.lbusy = null; renderSoon(); };
+  try {
+    if (act === 'file') {
+      const file = el.files?.[0]; if (!file) return;
+      if (!/\.(stl|obj)$/i.test(file.name || '')) return toast('Yalnız STL ya da OBJ dosyası yüklenebilir');
+      if (file.size > 150 * 1024 * 1024) return toast('Dosya çok büyük (150 MB üstü)');
+      await busy();
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const r = await l3call('prepare', { name: file.name, bytes, expectedMm: L3.expectedLength(T.size, T.sizeSystem)?.mm });
+      applyLast(mode, (q) => { putMesh(q.last, r.enc, { ...r.meta, name: String(file.name).slice(0, 80) }); putViews(q.last, r.views); });
+      Object.assign(l3view, { yaw: r.meta.outer * 2.2, pitch: 0.35 });   // önizleme dış yandan
+      done();
+      return toast(`3D kalıp yüklendi: boy ${f1(r.dims.length)} mm${r.unitSure ? '' : ` · birim tahmini: ${L3.UNIT_NAMES[r.meta.unit]} (yanlışsa değiştir)`}`);
+    }
+    const st = T.last.mesh; if (!st) return;
+    if (act === 'rm') return applyLast(mode, (q) => { q.last.mesh = null; toast('3D kalıp kaldırıldı (görünüşler duruyor)'); });
+    const meta = { name: st.name, unit: st.unit, inTris: st.inTris, outer: st.outer, open: st.open }, enc = { n: st.n, m: st.m, bb: st.bb, pos: st.pos, idx: st.idx, i32: st.i32 };
+    let args;
+    if (act === 'unit') {
+      const u = el.value; if (!L3.UNITS[u] || u === st.unit) return;
+      args = { enc, outer: st.outer, act, factor: L3.UNITS[u] / L3.UNITS[st.unit] }; meta.unit = u;
+    } else if (['toe', 'sole', 'rot', 'side'].includes(act)) args = { enc, outer: st.outer, act };
+    else return;
+    await busy();
+    const r = await l3call('views', args);
+    applyLast(mode, (q) => { putMesh(q.last, r.enc, { ...meta, outer: r.outer }); putViews(q.last, r.views); });
+    if (act === 'side' || act === 'toe') Object.assign(l3view, { yaw: r.outer * 2.2, pitch: 0.35 });
+    done();
+    return toast(act === 'unit' ? `Birim ${L3.UNIT_NAMES[meta.unit]} yapıldı: boy ${f1(r.enc.bb[3] - r.enc.bb[0])} mm` : 'Görünüşler 3D kalıptan yeniden çıkarıldı');
+  } catch (err) { done(); toast('3D kalıp işlenemedi: ' + err.message); }
+}
 function lastCard(p, mode) {
   const L = p.last, mr = p.modelRef;
   let h = `<div class="card lastcard" data-lmode="${mode}"><h3>Kalıp ve model resmi</h3>
   <p class="small">Kalıbın fotoğrafını eklersen kalıp çizgisi Stampa Atölyesi'nde gerçek ölçüsünde açılır. Model resmi çizerken ekranın köşesinde durur.</p>
   <div class="grid"><label>Kalıp adı / kodu<input data-lst="name" value="${esc(L.name)}" maxlength="80" placeholder="ör. K-41 sivri burun"></label>
   <label>Bilinen kalıp boyu (mm)<input data-lst="lengthMm" value="${nv(L.lengthMm)}" inputmode="decimal" placeholder="ör. 268"></label>
-  <label>Fotoğraftaki kâğıt<select data-lst="paper">${opts(M.PAPER_SIZES, L.paper)}</select></label></div>`;
+  <label>Fotoğraftaki kâğıt<select data-lst="paper">${opts(M.PAPER_SIZES, L.paper)}</select></label></div>${last3dHtml(p)}`;
   for (const [id, title] of Object.entries(M.LAST_VIEWS)) {
     const v = L.views[id];
     h += `<div class="lview" data-lview="${id}"><b>${title}</b>`;
     if (v) h += `<div class="lprev">${lastSvg(v)}</div><p class="small">Ölçülen: boy <b>${f1(v.length)} mm</b> · ${id === 'alt' ? 'genişlik' : 'yükseklik'} <b>${f1(v.height)} mm</b>${Math.abs(v.scale - 1) > 1e-6 ? ` · bilinen boya göre ×${fmt(v.scale, 3)} düzeltildi` : ''}</p>
-      <div class="row"><label class="small">Ayırma hassasiyeti <input type="range" min="-5" max="5" step="1" value="${v.sens}" data-lsens="${id}"></label><button type="button" class="danger" data-lrm="${id}">Kaldır</button></div>`;
+      <div class="row">${v.src === '3d' ? '<span class="small">3D kalıptan çıkarıldı</span>' : `<label class="small">Ayırma hassasiyeti <input type="range" min="-5" max="5" step="1" value="${v.sens}" data-lsens="${id}"></label>`}<button type="button" class="danger" data-lrm="${id}">Kaldır</button></div>`;
     h += `<div class="row"><label class="btn">${v ? 'Yeni fotoğraf' : 'Fotoğraf çek / seç'}<input type="file" accept="image/*" data-lfile="${id}" hidden></label>${S.lbusy === id ? '<span class="small">işleniyor…</span>' : ''}</div></div>`;
   }
   h += `<details class="small"><summary>Kalıp fotoğrafı nasıl çekilir?</summary><ol>
@@ -686,6 +795,7 @@ main.addEventListener('click', async (e) => {
   const t = e.target.closest('button, [data-go]'); if (!t || t.closest('.ed')) return;
   const d = t.dataset;
   if (d.go) return go(d.go);
+  if (d.l3) return onLast3d(t, t.closest('.lastcard')?.dataset.lmode, d.l3);
   if (d.lrm || d.mrm) {
     const mode = t.closest('.lastcard')?.dataset.lmode;
     if (d.lrm) return applyLast(mode, (q) => { q.last.views[d.lrm] = null; toast(M.LAST_VIEWS[d.lrm] + ' kaldırıldı'); });
@@ -806,6 +916,7 @@ main.addEventListener('change', async (e) => {
     if (file.size > 30 * 1024 * 1024) return toast('Dosya çok büyük (30 MB üstü)');
     try { const np = await store.importJSON(await file.text()); toast('İçe aktarıldı: ' + np.name); return openProject(np.id, 'parcalar'); } catch (err) { return toast('Açılamadı: ' + err.message); }
   }
+  if (d.l3file || d.l3unit) return onLast3d(el, el.closest('.lastcard')?.dataset.lmode, d.l3file ? 'file' : 'unit');
   if (d.lst || d.lfile || d.lsens !== undefined || d.mfile) return onLastChange(el, el.closest('.lastcard')?.dataset.lmode);
   if (d.aiopt) return edit((q) => { q.modelRef.ai[d.aiopt] = el.checked; try { runAiParts(q); } catch (err) { toast(err.message); } });
   if (d.au) return edit((q) => { q.modelRef.auto = M.makeAuto({ ...q.modelRef.auto, type: el.value, params: {} }); });

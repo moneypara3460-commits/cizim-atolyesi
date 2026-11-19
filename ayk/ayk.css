@@ -125,6 +125,8 @@ td input.n { width: 70px; }
 .lastcard .lview { border: 1px solid var(--line, #26324a); border-radius: 10px; padding: 10px; margin: 10px 0; }
 .lastcard .lprev { margin: 8px 0; background: #fff; border-radius: 8px; overflow: hidden; }
 .lastcard .lprev svg { display: block; width: 100%; height: auto; max-height: 260px; }
+.lastcard .l3d { border: 1px dashed var(--line, #26324a); border-radius: 10px; padding: 10px; margin: 10px 0; }
+.lastcard canvas.l3prev { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; margin: 8px 0; border-radius: 8px; background: #f6f5f0; touch-action: none; cursor: grab; }
 .lastcard input[type=range] { vertical-align: middle; width: 140px; }
 .lastcard details { margin: 8px 0; } .lastcard details ol { padding-left: 18px; margin: 6px 0; }
 .mthumbs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }

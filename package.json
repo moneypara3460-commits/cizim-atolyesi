@@ -19,6 +19,7 @@
     "test:e2e:hesap": "node tests/e2e/hesap.mjs",
     "test:e2e:ayk-kalip": "node tests/e2e/ayk-kalip.mjs",
     "test:e2e:ayk-auto": "node tests/e2e/ayk-auto.mjs",
+    "test:e2e:ayk-3d": "node tests/e2e/ayk-3d.mjs",
     "test:perf": "node --expose-gc tests/perf.mjs",
     "test:all": "node tests/run-all.mjs && node tests/e2e/run.mjs"
   }
