@@ -91,7 +91,7 @@ t('Örnek: tehlikeler ve işlevler kurulu, alt sistem verisi boş → doğrulanm
   const S = guvSanitize(JSON.parse(JSON.stringify({ ...G, tehlikeler: [...G.tehlikeler, { id: 999, tur: 'zz', S: 'S9', fonk: [1, 12345] }], kontrol: { ...G.kontrol, '99': { durum: 'uygun' } } })));
   assert.equal(S.tehlikeler.length, 5); assert.equal(S.tehlikeler[4].tur, 'mekanik'); assert.equal(S.tehlikeler[4].S, ''); assert.deepEqual(S.tehlikeler[4].fonk, [1]);
   assert.ok(!('99' in S.kontrol)); assert.equal(S.fonksiyonlar[0].altsistemler[0].PFH, 2e-8);
-  assert.match(riskCSV(G), /^﻿No;Tehlike türü/); assert.match(riskCSV(G), /S2;F2;P1;d;hayır;d/);
+  assert.match(riskCSV(G), /^\ufeffNo;Tehlike türü/); assert.match(riskCSV(G), /S2;F2;P1;d;hayır;d/);
   const L = guvRapor(G, 'Dolum'); assert.ok(L.some((l) => /GÜVENLİK İŞLEVLERİ/.test(l)) && L.some((l) => /SISTEMA/.test(l)));
 });
 

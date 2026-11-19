@@ -204,7 +204,7 @@ const csvq = (v) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' +
 export function riskCSV(G) {
   const fAd = new Map(G.fonksiyonlar.map((f) => [f.id, f.ad]));
   const rows = G.tehlikeler.map((t, i) => { let r = null; try { r = t.S && t.F && t.P ? plr(t.S, t.F, t.P, t.dusuk, t.gerekce) : null; } catch (e) { r = null; } return [i + 1, TEHLIKE_TUR[t.tur], YASAM_FAZ[t.faz], t.bolge, t.aciklama, t.S, t.F, t.P, r ? r.temel : '', r?.indirim ? 'evet: ' + t.gerekce : 'hayır', r ? r.plr : '', t.tasarim, t.koruyucu, t.bilgi, t.fonk.map((id) => fAd.get(id)).join(', ')]; });
-  return '﻿' + [['No', 'Tehlike türü', 'Yaşam döngüsü evresi', 'Bölge', 'Açıklama', 'S', 'F', 'P', 'PLr (grafik)', 'Olasılık indirimi', 'PLr', 'Tasarım önlemi', 'Koruyucu önlem', 'Kullanım bilgisi', 'Güvenlik işlevi'].join(';'), ...rows.map((r) => r.map(csvq).join(';'))].join('\r\n');
+  return '\ufeff' + [['No', 'Tehlike türü', 'Yaşam döngüsü evresi', 'Bölge', 'Açıklama', 'S', 'F', 'P', 'PLr (grafik)', 'Olasılık indirimi', 'PLr', 'Tasarım önlemi', 'Koruyucu önlem', 'Kullanım bilgisi', 'Güvenlik işlevi'].join(';'), ...rows.map((r) => r.map(csvq).join(';'))].join('\r\n');
 }
 export function guvRapor(G, proje = '') {
   const O = guvOzet(G), L = [];

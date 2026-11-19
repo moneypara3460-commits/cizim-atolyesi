@@ -39,7 +39,7 @@ import { machinePose } from './kin.js?v=20261112u';
 import { createOcctUI } from './occt-ui.js?v=20261112u';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
-import { createMekaUI } from './meka/ui.js?v=20261119a';
+import { createMekaUI } from './meka/ui.js?v=20261119b';
 
 const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -70,6 +70,10 @@ const cur = () => parts.find((p) => p.id === sel) || parts[0] || placeholderPart
 const SETTINGS_KEY = 'cizim:settings';
 const settings = { unit: 'mm', snap: 1, drag: 'floor', dim: 'off', ortho: false, move: false };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'), { move: false }); } catch (e) { /* varsayılan */ }
+// Ayarlar sayfaya HTML olarak yazıldığından yalnız bilinen değerler kabul edilir (kayıt elle değiştirilmiş olabilir).
+const UNIT_AD = { mm: 'mm', cm: 'cm', in: 'in' };
+settings.unit = UNIT_AD[settings.unit] || 'mm';
+if (!Number.isFinite(Number(settings.snap))) settings.snap = 1; else settings.snap = Number(settings.snap);
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* yoksay */ } };
 
 const section = { on: false, axis: 'x', pos: 0, flip: false };
@@ -1031,7 +1035,7 @@ const partName = (q, i) => q.name || (i + 1) + '. ' + TYPE_LABEL[q.type];
 function renderChips() {
   const p = cur();
   $('chips').innerHTML = parts.map((q, i) =>
-    `<button class="chip${q.op === 'sub' && i > 0 ? ' sub' : ''}${q.id === p.id && hasSel() ? ' on' : ''}"${q.hidden ? ' style="opacity:.45"' : ''} data-sel="${q.id}">` +
+    `<button class="chip${q.op === 'sub' && i > 0 ? ' sub' : ''}${q.id === p.id && hasSel() ? ' on' : ''}"${q.hidden ? ' style="opacity:.45"' : ''} data-sel="${esc(q.id)}">` +
     `${esc(partName(q, i))}${i > 0 && q.op === 'sub' ? ' (oyuk)' : ''}${q.hidden ? ' ⊘' : ''}${q.parent != null && !q.aux ? ' 🔗' : ''}${bendWarnings(q).length ? ' ⚠' : ''}</button>`).join('');
 }
 
@@ -3019,7 +3023,7 @@ document.addEventListener('change', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.wf) { weldUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.wg) { weightUI.input(el, 'change'); return; }
-  if (el.dataset && (el.dataset.mk || el.dataset.mkb || el.dataset.mkl || el.dataset.mki || el.dataset.mke || el.dataset.mkp || el.dataset.mky)) { mekaUI.input(el); return; }
+  if (el.dataset && (el.dataset.mk || el.dataset.mkb || el.dataset.mkl || el.dataset.mki || el.dataset.mke || el.dataset.mkp || el.dataset.mky || el.dataset.mks)) { mekaUI.input(el); return; }
   if (el.dataset && el.dataset.cf) { costUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.as) { asmUI.input(el, 'change'); return; }
   if (el.dataset && (el.dataset.cs || el.dataset.cn || el.dataset.ct || el.dataset.co)) { camUI.input(el, 'change'); return; }
@@ -4106,7 +4110,7 @@ document.addEventListener('click', (e) => {
   if (act === 'ortho') { setOrtho(!settings.ortho); renderPanel(); return; }
   if (act === 'measure') { setMeasure(!measure.on); renderPanel(); return; }
   if (act.startsWith('dim-')) { settings.dim = act.slice(4); afterSettings(); return; }
-  if (act.startsWith('unit-')) { settings.unit = act.slice(5); afterSettings(); return; }
+  if (act.startsWith('unit-')) { settings.unit = UNIT_AD[act.slice(5)] || settings.unit; afterSettings(); return; }
   if (act.startsWith('snap-')) { settings.snap = Number(act.slice(5)); afterSettings(); return; }
   if (act.startsWith('drag-')) { settings.drag = act.slice(5); afterSettings(); return; }
   if (act === 'move') {

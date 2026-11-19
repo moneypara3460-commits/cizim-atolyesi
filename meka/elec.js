@@ -223,10 +223,10 @@ export function klemensPlani(sys) {
 const csvq = (v) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 const nTR = (v, d = 2) => (fin(v) ? v.toFixed(d).replace('.', ',') : '');
 export function kabloCSV(rows) {
-  return '﻿' + [['Kablo', 'Hedef', 'Kablo tipi', 'Kesit (mm²)', 'Boy (m)', 'Koruma', 'Akım Ib (A)', 'Gerilim düşümü (%)'].join(';'), ...rows.map((r) => [r.kablo, r.hedef, r.tip, kesitYaz(r.S), nTR(r.L, 1), r.koruma, nTR(r.Ib), nTR(r.dUp)].map(csvq).join(';'))].join('\r\n');
+  return '\ufeff' + [['Kablo', 'Hedef', 'Kablo tipi', 'Kesit (mm²)', 'Boy (m)', 'Koruma', 'Akım Ib (A)', 'Gerilim düşümü (%)'].join(';'), ...rows.map((r) => [r.kablo, r.hedef, r.tip, kesitYaz(r.S), nTR(r.L, 1), r.koruma, nTR(r.Ib), nTR(r.dUp)].map(csvq).join(';'))].join('\r\n');
 }
 export function klemensCSV(rows) {
-  return '﻿' + [['Klemens', 'Potansiyel', 'Kaynak', 'Kablo', 'Damar', 'Hedef', 'Kesit (mm²)'].join(';'), ...rows.map((r) => [r.klemens, r.potansiyel, r.kaynak, r.kablo, r.damar, r.hedef, kesitYaz(r.S)].map(csvq).join(';'))].join('\r\n');
+  return '\ufeff' + [['Klemens', 'Potansiyel', 'Kaynak', 'Kablo', 'Damar', 'Hedef', 'Kesit (mm²)'].join(';'), ...rows.map((r) => [r.klemens, r.potansiyel, r.kaynak, r.kablo, r.damar, r.hedef, kesitYaz(r.S)].map(csvq).join(';'))].join('\r\n');
 }
 
 // Tek hat şeması: çizim ilkelleri (mm, y aşağı). { t:'l', x1,y1,x2,y2 } | { t:'r', x,y,w,h } | { t:'s', x,y,size,str,center }

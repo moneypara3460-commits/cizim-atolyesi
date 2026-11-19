@@ -209,7 +209,7 @@ t('Parça listesi: türe göre sıralı, model parçası, hesap durumu; CSV (Exc
   assert.deepEqual(rows.map((r) => r.tur), ['Servo / adım motoru', 'Redüktör / kayış kasnak', 'Bilyalı vida', 'Kaplin', 'Sensör']);
   assert.equal(rows[0].parca, 'Motor gövdesi'); assert.equal(rows[0].durum, 'uygun'); assert.equal(rows[4].durum, '—');
   const csv = bomCSV(rows);
-  assert.ok(csv.startsWith('﻿No;Tür;'));
+  assert.ok(csv.startsWith('\ufeffNo;Tür;'));
   assert.ok(csv.includes('"Endüktif; sensör ""M12"""'));
 });
 t('Kütüphane: aynı ürün kodu güncellenir, tekrar eklenmez; bozuk kayıt atılır', () => {
