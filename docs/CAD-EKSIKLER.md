@@ -6,7 +6,7 @@ Sıra kolaydan zora. Her madde ayrı PR; tam test (birim, gerçek OCCT, iki aray
 |---|---|---|
 | 6 | Her şekle radyüs / pah (tek tek kenar) | **Tamam** (19.11.2026) |
 | 2 | Delik sihirbazı / diş (işaretli diş) | **Tamam** (19.11.2026) |
-| 3 | Teknik resim: tolerans, pürüzlülük, parça listesi | Bekliyor |
+| 3 | Teknik resim: tolerans, pürüzlülük, parça listesi | **Tamam** (19.11.2026) |
 | 1 | Standart parça kütüphanesi (doğrulanmış ölçü tablolarıyla) | Bekliyor |
 | 8 | Sac metal: flanş, köşe kapatma | Bekliyor |
 | 4 | Kroki kısıtları ve serbest eğri | Bekliyor |
@@ -63,3 +63,32 @@ kullanılmadı.
 kesit hacmi), `tests/occt-delik.test.mjs` (gerçek OCCT: 7 delik türü/ölçüsünde geçerli katı ve kesin hacim, ağız çapları,
 desen), uçtan uca `C-Delik` (iki arayüzde: M8 kılavuz → B-Rep hacmi 191,25 cm³, delikle taşınan uç, yardımcılarıyla silme,
 M6 kademeli boydan boya → 190,24 cm³).
+
+## 3. Teknik resim: tolerans, pürüzlülük, parça listesi
+
+**Resim** sekmesi ayarları (projeyle saklanır): genel tolerans ISO 2768-1 sınıfı (f / m / c / v ya da yazma), genel yüzey
+pürüzlülüğü Ra (N1…N12 dizisi ya da yazma), parça listesi ve delik tablosu aç / kapat. Kod: `teknik.js` (saf hesap),
+`app.js` (`makeSheet`, `drawSheetNotes`).
+
+- **Delik yazıları** (ISO 129 / ISO 6410 düzeninde): delik sihirbazının kılavuz deliği `M8-6H ↧16,25` + `Ø6,8 ↧20`; kademe
+  `⌴ Ø11,25 ↧6`; havşa `⌵ Ø10,65 × 90°`; boydan boya. Kademe / havşa / uç parçaları ayrıca yazılmaz. Boydan boya delik de
+  görünüşte yazılır. Yazı, çerçeveden taşmayan, ölçü çizgisini ve başka görünüşü kesmeyen tarafa konur.
+- **Geçme toleransı** (ISO 286, H6…H11): delik seçilip Ölçü sekmesinden verilir (kılavuz deliğinde yok); resimde
+  `Ø10 H7 (+0,015 / 0)`. 0–500 mm.
+- **Antet**: `Genel toleranslar: ISO 2768-m`, tek malzemeliyse `Malzeme: …`, ISO 1302 pürüzlülük sembolü (talaş kaldırılarak)
+  ve Ra değeri.
+- **Parça listesi**: görünür, birleşen parçalar (oyuklar, gizliler, yardımcı kesiciler hariç); aynı ad + tür + ölçü + malzeme
+  tek satırda adetle. İki ya da daha çok satır varsa çizilir (tek parçalı resimde malzeme antete yazılır). Sığmayan satırlar
+  için "… N satır daha (tam liste: Hesap → Parça listesi CSV)".
+- **Delik tablosu**: sihirbazla açılan ya da geçme toleranslı delikler, aynı yazı adetle (A, B, …).
+- Tablolar izometrik alanın altına yerleşir (izometrik en az 35 mm kalır); geniş alanda yan yana.
+- Ondalık ayırıcı resimde virgül.
+
+**Sınır:** yüzey başına ayrı pürüzlülük, tek tek ölçüye tolerans, geometrik tolerans (GD&T) çerçeveleri ve parça
+balonları (poz numarası okları) yok; resim raster (PNG / PDF).
+
+**Tablo kaynakları** (`teknik.js` başında): ISO 2768-1 Tablo 1 (IS 2102-1 = ISO 2768-1, AmesWeb, Wevolver, Star Rapid);
+ISO 286-1 IT6…IT11 (Wikipedia ISO 286 Tablo 1, Wevolver, GlobalSpec, RoyMech); Ra / N dizisi (Ceratizit, Xometry, Keyence).
+
+**Doğrulama:** `tests/teknik.test.mjs` (tablo sınırları, H sapmaları, yazılar, parça listesi, delik tablosu), uçtan uca
+`C-Resim` (iki arayüzde: M8 kılavuz + Ø10 H7 + ikinci parça → resim bilgisi, tablolar, ayarların yeniden yüklemede kalması).

@@ -12,7 +12,7 @@ import {
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
-  sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
+  sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, partDims, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
 } from './logic.js?v=20261112u';
 import { openSketch } from './sketch.js?v=20261112u';
 import { to3MF, toSTEP } from './export3d.js?v=20261112u';
@@ -37,7 +37,8 @@ import { createCam5UI } from './cam5-ui.js?v=20261112u';
 import { createLatheUI } from './lathe-ui.js?v=20261112u';
 import { machinePose } from './kin.js?v=20261112u';
 import { createOcctUI } from './occt-ui.js?v=20261119d';
-import * as DLK from './delik.js?v=20261119e';
+import * as DLK from './delik.js?v=20261119f';
+import * as TK from './teknik.js?v=20261119f';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
 import { createMekaUI } from './meka/ui.js?v=20261119c';
@@ -91,12 +92,24 @@ let mechData = { cs: [], motor: null };   // Mekanizma: bağıntılar (dişli, k
 let simData = null;   // Geleceğimi Göster: onay, test kurulumu, saklanan alternatifler
 let femData = null;   // 📐 Analiz: kurulum (malzeme, ağ, sınır koşulları) ve sonuç özetleri
 let asmAnswers = {};   // Montaj planı: kullanıcının bildirdiği bağlantı türleri { 'a-b': 'kaynak' | 'cıvata' | ... }
-const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined });
+// teknik resim ayarları (projeyle saklanır): genel tolerans ISO 2768-1 sınıfı, genel yüzey pürüzlülüğü Ra (µm), parça listesi, delik tablosu
+const DRAW_DEF = { tol: 'm', ra: 3.2, bom: true, delik: true };
+let drawCfg = { ...DRAW_DEF };
+const drawSan = (o) => {
+  const d = { ...DRAW_DEF };
+  if (o && typeof o === 'object') {
+    if (o.tol === '' || TK.GENEL_TOL_SINIF[o.tol]) d.tol = o.tol;
+    if (o.ra === 0 || TK.RA.includes(+o.ra)) d.ra = +o.ra;
+    d.bom = o.bom !== false; d.delik = o.delik !== false;
+  }
+  return d;
+};
+const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined, draw: drawCfg });
 // "Tek parça" ağları (üçgen verisi) geri al geçmişine girmesin diye parçada yalnızca anahtar (mk) durur, veri burada tutulur.
 // Kaydederken (otomatik kayıt, proje) veri de dosyaya yazılır.
 const meshStore = new Map();
 function snapshotSave() {
-  const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined, meka: mekaReady ? mekaUI.getProject() : mekaPending };   // cam5: 4/5 eksen CNC ayarları; meka: Mekatronik ürün ağacı ve hesaplar
+  const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined, meka: mekaReady ? mekaUI.getProject() : mekaPending, draw: drawCfg };   // cam5: 4/5 eksen CNC ayarları; meka: Mekatronik ürün ağacı ve hesaplar
   const ks = [...new Set(parts.flatMap((q) => [q.mk, q.bk]).filter((k) => k && meshStore.has(k)))];   // bk: OCCT B-Rep metni
   if (ks.length) { o.meshes = {}; ks.forEach((k) => { o.meshes[k] = meshStore.get(k); }); }
   return JSON.stringify(o);
@@ -108,6 +121,7 @@ function restore(s) {
   cleanLinks(parts);
   if (typeof cam5UI !== 'undefined') cam5UI.setCfg(o.cam5);
   femData = o.fem && typeof o.fem === 'object' ? o.fem : null;   // eski projelerde yok: varsayılan (3 eksen)
+  drawCfg = drawSan(o.draw);   // eski projelerde yok: varsayılan (ISO 2768-m, Ra 3,2)
   // Mekatronik: yalnız proje kaydında var (geri al anlık görüntüsünde yok → dokunulmaz); 'meka' anahtarı olmayan eski proje boş ağaçla açılır
   if ('meka' in o) { if (mekaReady) mekaUI.setProject(o.meka || null); else mekaPending = o.meka || null; }
   if (!Array.isArray(parts)) parts = [];
@@ -1185,8 +1199,14 @@ function renderPanel() {
     hint = 'Üst parça taşınınca ya da döndürülünce bu parça da onunla birlikte gelir. Menteşe: seçilen eksen etrafında döner; Kayar: eksen boyunca kayar (sarı çizgi eksendir, "Eksen noktasını seç" ile modelde bir noktaya dokunarak menteşe yerini belirle). Delikler, bağlı oldukları parçayla birlikte gider.';
     drawJointAxis();
   } else if (tab === 'sheet') {
+    const dsel = (key, label, opts, cur) => `<label class="f w2"><span>${label}</span><select data-dc="${key}">` +
+      opts.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(cur) ? ' selected' : ''}>${esc(t)}</option>`).join('') + '</select></label>';
     body = btn('📐 Teknik resim oluştur', 'sheet-make') +
       '<div class="lbl" style="flex:1 0 100%">A4 yatay: ön, yan, üst ve izometrik görünüş; ölçek ve genel ölçüler.</div>' +
+      dsel('tol', 'Genel tolerans (ISO 2768-1)', [['', 'yazma'], ...Object.entries(TK.GENEL_TOL_SINIF).map(([k, v]) => [k, 'ISO 2768-' + k + ' · ' + v])], drawCfg.tol) +
+      dsel('ra', 'Genel yüzey pürüzlülüğü', [[0, 'yazma'], ...TK.RA.map((r) => [r, 'Ra ' + String(r).replace('.', ',') + ' µm (' + TK.nSinifi(r) + ')'])], drawCfg.ra) +
+      btn('Parça listesi: ' + (drawCfg.bom ? 'açık' : 'kapalı'), 'dc-bom', drawCfg.bom) + btn('Delik tablosu: ' + (drawCfg.delik ? 'açık' : 'kapalı'), 'dc-delik', drawCfg.delik) +
+      '<div class="lbl" style="flex:1 0 100%">Deliğe geçme toleransı (ör. H7) vermek için deliği seç → Ölçü sekmesi. Delik sihirbazıyla açılan deliklerde diş, kademe ve havşa resme yazılır.</div>' +
       (weldPlan && (weldPlan.welds || []).some((w) => w.status === 'approved') ? btn('Kaynak sembolleri: ' + (weldPlan.symbols !== false ? 'açık' : 'kapalı'), 'wd-sym', weldPlan.symbols !== false) + '<div class="lbl" style="flex:1 0 100%">Onaylı kaynaklar (Kaynak sekmesi) resimde ISO 2553 sembolüyle gösterilir: a = boğaz kalınlığı (girilmediyse a?), uzunluk, ○ çepeçevre, kuyrukta yöntem no ve kaynak harfi.</div>' : '');
     hint = 'Resim PNG ya da PDF olarak indirilir. Birim: ' + settings.unit + ' (Görünüm sekmesinden değiştirilir).';
   } else if (tab === 'anim') {
@@ -1300,6 +1320,12 @@ function renderPanel() {
     const fl = fieldsFor(p);
     body = fl.map(([l, k, kd]) => field(l, k, p, kd)).join('') + (p.type === 'sketch' && !p.gear ? btn('✎ Krokiyi düzenle', 'sketch-edit') : '') + (p.gear ? gearInfo(p) : '');
     if (p.hole && p.hole.label) body = '<div class="lbl" style="flex:1 0 100%">🔩 <b>' + esc(p.hole.label) + '</b>' + (p.hole.thread ? ' · diş ' + esc(DLK.disYazisi(p.hole.thread)) : '') + '</div>' + body;
+    if (idx > 0 && p.op === 'sub' && p.type === 'cylinder' && !(p.hole && p.hole.tur === 'klavuz')) {
+      const sp = p.fit ? TK.hSapma(p.fit, +p.d) : null;
+      body += '<label class="f w2"><span>Delik toleransı (ISO 286, resme yazılır)</span><select data-pfit="1"><option value="">yok (genel tolerans)</option>' +
+        TK.GECME.map((g) => '<option value="' + g + '"' + (p.fit === g ? ' selected' : '') + '>' + g + '</option>').join('') + '</select></label>' +
+        (p.fit ? '<div class="lbl" style="flex:1 0 100%">' + (sp ? 'Ø' + fmtNum(+p.d, 3).replace('.', ',') + ' ' + p.fit + ': +' + fmtNum(sp.es, 3).replace('.', ',') + ' / 0 mm' : '⚠ ' + p.fit + ' bu çapta tanımlı değil (0 – 500 mm)') + '</div>' : '');
+    }
     if (p.type === 'sheet') {
       const c = sheetCalc(p);
       body += (p.seg || []).map((sg, i) => '<div class="lbl h">' + (i + 1) + '. kenar</div>' +
@@ -2774,7 +2800,7 @@ function faceHoleWizard() {
       if (!main) {
         main = p;
         p.name = k.label + (offs.length > 1 ? ' (' + (i + 1) + '/' + offs.length + ')' : '');
-        p.hole = { ...k.o, d: k.d, thread: k.thread, label: k.label };
+        p.hole = { ...k.o, d: k.d, thread: k.thread, kademe: k.kademe, havsa: k.havsa, label: k.label };
       } else {
         Object.assign(p, { name: k.label + ' · ' + HW_ROL[sg.rol], aux: true, parent: main.id, joint: { type: 'fixed', axis: 'y', pv: [0, 0, 0], val: 0 } });
       }
@@ -3666,6 +3692,42 @@ function makeSheet(cut) {
   const size = bb.getSize(new THREE.Vector3()), ctr = bb.getCenter(new THREE.Vector3());
   const L = sheetLayout(size.x, size.y, size.z);
   const K = 6; // kağıt mm başına piksel
+  // parça listesi ve delik tablosu izometrik alanın altına yerleşir; izometrik görünüş küçülür (en az 35 mm kalır)
+  const numT = (v) => fmtNum(toUnit(v, settings.unit), 2).replace('.', ',');
+  const matName = (q) => (partMat(q) || {}).name || '';
+  const bomAll = TK.resimParcaListesi(parts, (q) => partDims(q, numT), matName);
+  const bom = drawCfg.bom && bomAll.length >= 2 ? bomAll : [];   // tek parçalı resimde liste yerine antette malzeme yazılır
+  const dtab = drawCfg.delik ? TK.delikTablosu(parts, numT) : [];
+  const RH = 4.6, TH = 10.4;   // satır yüksekliği; başlık + sütun adları
+  const tables = [];
+  const tx0 = L.iso.x + 2, tw0 = Math.max(40, L.sheet.w - 10 - 2 - tx0);
+  const plan = (rows, room) => {   // sığan satır sayısı ve yükseklik; sığmayanlar için "… N satır daha" satırı
+    if (!rows.length || room < TH + RH) return null;
+    const shown = rows.length <= Math.floor((room - TH) / RH) ? rows.length : Math.max(1, Math.floor((room - TH - RH) / RH));
+    return { shown, h: TH + shown * RH + (shown < rows.length ? RH : 0) };
+  };
+  const room0 = Math.max(0, L.iso.h - 35);
+  let tabH = 0;
+  if (bom.length && dtab.length && tw0 >= 150) {   // geniş alanda yan yana
+    const a1 = plan(bom, room0), a2 = plan(dtab, room0);
+    const wb = tw0 * 0.6 - 2;
+    if (a1) tables.push({ kind: 'bom', rows: bom, ...a1, x: tx0, w: wb });
+    if (a2) tables.push({ kind: 'delik', rows: dtab, ...a2, x: tx0 + wb + 4, w: tw0 - wb - 4 });
+    tabH = Math.max(0, ...tables.map((t) => t.h)) + (tables.length ? 3 : 0);
+    tables.forEach((t) => { t.dy = 0; });
+  } else {
+    let room = room0, dy = 0;
+    for (const [kind, rows] of [['bom', bom], ['delik', dtab]]) {
+      const a1 = plan(rows, room);
+      if (!a1) continue;
+      tables.push({ kind, rows, ...a1, x: tx0, w: tw0, dy });
+      dy += a1.h + 3; room -= a1.h + 3;
+    }
+    tabH = dy;
+  }
+  const tabY = L.iso.y + L.iso.h - tabH;
+  if (tabH) L.iso.h -= tabH;
+  sheetInfo = { tol: drawCfg.tol, ra: drawCfg.ra, bom: bom.map((r) => ({ ...r })), delik: dtab.map((r) => ({ ...r })), holes: [], tables: tables.map((t) => ({ kind: t.kind, shown: t.shown, rows: t.rows.length })) };
   const cv = document.createElement('canvas');
   cv.width = Math.round(L.sheet.w * K); cv.height = Math.round(L.sheet.h * K);
   const g = cv.getContext('2d');
@@ -3753,7 +3815,7 @@ function makeSheet(cut) {
   }
 
   // --- 2B: çerçeve, ölçü çizgileri, yazılar ---
-  const num = (v) => fmtNum(toUnit(v, settings.unit), 2);
+  const num = (v) => fmtNum(toUnit(v, settings.unit), 2).replace('.', ',');   // Türkçe ondalık virgül
   g.strokeStyle = '#111'; g.fillStyle = '#111'; g.lineWidth = 2;
   g.strokeRect(mm(10), mm(10), mm(L.sheet.w - 20), mm(L.sheet.h - 20));
   const tb = L.titleBlock;
@@ -3847,12 +3909,19 @@ function makeSheet(cut) {
       const want = name === 'front' ? 'z' : name === 'side' ? 'x' : 'y';
       let shown = 0;
       for (const h of holes) {
-        if (h.axis !== want || shown >= 6 || !inside(h.c, 0.5)) continue;
+        const P = parts.find((q) => q.id === h.id);
+        if (P && P.aux) continue;   // delik sihirbazının kademe / havşa / uç parçası: ana deliğin yazısında
+        // boydan boya delik modelin dışına taşar: eksene dik koordinatlar kutunun içinde olmalı
+        const ai = { x: 0, y: 1, z: 2 }[h.axis], hc = h.c.slice();
+        hc[ai] = Math.min(Math.max(hc[ai], [bb.min.x, bb.min.y, bb.min.z][ai]), [bb.max.x, bb.max.y, bb.max.z][ai]);
+        if (h.axis !== want || shown >= 6 || !inside(hc, 0.5)) continue;
         shown++;
-        const [cx, cy] = sheetProject(name, h.c, bbo, box, L.scale);
-        let hw, hh, label;
-        if (h.kind === 'round') { hw = hh = h.d * L.scale; label = 'Ø' + num(h.d); }
-        else { hw = h.ext[horiz[name]] * L.scale; hh = h.ext[vert[name]] * L.scale; label = '□ ' + num(h.ext[horiz[name]]) + ' × ' + num(h.ext[vert[name]]); }
+        const [cx, cy] = sheetProject(name, hc, bbo, box, L.scale);
+        let hw, hh, lines;
+        if (h.kind === 'round') { hw = hh = (P && P.hole && P.hole.kademe ? P.hole.kademe.d : P && P.hole && P.hole.havsa ? P.hole.havsa.d : h.d) * L.scale; lines = P ? TK.delikYazisi(P, num) : ['Ø' + num(h.d)]; }
+        else { hw = h.ext[horiz[name]] * L.scale; hh = h.ext[vert[name]] * L.scale; lines = ['□ ' + num(h.ext[horiz[name]]) + ' × ' + num(h.ext[vert[name]])]; }
+        const label = lines[0];
+        sheetInfo.holes.push({ view: name, lines });
         // eksen çizgileri (nokta-tire)
         g.save(); g.lineWidth = 0.9; g.setLineDash([mm(5), mm(1), mm(1), mm(1)]);
         g.beginPath();
@@ -3860,20 +3929,99 @@ function makeSheet(cut) {
         g.moveTo(mm(cx), mm(cy - hh / 2 - 2.5)); g.lineTo(mm(cx), mm(cy + hh / 2 + 2.5));
         g.stroke(); g.restore();
         // gösterme çizgisi: kutunun dışına doğru, omuz + yazı
-        const right = cx >= box.x + box.w / 2 ? 1 : -1;
+        // yazı ölçü çizgisinin olmadığı yana: önden görünüşte sağa (ölçü solda), üstten görünüşte sola (ölçü sağda)
+        // yazının yeri: sağ ya da sol; çerçeveden taşmayan, ölçü çizgisini ve başka görünüşü kesmeyen taraf seçilir
+        font(3.4, true);
+        const tw = Math.max(...lines.map((t) => g.measureText(t).width)) / K;
+        const dimX = name === 'front' ? [f.x - 7] : name === 'top' ? [tp.x + tp.w + 7] : [];
+        const others = views.filter(([n2]) => n2 !== name).map(([, b2]) => b2).concat([L.iso]);
+        const fits = (side) => {
+          const px0 = cx + side * hw / 2 * 0.7071, x0 = px0 + side * 9, xa = side > 0 ? x0 : x0 - tw, xb = side > 0 ? x0 + tw : x0;
+          const ya = cy - hh / 2 * 0.7071 - 7.5, yb = ya + 4 * lines.length + 2;
+          if (xa < 11 || xb > L.sheet.w - 11) return false;
+          if (dimX.some((dx) => dx > xa - 1 && dx < xb + 1)) return false;
+          return !others.some((o) => xa < o.x + o.w && xb > o.x && ya < o.y + o.h && yb > o.y);
+        };
+        const pref = cx >= box.x + box.w / 2 ? 1 : -1;
+        const right = fits(pref) ? pref : fits(-pref) ? -pref : pref;
         const px = cx + right * hw / 2 * 0.7071, py = cy - hh / 2 * 0.7071;
         const ex = px + right * 5, ey = py - 5;
         g.beginPath(); g.moveTo(mm(px), mm(py)); g.lineTo(mm(ex), mm(ey)); g.lineTo(mm(ex + right * 3), mm(ey)); g.stroke();
         arrow(mm(px), mm(py), -right * 0.7071, 0.7071);
         font(3.4, true); g.textAlign = right > 0 ? 'left' : 'right';
         g.fillText(label, mm(ex + right * 4), mm(ey));
+        font(3.2, false);
+        for (let li = 1; li < lines.length; li++) g.fillText(lines[li], mm(ex + right * 4), mm(ey + 4 * li));
       }
     }
     g.restore();
   } catch (err) { /* delik ölçüsü eklenemezse resim yine de gösterilir */ }
   try { drawSheetWelds(g, views, bb, L, K); } catch (err) { /* kaynak sembolü çizilemezse resim yine de gösterilir */ }
+  try { drawSheetNotes(g, L, K, tb, tables, tabY, bomAll); } catch (err) { sheetInfo.err = String(err && err.message || err); /* not ve tablolar çizilemezse resim yine de gösterilir */ }
 
   showSheet(cv, sheetCut);
+}
+let sheetInfo = null;   // son çizilen resmin yazıları (test ve hata ayıklama)
+// teknik resim: antette genel tolerans, malzeme, genel yüzey pürüzlülüğü; izometrik alanın altında parça listesi ve delik tablosu
+function drawSheetNotes(g, L, K, tb, tables, tabY, bomAll) {
+  const mm = (v) => v * K;
+  const font = (s, b) => { g.font = (b ? 'bold ' : '') + Math.round(mm(s)) + 'px system-ui, Arial, sans-serif'; };
+  g.save(); g.fillStyle = '#111'; g.strokeStyle = '#111'; g.textBaseline = 'middle';
+  // antet: orta sütun
+  const cx = tb.x + tb.w * 0.4;
+  font(3.4, false); g.textAlign = 'left';
+  if (drawCfg.tol) g.fillText('Genel toleranslar: ISO 2768-' + drawCfg.tol, mm(cx), mm(tb.y + 7));
+  const mats = [...new Set(bomAll.map((r) => r.malzeme).filter(Boolean))];
+  if (mats.length === 1) g.fillText('Malzeme: ' + mats[0], mm(cx), mm(tb.y + 15));
+  if (drawCfg.ra > 0) {
+    // ISO 1302 sembolü (talaş kaldırılarak): kısa sol bacak, iki kat uzun sağ bacak 60°, bacakları kapatan çizgi, üstte yazı
+    const x0 = tb.x + tb.w * 0.63, yb = tb.y + 18.5, h1 = 4.2, dx = h1 / Math.tan(Math.PI / 3);
+    g.lineWidth = 1.4;
+    g.beginPath();
+    g.moveTo(mm(x0 - dx), mm(yb - h1)); g.lineTo(mm(x0), mm(yb)); g.lineTo(mm(x0 + 2 * dx), mm(yb - 2 * h1));
+    g.lineTo(mm(x0 + 2 * dx + 16), mm(yb - 2 * h1));
+    g.moveTo(mm(x0 - dx), mm(yb - h1)); g.lineTo(mm(x0 + dx), mm(yb - h1));
+    g.stroke();
+    font(3.4, true); g.textAlign = 'left';
+    g.fillText('Ra ' + String(drawCfg.ra).replace('.', ','), mm(x0 + 2 * dx + 1), mm(yb - 2 * h1 - 2.2));
+    font(2.6, false);
+    g.fillText('genel yüzey', mm(x0 + 2 * dx + 1), mm(yb - h1 + 0.4));
+  }
+  // tablolar
+  const clip = (t, maxW) => { if (g.measureText(t).width <= maxW) return t; while (t.length > 1 && g.measureText(t + '…').width > maxW) t = t.slice(0, -1); return t + '…'; };
+  for (const tbl of tables) {
+    const x = tbl.x, w = tbl.w, y = tabY + tbl.dy;
+    const head = tbl.kind === 'bom' ? ['Poz', 'Ad', 'Adet', 'Malzeme', 'Ölçü (' + settings.unit + ')'] : ['', 'Delik', 'Adet'];
+    const body = tbl.rows.slice(0, tbl.shown).map((r) => (tbl.kind === 'bom' ? [r.poz, r.ad || '—', r.adet, r.malzeme, r.olcu] : [r.harf, r.yazi, r.adet]).map(String));
+    // sütun genişliği: içeriğe göre; sığmazsa yalnız esnek sütunlar (ad, malzeme, ölçü, delik yazısı) daralır
+    const flex = tbl.kind === 'bom' ? [false, true, false, true, true] : [false, true, false];
+    const nat = head.map((h, ci) => { font(2.9, true); let m = g.measureText(h).width; font(2.9, false); for (const r of body) m = Math.max(m, g.measureText(r[ci]).width); return m / K + 2; });
+    const fixed = nat.reduce((a, v, ci) => a + (flex[ci] ? 0 : v), 0), flexNat = nat.reduce((a, v, ci) => a + (flex[ci] ? v : 0), 0);
+    const k = Math.max(0.2, (w - fixed) / Math.max(flexNat, 1e-6));
+    const cw0 = nat.map((v, ci) => (flex[ci] ? v * k : v)), sc = w / cw0.reduce((a, v) => a + v, 0);
+    const cols = head.map((h, ci) => [h, cw0[ci] * sc / w]);
+    font(3.3, true); g.textAlign = 'left';
+    g.fillText(tbl.kind === 'bom' ? 'Parça listesi' : 'Delik tablosu', mm(x), mm(y + 2.4));
+    let yy = y + 5;
+    g.lineWidth = 1;
+    const RH_ = 4.6;
+    const rowLine = (cells, bold) => {
+      g.strokeRect(mm(x), mm(yy), mm(w), mm(RH_));
+      let cxx = x;
+      font(2.9, bold);
+      cells.forEach((c, i) => {
+        const cw = cols[i][1] * w;
+        if (i) { g.beginPath(); g.moveTo(mm(cxx), mm(yy)); g.lineTo(mm(cxx), mm(yy + RH_)); g.stroke(); }
+        g.fillText(clip(String(c), mm(cw - 1.6)), mm(cxx + 0.8), mm(yy + RH_ / 2));
+        cxx += cw;
+      });
+      yy += RH_;
+    };
+    rowLine(cols.map((c) => c[0]), true);
+    for (const r of body) rowLine(r, false);
+    if (tbl.shown < tbl.rows.length) { font(2.8, false); g.fillText(clip('… ' + (tbl.rows.length - tbl.shown) + ' satır daha' + (tbl.kind === 'bom' ? ' (tam liste: Hesap → Parça listesi CSV)' : ''), mm(w)), mm(x), mm(yy + 2.3)); }
+  }
+  g.restore();
 }
 // teknik resim: onaylı kaynakların ISO 2553 sembolleri, kaynağın en iyi göründüğü görünüşte
 function drawSheetWelds(g, views, bb, L, K) {
@@ -4081,6 +4229,7 @@ document.addEventListener('click', (e) => {
   }
   if (act === 'bake') { bakeAll(); return; }
   if (act === 'sheet-make') { makeSheet(false); return; }
+  if (act === 'dc-bom' || act === 'dc-delik') { commit(); const k = act.slice(3); drawCfg[k] = !drawCfg[k]; renderPanel(); scheduleSave(); return; }
   if (act === 'edges') { settings.edges = settings.edges === false; afterSettings(); return; }
   if (act === 'fmode-basic' || act === 'fmode-hw') { cp.fmode = act.slice(6); renderPanel(); return; }
   if (act === 'face-hw') { faceHoleWizard(); return; }
@@ -4240,6 +4389,8 @@ document.addEventListener('input', (e) => {
   }
   if (d.pmat) { commit(); cur().mat = el.value; refreshAll(); return; }
   if (d.pf) { commit(); cur().pf = el.value; refreshAll(); return; }
+  if (d.dc) { commit(); drawCfg = drawSan({ ...drawCfg, [d.dc]: d.dc === 'ra' ? +el.value : el.value }); renderPanel(); scheduleSave(); return; }
+  if (d.pfit) { const c = cur(); commit(); if (el.value) c.fit = el.value; else delete c.fit; renderPanel(); scheduleSave(); return; }
   if (d.hw) {
     const key = { tur: 'hwTur', std: 'hwStd', olcu: 'hwOlcu', adim: 'hwAdim', seri: 'hwSeri' }[d.hw];
     if (!key) return;
@@ -4400,7 +4551,7 @@ try {
 } catch (e) { /* bozuk kayıt: varsayılanla devam */ }
 
 // test / hata ayıklama için küçük kanca (arayüzü etkilemez)
-window.__app = { get lathe() { return latheUI; }, get edgeSel() { return { n: edgeSels.length, g: edgeG ? edgeG.edges.length : 0, busy: edgeBusy, sel: edgeSels.map((e) => ({ type: e.type, mid: e.mid.map((v) => Math.round(v * 100) / 100) })) }; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, get weightMarkerCount() { return wgtGroup.children.length; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
+window.__app = { get sheetInfo() { return sheetInfo; }, get drawCfg() { return drawCfg; }, get lathe() { return latheUI; }, get edgeSel() { return { n: edgeSels.length, g: edgeG ? edgeG.edges.length : 0, busy: edgeBusy, sel: edgeSels.map((e) => ({ type: e.type, mid: e.mid.map((v) => Math.round(v * 100) / 100) })) }; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, get weightMarkerCount() { return wgtGroup.children.length; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
 
 renderPanel();
 updateToolbar();
