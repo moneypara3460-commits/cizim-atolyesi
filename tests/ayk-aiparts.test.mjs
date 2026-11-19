@@ -144,6 +144,25 @@ t('9. Yapay zekâ çizgisi kalıp dışına taşsa bile parça kalıbın içinde
   }
 });
 
+t('10. Eğik çekilmiş mat: kare boyu yere göre değişir, kalıbın yüzeyinde ince doku var — ölçek kalıbın yanından alınır (±4 %)', () => {
+  // görüntüde aşağı indikçe kare büyür (s = 1,5 + 0,0035·y px/mm); kalıp 220 × 80 mm, tabanı matta
+  const w = 1000, h = 800, s0 = 1.5, gk = 0.0035, sAt = (y) => s0 + gk * y, Yof = (y) => Math.log(sAt(y) / s0) / gk;
+  const a = new Uint8ClampedArray(w * h * 4), cx = w / 2, yb = 520, Yb = Yof(yb);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const sy = sAt(y), X = (x - cx) / sy, Y = Yof(y), o = (y * w + x) * 4;
+    const mx = ((X % 10) + 10) % 10, my = ((Y % 10) + 10) % 10, lw = 1.1 / sy;   // çizgi kalınlığı ~1,1 px
+    const line = mx < lw * 1.6 || my < lw * 1.6;
+    let r = line ? 120 : 30, g = line ? 170 : 95, b = line ? 150 : 80;
+    // kalıp: alt kenarı yb satırında; görüntüde yan görünüş gibi dik durur → alt kenardaki ölçekle çizilir
+    const sb = sAt(yb), u = (x - cx) / sb, v = (yb - y) / sb;
+    if (v >= 0 && (u / 110) ** 2 + ((v - 40) / 40) ** 2 < 1) { const tex = (x % 7 < 1 || y % 7 < 1) ? 0.85 : 1; r = 170 * tex; g = 160 * tex; b = 70 * tex; }
+    a[o] = r; a[o + 1] = g; a[o + 2] = b; a[o + 3] = 255;
+  }
+  const r = L.analyzeMat(a, w, h);
+  assert.ok(r.ok, r.error);
+  assert.ok(Math.abs(r.length - 220) / 220 < 0.04, 'boy ' + r.length.toFixed(1) + ' mm (220 beklenir)');
+});
+
 let fail = 0;
 for (const [name, fn] of tests) {
   try { await fn(); console.log('ok   ' + name); }

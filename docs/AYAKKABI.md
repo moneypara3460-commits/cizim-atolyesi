@@ -163,6 +163,21 @@ Testler: `tests/ayk-aiparts.test.mjs` (9: sentetik mat ölçeği ve eğik kalıp
 kayıt güvenliği, çizgi yumuşatma, mat çizgisinin kalıba yapışmaması, taşan yapay zekâ çizgisinin kırpılması);
 `tests/e2e/ayk-auto.mjs` 4. senaryo (gerçek kalıbın mat fotoğrafı + sahte sunucu yanıtıyla uçtan uca).
 
+### Mat ölçeği düzeltmesi (19.11.2026, sürüm `20261119c`)
+
+Ümit Abi'nin gerçek kalıp fotoğraflarında (32 numara, ~213 mm) ölçek kareleri yanlış sayıyordu: boy 420–1000 mm çıkıyordu.
+Nedenler: bütün görüntünün sütun toplamında ilk tepe seçiliyordu (kalıbın yüzey dokusu ve gürültü yarım/üçte bir kareyi
+yakalıyordu); eğik çekimde kare boyu yere göre değiştiği hâlde tek ölçek kullanılıyordu.
+
+- Görüntü parçalara bölünür; her parçada ızgaranın iki çizgi ailesi ayrı bulunur (açı taraması, daire içinden örnek
+  ki köşegen yön kayırılmasın), her aile için en güçlü özilişki tepesi alınır (2 ya da 3 kare atlayan uyum değil).
+- Kalıp önce kaba ölçekle bulunur; sonra kalıbın dışında kalan, matla buluştuğu alt kenara en yakın parçalardan
+  yerel doğrusal uydurmayla o noktadaki kare aralığı, kalıbın uzun ekseni yönünde hesaplanır; kalıp bu ölçekle yeniden ayrılır.
+- Sonuç (aynı kalıbın gerçek fotoğrafları): yandan 213,4 mm, çapraz 207,6 mm, tabandan 224 mm, eski test fotoğrafı 216,7 mm.
+  Kalıbın ucundan bakan (boyuna) çekim hâlâ kısa ölçer (171 mm) — kalıp boyu o açıdan görünmez.
+- Kesin ölçü için bilinen kalıp boyu girilmesi önerisi sürüyor.
+- Test: `tests/ayk-aiparts.test.mjs` 10 (eğik çekilmiş mat, yüzeyi dokulu kalıp; eski kod 345 mm buluyordu).
+
 ### Hızlı yama (19.11.2026, sürüm `20261119a`)
 
 Ümit Abi'nin denemesinde (16.11.2026) iki sorun görüldü: fotoğraftan çıkan kalıp çizgisi tırtıklıydı, yapay zekânın

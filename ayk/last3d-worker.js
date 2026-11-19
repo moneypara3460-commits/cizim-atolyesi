@@ -1,5 +1,5 @@
 // 3D kalıp ağır işleri (dosya okuma, sadeleştirme, yön bulma, görünüş çıkarma) arka planda: sayfa donmasın.
-import * as L3 from './last3d.js?v=20261119b';
+import * as L3 from './last3d.js?v=20261119c';
 
 // Ortak iş: hem bu işçide hem (işçi açılamazsa) sayfada çalışır.
 export function run(op, a) {

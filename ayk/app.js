@@ -1,20 +1,20 @@
 // Ayakkabı Modelhanesi — uygulama kabuğu: 8 bölüm, otomatik kayıt, geri al / ileri al.
 // Hesap ve doğrulama saf modüllerde (geom, model, build, match, export); burada yalnız gösterim ve düzenleme.
 // Makine ve Tekstil alanlarının uygulama koduna bağlı değildir (yalnız tekstilin saf eğri / PDF / ofset modüllerini okur).
-import * as G from './geom.js?v=20261119b';
-import * as M from './model.js?v=20261119b';
-import { measure, checkPiece, fmt, netPolygon } from './build.js?v=20261119b';
-import * as X from './match.js?v=20261119b';
-import * as E from './export.js?v=20261119b';
-import { openStore, idbBackend, memoryBackend } from './store.js?v=20261119b';
-import { createEditor } from './editor.js?v=20261119b';
-import { addSample } from './sample.js?v=20261119b';
-import * as LST from './last.js?v=20261119b';
-import * as AUTO from './auto.js?v=20261119b';
-import * as AI from './ai.js?v=20261119b';
-import * as AIP from './aiparts.js?v=20261119b';
-import * as L3 from './last3d.js?v=20261119b';
-import { run as l3run } from './last3d-worker.js?v=20261119b';
+import * as G from './geom.js?v=20261119c';
+import * as M from './model.js?v=20261119c';
+import { measure, checkPiece, fmt, netPolygon } from './build.js?v=20261119c';
+import * as X from './match.js?v=20261119c';
+import * as E from './export.js?v=20261119c';
+import { openStore, idbBackend, memoryBackend } from './store.js?v=20261119c';
+import { createEditor } from './editor.js?v=20261119c';
+import { addSample } from './sample.js?v=20261119c';
+import * as LST from './last.js?v=20261119c';
+import * as AUTO from './auto.js?v=20261119c';
+import * as AI from './ai.js?v=20261119c';
+import * as AIP from './aiparts.js?v=20261119c';
+import * as L3 from './last3d.js?v=20261119c';
+import { run as l3run } from './last3d-worker.js?v=20261119c';
 import { saveBlob } from '../tx/download.js?v=20261112u';
 
 const $ = (id) => document.getElementById(id);
@@ -218,7 +218,7 @@ let l3w = null, l3seq = 0; const l3wait = new Map();
 function l3call(op, args, transfer = []) {   // girdi kopyalanır (aktarılmaz): işçi düşerse sayfada yeniden kullanılabilsin
   try {
     if (!l3w) {
-      l3w = new Worker(new URL('./last3d-worker.js?v=20261119b', import.meta.url), { type: 'module' });
+      l3w = new Worker(new URL('./last3d-worker.js?v=20261119c', import.meta.url), { type: 'module' });
       l3w.onmessage = (e) => { const w = l3wait.get(e.data.id); if (!w) return; l3wait.delete(e.data.id); e.data.ok ? w.res(e.data.out) : w.rej(new Error(e.data.error)); };
       // işçi açılamazsa (eski tarayıcı) bekleyen işler sayfada yapılır
       l3w.onerror = (e) => { e.preventDefault?.(); l3w = 'yok'; for (const w of l3wait.values()) { try { w.res(l3run(w.op, w.args)); } catch (err) { w.rej(err); } } l3wait.clear(); };
