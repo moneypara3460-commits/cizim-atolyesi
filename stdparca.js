@@ -11,6 +11,9 @@
 // - Rulman ana ölçüleri d × D × B (ISO 15): Miki Pulley JIS çizelgesi (6000–6005, 6200–6206), MRO Supply (6002–6006,
 //   6200–6204, 6300–6304), igus (6002–6005, 6202–6205, 6302–6305). 6306 doğrulanamadığı için yok.
 
+import { KABA } from './delik.js?v=20261120b';
+import { vidaDisBoyu } from './dis.js?v=20261120b';
+
 const r3 = (v) => Math.round(v * 1000) / 1000;
 const tf = (v) => String(r3(v)).replace('.', ',');
 
@@ -90,7 +93,11 @@ export function tarif(opts) {
     yazi = d + ' × ' + D + ' × ' + B + ' (sadeleştirilmiş)';
     out.push({ tip: 'tube', op: 'add', d: D, di: d, h: B, taban: 0, ad });
   }
-  return { parcalar: out, ad, yazi, std: { tur: o.tur, olcu: o.olcu, boy: o.tur === 'vida' ? o.boy : null } };
+  // kozmetik dişler (ana parçanın yerel çerçevesinde): vida gövdesinde ucundan b = 2d + 12 boyunca, somunda boydan boya
+  let disler = [];
+  if (o.tur === 'vida') { const d = parseFloat(o.olcu.slice(1)); disler = [{ yan: 'dis', olcu: o.olcu, d, P: KABA[o.olcu], bas: 0, boy: vidaDisBoyu(d, o.boy), r: d / 2 }]; }
+  if (o.tur === 'somun') { const d = parseFloat(o.olcu.slice(1)); disler = [{ yan: 'ic', olcu: o.olcu, d, P: KABA[o.olcu], bas: 0, boy: SOMUN_4032[o.olcu][1], r: d / 2 }]; }
+  return { parcalar: out, ad, yazi, disler, std: { tur: o.tur, olcu: o.olcu, boy: o.tur === 'vida' ? o.boy : null } };
 }
 
 // Kesin hacim (elle): vida = gövde + baş − lokma; somun = altıgen − delik; pul / rulman = halka

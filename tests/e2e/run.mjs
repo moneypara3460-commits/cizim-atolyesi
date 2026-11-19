@@ -355,6 +355,8 @@ await T('Standart parça: M8 kademeli deliğe ISO 4762 M8×30 (eksene ortalanır
   const sc = st.find((q) => q.std), sk = st.find((q) => q.aux && q.parent === (sc && sc.id));
   expect(sc && sc.type === 'sketch' && Math.abs(sc.x - 20) < 1e-6 && Math.abs(sc.z - 10) < 1e-6 && Math.abs(sc.y - 2) < 1e-6, 'vida eksende, baş kademe tabanında (taban y = 40 − 8 − 30): ' + JSON.stringify(sc));
   expect(sk && sk.op === 'sub' && Math.abs(sk.y - 36) < 1e-6, 'lokma başta (y = 32 + 8 − 4): ' + JSON.stringify(sk));
+  const vth = await page.evaluate((id) => window.__app.parts.find((q) => q.id === id).threads, sc.id);
+  expect(vth && vth.length === 1 && vth[0].yan === 'dis' && vth[0].boy === 28 && vth[0].P === 1.25, 'vida dişi b = 2·8 + 12: ' + JSON.stringify(vth));
   expect(/(deliğin eksenine ortalandı)/.test(await page.evaluate(() => document.querySelector('#toast').textContent)), 'ortalama bildirildi');
   // vida silinince lokması da gider
   await page.locator('#chips .chip', { hasText: 'ISO 4762 M8×30' }).first().click();
@@ -386,6 +388,46 @@ await T('Standart parça: M8 kademeli deliğe ISO 4762 M8×30 (eksene ortalanır
   expect(JSON.stringify(bom) === JSON.stringify([['', '80 × 60 × 40'], ['ISO 4032 M8', 'M8 (s 13, m 6,8)'], ['Rulman 6204', '20 × 47 × 14 (sadeleştirilmiş)']]), 'parça listesi: ' + JSON.stringify(bom));
   await page.locator('[data-sh="close"]').click();
 }, { allowErr: [/OCCT/] });
+
+/* ---------- C-Dis: kozmetik diş (borunun yarısı dış, yarısı iç diş), helis çizgisi, ISO 6410 resim, kayıt ---------- */
+await T('Kozmetik diş: boruya yarısına kadar M20×1,5 dış, kalanına M16×1,5 iç diş; 3B helis, resimde ISO 6410 çizgileri ve yazıları; yeniden yüklemede kalır', 'C-Dis', async ({ page }) => {
+  await page.evaluate(() => { const A = window.__app; const p = A.parts[0]; Object.assign(p, { type: 'tube', d: 20, di: 14, h: 60, rz: 90, name: 'Boru' }); A.refreshAll(true); });
+  await page.waitForTimeout(400);
+  await tab(page, 'dims');
+  const add = async (yan, olcu, adim, bas, boy) => {
+    await page.selectOption('#tabbody select[data-thk="yan"]', yan); await page.selectOption('#tabbody select[data-thk="olcu"]', olcu); await page.selectOption('#tabbody select[data-thk="adim"]', adim);
+    for (const [k, v] of [['thBas', bas], ['thBoy', boy]]) { await page.locator('#tabbody input[data-c="' + k + '"]').fill(v); await page.locator('#tabbody input[data-c="' + k + '"]').dispatchEvent('input'); }
+    await act(page, 'th-add'); await page.waitForTimeout(300);
+  };
+  await add('dis', 'M20', '1.5', '0', '30');
+  await add('ic', 'M16', '1.5', '30', '30');
+  const th = await page.evaluate(() => window.__app.parts[0].threads);
+  expect(th.length === 2 && th[0].yan === 'dis' && th[0].d === 20 && th[1].yan === 'ic' && th[1].bas === 30, 'dişler: ' + JSON.stringify(th));
+  expect(/Dış M20×1,5 · 0 – 30 mm/.test(await body(page)) && /İç M16×1,5 · 30 – 60 mm/.test(await body(page)), 'panel listesi');
+  // taşan diş reddedilir
+  await add('dis', 'M20', '1.5', '40', '30');
+  expect((await page.evaluate(() => window.__app.parts[0].threads.length)) === 2 && /dışına taşıyor/.test(await page.evaluate(() => document.querySelector('#toast').textContent)), 'taşan diş eklenmedi');
+  // 3B: helis çizgisi var (M20×1,5, 30 mm → 20 tur, M16 20 tur → 2·20·24 = 960 parça)
+  const nseg = await page.evaluate(() => { let n = 0; window.__app.THREE && document; const g = window.__app.modelMesh.parent; g.children.forEach((c) => { if (c.isLineSegments) n += c.geometry.attributes.position.count / 2; }); return n; });
+  expect(nseg === 960, 'helis parça sayısı: ' + nseg);
+  // resim
+  await tab(page, 'sheet'); await act(page, 'sheet-make');
+  await page.waitForFunction(() => window.__app.sheetInfo && document.querySelector('#sheetov canvas'), null, { timeout: 30000 });
+  const si = await page.evaluate(() => window.__app.sheetInfo);
+  expect(!si.thErr, 'diş çizimi hatasız: ' + si.thErr);
+  const k = (v, kind, yan) => si.threads.some((x) => x.view === v && x.kind === kind && (!yan || x.yan === yan));
+  expect(k('front', 'yan', 'dis') && k('front', 'yan', 'ic') && k('side', 'uc', 'dis') && k('side', 'uc', 'ic'), 'ISO 6410 çizgileri: ' + JSON.stringify(si.threads));
+  const yz = si.threads.filter((x) => x.kind === 'yazi').map((x) => x.ad).sort();
+  expect(JSON.stringify(yz) === '["M16×1,5","M20×1,5"]', 'diş yazıları birer kez: ' + JSON.stringify(yz));
+  await page.locator('[data-sh="close"]').click();
+  // sil + kayıt
+  await tab(page, 'dims');
+  await act(page, 'th-del-1'); await page.waitForTimeout(300);
+  expect((await page.evaluate(() => window.__app.parts[0].threads.length)) === 1, 'iç diş silindi');
+  await page.waitForTimeout(1500); await page.reload(); await page.waitForTimeout(2500);
+  const th2 = await page.evaluate(() => window.__app.parts[0].threads);
+  expect(th2 && th2.length === 1 && th2[0].olcu === 'M20', 'yeniden yüklemede diş kaldı: ' + JSON.stringify(th2));
+});
 
 /* ---------- C2. Tarama / ağ içe aktarma → CAD ---------- */
 // STL metni: boru (Y ekseni, 64 kenar) ve eğik çatılı takoz (temel şekle oturmaz)

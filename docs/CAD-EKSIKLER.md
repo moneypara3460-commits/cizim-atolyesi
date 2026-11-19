@@ -116,3 +116,22 @@ için konmadı. Ek çapraz denetim: pul iç çapı ISO 273 ince serisiyle, kadem
 **Doğrulama:** `tests/stdparca.test.mjs` (kaynak değerleri, tablo tutarlılığı, standartlar arası uyum, Pappus ile vida hacmi,
 altıgen alanı ve anahtar ağzı), uçtan uca `C-Standart` (iki arayüzde: kademeli deliğe vida — eksen ve oturma yüksekliği,
 lokmayla silme, somunlu B-Rep hacmi 192,65 cm³, rulman ve parça listesi).
+
+### Kozmetik diş (madde 1 ile birlikte, 20.11.2026)
+
+Diş modellenmez (model hafif kalır; imalat diş yazısından yapılır, SolidWorks'teki gibi) ama görünür. Kod: `dis.js`.
+
+- **Ölçü** sekmesi (silindir / boru / delik seçiliyken) → **Diş**: dış ya da iç diş, ölçü (M1,6–M24, kaba / ince adım
+  ya da **özel**: dış çap, adım ve ad, ör. boru dişi `G 1/2`), başlangıç ve boy. Ör. borunun yarısına kadar dış, kalanına iç
+  diş. Parçadan taşan diş reddedilir; çap uyuşmazsa uyarılır. Birden çok diş eklenip tek tek silinebilir.
+- Kendiliğinden dişler: ISO 4762 vidada uçtan b = 2d + 12 (kısa vidada boydan boya), ISO 4032 somunda boydan boya, delik
+  sihirbazının kılavuz deliğinde diş boyu kadar.
+- **3B**: dişli bölge yüzeyde helis çizgisiyle (gerçek adımla) görünür.
+- **Teknik resim (ISO 6410)**: dış diş — küçük çapta (d3 = d − 1,226869·P) ince çizgi, diş sonunda kalın sınır çizgisi,
+  uçtan bakışta küçük çapta 3/4 ince daire; iç diş (kesitsiz) — dış çapta kesik çizgi, uçtan bakışta dış çapta 3/4 daire;
+  diş yazısı (ör. `M20×1,5`) bir görünüşte gösterme çizgisiyle. Resimde helis çizgisi gösterilmez.
+
+**Doğrulama:** `tests/dis.test.mjs` (küçük çaplar Optimas çizelgesiyle, vida diş boyu Misumi çizelgesiyle, diş doğrulama,
+borunun yarı dış / yarı iç dişi, vida / somun / kılavuz deliği dişleri, helis), uçtan uca `C-Dis` (iki arayüzde: borunun
+iki dişi, taşan dişin reddi, helis parça sayısı, ISO 6410 çizgileri ve yazıları, silme, yeniden yükleme) ve `C-Standart`
+(vida dişi b = 28).
