@@ -48,8 +48,8 @@ export function sanitize(o) {
   for (const t of Object.keys(SLOTS)) for (const [slot] of SLOTS[t]) { const v = o.bag?.[t]?.[slot]; if (ids.has(v)) P.bag[t][slot] = v; }
   P.nextId = Math.max(fin(o.nextId) ? o.nextId : 1, ...P.items.map((i) => i.id + 1), 1);
   // Hesap girdileri, elektrik, PLC, güvenlik ve benzetim verisi burada yalnız taşınır; ui.js her birini kendi
-  // temizleme işleviyle (elekSanitize, plcSanitize, guvSanitize, simSanitize) doğrular.
-  for (const k of ['calc', 'elek', 'plc', 'guv', 'sim']) if (o[k] && typeof o[k] === 'object') P[k] = o[k];
+  // temizleme işleviyle (elekSanitize, plcSanitize, guvSanitize, simSanitize, izSanitize) doğrular.
+  for (const k of ['calc', 'elek', 'plc', 'guv', 'sim', 'iz']) if (o[k] && typeof o[k] === 'object') P[k] = o[k];
   return P;
 }
 

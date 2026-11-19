@@ -1,0 +1,7 @@
+# CodeQL: değiştirilmeden dağıtılan üçüncü taraf kütüphaneler (vendor/) taranmaz.
+# Bunların bütünlüğü "Üçüncü taraf kütüphane bütünlüğü" işinde npm paketiyle bayt bayt karşılaştırılır.
+# (Örn. three.js'in kimlik üretimindeki Math.random bir güvenlik bağlamı değildir.)
+name: cizim-atolyesi
+paths-ignore:
+  - vendor
+  - dist

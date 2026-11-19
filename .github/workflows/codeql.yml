@@ -30,6 +30,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: javascript-typescript
+          config-file: ./.github/codeql/codeql-config.yml
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
       - name: Perform CodeQL Analysis
@@ -41,7 +42,7 @@ jobs:
         run: |
           for f in codeql-sonuc/*.sarif; do
             echo "CODEQL-OZET $(jq '[.runs[].results[]] | length' "$f") bulgu"
-            jq -r '.runs[] as $r | $r.results[] | "CODEQL-BULGU \(.ruleId) | \(.level) | \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine) | \(.message.text | gsub("\n"; " ") | .[0:200]) | kaynak: \([.relatedLocations[]? | "\(.physicalLocation.artifactLocation.uri):\(.physicalLocation.region.startLine)"] | join(", "))"' "$f"
+            jq -r '.runs[] as $r | $r.results[] | "CODEQL-BULGU \(.ruleId) | \(.level) | \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine) | \(.message.text | gsub("\n"; " ") | .[0:200]) | kaynak: \([.relatedLocations[]? | "\(.physicalLocation.artifactLocation.uri):\(.physicalLocation.region.startLine)"] | join(", ")) | yol: \([.codeFlows[]?.threadFlows[]? | [.locations[]? | "\(.location.physicalLocation.region.startLine)"] | join(">")] | join(" ; "))"' "$f"
           done
       - name: Sonuç dosyasını sakla (SARIF)
         if: always()

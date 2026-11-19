@@ -74,6 +74,13 @@ export async function runOp(K, op, a, ctx = {}) {
       const m = K.model(a.descs || []);
       return { text: K.toSTEP(m.shape), check: K.check(m.shape), skipped: m.skipped };
     }
+    case 'step-ap242': {
+      const m = K.model(a.descs || []);
+      const text = K.toSTEPnamed(m.shape, { name: a.name || 'model', schema: 'AP242DIS' });
+      // doğrulama: yazılan dosya geri okunur, hacim karşılaştırılır
+      const back = K.fromSTEP(text), v0 = K.volume(m.shape), v1 = K.volume(back);
+      return { text, check: K.check(m.shape), skipped: m.skipped, hacim: v0, geriHacim: v1 };
+    }
     case 'step-in': {
       const s = K.fromSTEP(a.text);
       const r = full(K, s);
