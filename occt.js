@@ -123,6 +123,67 @@ export function createKernel(oc) {
     return mustBeValid(T(mk.Shape()), 'Pah sonucu bozuk katı (pah kenara göre çok büyük)');
   }
 
+  // ---- tek tek seçilen kenarlar (Kenar sekmesi: her şekil) ----
+  // Aynı düzlemdeki yüzleri ve aynı doğrudaki kenarları birleştir: üçgen ağından gelen parçada (kroki, iskelet, sac)
+  // düz yüz üçgenlerinin köşegenleri kenar sayılmasın, gerçek kenarlar seçilebilsin.
+  function unify(s) {
+    try {
+      const u = T(new oc.ShapeUpgrade_UnifySameDomain(s, true, true, false));
+      u.Build();
+      const r = T(u.Shape());
+      return volume(r) > 0 ? r : s;
+    } catch (e) { return s; }
+  }
+  // kenarlar: { type, len, mid [x,y,z], pts [[x,y,z]...] } — sıra ve orta nokta, aynı şekil yeniden kurulunca aynıdır
+  function edgeList(shape) {
+    // dikiş kenarı (silindirin, kürenin kapanma çizgisi): aynı yüzde iki kez geçer; gerçek kenar değildir, gösterilmez
+    const seams = [];
+    each(shape, 'TopAbs_FACE', (f) => {
+      const seen = [];
+      each(f, 'TopAbs_EDGE', (e) => { if (seen.some((x) => x.IsSame(e))) { if (!seams.some((x) => x.IsSame(e))) seams.push(e); } else seen.push(e); });
+    });
+    const out = [];
+    eachUnique(shape, 'TopAbs_EDGE', (e) => {
+      const ed = T_(oc.TopoDS.Edge, e);
+      if (oc.BRep_Tool.Degenerated(ed)) return;   // kürenin kutbu gibi uzunluğu olmayan kenar
+      if (seams.some((x) => x.IsSame(e))) return;
+      const c = T(new oc.BRepAdaptor_Curve(ed));
+      const type = String(c.GetType()).replace('GeomAbs_', ''), u0 = c.FirstParameter(), u1 = c.LastParameter();
+      const n = type === 'Line' ? 1 : 32, pts = [];
+      for (let i = 0; i <= n; i++) { const q = c.Value(u0 + (u1 - u0) * i / n); pts.push([q.X(), q.Y(), q.Z()]); q.delete(); }
+      const m = c.Value((u0 + u1) / 2), mid = [m.X(), m.Y(), m.Z()]; m.delete();
+      const g = T(new oc.GProp_GProps()); oc.BRepGProp.LinearProperties(ed, g, false, false);
+      const len = g.Mass();   // kesin kenar boyu (eğride çokgen yaklaşımı değil)
+      out.push({ e: ed, type, len, mid, pts });
+    });
+    return out;
+  }
+  // orta noktası verilen kenarlara yuvarlama / pah. picks: [{ mid, type }]
+  function edgeFeature(shape, picks, kind, r) {
+    if (!(r > 0)) throw new Error('Ölçü 0\'dan büyük olmalı');
+    const L = edgeList(shape), bb = props(shape).bbox;
+    const tol = Math.max(0.01, 1e-5 * Math.hypot(bb.max[0] - bb.min[0], bb.max[1] - bb.min[1], bb.max[2] - bb.min[2]));
+    const sel = [];
+    for (const pk of picks) {
+      let best = null, bd = Infinity;
+      for (const ed of L) {
+        if (pk.type && ed.type !== pk.type) continue;
+        const d = Math.hypot(ed.mid[0] - pk.mid[0], ed.mid[1] - pk.mid[1], ed.mid[2] - pk.mid[2]);
+        if (d < bd) { bd = d; best = ed; }
+      }
+      if (!best || bd > tol) throw new Error('Seçilen kenar modelde bulunamadı (model değişmiş olabilir); kenarları yeniden seç');
+      if (!sel.includes(best)) sel.push(best);
+    }
+    if (!sel.length) throw new Error('Kenar seçilmedi');
+    const minLen = Math.min(...sel.map((x) => x.len));
+    const mk = kind === 'chamfer' ? T(new oc.BRepFilletAPI_MakeChamfer(shape)) : T(new oc.BRepFilletAPI_MakeFillet(shape, oc.ChFi3d_FilletShape.ChFi3d_Rational));
+    for (const x of sel) mk.Add(r, x.e);
+    try { mk.Build(PR()); } catch (e) { /* aşağıda IsDone ile bildirilir */ }
+    const what = kind === 'chamfer' ? 'Pah kırılamadı' : 'Yuvarlama yapılamadı';
+    if (!mk.IsDone()) throw new Error(what + ': ölçü kenara ya da komşu yüzlere göre büyük olabilir' + (r >= minLen / 2 ? ' (en kısa seçili kenar ' + (Math.round(minLen * 100) / 100) + ' mm)' : '') + '. Daha küçük ölçü dene ya da kenarları ayrı ayrı işle.');
+    return { shape: mustBeValid(T(mk.Shape()), what + ': sonuç bozuk katı (ölçü komşu yüzlere göre büyük)'), n: sel.length };
+  }
+
   // ---- temel katılar (alt orta nokta orijinde, Y yukarı) ----
   const Y = () => AX2(P(0, 0, 0), DIR(0, 1, 0));
   function rectWire(w, l, y) {
@@ -444,7 +505,7 @@ export function createKernel(oc) {
   const fromBREP = (txt) => T(oc.BRepToolsWrapper.Read(txt));
 
   return {
-    oc, free, transform, fillet, chamfer, box, cylinder, cone, sphere, tube, fromTris, partShape, revolveProfile,
+    oc, free, transform, fillet, chamfer, unify, edgeList, edgeFeature, box, cylinder, cone, sphere, tube, fromTris, partShape, revolveProfile,
     fuse, cut, common, model, volume, props, check, fix, topology, mesh, edgeLines, triangles,
     toSTEP, toSTEPnamed, fromSTEP, toBREP, fromBREP, count,
   };

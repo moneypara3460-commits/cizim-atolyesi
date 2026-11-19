@@ -64,6 +64,22 @@ export async function runOp(K, op, a, ctx = {}) {
       r.part = asPart(K, s);
       return r;
     }
+    case 'edges': {
+      // Kenar sekmesi: dokunulan parça grubunun gerçek (B-Rep) kenarları; düz yüz köşegenleri birleştirilmiş
+      const m = K.model(a.descs || []);
+      const s = K.unify(m.shape);
+      return { edges: K.edgeList(s).map(({ type, len, mid, pts }) => ({ type, len, mid, pts })), skipped: m.skipped };
+    }
+    case 'edge-sel': {
+      const m = K.model(a.descs || []);
+      if (m.skipped.length) throw new Error('Parça katıya çevrilemedi: ' + m.skipped.map((x) => x.name + ' (' + x.why + ')').join(', '));
+      const s0 = K.unify(m.shape);
+      const v0 = K.volume(s0);
+      const { shape: s, n } = K.edgeFeature(s0, a.picks || [], a.kind === 'chamfer' ? 'chamfer' : 'fillet', +a.r);
+      const r = full(K, s, { n, v0 });
+      r.part = asPart(K, s);
+      return r;
+    }
     case 'fix': {
       const S = K.partShape(a.desc), s = K.fix(S);
       const r = full(K, s);
