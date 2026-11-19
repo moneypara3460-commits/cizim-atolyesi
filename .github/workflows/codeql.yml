@@ -36,6 +36,13 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           output: codeql-sonuc
+      - name: Bulguları iş günlüğüne yaz
+        if: always()
+        run: |
+          for f in codeql-sonuc/*.sarif; do
+            echo "CODEQL-OZET $(jq '[.runs[].results[]] | length' "$f") bulgu"
+            jq -r '.runs[] as $r | $r.results[] | "CODEQL-BULGU \(.ruleId) | \(.level) | \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine) | \(.message.text | gsub("\n"; " ") | .[0:200])"' "$f"
+          done
       - name: Sonuç dosyasını sakla (SARIF)
         if: always()
         uses: actions/upload-artifact@v4
