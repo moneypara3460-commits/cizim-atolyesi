@@ -402,6 +402,32 @@ export function createKernel(oc) {
     oc.FS.unlink(fn);
     return txt;
   }
+  // Adlandırılmış ürünle STEP (XCAF belgesi). schema: 'AP242DIS' (ISO 10303-242) ya da 'AP214IS'.
+  // Şema ayarı OCCT'de genel (statik) olduğundan iş sonunda eski değerine döndürülür.
+  function toSTEPnamed(shape, { name = 'model', schema = 'AP242DIS' } = {}) {
+    const IS = oc.Interface_Static;
+    T(new oc.STEPControl_Writer());   // STEP parametrelerini ilk kez yükler
+    const old = IS.CVal('write.step.schema');
+    if (!IS.SetCVal('write.step.schema', schema)) throw new Error('STEP şeması ayarlanamadı: ' + schema);
+    const fn = '/outx' + (++fileN) + '.step';
+    try {
+      const doc = T(new oc.TDocStd_Document(T(new oc.TCollection_ExtendedString('XmlOcaf', true))));
+      const main = doc.Main(), tool = oc.XCAFDoc_DocumentTool.ShapeTool(main);
+      const lbl = tool.NewShape();
+      tool.SetShape(lbl, shape);
+      oc.TDataStd_Name.Set(lbl, T(new oc.TCollection_ExtendedString(String(name), true)));
+      oc.XCAFDoc_DocumentTool.SetLengthUnit(doc, 0.001);
+      tool.UpdateAssemblies();
+      const w = T(new oc.STEPCAFControl_Writer(T(new oc.XSControl_WorkSession()), false));
+      w.SetNameMode(true); w.SetColorMode(false); w.SetPropsMode(false);
+      if (!w.Perform(doc, fn, PR())) throw new Error('STEP yazılamadı');
+      const txt = oc.FS.readFile(fn, { encoding: 'utf8' });
+      return txt;
+    } finally {
+      try { oc.FS.unlink(fn); } catch (e) { /* yok */ }
+      IS.SetCVal('write.step.schema', old || 'AP214IS');
+    }
+  }
   function fromSTEP(text) {
     const fn = '/in' + (++fileN) + '.step';
     oc.FS.writeFile(fn, text);
@@ -420,6 +446,6 @@ export function createKernel(oc) {
   return {
     oc, free, transform, fillet, chamfer, box, cylinder, cone, sphere, tube, fromTris, partShape, revolveProfile,
     fuse, cut, common, model, volume, props, check, fix, topology, mesh, edgeLines, triangles,
-    toSTEP, fromSTEP, toBREP, fromBREP, count,
+    toSTEP, toSTEPnamed, fromSTEP, toBREP, fromBREP, count,
   };
 }

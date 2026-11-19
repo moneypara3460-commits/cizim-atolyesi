@@ -512,7 +512,7 @@ await T('Mekatronik 6. aşama güvenlik: örnek risk kaydı → PLr risk grafiğ
   const pdf = await download(page, () => act(page, 'mk-ypdf'));
   expect(/^%PDF/.test(pdf.text) && /guvenlik\.pdf$/.test(pdf.name), 'güvenlik PDF');
   const csv = await download(page, () => act(page, 'mk-ycsv'));
-  expect(/^﻿?No;Tehlike türü/.test(csv.text) && /S2;F2;P2;e;evet/.test(csv.text), 'risk CSV: ' + csv.text.slice(0, 200));
+  expect(/^\ufeff?No;Tehlike türü/.test(csv.text) && /S2;F2;P2;e;evet/.test(csv.text), 'risk CSV: ' + csv.text.slice(0, 200));
   await page.waitForTimeout(1500);
   await page.reload(); await waitReady(page);
   await tab(page, 'meka'); await act(page, 'mk-v-guv'); await act(page, 'mk-yalt-rapor');
@@ -549,13 +549,58 @@ await T('Mekatronik 7. aşama benzetim: örnek çevrim 3,817 s, çizelge ve hız
   await act(page, 'mk-salt-tahrik'); await set(`t.${tid}.nmax`, 3000); await act(page, 'mk-salt-cevrim');
   expect(/✓ UYGUN/.test(await body(page)), 'sınır geri alındı');
   const csv = await download(page, () => act(page, 'mk-scsv'));
-  expect(/^﻿?Zaman \(s\);Kayışlı taşıma ekseni hız \(mm\/s\);İtici silindir hız \(mm\/s\)/.test(csv.text) && /benzetim\.csv$/.test(csv.name), 'CSV: ' + csv.text.slice(0, 150));
+  expect(/^\ufeff?Zaman \(s\);Kayışlı taşıma ekseni hız \(mm\/s\);İtici silindir hız \(mm\/s\)/.test(csv.text) && /benzetim\.csv$/.test(csv.name), 'CSV: ' + csv.text.slice(0, 150));
   const pdf = await download(page, () => act(page, 'mk-spdf'));
   expect(/^%PDF/.test(pdf.text), 'benzetim PDF');
   await page.waitForTimeout(1500);
   await page.reload(); await waitReady(page);
   await tab(page, 'meka'); await act(page, 'mk-v-sim');
   expect(/3,817 s/.test(await body(page)), 'yenileme sonrası benzetim');
+});
+
+await T('Mekatronik 8. aşama izlenebilirlik: gereksinimler benzetim ve kart sonucundan değerlendirilir; revizyon dört göz ile onaylanır; yenileme sonrası parmak izi aynı, değişiklik algılanır; matris CSV, PDF; STEP AP242 (gerçek OCCT, geri okuma)', 'M-Izlenebilirlik', async ({ page }) => {
+  await act(page, 'add-box'); await page.waitForTimeout(400);
+  await tab(page, 'meka');
+  await act(page, 'mk-v-sim'); await act(page, 'mk-sornek');
+  await act(page, 'mk-v-iz');
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mkz="${k}"]`); const tg = await i.evaluate((e) => e.tagName); if (tg === 'SELECT') await i.selectOption(String(v)); else await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(120); };
+  const gid = async () => page.evaluate(() => [...document.querySelectorAll('#tabbody [data-gereksinim]')].pop().dataset.gereksinim);
+  await act(page, 'mk-zadd'); let g = await gid();
+  await set(`g.${g}.metin`, 'Çevrim süresi en çok 4 s'); await set(`g.${g}.olcut`, 'cevrim'); await set(`g.${g}.hedef`, 4);
+  await act(page, 'mk-zadd'); const g2 = await gid();
+  await set(`g.${g2}.metin`, 'Vidalı eksen motoru yeterli'); await set(`g.${g2}.olcut`, 'kart'); await set(`g.${g2}.ref`, 'vida');
+  let b = await body(page);
+  expect((b.match(/Karşılandı/g) || []).length >= 2 && /çevrim 3.817 s, hedef ≤ 4 s/.test(b), 'gereksinimler: ' + b.slice(0, 300));
+  await set(`g.${g}.hedef`, 3.5);
+  expect(/Karşılanmadı/.test(await body(page)), 'hedef sıkılaşınca karşılanmadı');
+  await set(`g.${g}.hedef`, 4);
+  // revizyon
+  await act(page, 'mk-zalt-rev');
+  await set('y.aciklama', 'İlk yayın'); await set('y.hazirlayan', 'Deniz');
+  await act(page, 'mk-zrev');
+  await set('o.kontrol', 'Ali'); await set('o.onay', 'deniz'); await act(page, 'mk-zonay');
+  expect(/Taslak/.test(await body(page)), 'aynı kişi onaylayamaz (taslak kaldı)');
+  await set('o.kontrol', 'Ali'); await set('o.onay', 'Ayşe'); await act(page, 'mk-zonay');
+  b = await body(page);
+  expect(/Onaylı/.test(b) && /onaylı Rev A ile aynı/.test(b), 'onaylandı: ' + b.slice(0, 300));
+  await page.waitForTimeout(1500);
+  await page.reload(); await waitReady(page);
+  await tab(page, 'meka'); await act(page, 'mk-v-iz'); await act(page, 'mk-zalt-rev');
+  expect(/onaylı Rev A ile aynı/.test(await body(page)), 'yenileme sonrası parmak izi aynı');
+  // değişiklik: benzetimde vardiya süresi
+  await act(page, 'mk-v-sim');
+  const v = page.locator('#tabbody [data-mks="a.vardiya"]'); await v.fill('9'); await v.dispatchEvent('change'); await page.waitForTimeout(150);
+  await act(page, 'mk-v-iz'); await act(page, 'mk-zalt-rev');
+  expect(/onaylandıktan sonra proje değişti/.test(await body(page)), 'değişiklik algılandı');
+  await act(page, 'mk-zalt-ozet');
+  const csv = await download(page, () => act(page, 'mk-zcsv'));
+  expect(/^﻿?Kod;Gereksinim/.test(csv.text) && /GR-\d+;Çevrim süresi en çok 4 s;Müşteri;Zorunlu;Benzetim: çevrim süresi ≤ hedef \(s\);4;Karşılandı/.test(csv.text), 'matris CSV: ' + csv.text.slice(0, 300));
+  const pdf = await download(page, () => act(page, 'mk-zpdf'));
+  expect(/^%PDF/.test(pdf.text), 'izlenebilirlik PDF');
+  const st = await download(page, () => act(page, 'mk-zstep'), 180000);
+  expect(/^ISO-10303-21;/.test(st.text) && /AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF/.test(st.text) && /FILE_DESCRIPTION\(\('Rev A onayl\\X2\\0131\\X0\\ /.test(st.text) && /MANIFOLD_SOLID_BREP/.test(st.text) && /_revA_AP242\.step$/.test(st.name), 'STEP AP242: ' + st.name + ' ' + st.text.slice(0, 600));
+  expect(/^[\x09\x0a\x0d\x20-\x7e]*$/.test(st.text), 'STEP yalnız ASCII');
+  await waitText(page, '#toast', /geri okuma hacmi aynı/, 30000);
 });
 
 /* ---------- D. Montaj ---------- */

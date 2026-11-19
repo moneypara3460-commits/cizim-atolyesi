@@ -36,10 +36,10 @@ import { createCamUI } from './cam-ui.js?v=20261112u';
 import { createCam5UI } from './cam5-ui.js?v=20261112u';
 import { createLatheUI } from './lathe-ui.js?v=20261112u';
 import { machinePose } from './kin.js?v=20261112u';
-import { createOcctUI } from './occt-ui.js?v=20261112u';
+import { createOcctUI } from './occt-ui.js?v=20261119c';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
-import { createMekaUI } from './meka/ui.js?v=20261119b';
+import { createMekaUI } from './meka/ui.js?v=20261119c';
 
 const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -1765,6 +1765,8 @@ const mekaUI = createMekaUI({
   name: () => (projName || 'model').replace(/[^\w\-çğıöşüÇĞİÖŞÜ ]+/g, '_'),
   saveBlob: (b, n) => saveBlob(b, n),
   parts: () => parts.map((q, i) => ({ id: q.id, name: partName(q, i) })),
+  descs: () => parts.filter((q) => !q.hidden).map(occtDesc),   // STEP AP242 için B-Rep parça tanımları
+  occt: (op, args) => occtUI.call(op, args),
   changed: () => scheduleSave(),
   focusPart: (id) => {
     const b = lastBrushes.find((x) => x.p.id === id);
@@ -3023,7 +3025,7 @@ document.addEventListener('change', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.wf) { weldUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.wg) { weightUI.input(el, 'change'); return; }
-  if (el.dataset && (el.dataset.mk || el.dataset.mkb || el.dataset.mkl || el.dataset.mki || el.dataset.mke || el.dataset.mkp || el.dataset.mky || el.dataset.mks)) { mekaUI.input(el); return; }
+  if (el.dataset && (el.dataset.mk || el.dataset.mkb || el.dataset.mkl || el.dataset.mki || el.dataset.mke || el.dataset.mkp || el.dataset.mky || el.dataset.mks || el.dataset.mkz)) { mekaUI.input(el); return; }
   if (el.dataset && el.dataset.cf) { costUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.as) { asmUI.input(el, 'change'); return; }
   if (el.dataset && (el.dataset.cs || el.dataset.cn || el.dataset.ct || el.dataset.co)) { camUI.input(el, 'change'); return; }
