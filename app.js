@@ -36,7 +36,7 @@ import { createCamUI } from './cam-ui.js?v=20261112u';
 import { createCam5UI } from './cam5-ui.js?v=20261112u';
 import { createLatheUI } from './lathe-ui.js?v=20261112u';
 import { machinePose } from './kin.js?v=20261112u';
-import { createOcctUI } from './occt-ui.js?v=20261119c';
+import { createOcctUI } from './occt-ui.js?v=20261119d';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
 import { createMekaUI } from './meka/ui.js?v=20261119c';
@@ -1111,15 +1111,15 @@ function renderPanel() {
       hint = 'Delik / çıkıntı dokunduğun noktada oluşur (desende dokunduğun nokta merkezdir). Sonra Konum sekmesinden ince ayar yapabilirsin.';
     }
   } else if (tab === 'edge') {
-    if (!edgeSels.length) {
-      body = '<div class="lbl" style="flex:1 0 100%">Bir kutunun kenarına dokun (birden çok kenar seçebilirsin).</div>';
-      hint = 'Sadece düz kutu parçalarının kenarlarında çalışır (yuvarlama/pahı olmayan). Kenara yakın dokun; sarı çizgi seçileni gösterir.';
+    if (edgeBusy) {
+      body = '<div class="lbl" style="flex:1 0 100%">⏳ Hesaplanıyor… (ilk seferde katı modelleme çekirdeği yüklenir)</div>';
+    } else if (!edgeSels.length) {
+      body = '<div class="lbl" style="flex:1 0 100%">' + (edgeG && edgeG.rev === rebuildCount ? edgeG.edges.length + ' kenar gösteriliyor (mavi). İşlenecek kenara dokun.' : 'Herhangi bir parçanın kenarına dokun (birden çok kenar seçebilirsin).') + '</div>';
     } else {
       body = '<div class="lbl" style="flex:1 0 100%">' + edgeSels.length + ' kenar seçili (aynı kenara tekrar dokunursan kalkar)</div>' +
-        cfield('Ölçü (pah boyu / yarıçap)', 'es') + btn('◣ Pah kır', 'edge-chamfer') + btn('◜ Yuvarla', 'edge-fillet') +
-        btn('Üst 4 kenar', 'edge-top') + btn('Bu kutunun 12 kenarı', 'edge-all') + btn('Seçimi temizle', 'edge-clear');
-      hint = 'Seçili her kenar işlenir. İşlem, kenarlara oyuk parçaları ekler (Parça listesinde görünür); silersen geri gelir. Yuvarlamada iki kenarın birleştiği köşe tam yumuşak olmaz.';
+        cfield('Ölçü (pah boyu / yarıçap)', 'es') + btn('◣ Pah kır', 'edge-chamfer') + btn('◜ Yuvarla', 'edge-fillet') + btn('Seçimi temizle', 'edge-clear');
     }
+    hint = 'Her şekilde çalışır: kutu, silindir, koni, boru, kroki, iskelet, sac, içe aktarılan katı. Dokunduğun parça ve ona değen parçalar (oyuklar dahil) gerçek katı olarak işlenir; delik ağzı gibi oyukla oluşan kenarlar da seçilebilir. Sonuç bu parçaların yerine tek parça olur (Geri al ile döner). Eğri yüzü üçgen ağdan gelen parçada (süpürme, loft) kenar küçük parçalara bölünmüş olabilir.';
   } else if (tab === 'shell') {
     const el = shellEligible(p);
     body = (el ? cfield('Duvar kalınlığı', 'wall') + btn('Üst açık: ' + (cp.openTop ? 'evet' : 'hayır'), 'shell-top', cp.openTop) + btn('Alt açık: ' + (cp.openBot ? 'evet' : 'hayır'), 'shell-bot', cp.openBot) + btn('🥚 Kabuk yap', 'shell-do')
@@ -2720,82 +2720,103 @@ function faceSketch(op) {
   });
 }
 
-/* ---- kenar seçimi: tek kenara pah / yuvarlama (düz kutu parçaları) ---- */
-let edgeSels = []; // [{ id, axis, sa, sb }]  axis: serbest eksen; sa, sb: diğer iki eksenin işareti (-1/+1); birden çok kenar seçilebilir
-const edgeKey = (e) => e.id + ':' + e.axis + ':' + e.sa + ':' + e.sb;
-const EDGE_AXES = { x: ['y', 'z'], y: ['x', 'z'], z: ['x', 'y'] };
-const boxEligible = (p) => p.type === 'box' && !p.hidden && !(p.r > 0.05) && !(p.c > 0.05) && !(p.tp > 0.01);
+/* ---- kenar seçimi: her şekilde tek tek kenara gerçek (B-Rep) yuvarlama / pah ---- */
+// Dokunulan parça ve ona değen parçalar (birleşen ya da oyan) bir grup olarak OCCT'de katıya çevrilir; grubun
+// gerçek kenarları gösterilir, seçilen kenarlar yuvarlanır / pahlanır, sonuç grubun yerine tek parça olur (Geri al ile döner).
+let edgeSels = [];          // [{ mid:[x,y,z], type, pts:[[x,y,z]...] }]
+let edgeG = null;           // { ids, rev, edges } — son okunan grup
+let edgeBusy = false;
 const partQuat = (p) => new THREE.Quaternion().setFromEuler(new THREE.Euler(pos(p.rx) * RAD, pos(p.ry) * RAD, pos(p.rz) * RAD, 'XYZ'));
-// parça yerel koordinatı: alt-orta nokta orijin; x = genişlik, y = yükseklik (0..h), z = derinlik
-function edgeEnds(p, axis, sa, sb) {
-  const w = clamp(p.w), l = clamp(p.l), h = clamp(p.h);
-  const half = { x: w / 2, z: l / 2 };
-  const pt = (t) => {
-    const v = { x: 0, y: h / 2, z: 0 };
-    const [a1, a2] = EDGE_AXES[axis];
-    const set = (a, sgn) => { v[a] = a === 'y' ? (sgn > 0 ? h : 0) : sgn * half[a]; };
-    set(a1, sa); set(a2, sb);
-    v[axis] = axis === 'y' ? h / 2 + t * h / 2 : t * half[axis];
-    return new THREE.Vector3(v.x, v.y, v.z);
-  };
-  return [pt(-1), pt(1)];
-}
 const toWorld = (p, v) => v.clone().applyQuaternion(partQuat(p)).add(new THREE.Vector3(pos(p.x), pos(p.y), pos(p.z)));
-
+// dokunulan noktayı içeren parçalar + onların kutusuna değen parçalar (modeldeki sırayla)
+function edgeGroupAt(pt) {
+  const vis = parts.filter((q) => !q.hidden);
+  const box = (q) => { const b = partBBox(q.id); return b ? b.clone().expandByScalar(0.5) : null; };
+  const seeds = vis.filter((q) => { const b = box(q); return b && b.containsPoint(pt); });
+  if (!seeds.length) return [];
+  const sb = seeds.map(box);
+  return vis.filter((q) => seeds.includes(q) || (() => { const b = box(q); return b && sb.some((x) => x.intersectsBox(b)); })());
+}
+const edgeDescs = (ids) => ids.map((id) => parts.find((q) => q.id === id)).filter((q) => q && !q.hidden).map(occtDesc);
 function drawEdgeSelection() {
   disposeOverlay(faceGroup);
-  const pts = [];
-  for (const e of edgeSels) {
-    const p = parts.find((q) => q.id === e.id);
-    if (!p) continue;
-    const [e0, e1] = edgeEnds(p, e.axis, e.sa, e.sb).map((v) => toWorld(p, v));
-    pts.push(e0, e1);
+  const seg = (list) => { const v = []; for (const e of list) for (let i = 1; i < e.pts.length; i++) v.push(new THREE.Vector3(...e.pts[i - 1]), new THREE.Vector3(...e.pts[i])); return v; };
+  if (edgeG && edgeG.rev === rebuildCount) {   // grubun bütün kenarları ince (seçilebilecekler)
+    const all = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seg(edgeG.edges)), new THREE.LineBasicMaterial({ color: 0x38bdf8, depthTest: false, transparent: true, opacity: 0.55 }));
+    all.userData.own = true; all.layers.set(1); all.renderOrder = 996;
+    faceGroup.add(all);
   }
-  if (!pts.length) return;
-  const line = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xfacc15, depthTest: false, transparent: true }));
+  if (!edgeSels.length) return;
+  const line = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seg(edgeSels)), new THREE.LineBasicMaterial({ color: 0xfacc15, depthTest: false, transparent: true }));
   line.userData.own = true; line.layers.set(1); line.renderOrder = 998;
   faceGroup.add(line);
-  const dots = new THREE.Points(new THREE.BufferGeometry().setFromPoints(pts), new THREE.PointsMaterial({ color: 0xf43f5e, size: 10, sizeAttenuation: false, depthTest: false, transparent: true }));
+  const dots = new THREE.Points(new THREE.BufferGeometry().setFromPoints(edgeSels.map((e) => new THREE.Vector3(...e.mid))), new THREE.PointsMaterial({ color: 0xf43f5e, size: 10, sizeAttenuation: false, depthTest: false, transparent: true }));
   dots.userData.own = true; dots.layers.set(1); dots.renderOrder = 999;
   faceGroup.add(dots);
 }
 // dokunulan kenar seçilir; aynı kenara tekrar dokunmak seçimi kaldırır (birden çok kenar seçilebilir)
-function edgeTap(cx, cy) {
-  if (!modelMesh) { renderPanel(); return; }
+async function edgeTap(cx, cy) {
+  if (!modelMesh || edgeBusy) { renderPanel(); return; }
   setRay(cx, cy);
   const hits = raycaster.intersectObject(modelMesh, false);
   if (!hits.length) { renderPanel(); return; }
-  const hp = hits[0].point;
-  const r = renderer.domElement.getBoundingClientRect();
-  const scr = (v) => { const s = v.clone().project(camera); return [(s.x * 0.5 + 0.5) * r.width + r.left, (-s.y * 0.5 + 0.5) * r.height + r.top]; };
+  const hp = hits[0].point.clone();
+  const grp = edgeGroupAt(hp);
+  if (!grp.length) { toast('Dokunulan yerde parça bulunamadı'); return; }
+  const ids = grp.map((q) => q.id);
+  // başka grup ya da model değişti: seçim yeni grupta başlar
+  if (!edgeG || edgeG.rev !== rebuildCount || edgeG.ids.join(',') !== ids.join(',')) {
+    if (edgeSels.length && edgeG && edgeG.rev === rebuildCount && !ids.some((id) => edgeG.ids.includes(id))) { toast('Seçili kenarlar başka parçada. Önce "Seçimi temizle" ya da işlemi bitir.'); return; }
+    edgeBusy = true; renderPanel();
+    try {
+      const r = await occtUI.call('edges', { descs: edgeDescs(ids) });
+      if (r.skipped && r.skipped.length) throw new Error(r.skipped.map((x) => x.name + ': ' + x.why).join(', '));
+      const keep = edgeG && edgeG.rev === rebuildCount ? edgeSels : [];
+      edgeG = { ids, rev: rebuildCount, edges: r.edges };
+      // grup büyüdüyse önceki seçim yeni kenar listesinde aranır
+      edgeSels = keep.map((e) => r.edges.find((x) => x.type === e.type && Math.hypot(x.mid[0] - e.mid[0], x.mid[1] - e.mid[1], x.mid[2] - e.mid[2]) < 0.01)).filter(Boolean);
+    } catch (e) { edgeG = null; toast('Kenarlar okunamadı: ' + (e.message || e)); return; }
+    finally { edgeBusy = false; renderPanel(); }
+  }
+  const rect = renderer.domElement.getBoundingClientRect();
+  const scr = (v) => { const q = new THREE.Vector3(...v).project(camera); return [(q.x * 0.5 + 0.5) * rect.width + rect.left, (-q.y * 0.5 + 0.5) * rect.height + rect.top]; };
+  const size = lastClean && lastClean.boundingBox ? lastClean.boundingBox.getSize(new THREE.Vector3()).length() : 100;
+  const near3 = Math.max(2, 0.04 * size);   // arkadaki kenarlar seçilmesin: dokunulan yüzeye yakın olmalı
   let best = null, bd = 28;
-  for (const p of parts) {
-    if (!boxEligible(p)) continue;
-    const near = Math.min(clamp(p.w), clamp(p.l), clamp(p.h)) * 0.35 + 3;
-    for (const axis of ['x', 'y', 'z']) {
-      for (const sa of [-1, 1]) for (const sb of [-1, 1]) {
-        const [e0, e1] = edgeEnds(p, axis, sa, sb).map((v) => toWorld(p, v));
-        // 3B yakınlık: dokunulan nokta bu kenara yakın olmalı (arkadaki kenarlar seçilmesin)
-        const seg = new THREE.Line3(e0, e1);
-        const cp3 = seg.closestPointToPoint(hp, true, new THREE.Vector3());
-        if (cp3.distanceTo(hp) > near) continue;
-        const [x0, y0] = scr(e0), [x1, y1] = scr(e1);
-        const dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy || 1;
-        const t = Math.max(0, Math.min(1, ((cx - x0) * dx + (cy - y0) * dy) / L2));
-        const d = Math.hypot(cx - (x0 + t * dx), cy - (y0 + t * dy));
-        if (d < bd) { bd = d; best = { id: p.id, axis, sa, sb }; }
-      }
+  for (const e of edgeG.edges) {
+    let d3 = Infinity, d2 = Infinity;
+    for (let i = 1; i < e.pts.length; i++) {
+      const a = new THREE.Vector3(...e.pts[i - 1]), b = new THREE.Vector3(...e.pts[i]);
+      d3 = Math.min(d3, new THREE.Line3(a, b).closestPointToPoint(hp, true, new THREE.Vector3()).distanceTo(hp));
+      const [x0, y0] = scr(e.pts[i - 1]), [x1, y1] = scr(e.pts[i]);
+      const dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((cx - x0) * dx + (cy - y0) * dy) / L2));
+      d2 = Math.min(d2, Math.hypot(cx - (x0 + t * dx), cy - (y0 + t * dy)));
     }
+    if (d3 <= near3 && d2 < bd) { bd = d2; best = e; }
   }
   if (best) {
-    const k = edgeKey(best);
-    const i = edgeSels.findIndex((e) => edgeKey(e) === k);
+    const i = edgeSels.findIndex((e) => e.type === best.type && Math.hypot(e.mid[0] - best.mid[0], e.mid[1] - best.mid[1], e.mid[2] - best.mid[2]) < 0.01);
     if (i >= 0) edgeSels.splice(i, 1); else edgeSels.push(best);
-    drawEdgeSelection();
-  } else {
-    toast('Yakında uygun bir kutu kenarı yok. Kenara daha yakın dokun.');
-  }
+  } else toast('Yakında kenar yok. Mavi çizgilerden birine daha yakın dokun.');
+  drawEdgeSelection();
   renderPanel();
+}
+async function edgeFeature(kind) {
+  if (!edgeSels.length || !edgeG || edgeBusy) return;
+  if (edgeG.rev !== rebuildCount) { edgeSels = []; edgeG = null; disposeOverlay(faceGroup); renderPanel(); toast('Model değişti; kenarları yeniden seç'); return; }
+  const r0 = +cp.es;
+  if (!(r0 > 0)) { toast('Ölçü 0\'dan büyük olmalı'); return; }
+  const ids = edgeG.ids.slice(), n = edgeSels.length;
+  const base = parts.find((q) => q.id === ids[0]);
+  const name = (base ? partName(base, parts.indexOf(base)) : 'Parça') + (kind === 'chamfer' ? ' pah ' : ' R') + lenText(r0);
+  edgeBusy = true; renderPanel();
+  try {
+    const r = await occtUI.call('edge-sel', { descs: edgeDescs(ids), picks: edgeSels.map(({ mid, type }) => ({ mid, type })), kind, r: r0 });
+    edgeSels = []; edgeG = null; disposeOverlay(faceGroup);
+    occtUI.addResult(r, name, ids);
+    toast((kind === 'chamfer' ? 'Pah kırıldı' : 'Yuvarlandı') + ': ' + n + ' kenar' + (ids.length > 1 ? ' · ' + ids.length + ' parça tek parça oldu' : ''));
+  } catch (e) { toast(String(e.message || e)); }
+  finally { edgeBusy = false; renderPanel(); }
 }
 
 // yerel (kutu çerçevesi) merkezli bir kesici parça kur: size = [w,h,l] (kendi eksenleri), extra = ek dönme (kuaterniyon)
@@ -2808,68 +2829,6 @@ function cutterPart(p, op, type, dims, localCenter, extraQ, name) {
   const r4 = (v) => Math.round(v * 1e4) / 1e4 + 0;
   const q = newPart(nextId++, type, op, null);
   return Object.assign(q, dims, { r: 0, c: 0, x: r4(piv.x), y: r4(piv.y), z: r4(piv.z), rx, ry, rz, name, aux: true, parent: p.id, joint: { type: 'fixed', axis: 'y', pv: [0, 0, 0], val: 0 } });
-}
-
-function edgeFeature(kind) {
-  if (!edgeSels.length) return;
-  const AX = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
-  const list = [];
-  const label = kind === 'chamfer' ? 'Kenar pahı' : 'Kenar yuvarlama';
-  let clipped = false, skipped = 0;
-  const prep = [];
-  for (const es of edgeSels) {
-    const p = parts.find((q) => q.id === es.id);
-    if (!p) { skipped++; continue; }
-    const { axis, sa, sb } = es;
-    const w = clamp(p.w), l = clamp(p.l), h = clamp(p.h);
-    const len = { x: w, y: h, z: l }[axis];
-    const perp = EDGE_AXES[axis];
-    const maxSz = Math.min(...perp.map((a) => ({ x: w, y: h, z: l }[a]))) / 2 - 0.05;
-    if (!(maxSz > 0.1)) { skipped++; continue; }
-    const sz = Math.min(Math.max(cp.es, 0.1), maxSz);
-    if (cp.es > maxSz) clipped = true;
-    prep.push({ p, axis, sa, sb, len, perp, sz });
-  }
-  if (!prep.length) { toast('Seçili kenarlar için kutu çok ince'); return; }
-  commit();
-  for (const { p, axis, sa, sb, len, perp, sz } of prep) {
-    const [e0, e1] = edgeEnds(p, axis, sa, sb);
-    const edgeC = e0.clone().add(e1).multiplyScalar(0.5);           // kenar ortası
-    const sgn = { [perp[0]]: sa, [perp[1]]: sb };
-    // kesici boyutlarını kendi (w,h,l) eksenlerine yaz
-    const dimsFor = (freeLen, sq1, sq2) => {
-      const o = { x: 0, y: 0, z: 0 };
-      o[axis] = freeLen; o[perp[0]] = sq1; o[perp[1]] = sq2;
-      return { w: o.x, h: o.y, l: o.z };
-    };
-    if (kind === 'chamfer') {
-      const sd = sz * Math.SQRT2;
-      const extra = new THREE.Quaternion().setFromAxisAngle(AX[axis], Math.PI / 4);
-      list.push(cutterPart(p, 'sub', 'box', dimsFor(len + 2, sd, sd), edgeC, extra, label));
-    } else {
-      // 1) köşeyi kare olarak oy  2) aynı yere yarıçaplı silindiri geri ekle
-      const sqc = edgeC.clone();
-      const cylc = edgeC.clone();
-      for (const a of perp) {
-        // dışa doğru işaret: y için üst yüz +, alt yüz -; x,z için işaretin kendisi. İçeri yönü tersi.
-        const out = sgn[a];
-        sqc[a] += -out * (sz / 2 - 0.5);   // kare: dışarı 1 mm taşar, içeri sz kadar
-        cylc[a] += -out * sz;              // silindir ekseni: köşeden sz kadar içeride
-      }
-      list.push(cutterPart(p, 'sub', 'box', dimsFor(len + 2, sz + 1, sz + 1), sqc, new THREE.Quaternion(), label));
-      // silindir: kendi y ekseni serbest eksene hizalanmalı
-      const q = new THREE.Quaternion();
-      if (axis === 'x') q.setFromAxisAngle(AX.z, -Math.PI / 2);
-      else if (axis === 'z') q.setFromAxisAngle(AX.x, Math.PI / 2);
-      list.push(cutterPart(p, 'add', 'cylinder', { d: sz * 2, h: len, w: 10, l: 10 }, cylc, q, label + ' (dolgu)'));
-    }
-  }
-  for (const q of list) parts.push(q);
-  selOff = null; sel = list[0].id;
-  edgeSels = [];
-  disposeOverlay(faceGroup);
-  refreshAll();
-  toast((kind === 'chamfer' ? 'Pah kırıldı' : 'Yuvarlandı') + ': ' + prep.length + ' kenar' + (clipped ? ' (ölçü kutuya göre kısıldı)' : '') + (skipped ? ', ' + skipped + ' kenar atlandı' : ''));
 }
 
 /* ---- kabuk: parçanın içini boşalt ---- */
@@ -3983,21 +3942,7 @@ document.addEventListener('click', (e) => {
     linkPick = false;
     if (tab !== 'mate') { mate.a = null; mate.b = null; }
     if (tab !== 'edge') edgeSels = []; renderPanel(); return; }
-  if (act === 'edge-clear') { edgeSels = []; disposeOverlay(faceGroup); renderPanel(); return; }
-  if (act === 'edge-all' || act === 'edge-top') {
-    const last = edgeSels[edgeSels.length - 1];
-    const q = last && parts.find((x) => x.id === last.id);
-    if (!q) return;
-    const add = (e) => { if (!edgeSels.some((s) => edgeKey(s) === edgeKey(e))) edgeSels.push(e); };
-    for (const axis of ['x', 'y', 'z']) for (const sa of [-1, 1]) for (const sb of [-1, 1]) {
-      const perp = EDGE_AXES[axis];
-      const yi = perp.indexOf('y');
-      if (act === 'edge-top' && !(axis !== 'y' && (yi === 0 ? sa : sb) === 1)) continue;
-      add({ id: q.id, axis, sa, sb });
-    }
-    drawEdgeSelection(); renderPanel();
-    return;
-  }
+  if (act === 'edge-clear') { edgeSels = []; drawEdgeSelection(); renderPanel(); return; }
   if (act === 'edge-chamfer') { edgeFeature('chamfer'); return; }
   if (act === 'edge-fillet') { edgeFeature('fillet'); return; }
   if (act.startsWith('fshape-')) { cp.shape = act.slice(7); renderPanel(); return; }
@@ -4351,7 +4296,7 @@ try {
 } catch (e) { /* bozuk kayıt: varsayılanla devam */ }
 
 // test / hata ayıklama için küçük kanca (arayüzü etkilemez)
-window.__app = { get lathe() { return latheUI; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, get weightMarkerCount() { return wgtGroup.children.length; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
+window.__app = { get lathe() { return latheUI; }, get edgeSel() { return { n: edgeSels.length, g: edgeG ? edgeG.edges.length : 0, busy: edgeBusy, sel: edgeSels.map((e) => ({ type: e.type, mid: e.mid.map((v) => Math.round(v * 100) / 100) })) }; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, get weightMarkerCount() { return wgtGroup.children.length; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
 
 renderPanel();
 updateToolbar();

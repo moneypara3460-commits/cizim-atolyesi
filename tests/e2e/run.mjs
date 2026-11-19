@@ -181,6 +181,54 @@ await T('OCCT: motor yüklenir, model B-Rep doğrulanır, yuvarlama, STEP dışa
   expect(/görüntüsü: açık/.test(await body(page)) !== on0, 'OCCT görüntüsü aç/kapat');
 }, { allowErr: [/OCCT|STEP/] });
 
+/* ---------- C-Kenar: her şekilde tek kenara gerçek yuvarlama / pah ---------- */
+// dünya noktasının ekrandaki yeri (dokunmak için)
+const scrOf = (page, v) => page.evaluate((v) => {
+  const A = window.__app, q = new A.THREE.Vector3(...v).project(A.camera), r = document.querySelector('#view canvas, canvas').getBoundingClientRect();
+  return [(q.x * 0.5 + 0.5) * r.width + r.left, (-q.y * 0.5 + 0.5) * r.height + r.top];
+}, v);
+await T('Kenar: kutunun tek kenarı (B-Rep) yuvarlanır, hacim kesin; silindirin dairesel kenarına pah; Geri al', 'C-Kenar', async ({ page }) => {
+  await tab(page, 'edge');
+  expect(/Herhangi bir parçanın kenarına dokun/.test(await body(page)), 'boş kenar paneli: ' + (await body(page)).slice(0, 120));
+  // varsayılan kutu 80 × 40 × 60 (y: 0…40, z: ±30); üst yüzün ön kenarına yakın, yüzün üstüne dokun
+  const [x, y] = await scrOf(page, [0, 39.6, 29.2]);
+  await page.mouse.click(x, y);
+  await page.waitForFunction(() => window.__app.edgeSel.n === 1, null, { timeout: 120000 });
+  expect((await page.evaluate(() => window.__app.edgeSel.g)) === 12, 'kutunun 12 kenarı listelendi');
+  expect(/1 kenar seçili/.test(await body(page)), 'seçim paneli');
+  const c0 = await chips(page);
+  await page.locator('#tabbody input[data-c="es"]').fill('5'); await page.locator('#tabbody input[data-c="es"]').dispatchEvent('change');
+  await act(page, 'edge-fillet');
+  await page.waitForFunction((n) => document.querySelectorAll('#chips .chip').length > n, c0, { timeout: 120000 });
+  // hacim: 80·40·60 − (1 − π/4)·5²·80 = 191 570,8 mm³ → afterPart bildirimi cm³ yazar
+  await page.waitForFunction(() => /191,57 cm³/.test(document.querySelector('#toast').textContent) || /Yuvarlandı/.test(document.querySelector('#toast').textContent), null, { timeout: 10000 });
+  const st = await page.evaluate(() => window.__app.parts.map((q) => ({ type: q.type, hidden: !!q.hidden, name: q.name || '', bk: !!q.bk })));
+  expect(st.length === 2 && st[0].hidden && st[1].type === 'mesh' && st[1].bk && / R5 mm/.test(st[1].name), 'sonuç parçası: ' + JSON.stringify(st));
+  // B-Rep sekmesinde hacim doğrulaması
+  await tab(page, 'occt'); await act(page, 'oc-model'); await waitText(page, '#tabbody', /Geçerli katı|Sorunlu/, 120000);
+  const tx = await body(page);
+  expect(/Geçerli katı/.test(tx) && /191[.,]57/.test(tx.replace(/\s/g, '')), 'B-Rep hacim 191,57 cm³: ' + tx.slice(0, 300));
+  // Geri al: eski kutu geri gelir
+  await act(page, 'undo'); await page.waitForTimeout(400);
+  const back = await page.evaluate(() => window.__app.parts.map((q) => ({ type: q.type, hidden: !!q.hidden })));
+  expect(back.length === 1 && back[0].type === 'box' && !back[0].hidden, 'geri al: ' + JSON.stringify(back));
+  // silindir: üst dairesel kenara pah
+  await page.evaluate(() => { const A = window.__app, p = A.parts[0]; p.type = 'cylinder'; p.d = 50; p.h = 30; A.refreshAll(true); });
+  await page.waitForTimeout(500);
+  await tab(page, 'edge');
+  const [x2, y2] = await scrOf(page, [0, 29.7, 24.6]);
+  await page.mouse.click(x2, y2);
+  await page.waitForFunction(() => window.__app.edgeSel.n === 1, null, { timeout: 120000 });
+  const c1 = await chips(page);
+  await page.locator('#tabbody input[data-c="es"]').fill('2'); await page.locator('#tabbody input[data-c="es"]').dispatchEvent('change');
+  await act(page, 'edge-chamfer');
+  await page.waitForFunction((n) => document.querySelectorAll('#chips .chip').length > n, c1, { timeout: 120000 });
+  await tab(page, 'occt'); await act(page, 'oc-model'); await waitText(page, '#tabbody', /Geçerli katı|Sorunlu/, 120000);
+  // π·25²·30 − 2π·(25 − 2/3)·2 = 58 904,9 − 305,8 = 58 599,1 mm³
+  const tx2 = (await body(page)).replace(/\s/g, '');
+  expect(/Geçerlikatı/.test(tx2) && /58[.,]59/.test(tx2), 'silindir pah hacmi 58,599 cm³: ' + tx2.slice(0, 300));
+}, { allowErr: [/OCCT/] });
+
 /* ---------- C2. Tarama / ağ içe aktarma → CAD ---------- */
 // STL metni: boru (Y ekseni, 64 kenar) ve eğik çatılı takoz (temel şekle oturmaz)
 function stlText(tris) {
