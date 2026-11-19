@@ -159,5 +159,28 @@ taban = daha düzgün akan çizgi (eğrilik karşılaştırması). Yanlışsa "�
 Atölyesi'nde düğümler sürüklenerek düzeltilir. Mat ölçeği tepeden olmayan çekimde sapar (bilinen boy bunu düzeltir).
 Parçalar arası hizalama: üstteki parçanın binen kenarına A, B … harfli çentik; alttaki parçada aynı yere aynı harfle çentik (kenardaysa) ya da binme noktası (içindeyse). 3B kalıp tarama yok.
 
-Testler: `tests/ayk-aiparts.test.mjs` (6: sentetik mat ölçeği ve eğik kalıp, parça yerleştirme, kenar türleri, iç yan,
-kayıt güvenliği); `tests/e2e/ayk-auto.mjs` 4. senaryo (gerçek kalıbın mat fotoğrafı + sahte sunucu yanıtıyla uçtan uca).
+Testler: `tests/ayk-aiparts.test.mjs` (9: sentetik mat ölçeği ve eğik kalıp, parça yerleştirme, kenar türleri, iç yan,
+kayıt güvenliği, çizgi yumuşatma, mat çizgisinin kalıba yapışmaması, taşan yapay zekâ çizgisinin kırpılması);
+`tests/e2e/ayk-auto.mjs` 4. senaryo (gerçek kalıbın mat fotoğrafı + sahte sunucu yanıtıyla uçtan uca).
+
+### Hızlı yama (19.11.2026, sürüm `20261119a`)
+
+Ümit Abi'nin denemesinde (16.11.2026) iki sorun görüldü: fotoğraftan çıkan kalıp çizgisi tırtıklıydı, yapay zekânın
+model çizgileri kalıbın dışına taşıyordu.
+
+- **Mat çizgisi silme kalıbı ısırıyordu.** Izgara çizgisinin kalıbın gölgede kalan yüzüne denk gelen uzantısı da mat rengine
+  boyanıyordu; çizgi bu yüzden kalıbın içine dişli dişli giriyordu. Artık yalnız renk tonu matın / çizginin tonuna yakın
+  pikseller boyanır (çizgi tonu kenar şeridinden ölçülür); kalıbın kendi yüzeyine dokunulmaz.
+- **Gölge ve mat çizgisi temizliği (yalnız kesim matında).** Açık renkli kalıpta zemin tonunda koyulaşmış (ya da çok koyu)
+  pikseller gölge sayılıp çıkarılır; kalıbın gölgede kalan yüzü kendi tonunu koruduğu için silinmez. ~1,6 mm'den ince
+  çıkıntılar (mat çizgisi) açma ile silinir, kenar girintileri kapama ile kapanır; kalıbın üstündeki delik ve yazı doldurulur.
+- **Çizgi yumuşatma** (`smoothLoop`): çizgi 0,5 mm aralıkla yeniden örneklenir, büzülme düzeltmeli Gauss ortalaması
+  (σ = 2 mm) uygulanır; piksel basamağı ve kenar tırtığı en az %70 azalır. 3 mm ölçeğinde 50°'den keskin dönen gerçek köşeler
+  (topuk oturağı, burun ucu, konç tepesi) yuvarlanmaz. Kâğıt üstünde ölçülen boy değişmedi (sentetik 262 mm kalıp: 261,0 mm,
+  önceki sürümle aynı).
+- **Yapay zekâ çizgisi kalıbın içinde kalır** (`keepIn`, `densify`): parça köşeleri 4 mm'den sık ara noktalara bölünür,
+  her nokta kalıbın sütun aralığına (üst çizgi … taban) sıkıştırılır, yine dışarıda kalan (topuk kavisi, burun ucu) en yakın
+  kalıp kenarına oturtulur. Yumuşatılan kenar eğrileri de aynı işlemden geçer. İç yan eşi de iç yan kalıp çizgisine göre kırpılır.
+  Ölçüt: net çizgi kalıp kenarını en çok 0,5 mm aşabilir (düğümler arası eğri payı).
+- Bu sırada bulunan gizli hata düzeltildi: çentik eşleştirmede önce "parçanın içinde" bulunan, sonra kenarda bulunan
+  parça karşılaştırılınca hata veriyordu (`addNotches`).

@@ -33,6 +33,38 @@ export function mapper(F, ref = null) {
   return ([x, y]) => { const X = Math.max(0, Math.min(L, x * L / ref.L)); const xr = Math.max(0, Math.min(ref.L, x)); const v = Math.max(0, y) / Math.max(1, ref.bot(xr) - ref.top(xr)); return [X, bot(X) - v * h(X)]; };
 }
 
+// Kalıbın dışına taşan noktayı kalıbın içine al (16.11.2026 denemesi: yapay zekâ çizgileri kalıp dışına çıkıyordu).
+// Önce sütun aralığına (üst çizgi … taban) sıkıştırılır; çokgen yine de dışarıda kalırsa (topuk kavisi) en yakın kenar noktasına oturtulur.
+function nearestOn(poly, p) {
+  let best = null, bd = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length], dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0;
+    const q = [a[0] + dx * t, a[1] + dy * t], d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (d < bd) { bd = d; best = q; }
+  }
+  return { q: best, d: bd };
+}
+export function keepIn(F) {
+  return (p) => {
+    const x = Math.max(0, Math.min(F.L, p[0])), y = Math.max(F.top(x), Math.min(F.bot(x), p[1])), q = [x, y];
+    if (inside(F.poly, q)) return q;
+    const n = nearestOn(F.poly, q);
+    return n.q ? [n.q[0], n.q[1]] : q;
+  };
+}
+// uzun kenarları ara noktalarla böl (iki iç nokta arasındaki düz çizgi kalıbın girintisinden dışarı geçebilir)
+export function densify(pts, step = 4) {
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step));
+    for (let k = 0; k < n; k++) out.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+  }
+  return out;
+}
+// iç içe aynı noktaları (sıkıştırma sonrası) at
+const dedupe = (P) => P.filter((p, i) => { const q = P[(i - 1 + P.length) % P.length]; return Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.05; });
+
 // kenarları sınıflandır: her köşe noktası arası parçayı türüne göre grupla
 function classify(P, i, all, F) {
   const { L, top, bot, left } = F;
@@ -69,7 +101,7 @@ function shape(e, F, smooth = true) {
   const a = e.pts[0], b = e.pts[e.pts.length - 1];
   if (e.kind === 'montaj') return range(a[0], b[0], 2).map((x) => [x, F.bot(x)]);
   if (e.kind === 'yok') return range(a[0], b[0], 2).map((x) => [x, F.top(x)]);
-  return smooth && e.pts.length > 2 ? catmull(e.pts, 8) : e.pts;
+  return smooth && e.pts.length > 2 ? catmull(e.pts, 8).map(keepIn(F)) : e.pts;   // eğri kalıp kenarını aşmasın
 }
 const kindOf = (k) => (k === 'arka' ? 'dikis' : k);
 
@@ -109,7 +141,8 @@ export function generateAi(project, ai, { material = null, flipX, flipY } = {}) 
   const F = lastFrame(view, or.flipX, or.flipY), map = mapper(F);
   // yön: ekran koordinatında saat yönü (otomatik parçalarla aynı; paylar dışa açılır)
   const cw = (pts) => (area(pts) < 0 ? pts.slice().reverse() : pts);
-  const all = ai.pieces.map((p) => ({ ...p, pts: cw(p.poly.map(map)), holes: (p.holes || []).map(map) })).filter((p) => Math.abs(area(p.pts)) > 20);
+  const fit = (P, m, f) => { const k = keepIn(f); return cw(dedupe(densify(P.map(m)).map(k))); };
+  const all = ai.pieces.map((p) => ({ ...p, pts: fit(p.poly, map, F), holes: (p.holes || []).map(map).map(keepIn(F)) })).filter((p) => Math.abs(area(p.pts)) > 20);
   const pieces = [], base = { side: 'cift', qty: 2, material };
   let no = nextPieceNo(project);
   const push = (pc) => { pc.no = no++; pieces.push(pc); };
@@ -119,7 +152,7 @@ export function generateAi(project, ai, { material = null, flipX, flipY } = {}) 
   const iv = project.last?.views?.ic;
   if (iv) {
     const o2 = guessOrientation(iv), F2 = lastFrame(iv, o2.flipX, o2.flipY), map2 = mapper(F2, F);
-    const all2 = ai.pieces.map((p) => ({ ...p, pts: cw(p.poly.map(map2)), holes: (p.holes || []).map(map2) })).filter((p) => Math.abs(area(p.pts)) > 20);
+    const all2 = ai.pieces.map((p) => ({ ...p, pts: fit(p.poly, map2, F2), holes: (p.holes || []).map(map2).map(keepIn(F2)) })).filter((p) => Math.abs(area(p.pts)) > 20);
     all2.forEach((P, i) => {
       const g = classify(all[i] || P, i, all, F);
       if (!g.some((e) => e.kind === 'montaj') || g.some((e) => e.kind === 'yok')) return;
@@ -201,7 +234,7 @@ export function addNotches(pieces) {
         for (const P of pieces) {
           if (P === Q || P.kind === 'Astar' || P.kind === 'Takviye') continue;
           const loc = G.locateOnEdges(P.outline, p);
-          if (loc && loc.d < 3 && P.edges?.[loc.edge]?.kind !== 'montaj' && (!best || loc.d < best.loc.d)) best = { P, loc, edge: true };
+          if (loc && loc.d < 3 && P.edges?.[loc.edge]?.kind !== 'montaj' && (!best || !best.edge || loc.d < best.loc.d)) best = { P, loc, edge: true };
           else if (!best && G.insidePoly(P.outline.nodes.map((n) => n.p), p)) best = { P, edge: false };
         }
         if (!best) continue;

@@ -9,10 +9,10 @@ import * as E from './export.js?v=20261115g';
 import { openStore, idbBackend, memoryBackend } from './store.js?v=20261115g';
 import { createEditor } from './editor.js?v=20261115g';
 import { addSample } from './sample.js?v=20261115g';
-import * as LST from './last.js?v=20261115g';
+import * as LST from './last.js?v=20261119a';
 import * as AUTO from './auto.js?v=20261115g';
 import * as AI from './ai.js?v=20261115g';
-import * as AIP from './aiparts.js?v=20261115g';
+import * as AIP from './aiparts.js?v=20261119a';
 import { saveBlob } from '../tx/download.js?v=20261112u';
 
 const $ = (id) => document.getElementById(id);

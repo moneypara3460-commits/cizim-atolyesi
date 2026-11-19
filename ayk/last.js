@@ -101,6 +101,69 @@ function morph(mask, w, h, r, grow) {
   return out;
 }
 
+// En büyük bağlı bileşen, içindeki delikler doldurulmuş. Dönen: { mask, n, outside (dışarıdan ulaşılan boşluk) }
+function largestFilled(mask, w, h) {
+  const lab = new Int32Array(w * h).fill(-1), st = [];
+  let bestId = -1, bestN = 0;
+  for (let s = 0; s < mask.length; s++) {
+    if (!mask[s] || lab[s] >= 0) continue;
+    let n = 0; st.push(s); lab[s] = s;
+    while (st.length) {
+      const q = st.pop(); n++;
+      const x = q % w, y = (q / w) | 0;
+      if (x > 0 && mask[q - 1] && lab[q - 1] < 0) { lab[q - 1] = s; st.push(q - 1); }
+      if (x < w - 1 && mask[q + 1] && lab[q + 1] < 0) { lab[q + 1] = s; st.push(q + 1); }
+      if (y > 0 && mask[q - w] && lab[q - w] < 0) { lab[q - w] = s; st.push(q - w); }
+      if (y < h - 1 && mask[q + w] && lab[q + w] < 0) { lab[q + w] = s; st.push(q + w); }
+    }
+    if (n > bestN) { bestN = n; bestId = s; }
+  }
+  const obj = new Uint8Array(w * h), seen = new Uint8Array(w * h);
+  if (bestId < 0) return { mask: obj, n: 0, outside: seen };
+  for (let i = 0; i < obj.length; i++) obj[i] = lab[i] === bestId ? 1 : 0;
+  // delikleri doldur: dışarıdan ulaşılamayan boşluklar nesneye katılır
+  for (let x = 0; x < w; x++) for (const y of [0, h - 1]) if (!obj[y * w + x] && !seen[y * w + x]) { seen[y * w + x] = 1; st.push(y * w + x); }
+  for (let y = 0; y < h; y++) for (const x of [0, w - 1]) if (!obj[y * w + x] && !seen[y * w + x]) { seen[y * w + x] = 1; st.push(y * w + x); }
+  while (st.length) {
+    const q = st.pop(), x = q % w, y = (q / w) | 0;
+    for (const nb of [x > 0 ? q - 1 : -1, x < w - 1 ? q + 1 : -1, y > 0 ? q - w : -1, y < h - 1 ? q + w : -1]) if (nb >= 0 && !obj[nb] && !seen[nb]) { seen[nb] = 1; st.push(nb); }
+  }
+  let n = 0;
+  for (let i = 0; i < obj.length; i++) { obj[i] = seen[i] ? 0 : 1; n += obj[i]; }
+  return { mask: obj, n, outside: seen };
+}
+const lum = (rgba, i) => 0.299 * rgba[i * 4] + 0.587 * rgba[i * 4 + 1] + 0.114 * rgba[i * 4 + 2];
+// Maske iyileştirme (16.11.2026 denemesinde kalıp çizgisi gölgeyi ve mat çizgilerini izliyordu):
+// 1) açık renkli kalıpta zemin tonunda koyu pikseller (ya da çok koyu olanlar) gölgedir → çıkarılır;
+// 2) ~1,6 mm'den ince çıkıntılar (mat çizgisi) açma ile silinir, kapama ile kenar geri gelir;
+// 3) yeniden en büyük bileşen + delik doldurma (kalıbın üstündeki delik, yazı).
+function refine(mask, rgba, w, h, k, paper) {
+  const pl = 0.299 * paper[0] + 0.587 * paper[1] + 0.114 * paper[2], L = [], C = [];
+  const chr = (i) => { const r = rgba[i * 4], g = rgba[i * 4 + 1], b = rgba[i * 4 + 2], t = r + g + b + 1; return [r / t, g / t, b / t]; };
+  const pc = (() => { const t = paper[0] + paper[1] + paper[2] + 1; return [paper[0] / t, paper[1] / t, paper[2] / t]; })();
+  const cd = (c) => Math.hypot(c[0] - pc[0], c[1] - pc[1], c[2] - pc[2]);
+  for (let i = 0; i < mask.length; i += 7) if (mask[i]) { L.push(lum(rgba, i)); C.push(cd(chr(i))); }
+  const ol = median(L), oc = median(C);
+  let m = mask;
+  if (ol > pl * 1.15 + 8) {
+    // açık renkli kalıp: gölge, zeminin koyulaşmış hâlidir (renk tonu zemine yakın) ya da çok koyudur.
+    // Kalıbın gölgede kalan yüzü kendi renk tonunu korur → silinmez.
+    m = new Uint8Array(mask);
+    const lim = Math.min(pl * 0.9, (pl + ol) / 2);
+    for (let i = 0; i < m.length; i++) {
+      if (!m[i]) continue;
+      const l = lum(rgba, i);
+      if (l < lim && (l < pl * 0.45 || cd(chr(i)) < 0.5 * oc)) m[i] = 0;
+    }
+  }
+  const pre = largestFilled(m, w, h).mask;   // gölge çıktıktan sonra kapalı kalan delikler (kalıp üstündeki delik) doldurulur
+  const r = Math.max(1, Math.round(0.8 * k));
+  m = morph(morph(pre, w, h, r, false), w, h, r, true);   // açma: mat çizgisi gibi ince çıkıntılar
+  m = morph(morph(m, w, h, r, true), w, h, r, false);     // kapama: kenar girintileri
+  const res = largestFilled(m, w, h);
+  return res.n > 0.5 * mask.reduce((a, b) => a + b, 0) ? res : largestFilled(mask, w, h);   // aşırı silindiyse eskisi
+}
+
 // Kâğıt renginden ayrılan en büyük nesnenin maskesi (delikleri doldurulmuş). sens: -5 (az) … +5 (çok hassas)
 export function segment(rec, sens = 0) {
   const { rgba, w, h, k } = rec;
@@ -125,33 +188,10 @@ export function segment(rec, sens = 0) {
   const r = Math.max(1, Math.round(0.7 * k));
   mask = morph(morph(mask, w, h, r, true), w, h, r, false);   // kapama: küçük boşlukları kapat
   mask = morph(morph(mask, w, h, 1, false), w, h, 1, true);   // açma: tozu sil
-  // en büyük bileşen
-  const lab = new Int32Array(w * h).fill(-1), st = [];
-  let bestId = -1, bestN = 0;
-  for (let s = 0; s < mask.length; s++) {
-    if (!mask[s] || lab[s] >= 0) continue;
-    let n = 0; st.push(s); lab[s] = s;
-    while (st.length) {
-      const q = st.pop(); n++;
-      const x = q % w, y = (q / w) | 0;
-      if (x > 0 && mask[q - 1] && lab[q - 1] < 0) { lab[q - 1] = s; st.push(q - 1); }
-      if (x < w - 1 && mask[q + 1] && lab[q + 1] < 0) { lab[q + 1] = s; st.push(q + 1); }
-      if (y > 0 && mask[q - w] && lab[q - w] < 0) { lab[q - w] = s; st.push(q - w); }
-      if (y < h - 1 && mask[q + w] && lab[q + w] < 0) { lab[q + w] = s; st.push(q + w); }
-    }
-    if (n > bestN) { bestN = n; bestId = s; }
-  }
-  const obj = new Uint8Array(w * h);
-  if (bestId < 0) return { mask: obj, area: 0, paper: [pr, pg, pb], th };
-  for (let i = 0; i < obj.length; i++) obj[i] = lab[i] === bestId ? 1 : 0;
-  // delikleri doldur: dışarıdan ulaşılamayan boşluklar nesneye katılır
-  const out = new Uint8Array(w * h), seen = new Uint8Array(w * h);
-  for (let x = 0; x < w; x++) for (const y of [0, h - 1]) if (!obj[y * w + x] && !seen[y * w + x]) { seen[y * w + x] = 1; st.push(y * w + x); }
-  for (let y = 0; y < h; y++) for (const x of [0, w - 1]) if (!obj[y * w + x] && !seen[y * w + x]) { seen[y * w + x] = 1; st.push(y * w + x); }
-  while (st.length) {
-    const q = st.pop(), x = q % w, y = (q / w) | 0;
-    for (const nb of [x > 0 ? q - 1 : -1, x < w - 1 ? q + 1 : -1, y > 0 ? q - w : -1, y < h - 1 ? q + w : -1]) if (nb >= 0 && !obj[nb] && !seen[nb]) { seen[nb] = 1; st.push(nb); }
-  }
+  let obj = largestFilled(mask, w, h);
+  if (!obj.n) return { mask: obj.mask, area: 0, paper: [pr, pg, pb], th };
+  if (rec.dist) obj = refine(obj.mask, rgba, w, h, k, [pr, pg, pb]);   // kesim matı: gölge ve ızgara çizgisi temizliği
+  const seen = obj.outside, out = new Uint8Array(w * h);
   let area = 0;
   for (let i = 0; i < out.length; i++) { out[i] = seen[i] ? 0 : 1; area += out[i]; }
   return { mask: out, area, paper: [pr, pg, pb], th };
@@ -182,6 +222,46 @@ export function traceBoundary(mask, w, h) {
   return pts;
 }
 
+// Piksel basamağını ve kenar gürültüsünü gider: döngü eşit aralıkla (step mm) yeniden örneklenir, sonra dairesel
+// Gauss ortalaması (sigma mm) büzülme düzeltmesiyle uygulanır (yalın Gauss'ta R yarıçaplı kavis ≈ sigma² / (2R) içe kayardı).
+export function smoothLoop(pts, step = 0.5, sigma = 1.2) {
+  const n0 = pts.length;
+  if (n0 < 8) return pts.slice();
+  let per = 0;
+  for (let i = 0; i < n0; i++) per += dist(pts[i], pts[(i + 1) % n0]);
+  const N = Math.max(16, Math.round(per / step)), ds = per / N, R = [];
+  let i = 0, acc = 0, segL = dist(pts[0], pts[1 % n0]);
+  for (let s = 0; s < N; s++) {
+    const t = s * ds;
+    while (acc + segL < t && i < n0 - 1) { acc += segL; i++; segL = dist(pts[i], pts[(i + 1) % n0]); }
+    const u = segL > 0 ? (t - acc) / segL : 0, a = pts[i], b = pts[(i + 1) % n0];
+    R.push([a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u]);
+  }
+  const rad = Math.max(1, Math.round((3 * sigma) / ds)), W = [];
+  for (let j = -rad; j <= rad; j++) W.push(Math.exp(-((j * ds) ** 2) / (2 * sigma * sigma)));
+  const ws = W.reduce((x, y) => x + y, 0);
+  const blur = (A) => A.map((_, s) => {
+    let x = 0, y = 0;
+    for (let j = -rad; j <= rad; j++) { const q = A[(s + j + N) % N], wj = W[j + rad]; x += q[0] * wj; y += q[1] * wj; }
+    return [x / ws, y / ws];
+  });
+  // büzülme düzeltmesi (2G − G∘G): ince tırtık yine silinir, geniş kavislerde boy kaybı ikinci mertebede kalır
+  const g1 = blur(R), g2 = blur(g1), S = g1.map((p, s) => [2 * p[0] - g2[s][0], 2 * p[1] - g2[s][1]]);
+  // gerçek köşe (topuk oturağı, burun ucu, konç tepesi) yuvarlanmasın: 3 mm'lik kirişler arasındaki dönüş büyükse
+  // o bölgede ham çizgi korunur (piksel basamağı ve kenar tırtığı bu ölçekte ~45°'yi geçmez)
+  const c = Math.max(2, Math.round(3 / ds)), turn = new Float32Array(N);
+  for (let s2 = 0; s2 < N; s2++) {
+    const a = R[(s2 - c + N) % N], b = R[s2], e = R[(s2 + c) % N];
+    const d = Math.atan2(e[1] - b[1], e[0] - b[0]) - Math.atan2(b[1] - a[1], b[0] - a[0]);
+    turn[s2] = Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) * 180 / Math.PI;
+  }
+  return S.map((p, s2) => {
+    let t = 0;
+    for (let j = -c; j <= c; j++) t = Math.max(t, turn[(s2 + j + N) % N] * (1 - Math.abs(j) / (c + 1)));   // köşenin çevresine yumuşak geçiş
+    const k = Math.max(0, Math.min(1, (t - 50) / 30));
+    return k ? [p[0] + (R[s2][0] - p[0]) * k, p[1] + (R[s2][1] - p[1]) * k] : p;
+  });
+}
 // kapalı döngüyü sadeleştir: başlangıca en uzak noktadan ikiye bölünür (aksi halde kiriş sıfır uzunlukta olur)
 export function simplifyLoop(pts, tol) {
   let far = 0, fd = -1;
@@ -212,7 +292,7 @@ export function analyzeRectified(rec, sens = 0) {
   const edge = Math.round(3 * k);
   if (px.some(([x, y]) => x <= edge || y <= edge || x >= w - 1 - edge || y >= h - 1 - edge)) warnings.push('Kalıp kâğıdın kenarına değiyor: kâğıda sığmamış olabilir. Daha büyük kâğıt (A3) seç.');
   let mm = px.map(([x, y]) => [(x + 0.5) / k, (y + 0.5) / k]);
-  mm = simplifyLoop(mm, 0.4);
+  mm = simplifyLoop(smoothLoop(mm, 0.5, 2), 0.25);
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const [x, y] of mm) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
   const pts = mm.map(([x, y]) => [x - x0, y - y0]);
@@ -290,11 +370,21 @@ export function analyzeMat(rgba, w, h, { gridMm = 10, sens = 0 } = {}) {
     R.push(rgba[i * 4]); Gc.push(rgba[i * 4 + 1]); B.push(rgba[i * 4 + 2]);
   }
   const mr = median(R), mg = median(Gc), mb = median(B);
+  // çizgilerin renk tonu (kenar şeridindeki çizgi pikselleri): matın tonundan ne kadar ayrıldığı
+  const cs = mr + mg + mb + 1, mc = [mr / cs, mg / cs, mb / cs];
+  const cdist = (o) => { const t = rgba[o] + rgba[o + 1] + rgba[o + 2] + 1; return Math.hypot(rgba[o] / t - mc[0], rgba[o + 1] / t - mc[1], rgba[o + 2] / t - mc[2]); };
+  const LC = [];
+  for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) {
+    if (x > band && x < w - band && y > band && y < h - band) continue;
+    const i = y * w + x; if (lineMask[i] > 0) LC.push(cdist(i * 4));
+  }
+  const lineTone = 1.6 * (LC.length ? median(LC) : 0) + 0.03;
   for (let i = 0; i < near.length; i++) {
     if (lineMask[i] <= 0) continue;
     const o = i * 4, d = Math.hypot(rgba[o] - mr, rgba[o + 1] - mg, rgba[o + 2] - mb);
-    // çizgi pikseli matın açık tonu ise mat rengine çek; kalıbın üstündeki parlak noktaya dokunma
-    if (d < 120 && sc.g[i] > sc.bl[i]) { out[o] = mr; out[o + 1] = mg; out[o + 2] = mb; }
+    // çizgi pikseli matın açık tonu ise mat rengine çek; kalıbın üstündeki parlak noktaya ve kalıbın kendi
+    // (gölgede kalan) yüzeyine dokunma: renk tonu matın/çizginin tonundan uzaksa kalıptır (çizginin uzantısı kalıbı ısırmasın)
+    if (d < 200 && sc.g[i] > sc.bl[i] && cdist(o) < lineTone) { out[o] = mr; out[o + 1] = mg; out[o + 2] = mb; }
   }
   const warnings = [];
   if (!sc.agree) warnings.push('Matın kareleri iki yönde aynı ölçülmedi: fotoğraf eğik çekilmiş olabilir. Bilinen kalıp boyunu gir.');
