@@ -283,6 +283,56 @@ await T('Delik sihirbazı: M8 kılavuz kör delik (Ø6,8, 118° uç, diş bilgis
   expect(/Geçerlikatı/.test(tx2) && /190[.,]24/.test(tx2), 'kademeli hacim 190,24 cm³: ' + tx2.slice(0, 300));
 }, { allowErr: [/OCCT/] });
 
+/* ---------- C-Resim: teknik resimde diş / geçme yazısı, genel tolerans, pürüzlülük, parça listesi ---------- */
+await T('Teknik resim: kılavuz deliğin diş yazısı, Ø10 H7 geçme, ISO 2768-f, Ra 1,6, parça listesi ve delik tablosu; ayarlar projede kalır', 'C-Resim', async ({ page }) => {
+  // 1) delik sihirbazı: M8 kılavuz (varsayılan derinlik 12)
+  await tab(page, 'face');
+  let [x, y] = await scrOf(page, [20, 40, 10]);
+  await page.mouse.click(x, y);
+  await page.waitForFunction(() => /Basit delik/.test(document.querySelector('#tabbody').textContent), null, { timeout: 10000 });
+  await act(page, 'fmode-hw');
+  await page.selectOption('#tabbody select[data-hw="tur"]', 'klavuz'); await page.selectOption('#tabbody select[data-hw="olcu"]', 'M8');
+  await act(page, 'face-hw'); await page.waitForTimeout(300);
+  // 2) basit Ø10 delik + Ölçü sekmesinde H7
+  await tab(page, 'face');
+  [x, y] = await scrOf(page, [-20, 40, -10]);
+  await page.mouse.click(x, y);
+  await page.waitForFunction(() => /Basit delik/.test(document.querySelector('#tabbody').textContent), null, { timeout: 10000 });
+  await act(page, 'fmode-basic');
+  await page.locator('#tabbody input[data-c="fd"]').fill('10'); await page.locator('#tabbody input[data-c="fd"]').dispatchEvent('input');
+  await page.locator('#tabbody input[data-c="depth"]').fill('15'); await page.locator('#tabbody input[data-c="depth"]').dispatchEvent('input');
+  await act(page, 'face-hole'); await page.waitForTimeout(300);
+  await tab(page, 'dims');
+  await page.selectOption('#tabbody select[data-pfit]', 'H7');
+  await waitText(page, '#tabbody', /Ø10 H7: \+0,015 \/ 0 mm/, 5000);
+  // 3) ikinci parça (adlı) — parça listesi iki satır
+  await page.evaluate(() => { const A = window.__app; A.parts[0].name = 'Gövde'; A.parts.push({ id: 900, type: 'cylinder', op: 'add', d: 20, h: 30, x: 0, y: 40, z: 0, rx: 0, ry: 0, rz: 0, r: 0, c: 0, name: 'Pim', mat: 'paslanmaz' }); A.refreshAll(true); });
+  await page.waitForTimeout(300);
+  // 4) Resim ayarları ve resim
+  await tab(page, 'sheet');
+  await page.selectOption('#tabbody select[data-dc="tol"]', 'f');
+  await page.selectOption('#tabbody select[data-dc="ra"]', '1.6');
+  await act(page, 'sheet-make');
+  await page.waitForFunction(() => window.__app.sheetInfo && document.querySelector('#sheetov canvas'), null, { timeout: 30000 });
+  const si = await page.evaluate(() => window.__app.sheetInfo);
+  expect(!si.err, 'resim notları hatasız: ' + si.err);
+  expect(si.tol === 'f' && si.ra === 1.6, 'tolerans / pürüzlülük: ' + JSON.stringify([si.tol, si.ra]));
+  const lines = si.holes.flatMap((h) => h.lines);
+  expect(lines.includes('M8-6H ↧8,25') && lines.includes('Ø6,8 ↧12'), 'diş yazısı: ' + JSON.stringify(lines));
+  expect(lines.includes('Ø10 H7 (+0,015 / 0)'), 'geçme yazısı: ' + JSON.stringify(lines));
+  expect(!lines.some((t) => /^Ø6,8$/.test(t)), 'uç konisi ayrı yazılmaz');
+  expect(si.bom.length === 2 && si.bom[0].ad === 'Gövde' && si.bom[1].ad === 'Pim' && /Paslanmaz/.test(si.bom[1].malzeme), 'parça listesi: ' + JSON.stringify(si.bom));
+  expect(si.delik.length === 2 && si.tables.length === 2, 'delik tablosu ve iki tablo çizildi: ' + JSON.stringify(si.tables));
+  await page.locator('[data-sh="close"]').click();
+  // 5) ayarlar projeyle saklanır: yeniden yükle
+  await page.waitForTimeout(1500);
+  await page.reload(); await page.waitForTimeout(2500);
+  const dc = await page.evaluate(() => window.__app.drawCfg);
+  expect(dc.tol === 'f' && dc.ra === 1.6 && dc.bom === true, 'yeniden yüklemede resim ayarları: ' + JSON.stringify(dc));
+  const fit = await page.evaluate(() => (window.__app.parts.find((q) => q.fit) || {}).fit);
+  expect(fit === 'H7', 'geçme toleransı parçada kaldı');
+});
+
 /* ---------- C2. Tarama / ağ içe aktarma → CAD ---------- */
 // STL metni: boru (Y ekseni, 64 kenar) ve eğik çatılı takoz (temel şekle oturmaz)
 function stlText(tris) {

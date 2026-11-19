@@ -1351,24 +1351,27 @@ export const massGrams = (volumeMm3, rho) => volumeMm3 / 1000 * rho;
 // Parça listesi (BOM). Dönüş: satırlar (ilk satır başlık). fmt(mm) = uzunluk metni (sayı, birim yok)
 export function bomRows(parts, fmt = (v) => String(Math.round(v * 100) / 100)) {
   const f = (v) => fmt(Number(v) || 0);
-  const dims = (p) => {
-    switch (p.type) {
-      case 'box': return f(p.w) + ' × ' + f(p.l) + ' × ' + f(p.h);
-      case 'cylinder': return 'Ø' + f(p.d) + ' × ' + f(p.h);
-      case 'sphere': return 'Ø' + f(p.d);
-      case 'cone': return 'Ø' + f(p.d) + ' / Ø' + f(p.d2) + ' × ' + f(p.h);
-      case 'tube': return 'Ø' + f(p.d) + ' / iç Ø' + f(p.di) + ' × ' + f(p.h);
-      case 'sketch': return 'kalınlık ' + f(p.h);
-      case 'frame': { const c = frameCalc(p); return (PROFILES[p.pf] || {}).name + ' · ' + c.members.length + ' parça · toplam ' + f(c.totalLen) + ' · ' + (Math.round(c.kg * 100) / 100) + ' kg'; }
-      case 'sheet': { const c = sheetCalc(p); return 'sac ' + f(c.T) + ' · açınım ' + f(c.flatL) + ' × ' + f(c.W) + ' · ' + c.bends.length + ' büküm'; }
-      default: return p.type === 'mesh' ? 'tek parça (h ' + f(p.h) + ')' : '';
-    }
-  };
+  const dims = (p) => partDims(p, fmt);
   const rows = [['No', 'Ad', 'Tür', 'İşlem', 'Ölçü', 'X', 'Y (alt)', 'Z', 'Gizli']];
   parts.forEach((p, i) => {
     rows.push([i + 1, p.name || '', TYPE_LABEL[p.type] || p.type, i > 0 && p.op === 'sub' ? 'Oyuk' : 'Birleştir', dims(p), f(p.x), f(p.y), f(p.z), p.hidden ? 'evet' : '']);
   });
   return rows;
+}
+// parçanın ölçü yazısı (parça listesi, teknik resim)
+export function partDims(p, fmt = (v) => String(Math.round(v * 100) / 100)) {
+  const f = (v) => fmt(Number(v) || 0);
+  switch (p.type) {
+    case 'box': return f(p.w) + ' × ' + f(p.l) + ' × ' + f(p.h);
+    case 'cylinder': return 'Ø' + f(p.d) + ' × ' + f(p.h);
+    case 'sphere': return 'Ø' + f(p.d);
+    case 'cone': return 'Ø' + f(p.d) + ' / Ø' + f(p.d2) + ' × ' + f(p.h);
+    case 'tube': return 'Ø' + f(p.d) + ' / iç Ø' + f(p.di) + ' × ' + f(p.h);
+    case 'sketch': return 'kalınlık ' + f(p.h);
+    case 'frame': { const c = frameCalc(p); return (PROFILES[p.pf] || {}).name + ' · ' + c.members.length + ' parça · toplam ' + f(c.totalLen) + ' · ' + (Math.round(c.kg * 100) / 100) + ' kg'; }
+    case 'sheet': { const c = sheetCalc(p); return 'sac ' + f(c.T) + ' · açınım ' + f(c.flatL) + ' × ' + f(c.W) + ' · ' + c.bends.length + ' büküm'; }
+    default: return p.type === 'mesh' ? 'tek parça (h ' + f(p.h) + ')' : '';
+  }
 }
 // Excel (Türkçe) için: ; ayracı, tırnaklama, UTF-8 BOM
 export function csvFromRows(rows) {

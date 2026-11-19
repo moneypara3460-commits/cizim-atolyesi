@@ -81,7 +81,7 @@ export function delikKesiti(opts, through = 1000) {
   const o = normalize(opts), D = capOf(o.olcu), P = o.adim, kaba = Math.abs(P - KABA[o.olcu]) < 1e-9;
   const segs = [], warn = [];
   const dCap = () => GECIS[o.olcu][SERI[o.seri]];
-  let d, label, thread = null;
+  let d, label, thread = null, kademe = null, havsa = null;
   const L = o.boydan ? through : o.derinlik;
   if (!(L > 0)) return { hata: 'Derinlik 0\'dan büyük olmalı' };
   if (o.tur === 'klavuz') {
@@ -99,18 +99,20 @@ export function delikKesiti(opts, through = 1000) {
     const X = KADEME[o.olcu], H = o.kademeDer || D;
     if (!o.boydan && H >= L) return { hata: 'Kademe derinliği (' + tf(H) + ' mm) delik derinliğinden küçük olmalı' };
     segs.push({ kind: 'cyl', d: X, top: 1, bottom: -H, rol: 'kademe' });
+    kademe = { d: X, der: H };
     label = o.olcu + ' kademeli Ø' + tf(X) + '×' + tf(H) + ' / Ø' + tf(d);
   } else {
     d = dCap();
     const Dc = (o.havsaStd === 'iso10642' ? HAVSA_10642 : HAVSA_15065)[o.olcu], t = (Dc - d) / 2;   // 90°: derinlik = yarıçap farkı
     if (!o.boydan && t >= L) return { hata: 'Havşa derinliği (' + tf(t) + ' mm) delik derinliğinden küçük olmalı' };
     segs.push({ kind: 'cone', dTop: Dc + 2, dBottom: d, top: 1, bottom: -t, rol: 'havsa' });   // 1 mm dışarıda çap 2 mm büyür (90°)
+    havsa = { d: Dc, der: r2(t) };
     label = o.olcu + ' havşa 90° Ø' + tf(Dc) + ' / Ø' + tf(d);
   }
   segs.unshift({ kind: 'cyl', d, top: 1, bottom: -L, rol: 'govde' });
   if (!o.boydan && o.uc) segs.push({ kind: 'cone', dTop: d, dBottom: 0, top: -L, bottom: -L - ucBoyu(d), rol: 'uc' });
   label += o.boydan ? ' · boydan boya' : ' · derinlik ' + tf(L) + (o.uc ? ' (+118° uç)' : '');
-  return { o, segs, d, label, thread, warn };
+  return { o, segs, d, label, thread, kademe, havsa, warn };
 }
 
 // Elle hesap: kesitin malzemeden aldığı hacim (yalnız yüzeyin altı; kesişmeyen eş eksenli parçalar)
