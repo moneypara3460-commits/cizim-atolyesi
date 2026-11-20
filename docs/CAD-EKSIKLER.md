@@ -9,7 +9,7 @@ Sıra kolaydan zora. Her madde ayrı PR; tam test (birim, gerçek OCCT, iki aray
 | 3 | Teknik resim: tolerans, pürüzlülük, parça listesi | **Tamam** (19.11.2026) |
 | 1 | Standart parça kütüphanesi (doğrulanmış ölçü tablolarıyla) | **Tamam** (20.11.2026) |
 | 8 | Sac metal: flanş, köşe kapatma | **Tamam** (20.11.2026) |
-| 4 | Kroki kısıtları ve serbest eğri | Kısıtlar **tamam** (20.11.2026); serbest eğri sırada |
+| 4 | Kroki kısıtları ve serbest eğri | **Tamam** (20.11.2026) |
 | 5 | Parametrik geçmiş ve varyantlar | Bekliyor |
 | 7 | DWG | Lisans kararı bekliyor (ODA ücretli, LibreDWG GPL) |
 
@@ -196,4 +196,28 @@ dikdörtgen konum alanları, kısıtların parçaya geçmesi).
 
 Sınır: kısıtlar bir şeklin kendi köşe ve kenarları arasındadır (şekiller arası kısıt yok; deliğin yeri konum
 alanlarıyla verilir). Yay noktaları çokgen köşesi olarak tutulduğundan yaya teğetlik / yarıçap kısıtı yoktur.
+
+### 4b. Serbest eğri (20.11.2026)
+
+Kroki → **〰 Eğri**. Kod: `egri.js` (eğri noktaları; saf modül), `sketch.js` (araç, çizim, eğri noktası düğmesi),
+`logic.js` (eğri bilgisi parçayla saklanır).
+
+- Eğri aracıyla dokunulan noktalar **eğri noktası** olur: çizgi bu noktalardan yumuşak geçer (iki yandaki parçalar aynı
+  teğetle birleşir). Çokgen aracıyla konan noktalar sivri köşedir; aynı şekilde düz kenar ve eğri birlikte olabilir
+  (ör. döndürme için ekseni düz, gövdesi eğri profil).
+- Herhangi bir köşe sonradan **📐 Kısıt → köşeye dokun → 〰 Eğri noktası** ile eğriye çevrilir ya da sivri yapılır.
+- Kontrol noktaları sürüklenerek düzenlenir; kısıtlar kontrol noktalarına uygulanır (eğri kenarda uzunluk / açı kısıtı
+  iki nokta arasındaki düz çizgiye, yani kirişe uygulanır; eğri kenarlara uzunluk etiketi yazılmaz).
+- Kroki ekranında eğri noktaları mor halkalı, kontrol çokgeni kesik çizgiyle görünür.
+- Parça, eğrinin noktalarıyla (kenar başına 4–48 parça, boy ve dönüşe göre) oluşur; kontrol noktaları, eğri noktaları ve
+  kısıtlar ayrıca saklanır, **Krokiyi düzenle** eğriyi düzenlenebilir haliyle açar.
+
+**Yöntem:** Catmull-Rom teğetleri (eğri noktasında (p[k+1] − p[k−1]) / 2, kiriş boyuyla sınırlı; sivri köşede kenar
+yönü) ile kübik Hermite parçaları (Catmull & Rom 1974; Hermite taban fonksiyonları). Eğri kontrol noktalarından tam geçer.
+
+Ayrıca düzeltildi: kroki düzenlenirken silinen delik ve kısıtlar parçada kalıyordu (yeniden ortaya çıkıyordu).
+
+**Doğrulama:** `tests/egri.test.mjs` (noktalardan geçme, eğri noktasında yumuşak geçiş, sivri köşenin ve düz kenarın
+korunması, kapalı eğrinin sınırlı taşması, açık eğri, kroki ↔ parça dönüşümünde eğri bilgisinin sırası ve geri gelmesi),
+uçtan uca `K-Eğri` (iki arayüzde: eğri çizme, parça, yeniden açma, noktayı sivri yapma, eğrisiz hale dönme).
 

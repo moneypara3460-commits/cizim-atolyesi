@@ -935,6 +935,44 @@ await T('Kroki kısıtları: beşgende köşe çizgi üzerinde, orijinden konum 
   expect(part.type === 'sketch' && part.more === 2 && part.cons.some((c) => c.t === 'on') && part.cons.some((c) => c.t === 'dx' && c.L === 60), 'parça: ' + JSON.stringify(part));
 });
 
+/* ---------- K-Eğri: kroki serbest eğrisi ---------- */
+await T('Kroki eğrisi: Eğri aracıyla 4 noktalı kapalı eğri → parça eğrinin noktalarıyla oluşur; yeniden açınca 4 kontrol noktası gelir, bir noktayı sivri yapınca parça değişir', 'K-Eğri', async ({ page }) => {
+  await act(page, 'sketch-new'); await page.waitForSelector('#sk canvas'); await page.waitForTimeout(400);
+  const sk = (sel) => page.locator('#sk [data-a="' + sel + '"]').click();
+  const tapW = async (u, v) => { const [x, y] = await page.evaluate(([u, v]) => window.__sk.scr(u, v), [u, v]); await page.mouse.click(x, y); await page.waitForTimeout(120); };
+  await sk('tool-curve');
+  for (const [u, v] of [[0, 0], [40, 0], [40, 30], [0, 30], [0, 0]]) await tapW(u, v);
+  let sh = await page.evaluate(() => { const s = window.__sk.shape; return { n: s.pts.length, sm: s.sm, closed: s.closed, cons: s.cons.length }; });
+  expect(sh.closed && sh.n === 4 && sh.sm.join() === '0,1,2,3' && sh.cons === 0, 'eğri şekli: ' + JSON.stringify(sh));
+  await sk('done'); await page.waitForTimeout(900);
+  // parçanın kendi çizim noktalarının kapsamı (sahnede başka parça da var)
+  const geo = () => page.evaluate(() => { const p = window.__app.parts[window.__app.parts.length - 1], u = p.pts.map((q) => q[0]), v = p.pts.map((q) => q[1]); return [Math.max(...u) - Math.min(...u), p.h, Math.max(...v) - Math.min(...v)].map((x) => Math.round(x * 100) / 100); });
+  let part = await page.evaluate(() => { const p = window.__app.parts[window.__app.parts.length - 1]; return { type: p.type, n: p.pts.length, eg: p.egri && p.egri[0] }; });
+  expect(part.type === 'sketch' && part.n > 30 && part.eg && part.eg.cp.length === 4 && part.eg.sm.length === 4, 'parça: ' + JSON.stringify({ ...part, eg: part.eg && { cp: part.eg.cp.length, sm: part.eg.sm } }));
+  let g = await geo();
+  expect(g[0] > 40 && g[0] < 52 && g[2] > 30 && g[2] < 42 && g[1] > 0, 'eğri kontrol noktalarından geçip biraz dışarı taşar: ' + JSON.stringify(g));
+  // yeniden aç: kontrol noktaları gelir; 3. noktayı sivri yap
+  await act(page, 'sketch-edit'); await page.waitForSelector('#sk canvas'); await page.waitForTimeout(400);
+  sh = await page.evaluate(() => { const s = window.__sk.shape; return { n: s.pts.length, sm: s.sm }; });
+  expect(sh.n === 4 && sh.sm.join() === '0,1,2,3', 'yeniden açınca kontrol noktaları: ' + JSON.stringify(sh));
+  await sk('tool-cons');
+  const p2 = await page.evaluate(() => window.__sk.shape.pts[2]);
+  await tapW(p2[0], p2[1]);
+  await sk('c-sm'); await page.waitForTimeout(150);
+  expect(await page.evaluate(() => window.__sk.shape.sm.join()) === '0,1,3', 'nokta sivri yapıldı');
+  await sk('done'); await page.waitForTimeout(900);
+  part = await page.evaluate(() => { const p = window.__app.parts[window.__app.parts.length - 1]; return { n: p.pts.length, sm: p.egri && p.egri[0] && p.egri[0].sm }; });
+  expect(part.sm && part.sm.join() === '0,1,3', 'güncellendi: ' + JSON.stringify(part));
+  // hepsini sivri yapınca eğri bilgisi kalkar, parça 4 köşeli olur
+  await act(page, 'sketch-edit'); await page.waitForSelector('#sk canvas'); await page.waitForTimeout(400);
+  await sk('tool-cons');
+  for (const i of [0, 1, 3]) { const q = await page.evaluate((i) => window.__sk.shape.pts[i], i); await tapW(q[0], q[1]); await sk('c-sm'); await page.waitForTimeout(100); await tapW(q[0], q[1]); }
+  await sk('done'); await page.waitForTimeout(900);
+  part = await page.evaluate(() => { const p = window.__app.parts[window.__app.parts.length - 1]; return { n: p.pts.length, eg: p.egri === undefined }; });
+  expect(part.n === 4 && part.eg, 'eğrisiz: ' + JSON.stringify(part));
+  g = await geo(); expect(g[0] === 40 && g[2] === 30, 'dikdörtgen: ' + JSON.stringify(g));
+});
+
 /* ---------- E-Tava: flanşlı sac (kenar flanşı, köşe kapatma, açınım) ---------- */
 await T('Sac tava: 4 kenar flanşı, açınım = ölçüler − büküm düşümü; flanş kaldırma, kapalı köşe, 90° dışı uyarı, düz açınım, DXF ve kayıt', 'E-Tava', async ({ page }) => {
   await page.evaluate(() => { const A = window.__app, p = A.parts[0]; Object.assign(p, { type: 'sheet', st: 2, sr: 2, sw: 50, sk: 0.44, flat: false, sh: 'L', sa0: 0, seg: [{ L: 40 }, { a: 90, L: 40 }], name: 'Tava' }); A.refreshAll(true); });

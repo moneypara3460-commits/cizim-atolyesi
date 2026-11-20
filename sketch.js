@@ -4,7 +4,8 @@
 //   draw = { mode:'extrude'|'revolve', plane:'top'|'front', pts:[[u,v],...] (mm), h }
 //   top  : u = X, v = Z (ekranda aşağı = +Z)     front: u = X, v = Y (ekranda yukarı = +Y)
 //   revolve: her zaman 'front'; dönme ekseni u = 0 çizgisidir, çizim eksenin sağına yapılır.
-import { fmtNum, snap, circlePts, rectPts, bboxPts, polyArea, arcPoints, roundedRectPts, pointInPoly, solveCons, freedom, CONS_LABEL, consValid } from './logic.js?v=20261120d';
+import { egriNoktalari, egriKenar, egriTemizle } from './egri.js?v=20261120f';
+import { fmtNum, snap, circlePts, rectPts, bboxPts, polyArea, arcPoints, roundedRectPts, pointInPoly, solveCons, freedom, CONS_LABEL, consValid } from './logic.js?v=20261120f';
 
 let cssDone = false;
 const CSS = `
@@ -75,15 +76,17 @@ function dedupe(pts) {
 
 // Çizimi doğrular; { error } ya da { draw } döner. (Kullanıcı arayüzünden bağımsız, test edilebilir.)
 // pts0: tek döngü [[u,v],...] ya da çoklu döngü [[[u,v],...], ...]; çoklu ise en büyük alanlı döngü pts, diğerleri more olur.
-export function validateDraw(mode, plane, pts0, h, cons0) {
+// egri0: döngü başına { cp, sm, cons } ya da null (eğrili döngünün düzenleme bilgisi; çıktıda döngülerle aynı sırada egri)
+export function validateDraw(mode, plane, pts0, h, cons0, egri0) {
   const multi = Array.isArray(pts0[0]) && Array.isArray(pts0[0][0]);
   const loops0 = multi ? pts0 : [pts0];
   if (!loops0.length) return { error: 'Önce bir şekil çiz.' };
-  const loops = [], consL = [];
+  const loops = [], consL = [], egL = [];
   for (const [li, l] of loops0.entries()) {
     const pts = dedupe(l);
     const cl = cons0 && cons0[li] ? cons0[li] : [];
     consL.push(pts.length === l.length ? cl : []); // köşe sayısı değiştiyse kısıtlar geçersiz
+    egL.push(egri0 && egri0[li] ? egri0[li] : null);
     if (pts.length < 3) return { error: 'En az 3 noktalı kapalı bir şekil çiz.' };
     if (Math.abs(polyArea(pts)) < 1e-6) return { error: 'Şeklin alanı sıfır.' };
     if (selfIntersects(pts)) return { error: 'Çizgiler birbirini kesiyor. Noktaları düzelt.' };
@@ -100,6 +103,7 @@ export function validateDraw(mode, plane, pts0, h, cons0) {
     if (bb.maxU <= 1e-6 || bb.maxV - bb.minV <= 1e-6) return { error: 'Şekil eksenden uzakta bir yüzey oluşturmalı.' };
     const d = { mode, plane: 'front', pts, h: 0 };
     if (consL[0].length) d.cons = [consL[0]];
+    if (egL[0]) d.egri = [egL[0]];
     return { draw: d };
   }
   if (!(h > 0)) return { error: 'Kalınlık sıfırdan büyük olmalı.' };
@@ -107,6 +111,7 @@ export function validateDraw(mode, plane, pts0, h, cons0) {
   const draw = { mode: 'extrude', plane, pts: loops[order[0]], h };
   if (loops.length > 1) draw.more = order.slice(1).map((i) => loops[i]);
   if (consL.some((c) => c.length)) draw.cons = order.map((i) => consL[i]);
+  if (egL.some(Boolean)) draw.egri = order.map((i) => egL[i]);
   return { draw };
 }
 
@@ -131,8 +136,13 @@ export function openSketch(opts = {}) {
   let tool = 'poly';
   let arcEnd = null;        // yay aracı: seçilmiş bitiş noktası (orta nokta bekleniyor)
   // birden çok şekil: iç içe olanlar delik olur. shape = etkin şekil (shapes içinde)
-  const polyShape = (pts, closed, cons) => ({ kind: 'poly', pts, closed, marks: [], cons: cons || [] });
-  let shapes = init ? [init.pts, ...(init.more || [])].map((l, i) => polyShape(l.map((q) => q.slice()), true, init.cons && init.cons[i] ? JSON.parse(JSON.stringify(init.cons[i])) : [])) : [];
+  const polyShape = (pts, closed, cons, sm) => ({ kind: 'poly', pts, closed, marks: [], cons: cons || [], sm: egriTemizle(sm, pts.length) });
+  // eğrili döngü: çizim noktaları yerine kontrol noktaları, eğri noktaları ve kısıtlarıyla açılır
+  let shapes = init ? [init.pts, ...(init.more || [])].map((l, i) => {
+    const eg = init.egri && init.egri[i];
+    if (eg && Array.isArray(eg.cp) && eg.cp.length >= 3) return polyShape(eg.cp.map((q) => q.slice()), true, JSON.parse(JSON.stringify(eg.cons || [])), eg.sm);
+    return polyShape(l.map((q) => q.slice()), true, init.cons && init.cons[i] ? JSON.parse(JSON.stringify(init.cons[i])) : []);
+  }) : [];
   let csel = { edges: [], vtxs: [] };   // kısıt aracı seçimi (etkin şeklin kenar / köşe numaraları)
   let autoCons = true;                  // çizerken neredeyse yatay / dikey kenara otomatik kısıt
   let shape = shapes.length ? shapes[0] : null;
@@ -161,6 +171,7 @@ export function openSketch(opts = {}) {
       <button data-a="tool-rect">Dikdörtgen</button>
       <button data-a="tool-circle">Daire</button>
       <button data-a="tool-arc">Yay</button>
+      <button data-a="tool-curve">〰 Eğri</button>
       <button data-a="tool-select">Seç</button>
       <button data-a="tool-cons">📐 Kısıt</button>
     </div>
@@ -203,18 +214,19 @@ export function openSketch(opts = {}) {
   // ---- şekil yardımcıları ----
   const ptsOf = (s) => {
     if (!s) return null;
-    if (s.kind === 'poly') return s.pts;
+    if (s.kind === 'poly') return s.sm && s.sm.length ? egriNoktalari(s.pts, !!s.closed, s.sm).pts : s.pts;
     if (s.kind === 'rect') return s.cr > 0 ? roundedRectPts(s.a[0], s.a[1], s.b[0], s.b[1], s.cr) : rectPts(s.a[0], s.a[1], s.b[0], s.b[1]);
     if (s.kind === 'circle') return circlePts(s.c[0], s.c[1], s.r, 48);
     return null;
   };
-  const shapePts = () => ptsOf(shape);
+  const shapePts = () => (shape && shape.kind === 'poly' ? shape.pts : ptsOf(shape));   // çokgende kontrol noktaları
   const isClosed = (s) => s.kind !== 'poly' || s.closed;
   const allPts = () => shapes.flatMap((s) => ptsOf(s) || []);
   // geçersiz (silinmiş köşeye / kenara bakan) kısıtları at
   function pruneCons(s) {
     if (!s || s.kind !== 'poly' || !s.cons) return;
     s.cons = s.cons.filter((c) => consValid(c, s.pts.length, !!s.closed));
+    s.sm = egriTemizle(s.sm, s.pts.length);
   }
   // kısıtları çöz; başarısızsa false döner (şekil değişmez)
   function solveShape(s, pinned = []) {
@@ -298,6 +310,10 @@ export function openSketch(opts = {}) {
       const st = fr === 0 ? '✓ Tam tanımlı' : fr < 0 ? 'Fazla kısıt (' + (-fr) + ')' : 'Serbestlik: ' + fr + (fr <= 2 && !shape.cons.some((c) => c.t === 'fix') ? ' (yeri için bir köşeyi sabitle)' : '');
       return 'Kenara dokun: seç (2 kenar = paralel / dik / eşit / açı). Köşeye dokun: sabitle. ' + st;
     }
+    if (tool === 'curve') {
+      if (!shape || shape.kind !== 'poly' || shape.closed) return 'Eğri: dokunarak noktalar koy, çizgi bu noktalardan yumuşak geçer. İlk noktaya dokunarak ya da "Kapat" ile kapat. Çokgen aracıyla düz kenar ekleyebilirsin.' + multi;
+      return shape.pts.length + ' nokta (eğri). İlk noktaya dokunarak kapat; düz kenar için Çokgen aracına geç.' + multi;
+    }
     if (tool === 'poly') {
       if (!shape || shape.kind !== 'poly' || shape.closed) return 'Dokunarak nokta ekle. 3+ noktadan sonra ilk noktaya dokun ya da "Kapat". Kapalı şeklin dışına/içine yeni nokta başlarsan yeni şekil olur.' + multi;
       return shape.pts.length + ' nokta. İlk noktaya dokunarak kapat.' + multi;
@@ -354,7 +370,7 @@ export function openSketch(opts = {}) {
     if (VX.length && E.length <= 1) {
       if (VX.length === 1 && !E.length) {
         const i = VX[0], fx = shape.cons.some((c) => c.t === 'fix' && c.i === i);
-        h += L('Seçili köşe ' + (i + 1)) + B(fx ? '🔓 Serbest bırak' : '📌 Sabitle', 'c-fix', fx);
+        h += L('Seçili köşe ' + (i + 1)) + B(fx ? '🔓 Serbest bırak' : '📌 Sabitle', 'c-fix', fx) + B('〰 Eğri noktası', 'c-sm', (shape.sm || []).includes(i));
         h += VF('Orijinden yatay', 'cox', { t: 'ox', i }, P(i)[0]) + VF('Orijinden dikey', 'coy', { t: 'oy', i }, P(i)[1]);
       } else if (VX.length === 2 && !E.length) {
         const [i, j] = VX, a = P(i), b = P(j);
@@ -488,7 +504,7 @@ export function openSketch(opts = {}) {
           for (let i = 0; i < m; i++) {
             const a = pts[i], b = pts[(i + 1) % n];
             const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-            if (len * V.s < 28) continue;
+            if (len * V.s < 28 || egriKenar(shape.sm, n, i, closed)) continue;   // eğri kenarda kiriş boyu yanıltır
             const [mx, my] = toScreen((a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
             label(fmt(len), mx, my);
           }
@@ -559,7 +575,14 @@ export function openSketch(opts = {}) {
           const big = i === 0 && !shape.closed && sp.length >= 3;
           g.arc(x, y, big ? 9 : 5, 0, 7);
           g.fillStyle = i === 0 ? '#fbbf24' : '#fff'; g.fill();
+          if (shape.sm && shape.sm.includes(i)) { g.beginPath(); g.arc(x, y, 9, 0, 7); g.lineWidth = 2; g.strokeStyle = '#a78bfa'; g.stroke(); }   // eğri noktası
         });
+        if (shape.sm && shape.sm.length && pts.length > 1) {   // kontrol çokgeni (kesik çizgi)
+          g.beginPath(); g.setLineDash([3, 5]); g.lineWidth = 1; g.strokeStyle = 'rgba(167,139,250,.7)';
+          sp.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+          if (shape.closed) g.closePath();
+          g.stroke(); g.setLineDash([]);
+        }
         if (arcEnd && !shape.closed && shape.pts.length) {
           const [lx, ly] = toScreen(...shape.pts[shape.pts.length - 1]), [ex, ey] = toScreen(arcEnd[0], arcEnd[1]);
           g.beginPath(); g.setLineDash([5, 4]); g.strokeStyle = '#fbbf24'; line(lx, ly, ex, ey); g.stroke(); g.setLineDash([]);
@@ -629,7 +652,7 @@ export function openSketch(opts = {}) {
     const vi = hitVertex(sx, sy);
     if (tool === 'cons') { act = { type: vi >= 0 ? 'vertex' : 'ctap', i: vi, sx, sy, moved: false }; return; }
     if (vi >= 0) { act = { type: 'vertex', i: vi, sx, sy, moved: false }; return; }
-    if (tool === 'poly') { act = { type: 'tap', sx, sy, moved: false }; return; }
+    if (tool === 'poly' || tool === 'curve') { act = { type: 'tap', sx, sy, moved: false }; return; }
     if (tool === 'select') { act = { type: 'select', sx, sy, moved: false }; return; }
     const p0 = sn(toWorld(sx, sy));
     act = { type: 'draw', sx, sy, p0, created: null, prev: shape, moved: false };
@@ -723,7 +746,7 @@ export function openSketch(opts = {}) {
 
   function closeShape(s) {
     s.closed = true;
-    autoEdgeCons(s, s.pts.length - 1);
+    if (!egriKenar(s.sm, s.pts.length, s.pts.length - 1, true)) autoEdgeCons(s, s.pts.length - 1);
     if (!solveShape(s)) { s.cons = s.cons.filter((c) => !(c.e === s.pts.length - 1 && (c.t === 'h' || c.t === 'v'))); }
   }
   function up(e) {
@@ -766,7 +789,8 @@ export function openSketch(opts = {}) {
       }
       shape.marks.push(shape.pts.length);
       shape.pts.push(sn(toWorld(sx, sy)));
-      if (shape.pts.length >= 2) autoEdgeCons(shape, shape.pts.length - 2);
+      if (tool === 'curve') shape.sm = egriTemizle([...(shape.sm || []), shape.pts.length - 1], shape.pts.length);
+      else if (shape.pts.length >= 2 && !egriKenar(shape.sm, shape.pts.length, shape.pts.length - 2, false)) autoEdgeCons(shape, shape.pts.length - 2);
       refresh();
     } else if (a.type === 'vertex' && !a.moved) {
       if (a.i === 0 && shape.kind === 'poly' && !shape.closed && shape.pts.length >= 3) { closeShape(shape); refresh(); }
@@ -804,7 +828,10 @@ export function openSketch(opts = {}) {
         else { shape = s; setHint('Bitmemiş bir şekil var (en az 3 nokta) — tamamla ya da "Şekli sil".', true); refresh(false); setHint('Bitmemiş bir şekil var (en az 3 nokta) — tamamla ya da "Şekli sil".', true); return; }
       }
     }
-    const r = validateDraw(mode, plane, shapes.map(ptsOf), thick, shapes.map((s) => (s.kind === 'poly' ? s.cons || [] : [])));
+    // eğrili çokgen: geometri eğrinin noktalarıyla; kontrol noktaları, eğri noktaları ve kısıtlar düzenleme için ayrıca saklanır
+    const curved = (s) => s.kind === 'poly' && s.sm && s.sm.length > 0;
+    const r = validateDraw(mode, plane, shapes.map(ptsOf), thick, shapes.map((s) => (s.kind === 'poly' && !curved(s) ? s.cons || [] : [])),
+      shapes.map((s) => (curved(s) ? { cp: s.pts.map((q) => q.slice()), sm: s.sm.slice(), cons: JSON.parse(JSON.stringify(s.cons || [])) } : null)));
     if (r.error) { setHint(r.error, true); draw(); return; }
     cleanup();
     if (opts.onDone) opts.onDone(r.draw);
@@ -883,6 +910,11 @@ export function openSketch(opts = {}) {
       addCons(c); return;
     }
     const toggle = (c) => { const ex = shape.cons.find((d) => sameCons(d, c)); if (ex) { shape.cons.splice(shape.cons.indexOf(ex), 1); refresh(); return; } addCons(c); };
+    if (a === 'c-sm' && VX.length === 1) {
+      const i = VX[0], cur = shape.sm || [];
+      shape.sm = cur.includes(i) ? cur.filter((k) => k !== i) : egriTemizle([...cur, i], shape.pts.length);
+      refresh(); return;
+    }
     if (a === 'c-col') { toggle({ t: 'col', e: E[0], f: E[1] }); return; }
     if ((a === 'c-hal' || a === 'c-val') && VX.length === 2) { toggle({ t: a.slice(2), i: VX[0], j: VX[1] }); return; }
     if ((a === 'c-on' || a === 'c-mid') && VX.length === 1 && E.length === 1) { toggle({ t: a.slice(2), i: VX[0], e: E[0] }); return; }
