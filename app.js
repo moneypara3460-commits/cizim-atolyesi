@@ -42,6 +42,7 @@ import * as DLK from './delik.js?v=20261120b';
 import * as TK from './teknik.js?v=20261119f';
 import * as STD from './stdparca.js?v=20261120b';
 import * as DIS from './dis.js?v=20261120b';
+import * as PRM from './degisken.js?v=20261120g';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
 import { createMekaUI } from './meka/ui.js?v=20261119c';
@@ -100,6 +101,9 @@ let asmAnswers = {};   // Montaj planı: kullanıcının bildirdiği bağlantı 
 // teknik resim ayarları (projeyle saklanır): genel tolerans ISO 2768-1 sınıfı, genel yüzey pürüzlülüğü Ra (µm), parça listesi, delik tablosu
 const DRAW_DEF = { tol: 'm', ra: 3.2, bom: true, delik: true };
 let drawCfg = { ...DRAW_DEF };
+// parametrik model: global değişkenler [{ ad, ifade }] (projeyle saklanır), parça alanları p.eq = { alan: ifade } ile bağlanır.
+// geri sarma: modeli yalnız ilk rollTo adımla göster (yalnız görünüm; null = hepsi)
+let paramVars = [], paramState = { deger: {}, hata: {}, satir: [] }, paramErr = {}, rollTo = null;
 const drawSan = (o) => {
   const d = { ...DRAW_DEF };
   if (o && typeof o === 'object') {
@@ -109,12 +113,12 @@ const drawSan = (o) => {
   }
   return d;
 };
-const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined, draw: drawCfg });
+const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined, draw: drawCfg, vars: paramVars });
 // "Tek parça" ağları (üçgen verisi) geri al geçmişine girmesin diye parçada yalnızca anahtar (mk) durur, veri burada tutulur.
 // Kaydederken (otomatik kayıt, proje) veri de dosyaya yazılır.
 const meshStore = new Map();
 function snapshotSave() {
-  const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined, meka: mekaReady ? mekaUI.getProject() : mekaPending, draw: drawCfg };   // cam5: 4/5 eksen CNC ayarları; meka: Mekatronik ürün ağacı ve hesaplar
+  const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined, meka: mekaReady ? mekaUI.getProject() : mekaPending, draw: drawCfg, vars: paramVars };   // cam5: 4/5 eksen CNC ayarları; meka: Mekatronik ürün ağacı ve hesaplar
   const ks = [...new Set(parts.flatMap((q) => [q.mk, q.bk]).filter((k) => k && meshStore.has(k)))];   // bk: OCCT B-Rep metni
   if (ks.length) { o.meshes = {}; ks.forEach((k) => { o.meshes[k] = meshStore.get(k); }); }
   return JSON.stringify(o);
@@ -127,6 +131,7 @@ function restore(s) {
   if (typeof cam5UI !== 'undefined') cam5UI.setCfg(o.cam5);
   femData = o.fem && typeof o.fem === 'object' ? o.fem : null;   // eski projelerde yok: varsayılan (3 eksen)
   drawCfg = drawSan(o.draw);   // eski projelerde yok: varsayılan (ISO 2768-m, Ra 3,2)
+  paramVars = PRM.degiskenSan(o.vars); rollTo = null; paramState = PRM.degiskenleriCoz(paramVars);   // eski projelerde yok: boş
   // Mekatronik: yalnız proje kaydında var (geri al anlık görüntüsünde yok → dokunulmaz); 'meka' anahtarı olmayan eski proje boş ağaçla açılır
   if ('meka' in o) { if (mekaReady) mekaUI.setProject(o.meka || null); else mekaPending = o.meka || null; }
   if (!Array.isArray(parts)) parts = [];
@@ -796,8 +801,10 @@ function modelRange(axis) {
 }
 
 /* ================= CSG + sahne kurma ================= */
+// modele katılan parçalar: gizli olmayanlar; geri sarılmışsa yalnız ilk rollTo adım
+const modelParts = () => parts.filter((p, i) => !p.hidden && (rollTo == null || i < rollTo));
 function buildResult(useColors) {
-  const vis = parts.filter((p) => !p.hidden);
+  const vis = modelParts();
   evaluator.useGroups = useColors;
   const baseColor = vis[0].color;
   const brushes = [];
@@ -832,7 +839,7 @@ function rebuild(refit) {
     modelGroup.clear();
     modelMesh = null; capMesh = null;
 
-    const vis = parts.filter((p) => !p.hidden);
+    const vis = modelParts();
     if (!vis.length) { lastClean = null; lastBrushes = []; refreshOverlays(); modelChanged(); setMsg(parts.length ? 'Tüm parçalar gizli' : '', false); return; }   // boş model: boş çizim alanı
 
     const useColors = vis.some((p) => p.color);
@@ -872,7 +879,7 @@ function rebuild(refit) {
     modelGroup.add(capMesh);
     try { drawThreadLines(vis); } catch (e) { /* kozmetik diş çizilemezse model yine gösterilir */ }
 
-    setMsg('', false);
+    setMsg(rollTo != null && rollTo < parts.length ? '⏪ Geri sarıldı: ilk ' + rollTo + ' / ' + parts.length + ' adım gösteriliyor (ƒx Değişken → Geçmiş)' : '', false);
     refreshOverlays();
     if (tab === 'link') drawJointAxis();
     if (moved) syncInputs();
@@ -1050,7 +1057,7 @@ function toast(m) {
 const TYPES = ['box', 'cylinder', 'sphere', 'cone', 'tube'];
 const COLORS = ['#38bdf8', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#6366f1', '#a855f7', '#ec4899', '#f1f5f9', '#94a3b8', '#475569'];
 const SNAPS = [0, 1, 5, 10, 50];
-const TABS = [['dims', 'Ölçü'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['wgt', 'Ağırlık'], ['cost', 'Maliyet'], ['mfg', 'Üretim'], ['weld', 'Kaynak'], ['asm', 'Montaj planı'], ['sim', '🔮 Gelecek'], ['fem', '📐 Analiz'], ['cam', '⚙ CNC'], ['occt', '🧱 B-Rep'], ['meka', '⚡ Mekatronik']];
+const TABS = [['dims', 'Ölçü'], ['param', 'ƒx Değişken'], ['type', 'Tür'], ['pos', 'Konum'], ['rot', 'Döndür'], ['copy', 'Çoğalt'], ['face', 'Yüz'], ['edge', 'Kenar'], ['shell', 'Kabuk'], ['mate', 'Montaj'], ['link', 'Bağ'], ['part', 'Parça'], ['view', 'Görünüm'], ['sheet', 'Resim'], ['anim', 'Hareket'], ['str', 'Dayanım'], ['calc', 'Hesap'], ['wgt', 'Ağırlık'], ['cost', 'Maliyet'], ['mfg', 'Üretim'], ['weld', 'Kaynak'], ['asm', 'Montaj planı'], ['sim', '🔮 Gelecek'], ['fem', '📐 Analiz'], ['cam', '⚙ CNC'], ['occt', '🧱 B-Rep'], ['meka', '⚡ Mekatronik']];
 
 function fieldsFor(p) {
   switch (p.type) {
@@ -1085,7 +1092,8 @@ const lenVal = (mm) => (isFinite(mm) ? fmtNum(toUnit(mm, settings.unit), 3) : ''
 const btn = (label, act, on) => `<button data-act="${act}"${on ? ' class="on"' : ''}>${label}</button>`;
 const field = (label, key, p, kind = 'len') => {
   const v = typeof p[key] === 'number' && isFinite(p[key]) ? (kind === 'deg' ? fmtNum(p[key], 2) : lenVal(p[key])) : '';
-  return `<label class="f"><span>${label}${kind === 'len' ? ' (' + settings.unit + ')' : ''}</span><input type="number" step="any" data-k="${key}" data-u="${kind}" value="${v}"></label>`;
+  const eq = p.eq && p.eq[key];   // değişkene bağlı alan: elle değişmez, ƒx sekmesinden
+  return `<label class="f"><span>${label}${kind === 'len' ? ' (' + settings.unit + ')' : ''}${eq ? ' <b title="' + esc(eq) + '">ƒ = ' + esc(eq.length > 18 ? eq.slice(0, 17) + '…' : eq) + '</b>' : ''}</span><input type="number" step="any" data-k="${key}" data-u="${kind}" value="${v}"${eq ? ' readonly class="bagli"' : ''}></label>`;
 };
 const cfield = (label, key, kind = 'len') => {
   const v = kind === 'len' ? lenVal(cp[key]) : fmtNum(cp[key], 2);
@@ -1337,6 +1345,9 @@ function renderPanel() {
   } else if (tab === 'mfg') {
     body = mfg.html();
     hint = 'Üretilebilirlik kontrolü gerçek geometriyle yapılır ama bir ön kontroldür: kesin hata demek değildir, yapısal dayanımı göstermez. Sonuca dokununca kamera o bölgeye gider; kırmızı kutu problem bölgesi, turuncu parçalar ilgili parçalardır.';
+  } else if (tab === 'param') {
+    body = paramPanel(p, idx);
+    hint = 'Değişkenler mm (açılar derece) cinsindendir. Bir alana ifade yazınca o alan değişkene bağlanır ve Ölçü / Konum sekmesinde ƒ işaretiyle kilitli görünür; değişkeni değiştirince bağlı bütün parçalar güncellenir. Fonksiyonlar: sin cos tan (derece), sqrt, abs, min(a; b), max, round, pi.';
   } else if (tab === 'part') {
     body = `<label class="f w2"><span>Parça adı</span><input type="text" data-k="name" data-t="text" value="${esc(p.name || '')}" placeholder="${esc(partName(p, idx))}"></label>` +
       `<div class="row" style="flex:1 0 100%;padding:0;flex-wrap:wrap">` +
@@ -1425,6 +1436,65 @@ function scheduleSave() {
   }, 500);
 }
 
+/* ================= Parametrik model: değişkenler, denklemler, geri sarma ================= */
+// bağlanabilir alanlar: [etiket, anahtar, tür] — Ölçü sekmesindekiler + konum + dönüş
+function paramFields(p) {
+  return [...fieldsFor(p).map(([l, k, kd]) => [l, k, kd || 'len']), ['X', 'x', 'len'], ['Y', 'y', 'len'], ['Z', 'z', 'len'], ['Dönüş X°', 'rx', 'deg'], ['Dönüş Y°', 'ry', 'deg'], ['Dönüş Z°', 'rz', 'deg']];
+}
+// değişkenleri çöz ve bağlı alanları parçalara yaz. Hatalı ifade parçayı değiştirmez (son geçerli değer kalır).
+function applyParams() {
+  paramState = PRM.degiskenleriCoz(paramVars);
+  paramErr = {};
+  for (const r of PRM.bagliAlanlar(parts, paramState.deger)) {
+    const q = parts.find((x) => x.id === r.id);
+    if (!q) continue;
+    if (r.hata) { paramErr[q.id + '.' + r.alan] = r.hata; continue; }
+    if (q[r.alan] === r.deger) continue;
+    const setv = () => { q[r.alan] = r.deger; };
+    if (POSE_KEYS.includes(r.alan)) carry(q, setv); else setv();
+    if (q.gear && (r.alan === 'gm' || r.alan === 'gz' || r.alan === 'gb')) regenGear(q);
+  }
+}
+const pnum = (v) => (Number.isFinite(v) ? fmtNum(v, 4) : '');
+function paramPanel(p, idx) {
+  let h = '<div class="lbl h">Değişkenler (bütün model için)</div>';
+  if (!paramVars.length) h += '<div class="lbl" style="flex:1 0 100%">Henüz değişken yok. Örnek: L = 120, D = L/4; sonra parçanın genişliğine "L/2" yaz.</div>';
+  paramVars.forEach((d, i) => {
+    const err = paramState.satir[i], v = paramState.deger[d.ad];
+    h += `<div class="row" style="flex:1 0 100%;padding:0;gap:6px;align-items:flex-end;flex-wrap:nowrap"><label class="f" style="flex:1 1 25%;min-width:0"><span>Ad</span><input type="text" data-pv="${i},ad" value="${esc(d.ad)}" autocapitalize="off" spellcheck="false"></label>` +
+      `<label class="f" style="flex:2 1 55%;min-width:0"><span>Değer ya da ifade <i id="pv-info-${i}" style="font-style:normal;color:${err ? '#f87171' : '#a5b4fc'}">${err ? '⚠ ' + esc(err) : '= ' + pnum(v)}</i></span><input type="text" data-pv="${i},ifade" value="${esc(d.ifade)}" autocapitalize="off" spellcheck="false" inputmode="text"></label>` +
+      `<button data-act="pv-del-${i}" title="Sil" style="flex:0 0 auto">✕</button></div>`;
+  });
+  h += btn('+ Değişken ekle', 'pv-add');
+  h += '<div class="lbl h">Bu parçanın bağlı ölçüleri: ' + esc(partName(p, idx)) + '</div>';
+  for (const [l, k, kd] of paramFields(p)) {
+    const ex = (p.eq && p.eq[k]) || '', err = paramErr[p.id + '.' + k];
+    const now = typeof p[k] === 'number' ? (kd === 'deg' ? fmtNum(p[k], 2) : fmtNum(p[k], 3)) : '';
+    h += `<label class="f"><span>${esc(l)}${kd === 'len' ? ' (mm)' : ''} <i id="pe-info-${k}" style="font-style:normal;color:${err ? '#f87171' : '#a5b4fc'}">${err ? '⚠ ' + esc(err) : ex ? '= ' + now : ''}</i></span><input type="text" data-pe="${k}" value="${esc(ex)}" placeholder="${now === '' ? 'ifade yaz' : 'sabit: ' + now}" autocapitalize="off" spellcheck="false"></label>`;
+  }
+  h += '<div class="lbl h">Geçmiş (adım adım)</div>';
+  const n = parts.length, k = rollTo == null ? n : rollTo;
+  h += `<label class="f w2"><span>Model şu adıma kadar: <b id="roll-v">${k} / ${n}</b>${k > 0 && k <= n ? ' — ' + esc(partName(parts[k - 1], k - 1)) : ''}</span><input type="range" min="1" max="${n}" step="1" value="${k}" data-roll="1"></label>` +
+    btn('⏩ Tüm adımlar', 'roll-end');
+  return h;
+}
+function paramInfoUpdate(p) {
+  paramVars.forEach((d, i) => {
+    const el = document.getElementById('pv-info-' + i);
+    if (!el) return;
+    const err = paramState.satir[i];
+    el.textContent = err ? '⚠ ' + err : '= ' + pnum(paramState.deger[d.ad]);
+    el.style.color = err ? '#f87171' : '#a5b4fc';
+  });
+  for (const [, k, kd] of paramFields(p)) {
+    const el = document.getElementById('pe-info-' + k);
+    if (!el) continue;
+    const err = paramErr[p.id + '.' + k], ex = p.eq && p.eq[k];
+    el.textContent = err ? '⚠ ' + err : ex ? '= ' + (kd === 'deg' ? fmtNum(p[k], 2) : fmtNum(p[k], 3)) : '';
+    el.style.color = err ? '#f87171' : '#a5b4fc';
+  }
+}
+
 function refreshAll(refit) {
   renderPanel();
   rebuild(!!refit);
@@ -1435,6 +1505,7 @@ function refreshAll(refit) {
 /* ================= İşlemler ================= */
 function addPart(type, op, dims) {
   commit();
+  rollTo = null;
   const p = newPart(nextId++, type, op, parts[0]);
   if (dims) Object.assign(p, dims);
   if (type === 'frame') p.y = 0;   // iskelet yere otursun
@@ -4506,6 +4577,14 @@ document.addEventListener('click', (e) => {
   if (act === 'cut-opt') { openCutOpt({ name: fileBase(), fromCad: cadCutPieces }); return; }
   if (act.startsWith('frj-')) { commit(); p.fj = act.slice(4); refreshAll(); return; }
   if (act.startsWith('shp-')) { commit(); const k = act.slice(4); if (k !== 'tava') delete p.sm; Object.assign(p, JSON.parse(JSON.stringify(SHEET_PRESETS[k]))); refreshAll(); return; }
+  if (act === 'pv-add') {
+    commit();
+    let k = 1; while (paramVars.some((d) => d.ad === 'D' + k)) k++;
+    paramVars.push({ ad: paramVars.length ? 'D' + k : 'L', ifade: '100' });
+    applyParams(); refreshAll(); return;
+  }
+  if (act.startsWith('pv-del-')) { commit(); paramVars.splice(+act.slice(7), 1); applyParams(); refreshAll(); return; }
+  if (act === 'roll-end') { rollTo = null; refreshAll(); return; }
   if (act.startsWith('kk-') && p.sm === 'tava') { commit(); p.kk = act.slice(3) === 'kapali' ? 'kapali' : 'acik'; refreshAll(); return; }
   if (act.startsWith('ko-') && p.sm === 'tava') { commit(); p.ko = act.slice(3) === 'z' ? 'z' : 'x'; refreshAll(); return; }
   if (act === 'sh-flat') { commit(); p.flat = !p.flat; refreshAll(); return; }
@@ -4645,6 +4724,25 @@ document.addEventListener('input', (e) => {
     const jl = document.querySelector('[data-jl]');
     if (jl) jl.textContent = (isH ? 'Açı: ' + fmtNum(c.joint.val, 1) + '°' : 'Kayma: ' + lenText(c.joint.val));
     scheduleSave();
+    return;
+  }
+  if (d.pv || d.pe || d.roll) {
+    const c = cur();
+    if (d.roll) { const v = Math.round(el.valueAsNumber); rollTo = v >= parts.length ? null : Math.max(1, v); const rv = document.getElementById('roll-v'); if (rv) rv.textContent = (rollTo ?? parts.length) + ' / ' + parts.length; rebuild(false); return; }
+    const skey = (d.pv ? 'pv.' + d.pv : c.id + '.pe.' + d.pe), snow = Date.now();
+    if (skey !== lastKey || snow - lastAt > 1500) { commit(); updateToolbar(); }
+    lastKey = skey; lastAt = snow;
+    if (d.pv) {
+      const [i, f] = d.pv.split(','), row = paramVars[+i];
+      if (!row) return;
+      row[f] = el.value.trim();
+    } else {
+      const ex = el.value.trim();
+      c.eq = { ...(c.eq || {}) };
+      if (ex) c.eq[d.pe] = ex; else delete c.eq[d.pe];
+      if (!Object.keys(c.eq).length) delete c.eq;
+    }
+    applyParams(); rebuild(false); paramInfoUpdate(c); scheduleSave();
     return;
   }
   if (d.fl || d.tkg) {
@@ -4837,7 +4935,7 @@ try {
 } catch (e) { /* bozuk kayıt: varsayılanla devam */ }
 
 // test / hata ayıklama için küçük kanca (arayüzü etkilemez)
-window.__app = { get sheetInfo() { return sheetInfo; }, get drawCfg() { return drawCfg; }, get lathe() { return latheUI; }, get edgeSel() { return { n: edgeSels.length, g: edgeG ? edgeG.edges.length : 0, busy: edgeBusy, sel: edgeSels.map((e) => ({ type: e.type, mid: e.mid.map((v) => Math.round(v * 100) / 100) })) }; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, get weightMarkerCount() { return wgtGroup.children.length; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
+window.__app = { get param() { return { vars: paramVars, deger: paramState.deger, satir: paramState.satir, err: paramErr, rollTo }; }, get sheetInfo() { return sheetInfo; }, get drawCfg() { return drawCfg; }, get lathe() { return latheUI; }, get edgeSel() { return { n: edgeSels.length, g: edgeG ? edgeG.edges.length : 0, busy: edgeBusy, sel: edgeSels.map((e) => ({ type: e.type, mid: e.mid.map((v) => Math.round(v * 100) / 100) })) }; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, get weightMarkerCount() { return wgtGroup.children.length; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
 
 renderPanel();
 updateToolbar();

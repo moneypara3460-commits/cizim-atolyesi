@@ -973,6 +973,77 @@ await T('Kroki eğrisi: Eğri aracıyla 4 noktalı kapalı eğri → parça eğr
   g = await geo(); expect(g[0] === 40 && g[2] === 30, 'dikdörtgen: ' + JSON.stringify(g));
 });
 
+/* ---------- P-Değişken: global değişkenler, denklemler, bağlı ölçüler, geri sarma ---------- */
+await T('Değişkenler: L = 120, D = L/4; kutunun genişliği L/2, Z konumu D → L değişince parça güncellenir; bağlı alan kilitli görünür; döngü ve hatalı ifade Türkçe uyarı verir; geri al, kayıt, geri sarma', 'P-Değişken', async ({ page }) => {
+  const pv = (i, f) => page.locator(`#tabbody [data-pv="${i},${f}"]`);
+  const pe = (k) => page.locator(`#tabbody [data-pe="${k}"]`);
+  const P = () => page.evaluate(() => { const A = window.__app, p = A.parts[0]; return { w: p.w, z: p.z, eq: p.eq || null, ...A.param, n: A.parts.length }; });
+  const bboxX = () => page.evaluate(() => { const g = window.__app.lastClean; g.computeBoundingBox(); return Math.round((g.boundingBox.max.x - g.boundingBox.min.x) * 100) / 100; });
+  const bbox = () => page.evaluate(() => { const g = window.__app.lastClean; g.computeBoundingBox(); const b = g.boundingBox; return [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z].map((v) => Math.round(v * 10) / 10).join(','); });
+  await tab(page, 'param');
+  expect(/Henüz değişken yok/.test(await body(page)), 'boş liste ipucu');
+  await act(page, 'pv-add'); await page.waitForTimeout(200);
+  await pv(0, 'ifade').fill('120'); await page.waitForTimeout(200);
+  await act(page, 'pv-add'); await page.waitForTimeout(200);
+  await pv(1, 'ad').fill('D'); await pv(1, 'ifade').fill('L/4'); await page.waitForTimeout(250);
+  let s = await P();
+  expect(s.vars.map((v) => v.ad + '=' + v.ifade).join(',') === 'L=120,D=L/4' && s.deger.L === 120 && s.deger.D === 30, 'değişkenler: ' + JSON.stringify(s.vars) + JSON.stringify(s.deger));
+  expect(await page.locator('#pv-info-1').innerText() === '= 30', 'D değeri gösterilir: ' + await page.locator('#pv-info-1').innerText());
+  // bağla: genişlik = L/2, Z = D
+  await pe('w').fill('L/2'); await pe('z').fill('D'); await page.waitForTimeout(400);
+  s = await P();
+  expect(s.w === 60 && s.z === 30 && s.eq.w === 'L/2' && s.eq.z === 'D', 'bağlandı: ' + JSON.stringify(s));
+  expect(await bboxX() === 60, 'model genişliği 60: ' + await bboxX());
+  // L = 200 → genişlik 100, Z 50
+  await pv(0, 'ifade').fill('200'); await page.waitForTimeout(400);
+  s = await P(); expect(s.w === 100 && s.z === 50, 'L değişince güncellendi: ' + JSON.stringify({ w: s.w, z: s.z }));
+  expect(await bboxX() === 100, 'model genişliği 100');
+  // ondalık virgül ve fonksiyon
+  await pv(0, 'ifade').fill('max(150; 2,5*40)'); await page.waitForTimeout(300);
+  s = await P(); expect(s.deger.L === 150 && s.w === 75, 'virgül ve max: ' + JSON.stringify(s.deger));
+  // Ölçü sekmesinde kilitli ve ƒ işaretli
+  await tab(page, 'dims');
+  const ro = await page.evaluate(() => { const i = document.querySelector('#tabbody [data-k="w"]'); return { ro: i.readOnly, lbl: i.closest('label').innerText, h: document.querySelector('#tabbody [data-k="h"]').readOnly }; });
+  expect(ro.ro && /ƒ = L\/2/.test(ro.lbl) && !ro.h, 'bağlı alan kilitli: ' + JSON.stringify(ro));
+  await tab(page, 'param');
+  // hatalı ifade: parça son geçerli değerde kalır, uyarı Türkçe
+  await pv(1, 'ifade').fill('L/'); await page.waitForTimeout(300);
+  s = await P(); expect(s.w === 75 && /yarım/.test(s.satir[1]) && s.err['1.z'], 'hatalı ifade: ' + JSON.stringify({ w: s.w, z: s.z, sat: s.satir, err: s.err }));
+  expect(/⚠/.test(await page.locator('#pv-info-1').innerText()), 'uyarı görünür');
+  // döngü
+  await pv(1, 'ifade').fill('L+1'); await pv(0, 'ifade').fill('D*2'); await page.waitForTimeout(300);
+  s = await P(); expect(/Döngü/.test(s.satir[0]) && /Döngü/.test(s.satir[1]), 'döngü: ' + JSON.stringify(s.satir));
+  await pv(0, 'ifade').fill('120'); await pv(1, 'ifade').fill('L/4'); await page.waitForTimeout(300);
+  s = await P(); expect(s.w === 60 && s.z === 30 && !s.satir[0] && !s.satir[1], 'düzeldi: ' + JSON.stringify({ w: s.w, z: s.z }));
+  // bağı kaldır: alan boşaltılınca eq silinir, değer kalır
+  await pe('z').fill(''); await page.waitForTimeout(300);
+  s = await P(); expect(s.z === 30 && s.eq && !('z' in s.eq) && s.eq.w === 'L/2', 'bağ kaldırıldı: ' + JSON.stringify(s.eq));
+  // geri al: bağ geri gelir
+  await act(page, 'undo'); await page.waitForTimeout(400);
+  s = await P(); expect(s.eq && s.eq.z === 'D', 'geri al bağı geri getirdi: ' + JSON.stringify(s.eq));
+  // geri sarma: 2. parça ekle, kaydırıcıyla 1. adıma dön
+  await page.evaluate(() => { const A = window.__app; A.applyCommands(A.parseVoice('silindir ekle'), 'silindir ekle'); });
+  await page.waitForTimeout(600);
+  await page.evaluate(() => { document.querySelectorAll('#chips .chip')[0].click(); });
+  await tab(page, 'param'); await page.waitForTimeout(200);
+  expect((await P()).n === 2, 'iki parça');
+  const full = await bbox();
+  await page.evaluate(() => { const r = document.querySelector('#tabbody [data-roll]'); r.value = '1'; r.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.waitForTimeout(500);
+  const one = await bbox();
+  s = await P(); expect(s.rollTo === 1 && await bboxX() === 60 && one !== full, 'geri sarıldı: ' + JSON.stringify({ r: s.rollTo, one, full }));
+  expect(/Geri sarıldı: ilk 1 \/ 2/.test(await page.evaluate(() => document.body.innerText)), 'geri sarma uyarısı');
+  await act(page, 'roll-end'); await page.waitForTimeout(500);
+  s = await P(); expect(s.rollTo === null && await bbox() === full, 'tüm adımlar: ' + await bbox());
+  await shot(page, 'degisken');
+  await pv(0, 'ad').scrollIntoViewIfNeeded(); await shot(page, 'degisken-ust');
+  // kayıt: sayfa yenilenince değişkenler ve bağlar korunur
+  await page.waitForTimeout(1500);
+  await page.reload(); await waitReady(page);
+  s = await P();
+  expect(s.vars.length === 2 && s.deger.D === 30 && s.eq && s.eq.w === 'L/2' && s.w === 60, 'yenilemeden sonra: ' + JSON.stringify({ v: s.vars, eq: s.eq, w: s.w }));
+});
+
 /* ---------- E-Tava: flanşlı sac (kenar flanşı, köşe kapatma, açınım) ---------- */
 await T('Sac tava: 4 kenar flanşı, açınım = ölçüler − büküm düşümü; flanş kaldırma, kapalı köşe, 90° dışı uyarı, düz açınım, DXF ve kayıt', 'E-Tava', async ({ page }) => {
   await page.evaluate(() => { const A = window.__app, p = A.parts[0]; Object.assign(p, { type: 'sheet', st: 2, sr: 2, sw: 50, sk: 0.44, flat: false, sh: 'L', sa0: 0, seg: [{ L: 40 }, { a: 90, L: 40 }], name: 'Tava' }); A.refreshAll(true); });
