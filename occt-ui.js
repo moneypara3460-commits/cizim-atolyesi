@@ -21,11 +21,18 @@ function createClient() {
       w.onerror = (e) => { const err = new Error('OCCT işçisi başlatılamadı' + (e && e.message ? ': ' + e.message : '')); for (const p of pend.values()) p.rej(err); pend.clear(); try { w.terminate(); } catch (x) { /* */ } w = null; inline = inline || startInline(); };
     } catch (e) { w = null; inline = startInline(); }
   }
+  // Yedek yol: işçi açılamazsa ana iş parçacığında. Sayfanın güvenlik politikası metinden kod çalıştırmaya izin vermediği
+  // için (OCCT'nin bağlayıcısı buna ihtiyaç duyar) bu yol yalnız modül işçisi desteklemeyen çok eski tarayıcılarda gerekir;
+  // orada anlaşılır bir hata verilir.
   function startInline() {
     return (async () => {
-      const [{ default: Module }, { initOCCT }, { runOp }] = await Promise.all([import('./vendor/occt/replicad_single.js'), import('./occt.js?v=' + V), import('./occt-ops.js?v=' + V)]);
-      const K = await initOCCT(Module, { print: () => {}, printErr: () => {} });
-      return { K, runOp };
+      try {
+        const [{ default: Module }, { initOCCT }, { runOp }] = await Promise.all([import('./vendor/occt/replicad_single.js'), import('./occt.js?v=' + V), import('./occt-ops.js?v=' + V)]);
+        const K = await initOCCT(Module, { print: () => {}, printErr: () => {} });
+        return { K, runOp };
+      } catch (e) {
+        throw new Error('Bu tarayıcı 3B çekirdeğini çalıştıramıyor. Güncel Chrome, Edge, Safari ya da Firefox kullan.');
+      }
     })();
   }
   async function call(op, args, transfer) {

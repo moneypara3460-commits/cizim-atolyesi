@@ -22,8 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       - name: Testler (kapsama ile)
@@ -31,7 +31,7 @@ jobs:
         shell: bash -o pipefail {0}
       - name: Raporları yükle
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: birim-raporlari
           path: |
@@ -44,8 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       - name: OCCT çekirdeği (vendor/occt, gerçek WASM) testleri
@@ -56,7 +56,7 @@ jobs:
         shell: bash -o pipefail {0}
       - name: Raporları yükle
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: occt-wasm-raporlari
           path: |
@@ -70,8 +70,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       # Uygulamanın unpkg'den yüklediği sürümlerle aynı (index.html importmap). İnternet yerine yerel kopya: deterministik.
@@ -101,6 +101,14 @@ jobs:
         env:
           PLAYWRIGHT_MODULE: ${{ github.workspace }}/.e2e-libs/node_modules/playwright
         run: node tests/e2e/hand.mjs 2>&1 | tee reports-e2e-hand.log
+        shell: bash -o pipefail {0}
+      # Diğer uçtan uca testler test aracı için güvenlik politikasını atlar; bu adım atlamaz: eval gerçekten engelli,
+      # 3B çekirdek ve gerçek el algılama yine çalışıyor, politika ihlali yok (dört sayfa)
+      - name: E2E — güvenlik politikası (CSP) uygulanırken
+        if: always()
+        env:
+          PLAYWRIGHT_MODULE: ${{ github.workspace }}/.e2e-libs/node_modules/playwright
+        run: node tests/e2e/csp.mjs 2>&1 | tee reports-e2e-csp.log
         shell: bash -o pipefail {0}
       # Ayakkabı Modelhanesi: indirilen PDF / SVG / DXF dışarıda ölçülür (poppler, rsvg, PIL)
       - name: E2E senaryoları — Ayakkabı Modelhanesi (çıktı ölçüleri dahil)
@@ -143,7 +151,7 @@ jobs:
         shell: bash -o pipefail {0}
       - name: Raporları yükle (ekran görüntüleri dahil)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: e2e-raporlari
           path: |
@@ -151,6 +159,7 @@ jobs:
             reports-e2e.log
             reports-e2e-yeni.log
             reports-e2e-hand.log
+            reports-e2e-csp.log
             reports-e2e-ayakkabi.log
             reports-e2e-tanitim.log
             reports-e2e-hesap.log
@@ -166,8 +175,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       - name: Paketleri npm'den indir (sürüm sabit, npm integrity doğrular)
@@ -186,7 +195,7 @@ jobs:
         run: node tools/vendor-check.mjs /tmp/npmv/node_modules /tmp/models
       - name: npm kopyalarını yükle
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: vendor-npm
           path: /tmp/vendor-out/
@@ -199,8 +208,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       - name: Derleme araçları (sürümler sabit, depoya girmez)
@@ -233,13 +242,14 @@ jobs:
           node tests/e2e/ayk-kalip.mjs
           node tests/e2e/ayk-3d.mjs
           node tests/e2e/tanitim.mjs
+          node tests/e2e/csp.mjs
         shell: bash -o pipefail {0}
       - name: Derlemeyi yükle (yalnız uygulama dosyaları)
         if: success()
         run: rm -rf dist/tests dist/supabase dist/reports
       - name: dist/ yükle
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cizim-atolyesi-dist
           path: dist/

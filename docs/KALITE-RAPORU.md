@@ -222,7 +222,7 @@ Ortam aynı (Node 22, Chromium emülasyonu, gerçek OCCT WASM). Gerçek bir torn
 **Kalan riskler ve sınırlar.**
 - **Başlık tabanlı politika yok.** GitHub Pages özel HTTP başlığı vermiyor: `frame-ancestors` (başka sitenin uygulamayı çerçeve içinde göstermesi) ve HSTS sayfadan ayarlanamıyor. Uygulamada oturum ya da para işlemi olmadığı için etkisi düşük.
 - **Yerel veriler şifresiz.** Projeler tarayıcıda şifresiz durur. Cihaza erişen biri görebilir; tarayıcı verisi silinirse projeler gider (dışa aktarma ile yedek alınmalı).
-- **`'unsafe-eval'` açık.** OCCT yedek yolu için gerekli. Uygulama kodunda eval'e giden kullanıcı verisi yok.
+- ~~**`'unsafe-eval'` açık.**~~ **20.11.2026'da kaldırıldı** (bkz. bölüm 11). OCCT işçide çalışır; ana iş parçacığı yedek yolu yalnız modül işçisi olmayan çok eski tarayıcılarda gerekirdi, orada artık anlaşılır hata verir.
 - **Kapsam dışı.** Fuzz testi yalnız tarayıcı emülasyonunda yapıldı; profesyonel sızma testi değildir.
 
 ## 10. Parmakla kontrol (13.11.2026)
@@ -257,4 +257,21 @@ Ortam aynı (Node 22, Chromium emülasyonu, gerçek OCCT WASM). Gerçek bir torn
 **Güvenlik ve gizlilik.** Kamera yalnız kullanıcı düğmeye basınca istenir; ses istenmez. Kareler yalnız bellekte işlenir: kayıt, ekran görüntüsü ya da ağ isteği yoktur (E2E her senaryoda dış istek olmadığını denetler; CSP `connect-src 'self'`). Kütüphane ve model `vendor/` içinde birebir kopyadır; CI npm paketiyle ve sabit sha256 ile karşılaştırır. Kapatınca kamera izleri durdurulur, model bellekten bırakılır, işaretçi yaması geri alınır; sekme arka plana geçince işleme durur. Yapay işaretçi, tarayıcının `setPointerCapture` işlevini yalnız kendi işaretçi kimliği için ve yalnız kontrol açıkken sarar.
 
 **Bilinen sınırlar.** Tek el. Tarayıcının kendi denetimleri (kaydırıcı, açılır liste, dosya seçici, klavye) yapay işaretçiyle çalışmaz. Sesli komut gibi "kullanıcı hareketi" isteyen tarayıcı özellikleri parmakla dokunmayla açılmayabilir. El algılama ana iş parçacığında çalışır: yavaş cihazda arayüz akıcılığı düşebilir. Özel hareket öğretme arayüzü yok (kodla eklenir).
+
+## 11. Güvenlik sertleştirmesi (20.11.2026)
+
+Bağımsız inceleme raporunun (sohbette) düzeltilen bulguları:
+
+| Bulgu | Düzeltme | Doğrulama |
+|---|---|---|
+| play-verify'da hız sınırı yoktu (her istek Google Play API'ye gider) | Kullanıcı başına günde 20, toplam günde 5000 doğrulama (`public.istek_al`, reddedilen istek güvenlik nöbetçisine olay olarak yazılır) | `tests/istek.test.mjs` (sıralama: oturum → boyut sınırlı gövde → sınır → Google) |
+| play-verify'da yarış: aynı jeton aynı anda iki hesaptan gelirse kayıt sahibini değiştirebilirdi | Koşulsuz `upsert` yerine önce ekleme; jeton varsa yalnız aynı kullanıcıya ait kayıt güncellenir, değilse 409. Eski jeton ancak kayıt başarılı olunca geçersiz sayılır | aynı test |
+| Güvenlik nöbetçisinin deneme çağrısı herkese açıktı (saatlik sayacı sıfırlayıp gerçek uyarıyı geciktirebilir, sahte e-posta yağdırabilirdi) | Deneme e-postası `x-nobetci-anahtar` başlığı (gizli ayar `NOBETCI_ANAHTAR`) ister; anahtar yoksa deneme kapalı. Zamanlayıcının çağrısı değişmedi; herkese açık çağrı yalnız gerçek eşik aşıldıysa gerçek raporu gönderebilir | aynı test |
+| Yapay zekâ fonksiyonları gövdeyi (4–9 MB) oturum denetiminden ÖNCE okuyordu; boyut sınırı yalnız başlığa bakıyordu | Oturum önce; gövde akış okunurken bayt sayılarak sınırlanır (`_shared/istek.ts` → `jsonOku`) | `tests/istek.test.mjs` (başlıksız parça parça gövde dahil) |
+| Uygulama sayfalarında `'unsafe-eval'` | `klasik.html` ve `yeni/index.html`'den kaldırıldı (tekstil ve ayakkabıda zaten yoktu) | Yeni `tests/e2e/csp.mjs`: politika GERÇEKTEN uygulanırken (diğer testler test aracı için atlar) dört sayfada eval engelli, OCCT ve gerçek MediaPipe çalışıyor, ihlal yok. CI'da hem kaynakta hem derlenmiş (karıştırılmış) kodda çalışır |
+| GitHub Actions adımları sürüm etiketine bağlıydı | Sabit commit'e (SHA) bağlandı, yanında etiket notu; Dependabot (github-actions) güncel tutar | CI |
+
+Yapılamayanlar / sahibinin yapması gerekenler: main dalı koruması (GitHub ayarı), play-rtdn için Google Pub/Sub'da
+kimlik doğrulamalı gönderim (OIDC; Google Cloud ayarı), Supabase'de e-posta ile kaydın kapalı olduğunun ve sızdırılmış
+parola korumasının kontrolü (panel ayarı), `pg_net` uzantısı yeri değiştirilemez (taşınamaz uzantı; Supabase önerisi bilgi amaçlı).
 
