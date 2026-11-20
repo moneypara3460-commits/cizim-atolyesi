@@ -10,7 +10,7 @@ Sıra kolaydan zora. Her madde ayrı PR; tam test (birim, gerçek OCCT, iki aray
 | 1 | Standart parça kütüphanesi (doğrulanmış ölçü tablolarıyla) | **Tamam** (20.11.2026) |
 | 8 | Sac metal: flanş, köşe kapatma | **Tamam** (20.11.2026) |
 | 4 | Kroki kısıtları ve serbest eğri | **Tamam** (20.11.2026) |
-| 5 | Parametrik geçmiş ve varyantlar | Bekliyor |
+| 5 | Parametrik geçmiş ve varyantlar | 5a **Tamam** (20.11.2026) · 5b varyantlar bekliyor |
 | 7 | DWG | Lisans kararı bekliyor (ODA ücretli, LibreDWG GPL) |
 
 ## 6. Her şekle radyüs / pah
@@ -221,3 +221,40 @@ Ayrıca düzeltildi: kroki düzenlenirken silinen delik ve kısıtlar parçada k
 korunması, kapalı eğrinin sınırlı taşması, açık eğri, kroki ↔ parça dönüşümünde eğri bilgisinin sırası ve geri gelmesi),
 uçtan uca `K-Eğri` (iki arayüzde: eğri çizme, parça, yeniden açma, noktayı sivri yapma, eğrisiz hale dönme).
 
+## 5. Parametrik geçmiş ve varyantlar
+
+### 5a. Değişkenler, denklemler, geri sarma (20.11.2026)
+
+Sekme **ƒx Değişken** (yeni arayüzde Tasarım → Değişken). Kod: `degisken.js` (ifade dili ve çözücü; saf modül),
+`app.js` (sekme, parçalara uygulama, kayıt, geri sarma).
+
+- **Değişkenler** bütün model içindir: `L = 120`, `D = L/4`. Değişken başka değişkene başvurabilir; sıra önemli
+  değildir (bağımlılığa göre çözülür). Döngü (`A = B+1`, `B = A*2`), tanımsız ad, aynı ad iki kez, hatalı ifade
+  satırında Türkçe uyarı verir; hatalı değişkene bağlı olanlar da "bağlı olduğu … hatalı" der.
+- **Bağlı ölçü:** Değişken sekmesinde parçanın bir alanına ifade yazılınca (`L/2`) o alan değişkene bağlanır.
+  Bağlanabilen alanlar: Ölçü sekmesindeki bütün ölçüler + X, Y, Z konumu + X, Y, Z dönüşü. Bağlı alan Ölçü / Konum
+  sekmesinde **ƒ = ifade** işaretiyle kilitli görünür (elle yazılmaz). Değişken değişince bağlı bütün parçalar güncellenir.
+  İfade hatalıysa parça son geçerli değerinde kalır. İfade silinince bağ kalkar, değer kalır.
+- **Birimler:** değişkenler ve ifadeler mm (açılar derece) cinsindendir; arayüz birimi inç olsa da.
+- **İfade dili:** `+ − * / ^`, parantez, tekli eksi; ondalık virgül ya da nokta; fonksiyonlar `sin cos tan asin acos
+  atan` (derece), `sqrt`/`kok`, `abs`, `min(a; b; …)`, `max`, `round`/`yuvarla(x; basamak)`, `floor`, `ceil`, `pi`.
+  Bağımsız değişken ayırıcı `;` (Türkçe Excel gibi, çünkü virgül ondalıktır). `eval` kullanılmaz: ifadeler kendi
+  ayrıştırıcımızla ağaca çevrilir, yalnız bu işlemler ve fonksiyonlar çalışır (sayfa güvenlik politikası da `eval`'i
+  yasaklar).
+- **Geri sarma (Geçmiş):** kaydırıcıyla model ilk N adımla gösterilir (adım = parça listesindeki sıra; oyuklar
+  kendinden öncekileri keser). Yalnız görünümdür, model değişmez; üstte "Geri sarıldı" uyarısı çıkar. **Tüm adımlar**
+  ya da yeni parça eklemek geri sarmayı bitirir.
+- Değişkenler ve bağlar projeyle, otomatik kayıtla ve geri al / ileri al geçmişiyle saklanır. Eski projeler değişkensiz açılır.
+- Bilinen sınır: değişkenin adı değiştirilirse ifadelerdeki eski ad kendiliğinden düzelmez (uyarı "Tanımsız değişken" olur).
+
+**Yöntem:** özyinelemeli iniş ayrıştırıcı (öncelik: tekli eksi < üs < çarpma/bölme < toplama; üs sağdan birleşir),
+derinlik öncelikli bağımlılık sıralaması (topolojik sıra) ve döngü tespiti.
+
+**Doğrulama:** `tests/degisken.test.mjs` (işlem önceliği, ondalık virgül, fonksiyonlar ve derece, Türkçe adlar, hata
+iletileri, kod çalıştırma denemelerinin reddi, bağımlılık sırası, döngü, zincirleme hata, çift ad, bağlı alanlar, kayıt
+temizliği), uçtan uca `P-Değişken` (iki arayüzde: değişken ekleme, bağlama, güncelleme, kilitli alan, hatalı ifade,
+döngü, bağı kaldırma, geri al, geri sarma, sayfa yenileyince korunma).
+
+### 5b. Varyantlar ve tasarım tablosu
+
+Bekliyor (5a birleştirildikten sonra).

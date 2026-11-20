@@ -9,7 +9,7 @@ const chipsEl = $('chips');
 
 /* ---------- bölümler ve sekmeler ---------- */
 const MODES = {
-  tasarim: ['dims', 'type', 'pos', 'rot', 'copy', 'face', 'edge', 'shell', 'mate', 'link', 'part', 'view', 'sheet', 'anim', 'occt'],
+  tasarim: ['dims', 'param', 'type', 'pos', 'rot', 'copy', 'face', 'edge', 'shell', 'mate', 'link', 'part', 'view', 'sheet', 'anim', 'occt'],
   analiz: ['fem', 'sim', 'str', 'wgt'],
   uretim: ['cam', 'mfg', 'cost', 'weld', 'asm', 'calc'],
   mekatronik: ['meka'],
@@ -19,7 +19,7 @@ for (const [m, ks] of Object.entries(MODES)) for (const k of ks) TAB_MODE[k] = m
 const FIRST = { tasarim: 'dims', analiz: 'fem', uretim: 'cam', mekatronik: 'meka' };
 const MODE_NAME = { tasarim: 'Tasarım', analiz: 'Analiz', uretim: 'Üretim', mekatronik: 'Mekatronik' };
 const TAB_LABEL = {
-  dims: 'Ölçü', type: 'Tür', pos: 'Konum', rot: 'Döndür', copy: 'Çoğalt', face: 'Yüz', edge: 'Kenar', shell: 'Kabuk', mate: 'Montaj',
+  dims: 'Ölçü', param: 'Değişken', type: 'Tür', pos: 'Konum', rot: 'Döndür', copy: 'Çoğalt', face: 'Yüz', edge: 'Kenar', shell: 'Kabuk', mate: 'Montaj',
   link: 'Bağ', part: 'Parça', view: 'Görünüm', sheet: 'Teknik resim', anim: 'Hareket', occt: 'B-Rep',
   fem: 'FEA analizi', sim: 'Sanal test', str: 'Dayanım', wgt: 'Ağırlık',
   cam: 'CNC', mfg: 'Üretilebilirlik', cost: 'Maliyet', weld: 'Kaynak', asm: 'Montaj sırası', calc: 'Hesap ve dışa aktarma',
@@ -182,6 +182,7 @@ const CMDS = [
   T('mate', 'Montaj eşleşmeleri', 'Yüzü yüze, eş merkez', 'montaj eşleşme mate', 'link'),
   T('link', 'Bağ ve eklemler', 'Menteşe, kayar eklem', 'bağ menteşe eklem kayar', 'link'),
   T('part', 'Parça ayarları', 'Renk, gizle, ad', 'parça renk gizle', 'stack'),
+  T('param', 'Değişkenler ve denklemler', 'Ölçüleri değişkene bağla, geçmişi geri sar', 'değişken denklem parametrik formül ifade geçmiş geri sar ağaç', 'calc'),
   T('view', 'Görünüm', 'Kesit, ölçüm, birim', 'görünüm kesit ölçüm birim', 'eye'),
   T('sheet', 'Teknik resim', 'Ölçülü görünüşler, PDF', 'teknik resim pdf görünüş kesit', 'doc'),
   T('anim', 'Hareket etüdü', 'Mekanizmayı oynat', 'hareket animasyon mekanizma', 'play'),
