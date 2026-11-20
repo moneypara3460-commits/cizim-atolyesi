@@ -13,8 +13,8 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, partDims, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
-} from './logic.js?v=20261120c';
-import { openSketch } from './sketch.js?v=20261112u';
+} from './logic.js?v=20261120d';
+import { openSketch } from './sketch.js?v=20261120d';
 import { KENARLAR, KENAR_ADI } from './sac.js?v=20261120c';
 import { to3MF, toSTEP } from './export3d.js?v=20261112u';
 import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261112u';

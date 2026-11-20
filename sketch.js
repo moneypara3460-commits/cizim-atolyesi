@@ -4,7 +4,7 @@
 //   draw = { mode:'extrude'|'revolve', plane:'top'|'front', pts:[[u,v],...] (mm), h }
 //   top  : u = X, v = Z (ekranda aşağı = +Z)     front: u = X, v = Y (ekranda yukarı = +Y)
 //   revolve: her zaman 'front'; dönme ekseni u = 0 çizgisidir, çizim eksenin sağına yapılır.
-import { fmtNum, snap, circlePts, rectPts, bboxPts, polyArea, arcPoints, roundedRectPts, pointInPoly, solveCons, freedom, CONS_LABEL } from './logic.js?v=20261120c';
+import { fmtNum, snap, circlePts, rectPts, bboxPts, polyArea, arcPoints, roundedRectPts, pointInPoly, solveCons, freedom, CONS_LABEL, consValid } from './logic.js?v=20261120d';
 
 let cssDone = false;
 const CSS = `
@@ -133,7 +133,7 @@ export function openSketch(opts = {}) {
   // birden çok şekil: iç içe olanlar delik olur. shape = etkin şekil (shapes içinde)
   const polyShape = (pts, closed, cons) => ({ kind: 'poly', pts, closed, marks: [], cons: cons || [] });
   let shapes = init ? [init.pts, ...(init.more || [])].map((l, i) => polyShape(l.map((q) => q.slice()), true, init.cons && init.cons[i] ? JSON.parse(JSON.stringify(init.cons[i])) : [])) : [];
-  let csel = { edges: [], vtx: null };   // kısıt aracı seçimi (etkin şeklin kenar / köşe numaraları)
+  let csel = { edges: [], vtxs: [] };   // kısıt aracı seçimi (etkin şeklin kenar / köşe numaraları)
   let autoCons = true;                  // çizerken neredeyse yatay / dikey kenara otomatik kısıt
   let shape = shapes.length ? shapes[0] : null;
   let step = snaps.includes(10) ? 10 : snaps[0];
@@ -214,19 +214,20 @@ export function openSketch(opts = {}) {
   // geçersiz (silinmiş köşeye / kenara bakan) kısıtları at
   function pruneCons(s) {
     if (!s || s.kind !== 'poly' || !s.cons) return;
-    const n = s.pts.length;
-    const okE = (e) => Number.isInteger(e) && e >= 0 && (s.closed ? e < n : e + 1 < n);
-    s.cons = s.cons.filter((c) => (c.t === 'fix' ? c.i >= 0 && c.i < n : okE(c.e) && (c.f === undefined || okE(c.f))));
+    s.cons = s.cons.filter((c) => consValid(c, s.pts.length, !!s.closed));
   }
   // kısıtları çöz; başarısızsa false döner (şekil değişmez)
   function solveShape(s, pinned = []) {
     if (!s || s.kind !== 'poly' || !s.cons || !s.cons.length) return true;
     pruneCons(s);
-    const r = solveCons(s.pts, s.cons, pinned);
+    const r = solveCons(s.pts, s.cons, pinned, 100, 1e-7, !!s.closed);
     if (r.ok) s.pts = r.pts;
     return r.ok;
   }
-  function sameCons(a, b) { return a.t === b.t && a.e === b.e && a.f === b.f && a.i === b.i; }
+  // aynı kısıt mı (sırası önemsiz çiftler: e/f, i/j)
+  const pair = (a, b) => [a, b].filter((x) => x !== undefined).sort((x, y) => x - y).join(',');
+  const refKey = (c) => c.t + '|' + pair(c.e, c.f) + '|' + pair(c.i, c.j);
+  function sameCons(a, b) { return refKey(a) === refKey(b); }
   function addCons(c) {
     if (!shape || shape.kind !== 'poly') return;
     // aynı türden eskisini (ya da h/v karşıtını) kaldır
@@ -330,9 +331,10 @@ export function openSketch(opts = {}) {
     let h = '';
     const f = (label, id, val) => `<label class="f"><span>${label} (${unit})</span><input type="number" step="any" data-f="${id}" value="${val}"></label>`;
     if (shape && shape.kind === 'rect') {
-      h += f('Genişlik', 'rw', fmt(Math.abs(shape.b[0] - shape.a[0]))) + f('Yükseklik', 'rh', fmt(Math.abs(shape.b[1] - shape.a[1]))) + f('Köşe yuv.', 'cr', fmt(shape.cr || 0));
+      h += f('Genişlik', 'rw', fmt(Math.abs(shape.b[0] - shape.a[0]))) + f('Yükseklik', 'rh', fmt(Math.abs(shape.b[1] - shape.a[1]))) + f('Köşe yuv.', 'cr', fmt(shape.cr || 0)) +
+        f('Sol kenar (orijinden)', 'rx', fmt(Math.min(shape.a[0], shape.b[0]))) + f(plane === 'front' ? 'Alt kenar (orijinden)' : 'Üst kenar (orijinden)', 'ry', fmt(Math.min(shape.a[1], shape.b[1])));
     } else if (shape && shape.kind === 'circle') {
-      h += f('Çap', 'cd', fmt(shape.r * 2));
+      h += f('Çap', 'cd', fmt(shape.r * 2)) + f('Merkez yatay (orijinden)', 'ccx', fmt(shape.c[0])) + f('Merkez dikey (orijinden)', 'ccy', fmt(shape.c[1]));
     }
     if (tool === 'cons') h = consFields();
     if (mode === 'extrude' && tool !== 'cons') h += f('Kalınlık', 'th', fmt(thick));
@@ -344,9 +346,33 @@ export function openSketch(opts = {}) {
     let h = '';
     if (!shape) return L('Önce bir şekil çiz.');
     if (shape.kind !== 'poly') return L('Bu şekil dikdörtgen / daire.') + B('Kısıtlı çokgene çevir', 'c-topoly');
-    const E = csel.edges, has = (t, e, f) => shape.cons.some((c) => c.t === t && c.e === e && (f === undefined || c.f === f || (c.e === f && c.f === e)));
+    const E = csel.edges, VX = csel.vtxs, has = (t, e, f) => shape.cons.some((c) => c.t === t && c.e === e && (f === undefined || c.f === f || (c.e === f && c.f === e)));
+    const find = (c) => shape.cons.find((d) => sameCons(d, c));
+    const VF = (lbl, id, c, cur) => { const ex = find(c); return `<label class="f" style="flex:1 1 40%"><span>${lbl} (${unit})</span><input type="number" step="any" data-f="${id}" value="${fmt(ex ? ex.L : cur)}"></label>` + B('🔒 Kilitle', 'c-' + id.slice(1), !!ex); };
+    const P = (i) => shape.pts[i];
     const len = (e) => { const a = shape.pts[e], b = shape.pts[(e + 1) % shape.pts.length]; return Math.hypot(b[0] - a[0], b[1] - a[1]); };
-    if (E.length === 1) {
+    if (VX.length && E.length <= 1) {
+      if (VX.length === 1 && !E.length) {
+        const i = VX[0], fx = shape.cons.some((c) => c.t === 'fix' && c.i === i);
+        h += L('Seçili köşe ' + (i + 1)) + B(fx ? '🔓 Serbest bırak' : '📌 Sabitle', 'c-fix', fx);
+        h += VF('Orijinden yatay', 'cox', { t: 'ox', i }, P(i)[0]) + VF('Orijinden dikey', 'coy', { t: 'oy', i }, P(i)[1]);
+      } else if (VX.length === 2 && !E.length) {
+        const [i, j] = VX, a = P(i), b = P(j);
+        h += L('Seçili köşeler ' + (i + 1) + ' ve ' + (j + 1));
+        h += B('— Yatay hizala', 'c-hal', !!find({ t: 'hal', i, j })) + B('| Dikey hizala', 'c-val', !!find({ t: 'val', i, j }));
+        h += VF('Mesafe', 'cdist', { t: 'dist', i, j }, Math.hypot(b[0] - a[0], b[1] - a[1])) +
+          VF('Yatay mesafe', 'cdx', { t: 'dx', i, j }, Math.abs(b[0] - a[0])) + VF('Dikey mesafe', 'cdy', { t: 'dy', i, j }, Math.abs(b[1] - a[1]));
+      } else if (VX.length === 1 && E.length === 1) {
+        const i = VX[0], e = E[0];
+        h += L('Köşe ' + (i + 1) + ' ve kenar ' + (e + 1));
+        const touch = i === e || i === (e + 1) % shape.pts.length;
+        h += B('⟂ Çizgi üzerinde', 'c-on', !!find({ t: 'on', i, e }), touch) + B('◉ Orta noktada', 'c-mid', !!find({ t: 'mid', i, e }), touch);
+        if (touch) h += L('Bu köşe zaten kenarın ucunda.');
+      } else if (VX.length === 2 && E.length === 1) {
+        const [i, j] = VX, e = E[0];
+        h += L('Köşe ' + (i + 1) + ' ve ' + (j + 1) + ', simetri çizgisi kenar ' + (e + 1)) + B('⇋ Simetrik', 'c-sym', !!find({ t: 'sym', i, j, e }));
+      }
+    } else if (E.length === 1) {
       const e = E[0];
       h += L('Seçili kenar ' + (e + 1));
       h += B('— Yatay', 'c-h', has('h', e)) + B('| Dikey', 'c-v', has('v', e));
@@ -358,20 +384,19 @@ export function openSketch(opts = {}) {
       h += B('∥ Paralel', 'c-par', has('par', e, f)) + B('⊥ Dik', 'c-perp', has('perp', e, f)) + B('= Eşit uzunluk', 'c-eq', has('eq', e, f));
       const ac = shape.cons.find((c) => c.t === 'ang' && ((c.e === e && c.f === f) || (c.e === f && c.f === e)));
       h += `<label class="f" style="flex:1 1 40%"><span>Açı (°)</span><input type="number" step="any" data-f="cang" value="${ac ? fmtNum(ac.A, 2) : 90}"></label>` + B('∠ Açıyı kilitle', 'c-ang', !!ac);
-    } else if (csel.vtx !== null) {
-      const fx = shape.cons.some((c) => c.t === 'fix' && c.i === csel.vtx);
-      h += L('Seçili köşe ' + (csel.vtx + 1)) + B(fx ? '🔓 Serbest bırak' : '📌 Sabitle', 'c-fix', fx);
+      h += B('⎯ Doğrusal', 'c-col', has('col', e, f));
     } else {
-      h += L('Bir kenara ya da köşeye dokun.');
+      h += L('Kenara ya da köşeye dokun (en çok 2 kenar, 2 köşe). Köşe + kenar: çizgi üzerinde / orta nokta; 2 köşe + kenar: simetri.');
     }
-    h += L('Genel') + B('Seçimin kısıtlarını sil', 'c-delsel', false, !E.length && csel.vtx === null) + B('Tüm kısıtları sil', 'c-delall', false, !shape.cons.length) +
+    h += L('Genel') + B('Seçimin kısıtlarını sil', 'c-delsel', false, !E.length && !VX.length) + B('Tüm kısıtları sil', 'c-delall', false, !shape.cons.length) +
       B('Otomatik yatay/dikey: ' + (autoCons ? 'açık' : 'kapalı'), 'c-auto', autoCons);
     return h;
   }
   function syncFieldValues() {
     const set = (id, v) => { const el = fieldsEl.querySelector(`[data-f="${id}"]`); if (el && document.activeElement !== el) el.value = v; };
     if (shape && shape.kind === 'rect') { set('rw', fmt(Math.abs(shape.b[0] - shape.a[0]))); set('rh', fmt(Math.abs(shape.b[1] - shape.a[1]))); }
-    if (shape && shape.kind === 'circle') set('cd', fmt(shape.r * 2));
+    if (shape && shape.kind === 'rect') { set('rx', fmt(Math.min(shape.a[0], shape.b[0]))); set('ry', fmt(Math.min(shape.a[1], shape.b[1]))); }
+    if (shape && shape.kind === 'circle') { set('cd', fmt(shape.r * 2)); set('ccx', fmt(shape.c[0])); set('ccy', fmt(shape.c[1])); }
   }
   function refresh(full = true) {
     updateButtons();
@@ -478,11 +503,11 @@ export function openSketch(opts = {}) {
           g.beginPath(); g.lineWidth = 5; g.strokeStyle = 'rgba(249,115,22,.85)'; line(x0, y0, x1, y1); g.stroke();
         }
         // kısıt işaretleri kenarın ortasının biraz dışına
-        const sym = { h: '—', v: '|', par: '∥', perp: '⊥', eq: '=', ang: '∠' };
+        const sym = { h: '—', v: '|', par: '∥', perp: '⊥', eq: '=', ang: '∠', col: '⎯' };
         const badges = new Map();
         const addB = (e, t) => { if (!badges.has(e)) badges.set(e, []); badges.get(e).push(t); };
         shape.cons.forEach((c, k) => {
-          if (c.t === 'fix') return;
+          if (c.t === 'fix' || c.e === undefined || ['on', 'mid', 'sym'].includes(c.t)) return; // köşe kısıtları aşağıda
           if (c.t === 'len') addB(c.e, '🔒' + fmt(c.L));
           else if (c.f !== undefined) { const tag = sym[c.t] + (k + 1) + (c.t === 'ang' ? ' ' + fmtNum(c.A, 1) + '°' : ''); addB(c.e, tag); addB(c.f, tag); }
           else addB(c.e, sym[c.t]);
@@ -502,7 +527,30 @@ export function openSketch(opts = {}) {
           g.textAlign = 'start'; g.textBaseline = 'alphabetic';
         }
         for (const c of shape.cons) if (c.t === 'fix' && c.i < n) { const [x, y] = toScreen(...pts[c.i]); g.fillStyle = '#f59e0b'; g.fillRect(x - 7, y - 7, 14, 14); }
-        if (csel.vtx !== null && csel.vtx < n) { const [x, y] = toScreen(...pts[csel.vtx]); g.beginPath(); g.lineWidth = 3; g.strokeStyle = '#f97316'; g.arc(x, y, 11, 0, 7); g.stroke(); }
+        for (const vi of csel.vtxs) if (vi < n) { const [x, y] = toScreen(...pts[vi]); g.beginPath(); g.lineWidth = 3; g.strokeStyle = '#f97316'; g.arc(x, y, 11, 0, 7); g.stroke(); }
+        // köşe kısıtları: iki köşe arası kesik çizgi + etiket, tek köşede etiket
+        const vb = new Map(); const addV = (i, t) => { if (!vb.has(i)) vb.set(i, []); vb.get(i).push(t); };
+        const tagOf = (c, k) => ({ ox: '↔' + fmt(c.L), oy: '↕' + fmt(c.L), on: '⟂' + (c.e + 1), mid: '◉' + (c.e + 1), sym: '⇋' + (k + 1) }[c.t]);
+        shape.cons.forEach((c, k) => {
+          if (['ox', 'oy', 'on', 'mid'].includes(c.t) && c.i < n) addV(c.i, tagOf(c, k));
+          if (c.t === 'sym' && c.i < n && c.j < n) { addV(c.i, tagOf(c, k)); addV(c.j, tagOf(c, k)); }
+          if (['hal', 'val', 'dist', 'dx', 'dy'].includes(c.t) && c.i < n && c.j < n) {
+            const [x0, y0] = toScreen(...pts[c.i]), [x1, y1] = toScreen(...pts[c.j]);
+            g.beginPath(); g.setLineDash([3, 4]); g.lineWidth = 1.5; g.strokeStyle = '#fbbf24'; line(x0, y0, x1, y1); g.stroke(); g.setLineDash([]);
+            const txt = { hal: '— hizalı', val: '| hizalı', dist: '⟷ ' + fmt(c.L), dx: '↔ ' + fmt(c.L), dy: '↕ ' + fmt(c.L) }[c.t];
+            g.font = 'bold 11px system-ui, sans-serif';
+            const w = g.measureText(txt).width + 8, bx = (x0 + x1) / 2, by = (y0 + y1) / 2 - 12;
+            g.fillStyle = 'rgba(120,53,15,.92)'; g.fillRect(bx - w / 2, by - 8, w, 16);
+            g.fillStyle = '#fde68a'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, bx, by); g.textAlign = 'start'; g.textBaseline = 'alphabetic';
+          }
+        });
+        for (const [i, tags] of vb) {
+          const [x, y] = toScreen(...pts[i]), txt = tags.join(' ');
+          g.font = 'bold 11px system-ui, sans-serif';
+          const w = g.measureText(txt).width + 8;
+          g.fillStyle = 'rgba(120,53,15,.92)'; g.fillRect(x + 10, y - 22, w, 16);
+          g.fillStyle = '#fde68a'; g.textBaseline = 'middle'; g.fillText(txt, x + 14, y - 14); g.textBaseline = 'alphabetic';
+        }
       }
       if (shape.kind === 'poly') {
         sp.forEach(([x, y], i) => {
@@ -605,7 +653,7 @@ export function openSketch(opts = {}) {
       shape.pts[act.i] = sn(toWorld(sx, sy));
       if (shape.cons && shape.cons.length) {
         if (!act.keep) act.keep = shape.pts.map((q) => q.slice());
-        const r = solveCons(shape.pts, shape.cons, [act.i], 150);
+        const r = solveCons(shape.pts, shape.cons, [act.i], 60, 1e-7, !!shape.closed);
         if (r.ok) { shape.pts = r.pts; act.bad = false; } else act.bad = true;
       }
       draw();
@@ -691,17 +739,20 @@ export function openSketch(opts = {}) {
       if (a.moved) return;
       const e = hitEdge(sx, sy);
       if (e >= 0) {
-        csel.vtx = null;
         const k = csel.edges.indexOf(e);
         if (k >= 0) csel.edges.splice(k, 1); else { csel.edges.push(e); if (csel.edges.length > 2) csel.edges.shift(); }
       } else {
         const s2 = pickShape(sx, sy);
         if (s2 && s2 !== shape) { shape = s2; arcEnd = null; }
-        csel = { edges: [], vtx: null };
+        csel = { edges: [], vtxs: [] };
       }
       refresh(); return;
     }
-    if (a.type === 'vertex' && tool === 'cons' && !a.moved) { csel = { edges: [], vtx: a.i }; refresh(); return; }
+    if (a.type === 'vertex' && tool === 'cons' && !a.moved) {
+      const k = csel.vtxs.indexOf(a.i);
+      if (k >= 0) csel.vtxs.splice(k, 1); else { csel.vtxs.push(a.i); if (csel.vtxs.length > 2) csel.vtxs.shift(); }
+      refresh(); return;
+    }
     if (a.type === 'vertex' && a.moved && a.bad && a.keep) { shape.pts = a.keep; setHint('Kısıtlar bu konuma izin vermiyor, köşe geri alındı.', true); draw(); updateButtons(); return; }
     if (a.type === 'select') {
       if (!a.moved) { const s = pickShape(sx, sy); if (s) { shape = s; arcEnd = null; } refresh(); }
@@ -758,7 +809,9 @@ export function openSketch(opts = {}) {
     cleanup();
     if (opts.onDone) opts.onDone(r.draw);
   }
-  function cleanup() { ro.disconnect(); root.remove(); }
+  function cleanup() { ro.disconnect(); root.remove(); if (window.__sk && window.__sk.root === root) delete window.__sk; }
+  // test kancası: şekiller ve dünya → ekran (sayfa) koordinatı
+  window.__sk = { root, get shapes() { return shapes; }, get shape() { return shape; }, scr(u, v) { const r = cv.getBoundingClientRect(), q = toScreen(u, v); return [r.left + q[0], r.top + q[1]]; } };
 
   root.addEventListener('click', (e) => {
     const b = e.target.closest('button');
@@ -775,7 +828,7 @@ export function openSketch(opts = {}) {
       else if (allPts().some(([u]) => u < 0)) setHint('Şekil eksenin solunda; sağına taşı.', true);
       updateButtons(); renderFields(); draw(); return;
     }
-    if (a.startsWith('tool-')) { tool = a.slice(5); arcEnd = null; csel = { edges: [], vtx: null }; refresh(); return; }
+    if (a.startsWith('tool-')) { tool = a.slice(5); arcEnd = null; csel = { edges: [], vtxs: [] }; refresh(); return; }
     if (a.startsWith('c-')) { consAction(a); return; }
     if (a === 'back') {
       if (arcEnd) { arcEnd = null; refresh(); return; }
@@ -786,11 +839,11 @@ export function openSketch(opts = {}) {
         else shape.pts.pop();
         if (!shape.pts.length) removeShape(shape); else pruneCons(shape);
       } else removeShape(shape);
-      csel = { edges: [], vtx: null };
+      csel = { edges: [], vtxs: [] };
       refresh(); return;
     }
     if (a === 'close') { if (shape && shape.kind === 'poly' && shape.pts.length >= 3) { closeShape(shape); refresh(); } return; }
-    if (a === 'delshape') { if (shape) removeShape(shape); csel = { edges: [], vtx: null }; refresh(); return; }
+    if (a === 'delshape') { if (shape) removeShape(shape); csel = { edges: [], vtxs: [] }; refresh(); return; }
     if (a === 'clear') { shapes = []; shape = null; arcEnd = null; refresh(); return; }
     if (a === 'zin') { zoomAt(1.4, W / 2, H / 2); draw(); return; }
     if (a === 'zout') { zoomAt(1 / 1.4, W / 2, H / 2); draw(); return; }
@@ -806,7 +859,7 @@ export function openSketch(opts = {}) {
       shapes[shapes.indexOf(shape)] = ns; shape = ns; refresh(); return;
     }
     if (shape.kind !== 'poly') return;
-    const E = csel.edges;
+    const E = csel.edges, VX = csel.vtxs;
     const val = (id) => { const el = fieldsEl.querySelector(`[data-f="${id}"]`); return el ? el.valueAsNumber : NaN; };
     if (a === 'c-h' || a === 'c-v') {
       const t = a.slice(2), e = E[0];
@@ -829,14 +882,30 @@ export function openSketch(opts = {}) {
       if (t === 'ang') { const A = val('cang'); if (!(A > 0 && A < 180)) { setHint('Açı 0 ile 180 arasında olmalı.', true); return; } c.A = A; }
       addCons(c); return;
     }
-    if (a === 'c-fix' && csel.vtx !== null) {
-      const i = csel.vtx;
+    const toggle = (c) => { const ex = shape.cons.find((d) => sameCons(d, c)); if (ex) { shape.cons.splice(shape.cons.indexOf(ex), 1); refresh(); return; } addCons(c); };
+    if (a === 'c-col') { toggle({ t: 'col', e: E[0], f: E[1] }); return; }
+    if ((a === 'c-hal' || a === 'c-val') && VX.length === 2) { toggle({ t: a.slice(2), i: VX[0], j: VX[1] }); return; }
+    if ((a === 'c-on' || a === 'c-mid') && VX.length === 1 && E.length === 1) { toggle({ t: a.slice(2), i: VX[0], e: E[0] }); return; }
+    if (a === 'c-sym' && VX.length === 2 && E.length === 1) { toggle({ t: 'sym', i: VX[0], j: VX[1], e: E[0] }); return; }
+    const VAL = { 'c-ox': ['ox', 'cox', 1], 'c-oy': ['oy', 'coy', 1], 'c-dist': ['dist', 'cdist', 2], 'c-dx': ['dx', 'cdx', 2], 'c-dy': ['dy', 'cdy', 2] }[a];
+    if (VAL) {
+      const [t, id, nv] = VAL;
+      if (VX.length !== nv) return;
+      const c = nv === 1 ? { t, i: VX[0] } : { t, i: VX[0], j: VX[1] };
+      const ex = shape.cons.find((d) => sameCons(d, c));
+      if (ex) { shape.cons.splice(shape.cons.indexOf(ex), 1); refresh(); return; }
+      const L = val(id) * uf;
+      if (!isFinite(L) || (nv === 2 && !(L >= 0))) { setHint('Geçerli bir ölçü yaz.', true); return; }
+      c.L = L; addCons(c); return;
+    }
+    if (a === 'c-fix' && VX.length === 1) {
+      const i = VX[0];
       if (shape.cons.some((c) => c.t === 'fix' && c.i === i)) shape.cons = shape.cons.filter((c) => !(c.t === 'fix' && c.i === i));
       else shape.cons.push({ t: 'fix', i });
       refresh(); return;
     }
     if (a === 'c-delsel') {
-      shape.cons = shape.cons.filter((c) => !(c.t === 'fix' ? c.i === csel.vtx : E.includes(c.e) || (c.f !== undefined && E.includes(c.f))));
+      shape.cons = shape.cons.filter((c) => !([c.e, c.f].some((x) => x !== undefined && E.includes(x)) || [c.i, c.j].some((x) => x !== undefined && VX.includes(x))));
       refresh(); return;
     }
     if (a === 'c-delall') { shape.cons = []; refresh(); }
@@ -852,6 +921,16 @@ export function openSketch(opts = {}) {
     if (!id) return;
     const v = e.target.valueAsNumber * uf;
     if (id === 'cr' && shape && shape.kind === 'rect') { shape.cr = v >= 0 ? v : 0; draw(); return; }
+    const VID = { cox: 'ox', coy: 'oy', cdist: 'dist', cdx: 'dx', cdy: 'dy' };
+    if (VID[id] && shape && shape.kind === 'poly') {
+      const VX = csel.vtxs, t = VID[id], ref = t === 'ox' || t === 'oy' ? { t, i: VX[0] } : { t, i: VX[0], j: VX[1] };
+      const c = shape.cons.find((q) => sameCons(q, ref));
+      if (!c || !isFinite(v) || (t !== 'ox' && t !== 'oy' && !(v >= 0))) return;
+      const old = c.L, keep = shape.pts.map((q) => q.slice());
+      c.L = v;
+      if (!solveShape(shape)) { c.L = old; shape.pts = keep; setHint('Bu ölçü diğer kısıtlarla sağlanamıyor.', true); } else setHint(defaultHint(), false);
+      draw(); return;
+    }
     if ((id === 'clen' || id === 'cang') && shape && shape.kind === 'poly') {
       // kilitli ölçü yazarken canlı güncellenir (SolidWorks'teki ölçüyü değiştirme gibi)
       const E = csel.edges;
@@ -865,6 +944,12 @@ export function openSketch(opts = {}) {
       if (!solveShape(shape)) { if (id === 'clen') c.L = old; else c.A = old; shape.pts = keep; setHint('Bu ölçü diğer kısıtlarla sağlanamıyor.', true); }
       else setHint(defaultHint(), false);
       draw(); return;
+    }
+    // konum alanları (eksi ya da sıfır olabilir)
+    if (isFinite(v) && shape && shape.kind === 'circle' && (id === 'ccx' || id === 'ccy')) { shape.c = id === 'ccx' ? [v, shape.c[1]] : [shape.c[0], v]; draw(); return; }
+    if (isFinite(v) && shape && shape.kind === 'rect' && (id === 'rx' || id === 'ry')) {
+      const k = id === 'rx' ? 0 : 1, d = v - Math.min(shape.a[k], shape.b[k]);
+      shape.a = shape.a.slice(); shape.b = shape.b.slice(); shape.a[k] += d; shape.b[k] += d; draw(); return;
     }
     if (!(v > 0)) return;
     if (id === 'th') thick = v;
