@@ -275,3 +275,24 @@ Yapılamayanlar / sahibinin yapması gerekenler: main dalı koruması (GitHub ay
 kimlik doğrulamalı gönderim (OIDC; Google Cloud ayarı), Supabase'de e-posta ile kaydın kapalı olduğunun ve sızdırılmış
 parola korumasının kontrolü (panel ayarı), `pg_net` uzantısı yeri değiştirilemez (taşınamaz uzantı; Supabase önerisi bilgi amaçlı).
 
+
+## 12. Güvenlik denetimi düzeltmeleri, 1. adım: hesap silme (21.11.2026)
+
+20 Kasım güvenlik denetiminin (Claude Docs belgesi "Çizim Atölyesi Güvenlik Denetimi"; ayrı bir ajan da bağımsız
+inceledi) ilk kod düzeltmesi. Aynı gün sahibi iki panel ayarını yaptı ve canlıda doğrulandı: Supabase'de e-posta ile
+kayıt kapalı (M3), GitHub'da `main` dalı silinemez ve zorla push edilemez (L8).
+
+| Bulgu | Düzeltme | Doğrulama |
+|---|---|---|
+| M1: Hesap silinince yapay zekâ sayaçları da siliniyordu; ortak günlük sınır sayaçların toplamı olduğu için "kullan → sil → aynı Google hesabıyla tekrar gir" döngüsü sınırı etkisiz kılıyordu | Sayaçlar silinmez; `public.hesap_sayac_devret` kimliksiz `<tür>:_silinen` satırına aktarır (toplam aynı kalır, kimlik kalmaz). Daha önce silinmiş e-postayla açılan hesabın ilk 24 saatteki yapay zekâ hakkı 0 (`ai_take_user`) | Yeni `tests/vt-hesap-silme.test.mjs` |
+| L6: `playdog:` sayacı ve güvenlik olaylarındaki kimlik silmede kalıyordu | Bütün önekler aynı yolla aktarılır; olaylardaki kimlik `_silinen` olur | aynı test |
+| L5 (bir kısmı): `hesap-sil` gövdeyi sınırsız okuyordu | `jsonOku(req, 1024)` | `tests/istek.test.mjs` (yardımcının kendisi) |
+| Nöbetçi silme selini görmüyordu | Her hesap silme `hesap_silme` olayı olarak yazılır (saatte 10 olay eşiğine girer) | `tests/vt-hesap-silme.test.mjs` |
+
+**Veritabanı testi:** `tests/vt-hesap-silme.test.mjs` bütün `supabase/migrations` dosyalarını geçici, yerel bir
+PostgreSQL'e sırayla uygular (Supabase'in `auth` / `cron` / `net` şemaları küçük taklitlerle) ve senaryoları sınar;
+canlı veritabanına dokunmaz. PostgreSQL yoksa atlanır (GitHub'ın `ubuntu-latest` makinesinde kurulu). Bozuk düzeltmeyle
+denendi: 7 testten 4'ü kırıldı.
+
+Gizlilik metinleri (hesap sayfası, `tanitim/hesap-silme.html`, `tanitim/gizlilik.html`) yeni davranışa göre
+güncellendi: kullanım sayıları silinmiyor, kimliksizleştiriliyor.
