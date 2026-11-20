@@ -3,6 +3,8 @@
 // - binary STL yazıcı
 // - Türkçe sesli komut çözücü (kural tabanlı, yapay zekâ kullanmaz)
 
+import { tavaCalc, TAVA_VARSAYILAN } from './sac.js?v=20261120c';
+
 export const TYPE_LABEL = {
   box: 'Kutu',
   cylinder: 'Silindir',
@@ -1179,9 +1181,11 @@ export const SHEET_PRESETS = {
   Z: { sh: 'Z', sa0: 0, seg: [{ L: 25 }, { a: 90, L: 50 }, { a: -90, L: 25 }] },
   hat: { sh: 'hat', sa0: 0, seg: [{ L: 20 }, { a: 90, L: 30 }, { a: -90, L: 40 }, { a: -90, L: 30 }, { a: 90, L: 20 }] },
   C: { sh: 'C', sa0: 0, seg: [{ L: 12 }, { a: -90, L: 30 }, { a: -90, L: 60 }, { a: -90, L: 30 }, { a: -90, L: 12 }] },
+  tava: TAVA_VARSAYILAN, // flanşlı tava / kutu (sac.js)
 };
 // Hesap: { ok, err, flatL, W, T, bends:[{ pos (açınımda büküm ortası), a, ba }], straights, poly (kesit), h, size }
 export function sheetCalc(p) {
+  if (p.sm === 'tava') return memo(JSON.stringify(['tava', p.st, p.sr, p.sk, p.ta, p.tb, p.tq, p.fl, p.kk, p.kg, p.ko]), () => tavaCalc(p));
   const key = JSON.stringify(['sh', p.st, p.sr, p.sw, p.sk, p.sa0, p.seg]);
   return memo(key, () => {
     const num = (v, d) => (isFinite(Number(v)) ? Number(v) : d);
@@ -1235,6 +1239,7 @@ export function sheetCalc(p) {
 }
 // Açınım DXF çizgileri (mm): dış kontur + büküm çizgileri
 export function sheetFlatLines(c) {
+  if (c.tava) return { outline: c.flat.outline, bendLines: c.flat.bendLines };
   const L = c.flatL, W = c.W;
   return {
     outline: [[0, 0, L, 0], [L, 0, L, W], [L, W, 0, W], [0, W, 0, 0]],

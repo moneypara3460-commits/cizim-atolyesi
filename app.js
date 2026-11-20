@@ -13,8 +13,9 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, partDims, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
-} from './logic.js?v=20261112u';
+} from './logic.js?v=20261120c';
 import { openSketch } from './sketch.js?v=20261112u';
+import { KENARLAR, KENAR_ADI } from './sac.js?v=20261120c';
 import { to3MF, toSTEP } from './export3d.js?v=20261112u';
 import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261112u';
 import { openCad2D } from './cad2d.js?v=20261112u';
@@ -610,6 +611,24 @@ function baseGeo(p) {
     }
     case 'sheet': {
       const c = sheetCalc(p);
+      if (c.tava) {
+        let g;
+        if (p.flat) {
+          const loop = c.flat.loops[0] || [[0, 0], [c.flatL, 0], [c.flatL, c.W], [0, c.W]];
+          // açınım: XZ düzleminde, kalınlık Y yönünde (Z = döndürmeden sonra şekil Y'si)
+          g = new THREE.ExtrudeGeometry(new THREE.Shape(loop.map(([x, z]) => new THREE.Vector2(x, z))), { depth: c.T, bevelEnabled: false, curveSegments: 1 });
+          g.rotateX(Math.PI / 2);
+        } else {
+          g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(c.tris), 3));
+          try { g = toCreasedNormals(g, 30 * RAD); } catch (e) { g.computeVertexNormals(); }
+        }
+        g.computeBoundingBox();
+        const bb = g.boundingBox;
+        g.translate(-(bb.min.x + bb.max.x) / 2, -(bb.min.y + bb.max.y) / 2, -(bb.min.z + bb.max.z) / 2);
+        g.clearGroups();
+        return ensureUV(g);
+      }
       if (p.flat) return new THREE.BoxGeometry(Math.max(c.flatL, 0.01), c.T, c.W);
       const g = new THREE.ExtrudeGeometry(new THREE.Shape(c.poly.map(([u, v]) => new THREE.Vector2(u, v))), { depth: c.W, bevelEnabled: false, curveSegments: 1 });
       g.computeBoundingBox();
@@ -1051,7 +1070,9 @@ function fieldsFor(p) {
     }
     case 'frame': return [['Genişlik (dış)', 'fw'], ...(p.fr === 'rect' ? [] : [['Derinlik (dış)', 'fd']]), ['Yükseklik', 'fh'],
       ...(p.fr === 'table' ? [['Alt kuşak yüksekliği (0 = yok)', 'fs']] : []), ...(p.fr === 'shelf' ? [['Raf sayısı', 'fn', 'deg']] : [])];
-    case 'sheet': return [['Sac kalınlığı', 'st'], ['İç büküm yarıçapı', 'sr'], ['Derinlik (en)', 'sw'], ['K faktörü (0–1)', 'sk', 'deg'], ['Başlangıç yönü °', 'sa0', 'deg']];
+    case 'sheet': return p.sm === 'tava'
+      ? [['Taban boyu X (dış)', 'ta'], ['Taban eni Z (dış)', 'tb'], ['Sac kalınlığı', 'st'], ['İç büküm yarıçapı', 'sr'], ['K faktörü (0–1)', 'sk', 'deg'], ['Flanş açısı ° (90 = dik)', 'tq', 'deg']]
+      : [['Sac kalınlığı', 'st'], ['İç büküm yarıçapı', 'sr'], ['Derinlik (en)', 'sw'], ['K faktörü (0–1)', 'sk', 'deg'], ['Başlangıç yönü °', 'sa0', 'deg']];
     case 'loft': return [
       ...(p.ls0 === 'circle' ? [['Alt çap', 'd']] : [['Alt genişlik', 'w'], ['Alt derinlik', 'l']]),
       ...(p.ls1 === 'circle' ? [['Üst çap', 'd2']] : [['Üst genişlik', 'w2'], ['Üst derinlik', 'l2']]),
@@ -1102,7 +1123,8 @@ function renderPanel() {
         '<div class="lbl h">Köşe birleşimi</div>' + btn('Alın (90°)', 'frj-butt', p.fj !== 'miter' || !miterOK(p)) + (miterOK(p) ? btn('Gönye (45°)', 'frj-miter', p.fj === 'miter') : '<div class="lbl" style="flex:1 0 100%">Gönye: pano ve kutu çerçevede, kare ya da yuvarlak profille yapılır.</div>') +
         cutListHtml(p) + btn('📋 Kesim listesi (CSV)', 'fr-csv') + btn('✂ Kesim optimizasyonu (6 m boylara böl)', 'cut-opt') + opBtns
       : p.type === 'sheet'
-      ? '<div class="lbl h">Hazır profil</div>' + [['L', 'L köşebent'], ['U', 'U kanal'], ['Z', 'Z profil'], ['hat', 'Şapka'], ['C', 'C (dudaklı)']].map(([k, l]) => btn(l, 'shp-' + k, p.sh === k)).join('') +
+      ? '<div class="lbl h">Hazır profil</div>' + [['L', 'L köşebent'], ['U', 'U kanal'], ['Z', 'Z profil'], ['hat', 'Şapka'], ['C', 'C (dudaklı)']].map(([k, l]) => btn(l, 'shp-' + k, p.sh === k && p.sm !== 'tava')).join('') +
+        '<div class="lbl h">Flanşlı sac</div>' + btn('▭ Tava / kutu (kenar flanşları)', 'shp-tava', p.sm === 'tava') +
         '<div class="lbl h">Açınım</div>' + btn(p.flat ? '📐 Bükülmüş göster' : '📄 Düz (açınım) göster', 'sh-flat', p.flat) + btn('⬇ Açınım DXF', 'sh-dxf') + opBtns
       : p.type === 'sweep'
       ? '<div class="lbl h">Profil (kesit şekli)</div>' + btn('Daire', 'prof-circle', p.prof === 'circle') + btn('Dikdörtgen', 'prof-rect', p.prof === 'rect') + btn('Boru (içi boş)', 'prof-tube', p.prof === 'tube') +
@@ -1355,7 +1377,8 @@ function renderPanel() {
         (p.fit ? '<div class="lbl" style="flex:1 0 100%">' + (sp ? 'Ø' + fmtNum(+p.d, 3).replace('.', ',') + ' ' + p.fit + ': +' + fmtNum(sp.es, 3).replace('.', ',') + ' / 0 mm' : '⚠ ' + p.fit + ' bu çapta tanımlı değil (0 – 500 mm)') + '</div>' : '');
     }
     if (p.type === 'cylinder' || p.type === 'tube') body += threadPanel(p, idx);
-    if (p.type === 'sheet') {
+    if (p.type === 'sheet' && p.sm === 'tava') body += tavaPanel(p);
+    else if (p.type === 'sheet') {
       const c = sheetCalc(p);
       body += (p.seg || []).map((sg, i) => '<div class="lbl h">' + (i + 1) + '. kenar</div>' +
         (i > 0 ? `<label class="f"><span>Büküm açısı ° (+ yukarı, − aşağı)</span><input type="number" step="any" data-seg="${i},a" value="${fmtNum(sg.a, 2)}"></label>` : '') +
@@ -3271,6 +3294,35 @@ function mateTap(cx, cy) {
 /* ---- dayanım: malzeme, büküm sınırı, yük testi ---- */
 cp.lkg = 100; cp.bsup = 'simple'; cp.bload = 'point'; cp.bax = 'x';
 const partMat = (p) => matById(p.mat || settings.mat || 'celik');
+// flanşlı tava: kenar flanşları, köşe kapatma, açınım bilgisi
+function tavaInfoHtml(p) {
+  const c = sheetCalc(p), f2 = (v) => fmtNum(v, 2);
+  let h = c.ok ? 'Açınım boyu: <b>' + lenText(c.flatL) + '</b> × ' + lenText(c.W) + ' · ' + c.bends.length + ' büküm' +
+    '<br>Büküm payı BA ' + f2(c.ba) + ' mm · geri çekilme ' + f2(c.ossb) + ' mm · büküm düşümü BD ' + f2(c.bd) + ' mm' + (c.kapali ? ' · köşeler kapalı (aralık ' + f2(c.g) + ' mm)' : '')
+    : '⚠ ' + c.err;
+  for (const u of c.uyari || []) h += '<br>⚠ ' + u;
+  for (const w of bendWarnings(p)) h += '<br>⚠ ' + w;
+  return h;
+}
+function tavaInfoUpdate(p) {
+  const el = document.getElementById('tava-info');
+  if (!el) return;
+  const c = sheetCalc(p);
+  el.innerHTML = tavaInfoHtml(p); el.style.color = c.ok && !(c.uyari || []).length && !bendWarnings(p).length ? '#cbd5e1' : '#f87171';
+}
+function tavaPanel(p) {
+  const fl = p.fl || {}, c = sheetCalc(p);
+  let h = '<div class="lbl h">Kenar flanşları (dış boy, 0 = flanş yok)</div>' +
+    KENARLAR.map((k) => `<label class="f"><span>${KENAR_ADI[k]} (${settings.unit})</span><input type="number" step="any" min="0" data-fl="${k}" value="${lenVal(+fl[k] || 0)}"></label>`).join('') +
+    '<div class="lbl h">Köşe</div>' + btn('Açık (köşe boşaltmalı)', 'kk-acik', p.kk !== 'kapali') + btn('Kapalı (flanşlar birleşir)', 'kk-kapali', p.kk === 'kapali');
+  if (p.kk === 'kapali') {
+    h += btn('Ön / arka flanşı uzar', 'ko-x', p.ko !== 'z') + btn('Sol / sağ flanşı uzar', 'ko-z', p.ko === 'z') +
+      `<label class="f"><span>Köşe aralığı (${settings.unit})</span><input type="number" step="any" min="0" data-tkg="1" value="${lenVal(+p.kg >= 0 ? +p.kg : 0.4)}"></label>`;
+  }
+  const bad = !c.ok || (c.uyari || []).length || bendWarnings(p).length;
+  h += `<div class="lbl" id="tava-info" style="flex:1 0 100%;font-size:13px;color:${bad ? '#f87171' : '#cbd5e1'}">${tavaInfoHtml(p)}</div>`;
+  return h;
+}
 // büküm sınırı uyarıları (metin listesi)
 function bendWarnings(p) {
   const m = partMat(p), out = [], f = (v) => fmtNum(v, 1);
@@ -3281,7 +3333,9 @@ function bendWarnings(p) {
     }
     if (m.kind === 'wood' && c.bends.length) out.push('Ahşap sac gibi keskin bükülmez; bu parça ancak buharla / laminasyonla (ince katmanlar yapıştırılarak) yapılabilir.');
     const minFl = 2.5 * c.T + c.R;
-    (p.seg || []).forEach((sg, i) => { if (p.seg.length > 1 && (Number(sg.L) || 0) < minFl - 1e-6) out.push((i + 1) + '. kenar ' + f(sg.L) + ' mm: abkantta tutmaz, en az ~' + f(minFl) + ' mm olmalı.'); });
+    if (p.sm === 'tava') {
+      for (const k of KENARLAR) { const L = Number((p.fl || {})[k]) || 0; if (L > 0 && L < minFl - 1e-6) out.push(KENAR_ADI[k] + ' flanşı ' + f(L) + ' mm: abkantta tutmaz, en az ~' + f(minFl) + ' mm olmalı.'); }
+    } else (p.seg || []).forEach((sg, i) => { if (p.seg.length > 1 && (Number(sg.L) || 0) < minFl - 1e-6) out.push((i + 1) + '. kenar ' + f(sg.L) + ' mm: abkantta tutmaz, en az ~' + f(minFl) + ' mm olmalı.'); });
   }
   if (p.type === 'sweep' && p.path !== 'poly') {
     const D = p.prof === 'rect' ? Math.max(Number(p.w) || 0, Number(p.l) || 0) : Number(p.d) || 0;
@@ -3341,7 +3395,7 @@ function strengthPanel(p) {
     L = Number(p.h) || 0; const d = Number(p.d) || 0;
     sec = { kind: 'round', d, t: p.type === 'tube' ? Math.max((d - (Number(p.di) || 0)) / 2, 0.01) : 0 };
     label = p.type === 'tube' ? 'Boru (boyu boyunca kiriş)' : 'Mil / çubuk (boyu boyunca kiriş)';
-  } else if (p.type === 'sheet' && p.flat) {
+  } else if (p.type === 'sheet' && p.flat && p.sm !== 'tava') {
     const c = sheetCalc(p); L = c.flatL; sec = { kind: 'rect', b: c.W, h: c.T }; label = 'Düz sac';
   }
   if (!sec) {
@@ -4449,7 +4503,9 @@ document.addEventListener('click', (e) => {
   if (act === 'fr-csv') { exportCutList(p); return; }
   if (act === 'cut-opt') { openCutOpt({ name: fileBase(), fromCad: cadCutPieces }); return; }
   if (act.startsWith('frj-')) { commit(); p.fj = act.slice(4); refreshAll(); return; }
-  if (act.startsWith('shp-')) { commit(); Object.assign(p, JSON.parse(JSON.stringify(SHEET_PRESETS[act.slice(4)]))); refreshAll(); return; }
+  if (act.startsWith('shp-')) { commit(); const k = act.slice(4); if (k !== 'tava') delete p.sm; Object.assign(p, JSON.parse(JSON.stringify(SHEET_PRESETS[k]))); refreshAll(); return; }
+  if (act.startsWith('kk-') && p.sm === 'tava') { commit(); p.kk = act.slice(3) === 'kapali' ? 'kapali' : 'acik'; refreshAll(); return; }
+  if (act.startsWith('ko-') && p.sm === 'tava') { commit(); p.ko = act.slice(3) === 'z' ? 'z' : 'x'; refreshAll(); return; }
   if (act === 'sh-flat') { commit(); p.flat = !p.flat; refreshAll(); return; }
   if (act === 'sh-dxf') { exportFlatDXF(p); return; }
   if (act === 'seg-add' && p.seg) { commit(); p.seg.push({ a: 90, L: 30 }); p.sh = 'custom'; refreshAll(); return; }
@@ -4589,6 +4645,16 @@ document.addEventListener('input', (e) => {
     scheduleSave();
     return;
   }
+  if (d.fl || d.tkg) {
+    const c = cur(), v = el.valueAsNumber;
+    if (c.sm !== 'tava' || !isFinite(v)) return;
+    const skey = c.id + '.fl' + (d.fl || 'kg'), snow = Date.now();
+    if (skey !== lastKey || snow - lastAt > 1500) { commit(); updateToolbar(); }
+    lastKey = skey; lastAt = snow;
+    if (d.fl) { c.fl = { ...(c.fl || {}), [d.fl]: Math.max(fromUnit(v, settings.unit), 0) }; } else c.kg = Math.max(fromUnit(v, settings.unit), 0);
+    rebuild(false); tavaInfoUpdate(c); scheduleSave();
+    return;
+  }
   if (d.seg) {
     const [si, key] = d.seg.split(','), c = cur(), v = el.valueAsNumber;
     if (!c.seg || !c.seg[+si] || !isFinite(v)) return;
@@ -4653,6 +4719,7 @@ document.addEventListener('input', (e) => {
   if (POSE_KEYS.includes(k)) carry(cur(), setv); else setv();
   if (cur().gear && (k === 'gm' || k === 'gz' || k === 'gb')) regenGear(cur());
   rebuild(false);
+  if (cur().sm === 'tava') tavaInfoUpdate(cur());
   scheduleSave();
 });
 
