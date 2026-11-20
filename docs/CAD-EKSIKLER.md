@@ -9,7 +9,7 @@ Sıra kolaydan zora. Her madde ayrı PR; tam test (birim, gerçek OCCT, iki aray
 | 3 | Teknik resim: tolerans, pürüzlülük, parça listesi | **Tamam** (19.11.2026) |
 | 1 | Standart parça kütüphanesi (doğrulanmış ölçü tablolarıyla) | **Tamam** (20.11.2026) |
 | 8 | Sac metal: flanş, köşe kapatma | **Tamam** (20.11.2026) |
-| 4 | Kroki kısıtları ve serbest eğri | Bekliyor |
+| 4 | Kroki kısıtları ve serbest eğri | Kısıtlar **tamam** (20.11.2026); serbest eğri sırada |
 | 5 | Parametrik geçmiş ve varyantlar | Bekliyor |
 | 7 | DWG | Lisans kararı bekliyor (ODA ücretli, LibreDWG GPL) |
 
@@ -164,4 +164,36 @@ bölgeyi aşmaz (PTC Creo); kapalı köşe biçimi Solid Edge ve Inventor'daki g
 alanı, 3B hacmin analitik değerle uyumu, kapalı köşe uzatmaları ve aralık, 60° flanş, tek flanş, hata ve uyarılar),
 uçtan uca `E-Tava` (iki arayüzde: açınım 173,05 × 133,05, dış ölçü 120 × 30 × 80, hacim, flanş kaldırma, kapalı köşe hacim
 farkı, 60° uyarısı, düz açınım ölçüsü, DXF kapsamı ve büküm katmanı, kayıttan geri yükleme).
+
+## 4. Kroki kısıtları (4a) ve serbest eğri (4b)
+
+### 4a. Kısıtlar ve çözücü (20.11.2026)
+
+Kroki → **📐 Kısıt**. Kod: `kisit.js` (kısıt artıkları, çözücü, serbestlik, köşe silmede uyarlama; saf modül),
+`sketch.js` (seçim ve düğmeler).
+
+- **Çözücü yenilendi**: her kısıt bir artık denklemi verir; hepsi birlikte en küçük hareketle sıfırlanır
+  (Δx = Jᵀ(JJᵀ + λI)⁻¹(−r), sönümlü Gauss-Newton). Az kısıtlı şekilde ilgisiz köşeler kıpırdamaz; sürüklenen köşe
+  yerinde kalır; çelişen kısıt eklenmez, "çelişiyor" uyarısı verir. Eski kısıtlar (yatay, dikey, uzunluk, paralel,
+  dik, eşit, açı, sabit) aynen çalışır, eski projeler aynı açılır.
+- **Seçim**: en çok 2 kenar ve 2 köşe birlikte seçilebilir (dokununca seçilir, yeniden dokununca bırakılır, boş yere
+  dokununca temizlenir).
+- **Yeni kısıtlar**:
+  - 1 köşe: *orijinden yatay / dikey konum* (kilitli ölçü, yazdıkça canlı değişir), sabitle.
+  - 2 köşe: *yatay hizalı*, *dikey hizalı*, *mesafe*, *yatay mesafe*, *dikey mesafe*.
+  - 1 köşe + 1 kenar: *çizgi üzerinde* (kenarın doğrusu), *orta noktada*.
+  - 2 köşe + 1 kenar: *simetrik* (kenarın doğrusuna göre).
+  - 2 kenar: *doğrusal* (paralel, dik, eşit, açıya ek olarak).
+- Kroki üzerinde işaretler: iki köşe arası kesik çizgi ve ölçü, köşe yanında ↔ / ↕ / ⟂ / ◉ / ⇋ etiketleri.
+- **Konum alanları**: daire için merkez yatay / dikey, dikdörtgen için sol ve üst (önden çizimde alt) kenarın
+  orijinden uzaklığı (deliğin yerini ölçüyle vermek için).
+- Kısıtlar parçayla kaydedilir; kroki yeniden açıldığında geri gelir.
+
+**Doğrulama:** `tests/kisit.test.mjs` (her yeni kısıtın çözümü, en küçük hareket, eski + yeni kısıtlı tam tanımlı
+dikdörtgen, çelişki, geçerlilik, köşe silmede kayma), eski `logic.test.mjs` kısıt testleri yeni çözücüyle de geçiyor;
+uçtan uca `K-Kısıt` (iki arayüzde: beşgende çizgi üzerinde, orijinden konum ve canlı değişim, yatay mesafe, daire ve
+dikdörtgen konum alanları, kısıtların parçaya geçmesi).
+
+Sınır: kısıtlar bir şeklin kendi köşe ve kenarları arasındadır (şekiller arası kısıt yok; deliğin yeri konum
+alanlarıyla verilir). Yay noktaları çokgen köşesi olarak tutulduğundan yaya teğetlik / yarıçap kısıtı yoktur.
 

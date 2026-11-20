@@ -885,6 +885,56 @@ await T('Sac: U kanal örneği, açınım boyu panelde, açınım DXF boyu açı
   expect(Math.abs(Math.max(ex, ey) - Math.max(flatL, W)) < 0.6 && Math.abs(Math.min(ex, ey) - Math.min(flatL, W)) < 0.6, `DXF kapsamı ${ex.toFixed(2)}×${ey.toFixed(2)} ≠ ${flatL}×${W}`);
 });
 
+/* ---------- K-Kısıt: kroki nokta kısıtları (çizgi üzerinde, orijinden konum, yatay mesafe), konum alanları ---------- */
+await T('Kroki kısıtları: beşgende köşe çizgi üzerinde, orijinden konum (canlı değişir), iki köşe arası yatay mesafe; dikdörtgen ve daire konum alanları; parçaya kısıtlarıyla geçer', 'K-Kısıt', async ({ page }) => {
+  await act(page, 'sketch-new'); await page.waitForSelector('#sk canvas'); await page.waitForTimeout(400);
+  const sk = (sel) => page.locator('#sk [data-a="' + sel + '"]').click();
+  const tapW = async (u, v) => { const [x, y] = await page.evaluate(([u, v]) => window.__sk.scr(u, v), [u, v]); await page.mouse.click(x, y); await page.waitForTimeout(120); };
+  const pts = () => page.evaluate(() => window.__sk.shape.pts.map((q) => q.map((v) => Math.round(v * 1000) / 1000)));
+  const clearSel = async () => { const b = await page.locator('#sk canvas').boundingBox(); await page.mouse.click(b.x + 15, b.y + b.height - 15); await page.waitForTimeout(120); };
+  const fill = async (id, v) => { const i = page.locator('#sk [data-f="' + id + '"]'); await i.fill(String(v)); await page.waitForTimeout(200); };
+  for (const [u, v] of [[0, 0], [40, 0], [40, 30], [20, 50], [0, 30], [0, 0]]) await tapW(u, v);
+  expect(await page.evaluate(() => window.__sk.shape.closed && window.__sk.shape.pts.length === 5), 'beşgen kapandı');
+  await sk('tool-cons');
+  // köşe 4 (20, 50) + kenar 2 (40,0 – 40,30) → çizgi üzerinde
+  await tapW(20, 50); await tapW(40, 15);
+  await sk('c-on'); await page.waitForTimeout(200);
+  let p = await pts();
+  expect(Math.abs(p[3][0] - p[1][0]) < 1e-3 && Math.abs(p[1][0] - p[2][0]) < 1e-3, 'köşe 4 kenar 2 doğrusunda: ' + JSON.stringify(p));
+  // seçimi boşalt, köşe 1 → orijinden yatay 5, sonra canlı 8
+  await clearSel();
+  await tapW(p[0][0], p[0][1]);
+  await fill('cox', 5); await sk('c-ox'); await page.waitForTimeout(200);
+  p = await pts(); expect(Math.abs(p[0][0] - 5) < 1e-3, 'köşe 1 x = 5: ' + JSON.stringify(p[0]));
+  await fill('cox', 8); p = await pts(); expect(Math.abs(p[0][0] - 8) < 1e-3, 'canlı değişti: ' + JSON.stringify(p[0]));
+  // köşe 1 ve 2 → yatay mesafe 60
+  await clearSel();
+  p = await pts(); await tapW(p[0][0], p[0][1]); await tapW(p[1][0], p[1][1]);
+  await fill('cdx', 60); await sk('c-dx'); await page.waitForTimeout(200);
+  p = await pts(); expect(Math.abs(Math.abs(p[1][0] - p[0][0]) - 60) < 1e-3 && Math.abs(p[0][0] - 8) < 1e-3, 'yatay mesafe 60, köşe 1 yerinde: ' + JSON.stringify(p));
+  expect(Math.abs(p[3][0] - p[1][0]) < 1e-3, 'önceki kısıt korunuyor');
+  const cons = await page.evaluate(() => window.__sk.shape.cons.map((c) => c.t).sort().join(','));
+  expect(/dx/.test(cons) && /on/.test(cons) && /ox/.test(cons), 'kısıtlar: ' + cons);
+  // daire konum alanları (ayrı şekil)
+  await sk('tool-circle');
+  const [cx, cy] = await page.evaluate(() => window.__sk.scr(30, 15)), [ex, ey] = await page.evaluate(() => window.__sk.scr(35, 15));
+  await page.mouse.move(cx, cy); await page.mouse.down(); await page.mouse.move(ex, ey, { steps: 5 }); await page.mouse.up(); await page.waitForTimeout(200);
+  await fill('ccx', 33); await fill('ccy', 12); await fill('cd', 6);
+  const ci = await page.evaluate(() => { const s = window.__sk.shape; return s.kind + ' ' + s.c.join(',') + ' ' + s.r; });
+  expect(ci === 'circle 33,12 3', 'daire: ' + ci);
+  // dikdörtgen konum alanları
+  await sk('tool-rect');
+  const [ax, ay] = await page.evaluate(() => window.__sk.scr(12, 20)), [bx, by] = await page.evaluate(() => window.__sk.scr(20, 26));
+  await page.mouse.move(ax, ay); await page.mouse.down(); await page.mouse.move(bx, by, { steps: 5 }); await page.mouse.up(); await page.waitForTimeout(200);
+  await fill('rw', 6); await fill('rh', 4); await fill('rx', 15); await fill('ry', 5);
+  const re = await page.evaluate(() => { const s = window.__sk.shape; return s.kind + ' ' + [Math.min(s.a[0], s.b[0]), Math.min(s.a[1], s.b[1]), Math.abs(s.b[0] - s.a[0]), Math.abs(s.b[1] - s.a[1])].join(','); });
+  expect(re === 'rect 15,5,6,4', 'dikdörtgen: ' + re);
+  await shot(page, 'kroki-kisit');
+  await sk('done'); await page.waitForTimeout(800);
+  const part = await page.evaluate(() => { const p = window.__app.parts[window.__app.parts.length - 1]; return { type: p.type, cons: (p.cons || [])[0] || [], more: (p.more || []).length }; });
+  expect(part.type === 'sketch' && part.more === 2 && part.cons.some((c) => c.t === 'on') && part.cons.some((c) => c.t === 'dx' && c.L === 60), 'parça: ' + JSON.stringify(part));
+});
+
 /* ---------- E-Tava: flanşlı sac (kenar flanşı, köşe kapatma, açınım) ---------- */
 await T('Sac tava: 4 kenar flanşı, açınım = ölçüler − büküm düşümü; flanş kaldırma, kapalı köşe, 90° dışı uyarı, düz açınım, DXF ve kayıt', 'E-Tava', async ({ page }) => {
   await page.evaluate(() => { const A = window.__app, p = A.parts[0]; Object.assign(p, { type: 'sheet', st: 2, sr: 2, sw: 50, sk: 0.44, flat: false, sh: 'L', sa0: 0, seg: [{ L: 40 }, { a: 90, L: 40 }], name: 'Tava' }); A.refreshAll(true); });
