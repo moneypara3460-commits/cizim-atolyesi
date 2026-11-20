@@ -26,7 +26,7 @@ const HAS_MP = fs.existsSync(path.join(ROOT, 'vendor/mediapipe-models/hand_landm
 const INIT_FAKE = () => {
   try { localStorage.setItem('cizim:guideSeen', '1'); if (!localStorage.getItem('cizim:workspace')) localStorage.setItem('cizim:workspace', 'makine'); } catch (e) { /* */ }
   window.__handPose = null; window.__handStat = { load: 0, close: 0, detect: 0 };
-  window.__handTracker = { async load() { window.__handStat.load++; }, detect() { window.__handStat.detect++; return window.__handPose ? { landmarks: window.__handPose, handedness: 'Left' } : null; }, close() { window.__handStat.close++; } };
+  window.__handTracker = { delegate: null, async load(d) { window.__handStat.load++; window.__handStat.last = d; this.delegate = d === 'CPU' ? 'CPU' : 'GPU'; }, detect() { window.__handStat.detect++; return window.__handPose ? { landmarks: window.__handPose, handedness: 'Left' } : null; }, close() { window.__handStat.close++; } };
 };
 const INIT_REAL = () => { try { localStorage.setItem('cizim:guideSeen', '1'); if (!localStorage.getItem('cizim:workspace')) localStorage.setItem('cizim:workspace', 'makine'); } catch (e) { /* */ } };
 
@@ -40,7 +40,7 @@ const T = (title, area, fn, { view = DESK, file = 'klasik.html', browser = camBr
       await a.page.waitForFunction(() => !!window.__hand, null, { timeout: 30000 });
       await a.page.evaluate(async () => {
         const { hand, POSE } = await import('/tests/hand-fixture.mjs');
-        const { sensitivityBox } = await import('/hand/gestures.js?v=20261113a');
+        const { sensitivityBox } = await import('/hand/gestures.js?v=20261120e');
         // ekran noktası (px) → işaret parmağı ucu o noktaya gelen yapay el (ön kamera: aynalı)
         window.__hp = (sx, sy, pose = 'point') => { const b = sensitivityBox(window.__hand.sens), k = b.x1 - b.x0; return hand({ ...POSE[pose], x: 1 - (b.x0 + sx / innerWidth * k), y: b.y0 + sy / innerHeight * k }); };
         window.__orig = { set: Element.prototype.setPointerCapture, rel: Element.prototype.releasePointerCapture };
@@ -230,6 +230,30 @@ await T('telefon ölçüsü (emülasyon), yeni arayüz: düğme görünür, parm
   // sekme arka plana geçerse basılı işaretçi bırakılır
   await page.locator('[data-hc="close"]').click();
 }, { view: PHONE, file: 'yeni/index.html' });
+
+await T('ayarlar: imleç noktası (sabit / uç) ve hızlandırma (otomatik ölçüm, elle işlemci) seçilir, durum satırında birim ve kare süresi görünür, saklanır', 'P3-Hız', async ({ page }) => {
+  await start(page);
+  await moveTo(page, 300, 300);
+  // otomatik ölçüm: yapay algılayıcı hızlı → ekran kartı seçilir ve hatırlanır
+  await until(page, () => JSON.parse(localStorage.getItem('cizim:hand') || '{}').best === 'GPU', null, 'otomatik ölçüm bitti');
+  await noHand(page); await page.locator('[data-hc="panel"]').click();
+  await page.waitForTimeout(700);
+  expect(await page.locator('#hc-anchor').inputValue() === 'kok' && await page.locator('#hc-accel').inputValue() === 'auto', 'varsayılanlar: sabit nokta, otomatik');
+  expect(/ekran kartı/.test(await page.locator('#hc-s-track').innerText()), 'durumda birim: ' + await page.locator('#hc-s-track').innerText());
+  expect(/Bir kare \d+ ms · kamera \d+×\d+/.test(await page.locator('#hc-perf').innerText()), 'kare süresi ve çözünürlük: ' + await page.locator('#hc-perf').innerText());
+  await page.selectOption('#hc-anchor', 'uc');
+  expect(await page.evaluate(() => window.__hand.engine.anchor === 'uc' && JSON.parse(localStorage.getItem('cizim:hand')).anchor === 'uc'), 'uç ayarı uygulandı ve saklandı');
+  await page.selectOption('#hc-anchor', 'kok');
+  const n = await page.evaluate(() => window.__handStat.load);
+  await page.selectOption('#hc-accel', 'CPU');
+  await until(page, () => window.__handStat.last === 'CPU' && window.__hand.track === 'on', null, 'işlemciyle yeniden kuruldu');
+  expect(await page.evaluate((n) => window.__handStat.load === n + 1 && JSON.parse(localStorage.getItem('cizim:hand')).accel === 'CPU', n), 'işlemci seçimi saklandı');
+  await page.waitForTimeout(700);
+  expect(/işlemci/.test(await page.locator('#hc-s-track').innerText()), 'durumda işlemci: ' + await page.locator('#hc-s-track').innerText());
+  await page.selectOption('#hc-accel', 'auto');
+  await until(page, () => window.__handStat.last === 'GPU' && window.__hand.track === 'on', null, 'otomatiğe dönünce yeniden ölçülür (ekran kartıyla başlar)');
+  await page.locator('[data-hc="close"]').click();
+});
 
 await T('tekstil sayfası: düğme var, kamera açılıp kapanır, sayfa hatası yok', 'P4-Tekstil', async ({ page }) => {
   expect(await page.locator('#b-hand').isVisible(), 'düğme');

@@ -1,10 +1,10 @@
 // Parmakla kontrol — arayüz: düğme, kamera önizlemesi, ayar paneli, imleç.
 // Sayfaya tek <script type="module"> ile eklenir; uygulama koduna (app.js, kroki, 2B çizim, tekstil) dokunmaz.
 // Kamera yalnız kullanıcı düğmeye basınca açılır; sayfa açılışında hiçbir şey yüklenmez (MediaPipe dahil).
-import { HandControl } from './control.js?v=20261113a';
-import { CONNECTIONS, LM } from './gestures.js?v=20261113a';
+import { HandControl } from './control.js?v=20261120e';
+import { CONNECTIONS, LM } from './gestures.js?v=20261120e';
 
-const V = '20261113a';
+const V = '20261120e';
 const ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11.5V5a1.5 1.5 0 0 1 3 0v5.5M12 10V8.5a1.5 1.5 0 0 1 3 0V11M15 10.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-.8a6 6 0 0 1-4.9-2.6L4.4 15a1.5 1.5 0 0 1 2.4-1.8L9 15.5"/></svg>';
 const el = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (html) e.innerHTML = html; return e; };
 
@@ -32,6 +32,9 @@ root.innerHTML = `
   <div class="ln"><button type="button" data-hc="camera" id="hc-b-cam"></button></div>
   <div class="ln"><button type="button" data-hc="draw" id="hc-b-draw" aria-pressed="true"></button></div>
   <div class="ln"><label for="hc-sens">Hassasiyet</label><button type="button" class="sq" data-hc="sens-" aria-label="Hassasiyeti azalt">−</button><input id="hc-sens" type="range" min="1" max="10" step="1"><button type="button" class="sq" data-hc="sens+" aria-label="Hassasiyeti artır">+</button><output id="hc-sens-v"></output></div>
+  <div class="ln"><label for="hc-anchor">İmleç noktası</label><select id="hc-anchor"><option value="kok">Sabit (parmak kökü) — birleştirince kaymaz</option><option value="uc">Parmak ucu (eski)</option></select></div>
+  <div class="ln"><label for="hc-accel">Hızlandırma</label><select id="hc-accel"><option value="auto">Otomatik (hızlıyı seç)</option><option value="GPU">Ekran kartı (GPU)</option><option value="CPU">İşlemci (CPU)</option></select></div>
+  <p class="pv" id="hc-perf"></p>
   <div class="ln"><button type="button" data-hc="calib" id="hc-b-calib"></button><button type="button" data-hc="calib-reset" id="hc-b-creset">Sıfırla</button></div>
   <ul>
     <li><b>İşaret parmağı:</b> imleci gezdirir.</li>
@@ -101,6 +104,8 @@ root.addEventListener('click', (e) => {
   else if (a === 'calib-reset') { hc.resetCalibration(); toast('Kalibrasyon sıfırlandı.'); }
 });
 $('hc-sens').addEventListener('input', (e) => hc.setSensitivity(e.target.value));
+$('hc-anchor').addEventListener('change', (e) => hc.setAnchor(e.target.value));
+$('hc-accel').addEventListener('change', (e) => hc.setAccel(e.target.value));
 const POS = ['bl', 'br', 'tr', 'tl'];
 function cyclePos() { dock.dataset.pos = POS[(POS.indexOf(dock.dataset.pos) + 1) % POS.length]; }
 
@@ -126,7 +131,10 @@ function paint() {
   st.dataset.s = hc.track !== 'on' ? 'off' : g === 'pinch' ? 'draw' : g === 'palm' || hc.calib ? 'pause' : hc.landmarks ? 'on' : 'off';
   st.querySelector('span').textContent = hc.track !== 'on' ? (wait.textContent || 'Kapalı') : hc.gestureText;
   $('hc-s-cam').textContent = CAM_TEXT[hc.cam] || '';
-  $('hc-s-track').textContent = (TRACK_TEXT[hc.track] || '') + (hc.track === 'on' ? ` · ${hc.fps} kare/sn` + (hc.handed ? ' · ' + hc.handed : '') : '');
+  const DEL = { GPU: 'ekran kartı', CPU: 'işlemci' };
+  $('hc-s-track').textContent = (TRACK_TEXT[hc.track] || '') + (hc.track === 'on' ? ` · ${hc.fps} kare/sn` + (hc.delegate ? ' · ' + (DEL[hc.delegate] || hc.delegate) : '') + (hc.handed ? ' · ' + hc.handed : '') : '');
+  $('hc-anchor').value = hc.anchor; $('hc-accel').value = hc.accel;
+  $('hc-perf').textContent = hc.track === 'on' ? 'Bir kare ' + Math.round(hc.cost) + ' ms' + (hc.resolution ? ' · kamera ' + hc.resolution : '') + (hc.benchNote ? ' · ' + hc.benchNote : '') : '';
   $('hc-s-gest').textContent = hc.track === 'on' ? hc.gestureText : '—';
   $('hc-b-cam').textContent = on ? 'Kamerayı kapat' : 'Kamerayı aç ve başlat'; $('hc-b-cam').classList.toggle('bad', on); $('hc-b-cam').classList.toggle('on', !on);
   $('hc-b-draw').textContent = hc.drawing ? 'Parmakla çizim: AÇIK' : 'Parmakla çizim: KAPALI (yalnız imleç)'; $('hc-b-draw').classList.toggle('on', hc.drawing); $('hc-b-draw').setAttribute('aria-pressed', String(hc.drawing));

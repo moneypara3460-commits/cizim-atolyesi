@@ -117,6 +117,8 @@ export const DEFAULTS = {
   jump: 0.35, jumpFrames: 2,           // ekran köşegeninin oranı: tek karede daha büyük sıçrama en çok bu kadar kare yok sayılır
   offAbsorb: 0.5,                      // imleç kayması, el hareketinin bu oranı kadar erir
   scrollStep: 0.035,                   // iki parmakla dikey hareket: her adımda bir tekerlek çentiği
+  anchorFollow: 0.35,                  // sabit imleç noktası: parmaklar açıkken uç–kök farkına her karede bu oranla yaklaşılır
+  anchorOpen: 0.8, anchorBackMs: 200,  // fark yalnız oran bunun üstündeyken öğrenilir; kapanma başlayınca bu kadar önceki farka dönülür
   minCutoff: 1, beta: 0.006,
 };
 
@@ -129,6 +131,9 @@ export class HandEngine {
     this.o = { ...DEFAULTS, ...opts };
     this.sens = 5; this.calib = null; this.calibSens = 5;
     this.drawing = true;                // false: imleç gezer ama birleştirme basmaz
+    // İmleç noktası. 'kok' (varsayılan): işaret parmağı KÖKÜ + parmaklar açıkken ölçülen kök→uç farkı. Birleştirirken parmak
+    // ucu başparmağa doğru kıvrılır, kök yerinde kalır: imleç kaymaz. 'uc': doğrudan parmak ucu (eski davranış).
+    this.anchor = 'kok';
     this.custom = [];
     this.pinch = new Hysteresis(this.o.pinchEnter, this.o.pinchExit);
     this.fx = new OneEuro(this.o.minCutoff, this.o.beta); this.fy = new OneEuro(this.o.minCutoff, this.o.beta);
@@ -142,10 +147,12 @@ export class HandEngine {
     this.pinchSince = null; this.openSince = null; this.cand = null; this.candSince = 0; this.mode = 'idle';
     this.aim = null; this.downAt = null; this.sticky = false; this.scrollY = null; this.scrollAcc = 0;
     this.fired = null;
+    this.tipOff = null; this.anchorPt = null; this.offHist = []; this.wasOpen = false;
   }
   setSensitivity(s) { this.sens = clamp(Number(s) || 5, 1, 10); }
   setCalibration(box) { if (validBox(box)) { this.calib = { ...box }; this.calibSens = this.sens; } else this.calib = null; }
   setDrawing(on) { this.drawing = !!on; }
+  setAnchor(a) { this.anchor = a === 'uc' ? 'uc' : 'kok'; this.tipOff = null; }
   addGesture(g) { if (!g || !g.id || typeof g.test !== 'function') throw new Error('hareket: { id, test } gerekli'); this.custom = this.custom.filter((c) => c.id !== g.id).concat([{ holdMs: 400, label: g.id, ...g }]); }
   removeGesture(id) { this.custom = this.custom.filter((c) => c.id !== id); }
   box() {
@@ -167,7 +174,7 @@ export class HandEngine {
       if (this.lostAt === null) this.lostAt = tMs;
       if (tMs - this.lostAt >= o.lostMs && this.gesture !== 'lost') {
         this.release(ev); this.fx.reset(); this.fy.reset(); this.raw = null; this.ps = null; this.off = [0, 0]; this.scrollY = null; this.cand = null; this.mode = 'idle'; this.fired = null;
-        this.gesture = 'lost'; this.visible = false;
+        this.gesture = 'lost'; this.visible = false; this.tipOff = null;
       }
       return out();
     }
@@ -189,8 +196,27 @@ export class HandEngine {
     if (pin || this.down) this.mode = this.down || wantDown ? 'pinch' : this.mode === 'palm' || this.mode === 'two' ? 'point' : this.mode;
 
     /* --- ham konum → ekran, sıçrama süzgeci, yumuşatma --- */
-    const tip = lm[LM.INDEX_TIP];
-    let [rx, ry] = mapPoint(px(tip), py(tip), this.box(), view.w, view.h, view.mirror !== false);
+    const tip = lm[LM.INDEX_TIP], kok = lm[LM.INDEX_MCP];
+    let ax = px(tip), ay = py(tip);
+    if (this.anchor === 'kok') {
+      // kök→uç farkı yalnız parmaklar açıkken (birleştirme bölgesi dışında, basılı değilken) güncellenir
+      // parmaklar kapanmaya başlarken uç zaten bükülmeye başlar: kapanma fark edilince ~200 ms önceki farka geri dönülür
+      const d = [px(tip) - px(kok), py(tip) - py(kok)];
+      const open = !this.down && !pin && f.index && f.pinch > o.anchorOpen;
+      if (!this.tipOff) { this.tipOff = d; this.offHist = []; }
+      else if (open) {
+        const k = o.anchorFollow; this.tipOff = [this.tipOff[0] + (d[0] - this.tipOff[0]) * k, this.tipOff[1] + (d[1] - this.tipOff[1]) * k];
+      } else if (this.wasOpen) {
+        const old = this.offHist.find((h) => tMs - h.t <= o.anchorBackMs);   // geçmişte bu süre içindeki en eski fark
+        if (old) this.tipOff = old.off.slice();
+      }
+      if (open) { this.offHist.push({ t: tMs, off: this.tipOff.slice() }); while (this.offHist.length && tMs - this.offHist[0].t > o.anchorBackMs) this.offHist.shift(); }
+      else this.offHist = [];
+      this.wasOpen = open;
+      ax = px(kok) + this.tipOff[0]; ay = py(kok) + this.tipOff[1];
+    }
+    this.anchorPt = [ax, ay];
+    let [rx, ry] = mapPoint(ax, ay, this.box(), view.w, view.h, view.mirror !== false);
     if (this.raw && Math.hypot(rx - this.raw[0], ry - this.raw[1]) > o.jump * Math.hypot(view.w, view.h) && this.skipped < o.jumpFrames) {
       this.skipped++; [rx, ry] = this.raw;                     // tek karelik yanlış algılama: önceki konum korunur
     } else { if (this.skipped) { this.fx.reset(); this.fy.reset(); } this.skipped = 0; this.raw = [rx, ry]; }
