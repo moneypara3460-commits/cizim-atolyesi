@@ -5,6 +5,7 @@
 //   x: topuk arkasından burna mm, y: taban (saya-taban birleşim) çizgisinden yukarı mm. Parçalar dış yandan görünüştür.
 // Gizli ayarlar: ANTHROPIC_API_KEY (zorunlu), AI_MODEL (isteğe bağlı). Yalnız giriş yapmış kullanıcı (Authorization: Bearer <oturum>). Sınır (public.ai_take_user): abone günde 10; abone olmayan günde 5 (hesap 24 saatten yeniyse 2); abone olmayanların ortak toplamı 150 — aboneler ortak sınırdan etkilenmez.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { jsonOku, kullanici } from '../_shared/istek.ts';
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -49,9 +50,13 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json(405, { error: 'Yalnız POST' });
   const key = Deno.env.get('ANTHROPIC_API_KEY');
   if (!key) return json(503, { error: 'Yapay zekâ okuması henüz açılmadı (anahtar ayarlanmadı).' });
-  if (Number(req.headers.get('content-length') || 0) > 9_000_000) return json(413, { error: 'Resimler çok büyük' });
-  let body: { images?: unknown; last?: { L?: unknown; top?: unknown } };
-  try { body = await req.json(); } catch { return json(400, { error: 'Geçersiz istek' }); }
+  // önce oturum (girişsiz istek gövdeyi okutmasın), sonra gövde akış okunurken boyut sınırıyla
+  const uid = await kullanici(req, admin);
+  if (!uid) return json(401, { error: 'Yapay zekâ için önce Google ile giriş yap.' });
+  const okunan = await jsonOku(req, 9_000_000);
+  if (okunan.status === 413) return json(413, { error: 'Resimler çok büyük' });
+  if (!okunan.body || typeof okunan.body !== 'object') return json(400, { error: 'Geçersiz istek' });
+  const body: { images?: unknown; last?: { L?: unknown; top?: unknown } } = okunan.body;
   const imgs = (Array.isArray(body.images) ? body.images : []).slice(0, 6).map((s) => (typeof s === 'string' ? IMG.exec(s) : null));
   if (!imgs.length || imgs.some((m) => !m || m[2].length > 2_000_000)) return json(400, { error: 'Model resimleri okunamadı (jpeg/png/webp, her biri en çok ~1,5 MB)' });
   const L = N(body.last?.L, 120, 450);
@@ -59,11 +64,7 @@ Deno.serve(async (req) => {
     .map((q) => (Array.isArray(q) ? [N(q[0], 0, 450), N(q[1], 0, 400)] : [null, null])).filter((q) => q[0] !== null && q[1] !== null) as number[][];
   if (!L || top.length < 5) return json(400, { error: 'Kalıp bilgisi eksik' });
 
-  // yalnız giriş yapmış kullanıcı: oturum anahtarı Supabase'e sorularak doğrulanır; sınır hesaba göre (IP taklit edilebilir)
-  const tok = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
-  const { data: ud, error: ue } = tok ? await admin.auth.getUser(tok) : { data: null, error: true };
-  if (ue || !ud?.user?.id) return json(401, { error: 'Yapay zekâ için önce Google ile giriş yap.' });
-  const { data: allowed, error: le } = await admin.rpc('ai_take_user', { p_uid: ud.user.id, p_kind: 'parca', p_paid_limit: 10, p_trial_limit: 5, p_new_limit: 2, p_global: 150 });
+  const { data: allowed, error: le } = await admin.rpc('ai_take_user', { p_uid: uid, p_kind: 'parca', p_paid_limit: 10, p_trial_limit: 5, p_new_limit: 2, p_global: 150 });
   if (le) { console.error(le); return json(500, { error: 'Sınır kontrolü yapılamadı' }); }
   if (!allowed) return json(429, { error: 'Bugünkü parça çıkarma sınırına ulaşıldı, yarın tekrar dene.' });
 

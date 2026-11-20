@@ -6,6 +6,7 @@
 // Gizli ayarlar: ANTHROPIC_API_KEY (zorunlu), AI_MODEL (isteğe bağlı). Yalnız giriş yapmış kullanıcı.
 // Sınır (public.ai_take_user): abone günde 10; abone olmayan günde 5 (hesap 24 saatten yeniyse 2); abone olmayanların ortak toplamı 100.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { jsonOku, kullanici } from '../_shared/istek.ts';
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -64,18 +65,19 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json(405, { error: 'Yalnız POST' });
   const key = Deno.env.get('ANTHROPIC_API_KEY');
   if (!key) return json(503, { error: 'Yapay zekâ henüz açılmadı (anahtar ayarlanmadı).' });
-  if (Number(req.headers.get('content-length') || 0) > 4_000_000) return json(413, { error: 'Resim çok büyük' });
-  let body: { image?: unknown; hint?: unknown; known?: { mm?: unknown } };
-  try { body = await req.json(); } catch { return json(400, { error: 'Geçersiz istek' }); }
+  // önce oturum (girişsiz istek gövdeyi okutmasın), sonra gövde akış okunurken boyut sınırıyla
+  const uid = await kullanici(req, admin);
+  if (!uid) return json(401, { error: 'Yapay zekâ için önce Google ile giriş yap.' });
+  const okunan = await jsonOku(req, 4_000_000);
+  if (okunan.status === 413) return json(413, { error: 'Resim çok büyük' });
+  if (!okunan.body || typeof okunan.body !== 'object') return json(400, { error: 'Geçersiz istek' });
+  const body: { image?: unknown; hint?: unknown; known?: { mm?: unknown } } = okunan.body;
   const m = typeof body.image === 'string' ? IMG.exec(body.image) : null;
   if (!m || m[2].length > 3_500_000) return json(400, { error: 'Resim okunamadı (jpeg/png/webp, en çok ~2,5 MB)' });
   const hint = typeof body.hint === 'string' ? body.hint.replace(/[<>]/g, '').slice(0, 200) : '';
   const known = N(body.known?.mm, 1, 5000);
 
-  const tok = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
-  const { data: ud, error: ue } = tok ? await admin.auth.getUser(tok) : { data: null, error: true };
-  if (ue || !ud?.user?.id) return json(401, { error: 'Yapay zekâ için önce Google ile giriş yap.' });
-  const { data: allowed, error: le } = await admin.rpc('ai_take_user', { p_uid: ud.user.id, p_kind: 'foto', p_paid_limit: 10, p_trial_limit: 5, p_new_limit: 2, p_global: 100 });
+  const { data: allowed, error: le } = await admin.rpc('ai_take_user', { p_uid: uid, p_kind: 'foto', p_paid_limit: 10, p_trial_limit: 5, p_new_limit: 2, p_global: 100 });
   if (le) { console.error(le); return json(500, { error: 'Sınır kontrolü yapılamadı' }); }
   if (!allowed) return json(429, { error: 'Bugünkü fotoğraftan model sınırına ulaşıldı, yarın tekrar dene.' });
 
