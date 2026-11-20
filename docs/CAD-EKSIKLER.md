@@ -10,7 +10,7 @@ Sıra kolaydan zora. Her madde ayrı PR; tam test (birim, gerçek OCCT, iki aray
 | 1 | Standart parça kütüphanesi (doğrulanmış ölçü tablolarıyla) | **Tamam** (20.11.2026) |
 | 8 | Sac metal: flanş, köşe kapatma | **Tamam** (20.11.2026) |
 | 4 | Kroki kısıtları ve serbest eğri | **Tamam** (20.11.2026) |
-| 5 | Parametrik geçmiş ve varyantlar | 5a **Tamam** (20.11.2026) · 5b varyantlar bekliyor |
+| 5 | Parametrik geçmiş ve varyantlar | **Tamam** (20.11.2026) |
 | 7 | DWG | Lisans kararı bekliyor (ODA ücretli, LibreDWG GPL) |
 
 ## 6. Her şekle radyüs / pah
@@ -255,6 +255,27 @@ iletileri, kod çalıştırma denemelerinin reddi, bağımlılık sırası, dön
 temizliği), uçtan uca `P-Değişken` (iki arayüzde: değişken ekleme, bağlama, güncelleme, kilitli alan, hatalı ifade,
 döngü, bağı kaldırma, geri al, geri sarma, sayfa yenileyince korunma).
 
-### 5b. Varyantlar ve tasarım tablosu
+### 5b. Varyantlar ve tasarım tablosu (20.11.2026)
 
-Bekliyor (5a birleştirildikten sonra).
+**ƒx Değişken → Varyantlar (tasarım tablosu)**. SolidWorks'teki konfigürasyon ve tasarım tablosunun karşılığı.
+Kod: `degisken.js` (varyant değerleri, CSV okuma/yazma; saf), `app.js` (tablo, geçiş, kayıt).
+
+- **Ana** her zaman vardır: değişkenlerin kendi ifadeleri. Her **varyant** değişkenlere kendi değerini ya da ifadesini
+  verir; boş hücre Ana değerini kullanır (ör. Kısa: L = 80, D boş → D = Ana'daki L/4 ifadesi, Kısa'nın L'siyle).
+- Satırdaki ○ düğmesi varyantı etkin yapar: bağlı bütün ölçüler o varyanta göre yeniden hesaplanır.
+- **Varyanta özel gizli parça** (SolidWorks'te bastırma): bir varyant etkinken gizlenen / gösterilen parçalar yalnız o
+  varyantta öyledir; varyant değişince her varyantın kendi gizli listesi geri gelir.
+- **+ Varyant ekle** şimdiki durumdan başlar (etkin varyantın değerleri ve gizli parçaları). Varyant adı boş, "Ana" ya
+  da başka varyantla aynı olamaz (kırmızı görünür, eski ad kalır). Değişken silinince tablodaki sütunu da silinir.
+- **Tabloyu indir (CSV):** `;` ayırıcılı, UTF-8 (Türkçe Excel doğrudan açar). İlk satır Ana. `= + − @` ile başlayan
+  hücrelere `'` öneki konur (CSV formül enjeksiyonuna karşı); geri yüklerken kaldırılır.
+- **Tablo yükle (CSV):** Excel'de düzenlenen tablo geri yüklenir (`;`, `,` ya da sekme ayırıcı). Ana satırı değişken
+  ifadelerini günceller, yeni sütun yeni değişken olur, yeni satır yeni varyant olur. Aynı addaki varyantın gizli
+  parça listesi korunur. Hatalı tablo (geçersiz ad, aynı ad iki kez, boş ad) yüklenmez, Türkçe uyarı verir.
+  Gizli parça listesi CSV'ye yazılmaz (parça kimlikleri tabloda anlamsız olurdu).
+- Varyantlar projeyle, otomatik kayıtla ve geri al geçmişiyle saklanır.
+
+**Doğrulama:** `tests/degisken.test.mjs` (varyant değerleri ve boş hücre, kayıt temizliği, ad üretimi, CSV dışa ver →
+içe al aynı tablo, tırnak ve `;` içeren adlar, formül öneki, virgül / sekme ayırıcı, Ana satırı, yeni sütun, hatalar),
+uçtan uca `P-Varyant` (iki arayüzde: varyant ekleme, ad, değer, boş hücre, varyanta özel gizli parça, geçişler, geri al,
+CSV indirme, düzenlenmiş CSV yükleme, hatalı CSV, etkin varyantı silme, sayfa yenileyince korunma).
