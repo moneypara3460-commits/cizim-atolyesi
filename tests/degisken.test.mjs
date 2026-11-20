@@ -1,10 +1,10 @@
 // Çalıştır: node tests/degisken.test.mjs
 // Parametrik model: ifade ayrıştırıcı, değişken çözücü (bağımlılık sırası, döngü), parça alan bağları.
 import assert from 'node:assert/strict';
-import { ifadeDegeri, ayristir, degiskenleriCoz, bagliAlanlar, degiskenSan, adGecerli, IfadeHatasi } from '../degisken.js';
+import { ifadeDegeri, ayristir, degiskenleriCoz, bagliAlanlar, degiskenSan, adGecerli, IfadeHatasi, varyantDegiskenleri, varyantSan, yeniVaryantAdi, tabloCsv, csvTablo } from '../degisken.js';
 
 let n = 0;
-const t = (ad, f) => { f(); n++; };
+const t = (ad, f) => { f(); n++; console.log('ok    ' + ad); };   // run-all.mjs 'ok' satırlarını sayar
 const yakin = (a, b, e = 1e-9) => assert.ok(Math.abs(a - b) < e, a + ' ≠ ' + b);
 const d = (s, env) => ifadeDegeri(s, env).deger;
 
@@ -123,4 +123,48 @@ t('kayıt temizliği', () => {
   assert.equal(degiskenSan([{ ad: 'a'.repeat(99), ifade: '1'.repeat(999) }])[0].ifade.length, 500);
 });
 
-console.log('degisken: ' + n + ' test geçti');
+t('varyant değişkenleri: boş hücre ana değeri kullanır', () => {
+  const vars = [{ ad: 'L', ifade: '120' }, { ad: 'D', ifade: 'L/4' }];
+  assert.deepEqual(varyantDegiskenleri(vars, null), vars);
+  const v = varyantDegiskenleri(vars, { ad: 'Kısa', deg: { L: '80', D: '  ' } });
+  assert.deepEqual(v, [{ ad: 'L', ifade: '80' }, { ad: 'D', ifade: 'L/4' }]);
+  assert.deepEqual(degiskenleriCoz(v).deger, { L: 80, D: 20 });
+  assert.equal(vars[0].ifade, '120');   // ana liste değişmez
+});
+t('varyant kaydı temizliği', () => {
+  assert.deepEqual(varyantSan(null), { aktif: -1, ana: { gizli: [] }, list: [] });
+  const r = varyantSan({ aktif: 1, ana: { gizli: [2, 2, 'x', 3.5] }, list: [{ ad: ' Kısa ', deg: { L: 80, D: {} }, gizli: [4] }, { ad: 'ana' }, { ad: 'kısa' }, { ad: 'Uzun', deg: { L: '200' } }, null, { ad: '' }] });
+  assert.deepEqual(r.ana.gizli, [2]);
+  assert.deepEqual(r.list.map((v) => v.ad), ['Kısa', 'Uzun']);   // "Ana" ve çift ad atılır
+  assert.deepEqual(r.list[0], { ad: 'Kısa', deg: { L: '80' }, gizli: [4] });
+  assert.equal(r.aktif, 1);
+  assert.equal(varyantSan({ aktif: 5, list: [] }).aktif, -1);
+  assert.equal(yeniVaryantAdi([{ ad: 'Varyant 1' }, { ad: 'varyant 2' }]), 'Varyant 3');
+});
+t('tasarım tablosu CSV: dışa ver → içe al aynı tabloyu verir', () => {
+  const vars = [{ ad: 'L', ifade: '120' }, { ad: 'D', ifade: 'L/4' }, { ad: 'A', ifade: '-5' }];
+  const durum = { list: [{ ad: 'Kısa; özel', deg: { L: '2,5*32' }, gizli: [7] }, { ad: 'Uzun "XL"', deg: { L: '200', D: 'L/5' }, gizli: [] }] };
+  const csv = tabloCsv(vars, durum);
+  assert.ok(csv.startsWith('﻿Varyant;L;D;A\r\nAna;120;L/4;"\'-5"\r\n'), JSON.stringify(csv));   // formül enjeksiyonuna karşı ' önek
+  assert.ok(csv.includes('"Kısa; özel";2,5*32;;'));
+  const r = csvTablo(csv, vars, durum);
+  assert.ok(!r.hata, r.hata);
+  assert.deepEqual(r.vars, vars);
+  assert.deepEqual(r.list, durum.list);   // bastırma bilgisi adla korunur
+});
+t('tasarım tablosu CSV: Excel düzenlemesi, yeni sütun, Ana satırı, hatalar', () => {
+  const vars = [{ ad: 'L', ifade: '120' }];
+  const r = csvTablo('Varyant,L,T\nAna,150,3\nİnce,,1\n', vars, null);   // virgül ayırıcı da olur
+  assert.deepEqual(r.vars, [{ ad: 'L', ifade: '150' }, { ad: 'T', ifade: '3' }]);
+  assert.deepEqual(r.list, [{ ad: 'İnce', deg: { T: '1' }, gizli: [] }]);
+  assert.match(csvTablo('Varyant;L\n', vars).hata, /en az bir satır/);
+  assert.match(csvTablo('Varyant\nA\n', vars).hata, /sütunu yok/);
+  assert.match(csvTablo('Varyant;2x\nA;1\n', vars).hata, /Geçersiz değişken adı: 2x/);
+  assert.match(csvTablo('Varyant;L;L\nA;1;2\n', vars).hata, /iki sütunda/);
+  assert.match(csvTablo('Varyant;L\nA;1\na;2\n', vars).hata, /iki kez/);
+  assert.match(csvTablo('Varyant;L\n;1\n', vars).hata, /boş/);
+  assert.match(csvTablo(5, vars).hata, /okunamadı/);
+  assert.equal(csvTablo('Varyant\tL\nA\t7\n', vars).list[0].deg.L, '7');   // sekme ayırıcı
+});
+
+console.log('Hepsi geçti (' + n + ')');

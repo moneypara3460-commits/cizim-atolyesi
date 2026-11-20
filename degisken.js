@@ -163,3 +163,100 @@ export function degiskenSan(liste) {
   if (!Array.isArray(liste)) return [];
   return liste.slice(0, 200).filter((d) => d && typeof d.ad === 'string').map((d) => ({ ad: d.ad.slice(0, 40), ifade: String(d.ifade ?? '').slice(0, 500) }));
 }
+
+/* ================= Varyantlar (SolidWorks "Konfigürasyon") ve tasarım tablosu ================= */
+// Varyant: { ad, deg: { değişkenAdı: ifade }, gizli: [parça id] }. deg'de boş / olmayan değişken ana ifadesini kullanır.
+// Durum: { aktif: -1 (Ana) | varyant sırası, ana: { gizli: [...] }, list: [varyant…] }
+export const ANA = 'Ana';
+
+export function varyantDegiskenleri(liste, v) {
+  if (!v || !v.deg) return liste || [];
+  return (liste || []).map((d) => {
+    const x = v.deg[d.ad];
+    return typeof x === 'string' && x.trim() ? { ad: d.ad, ifade: x } : d;
+  });
+}
+
+const idler = (a) => (Array.isArray(a) ? [...new Set(a.filter((x) => Number.isInteger(x)))].slice(0, 2000) : []);
+export function varyantSan(o) {
+  const r = { aktif: -1, ana: { gizli: [] }, list: [] };
+  if (!o || typeof o !== 'object') return r;
+  r.ana.gizli = idler(o.ana && o.ana.gizli);
+  if (Array.isArray(o.list)) {
+    const adlarim = new Set([ANA.toLowerCase()]);
+    for (const v of o.list.slice(0, 100)) {
+      if (!v || typeof v.ad !== 'string' || !v.ad.trim()) continue;
+      const ad = v.ad.trim().slice(0, 40);
+      if (adlarim.has(ad.toLowerCase())) continue;
+      adlarim.add(ad.toLowerCase());
+      const deg = {};
+      if (v.deg && typeof v.deg === 'object') for (const [k, x] of Object.entries(v.deg).slice(0, 200)) if (typeof k === 'string' && k.length <= 40 && (typeof x === 'string' || typeof x === 'number')) deg[k] = String(x).slice(0, 500);
+      r.list.push({ ad, deg, gizli: idler(v.gizli) });
+    }
+  }
+  if (Number.isInteger(o.aktif) && o.aktif >= 0 && o.aktif < r.list.length) r.aktif = o.aktif;
+  return r;
+}
+
+// Yeni varyant adı: "Varyant 1", "Varyant 2"…
+export function yeniVaryantAdi(list) {
+  const var_ = new Set((list || []).map((v) => v.ad.toLowerCase()));
+  let k = 1; while (var_.has(('Varyant ' + k).toLowerCase())) k++;
+  return 'Varyant ' + k;
+}
+
+// Tasarım tablosu → CSV (ayırıcı ; — Türkçe Excel; ondalık virgül ifade içinde aynen kalır). İlk satır Ana.
+const hucre = (s) => { s = String(s ?? ''); return /[;"\r\n]/.test(s) || /^[=+\-@]/.test(s) ? '"' + (/^[=+\-@]/.test(s) ? "'" : '') + s.replace(/"/g, '""') + '"' : s; };
+export function tabloCsv(vars, durum) {
+  const ad = (vars || []).map((d) => d.ad);
+  const satirlar = [['Varyant', ...ad], [ANA, ...(vars || []).map((d) => d.ifade)]];
+  for (const v of (durum && durum.list) || []) satirlar.push([v.ad, ...ad.map((a) => (v.deg && v.deg[a]) || '')]);
+  return '﻿' + satirlar.map((r) => r.map(hucre).join(';')).join('\r\n') + '\r\n';
+}
+
+function csvSatirlar(text) {
+  const out = []; let row = [], cell = '', q = false;
+  const s = String(text).replace(/^﻿/, '');
+  const sep = (() => { const ilk = s.split(/\r?\n/)[0] || ''; return ilk.includes(';') ? ';' : ilk.includes('\t') ? '\t' : ','; })();
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (q) { if (c === '"') { if (s[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; continue; }
+    if (c === '"' && cell === '') { q = true; continue; }
+    if (c === sep) { row.push(cell); cell = ''; continue; }
+    if (c === '\n' || c === '\r') { if (c === '\r' && s[i + 1] === '\n') i++; row.push(cell); out.push(row); row = []; cell = ''; continue; }
+    cell += c;
+  }
+  if (cell !== '' || row.length) { row.push(cell); out.push(row); }
+  return out.filter((r) => r.some((x) => x.trim() !== ''));
+}
+
+// CSV → { vars: yeni değişken listesi, list: varyantlar } | { hata }. Var olan varyantların bastırma (gizli) bilgisi adla korunur.
+export function csvTablo(text, vars, durum) {
+  if (typeof text !== 'string' || text.length > 500000) return { hata: 'Dosya okunamadı ya da çok büyük' };
+  const r = csvSatirlar(text);
+  if (r.length < 2) return { hata: 'Tabloda başlık ve en az bir satır olmalı' };
+  const bas = r[0].map((x) => x.trim().replace(/^'/, ''));
+  const sut = bas.slice(1);
+  if (!sut.length) return { hata: 'Tabloda değişken sütunu yok' };
+  for (const a of sut) if (!adGecerli(a)) return { hata: 'Geçersiz değişken adı: ' + (a || '(boş)') };
+  if (new Set(sut).size !== sut.length) return { hata: 'Aynı değişken iki sütunda' };
+  const temiz = (x) => String(x ?? '').trim().replace(/^'(?=[=+\-@])/, '');
+  const yeniVars = (vars || []).map((d) => ({ ...d }));
+  for (const a of sut) if (!yeniVars.some((d) => d.ad === a)) yeniVars.push({ ad: a, ifade: '0' });
+  const eski = new Map(((durum && durum.list) || []).map((v) => [v.ad.toLowerCase(), v]));
+  const list = [], gor = new Set();
+  for (const row of r.slice(1, 102)) {
+    const ad = temiz(row[0]).slice(0, 40);
+    if (!ad) return { hata: 'Adı boş satır var' };
+    if (gor.has(ad.toLowerCase())) return { hata: 'Aynı varyant adı iki kez: ' + ad };
+    gor.add(ad.toLowerCase());
+    if (ad.toLowerCase() === ANA.toLowerCase()) {
+      sut.forEach((a, j) => { const x = temiz(row[j + 1]); if (x) yeniVars.find((d) => d.ad === a).ifade = x.slice(0, 500); });
+      continue;
+    }
+    const deg = {};
+    sut.forEach((a, j) => { const x = temiz(row[j + 1]); if (x) deg[a] = x.slice(0, 500); });
+    list.push({ ad, deg, gizli: (eski.get(ad.toLowerCase()) || {}).gizli || [] });
+  }
+  return { vars: yeniVars, list };
+}

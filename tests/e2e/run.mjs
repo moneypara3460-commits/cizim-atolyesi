@@ -1044,6 +1044,79 @@ await T('Değişkenler: L = 120, D = L/4; kutunun genişliği L/2, Z konumu D �
   expect(s.vars.length === 2 && s.deger.D === 30 && s.eq && s.eq.w === 'L/2' && s.w === 60, 'yenilemeden sonra: ' + JSON.stringify({ v: s.vars, eq: s.eq, w: s.w }));
 });
 
+/* ---------- P-Varyant: varyantlar (konfigürasyon) ve tasarım tablosu ---------- */
+await T('Varyantlar: L değişkeni, Kısa / Uzun varyant; etkin varyant ölçüyü değiştirir, boş hücre Ana değeri kullanır; varyanta özel gizli parça; CSV indir ve geri yükle; sil; kayıt', 'P-Varyant', async ({ page }) => {
+  const P = () => page.evaluate(() => { const A = window.__app; return { w: A.parts[0].w, hid: A.parts.map((q) => !!q.hidden), ...JSON.parse(JSON.stringify(A.param)) }; });
+  // hazırlık: L = 120, D = 30; kutu genişliği L/2, derinliği D; ikinci parça silindir
+  await page.evaluate(() => { const A = window.__app; A.applyCommands(A.parseVoice('silindir ekle'), 'silindir ekle'); });
+  await page.waitForTimeout(500);
+  await page.evaluate(() => { document.querySelectorAll('#chips .chip')[0].click(); });
+  await tab(page, 'param');
+  await act(page, 'pv-add'); await page.locator('#tabbody [data-pv="0,ifade"]').fill('120');
+  await act(page, 'pv-add'); await page.locator('#tabbody [data-pv="1,ad"]').fill('D'); await page.locator('#tabbody [data-pv="1,ifade"]').fill('30');
+  await page.locator('#tabbody [data-pe="w"]').fill('L/2'); await page.locator('#tabbody [data-pe="l"]').fill('D'); await page.waitForTimeout(300);
+  expect((await P()).w === 60, 'Ana: genişlik 60');
+  // Varyant 1 → adı Kısa, L = 80
+  await act(page, 'vr-add'); await page.waitForTimeout(300);
+  let s = await P(); expect(s.cfg.list.length === 1 && s.cfg.aktif === 0 && s.cfg.list[0].ad === 'Varyant 1', 'varyant eklendi: ' + JSON.stringify(s.cfg));
+  await page.locator('#tabbody [data-vr="0"]').fill('Kısa');
+  await page.locator('#tabbody [data-vc="0,L"]').fill('80'); await page.waitForTimeout(300);
+  s = await P(); expect(s.w === 40 && s.deger.L === 80 && s.deger.D === 30 && s.cfg.list[0].ad === 'Kısa', 'Kısa: genişlik 40, D Ana değeri: ' + JSON.stringify({ w: s.w, d: s.deger, c: s.cfg.list }));
+  expect(await page.locator('#vr-aktif').innerText() === 'Kısa', 'etkin adı');
+  // Kısa varyantında silindiri gizle
+  await page.evaluate(() => { document.querySelectorAll('#chips .chip')[1].click(); });
+  await tab(page, 'param'); await act(page, 'hide'); await page.waitForTimeout(300);
+  expect((await P()).hid.join() === 'false,true', 'silindir Kısa varyantta gizli');
+  await page.evaluate(() => { document.querySelectorAll('#chips .chip')[0].click(); });
+  await tab(page, 'param');
+  // Uzun: L = 200, D = L/5 (silindir görünür, çünkü Kısa'dan kopyalanır ama sonra gösteririz)
+  await act(page, 'vr-add'); await page.waitForTimeout(300);
+  s = await P(); expect(s.cfg.aktif === 1 && s.hid.join() === 'false,true' && s.w === 40, 'yeni varyant şimdiki durumdan başlar: ' + JSON.stringify({ a: s.cfg.aktif, h: s.hid, w: s.w }));
+  await page.locator('#tabbody [data-vr="1"]').fill('Uzun');
+  await page.locator('#tabbody [data-vc="1,L"]').fill('200'); await page.locator('#tabbody [data-vc="1,D"]').fill('L/5'); await page.waitForTimeout(300);
+  await page.evaluate(() => { document.querySelectorAll('#chips .chip')[1].click(); });
+  await tab(page, 'param'); await act(page, 'hide'); await page.waitForTimeout(300);
+  await page.evaluate(() => { document.querySelectorAll('#chips .chip')[0].click(); });
+  await tab(page, 'param');
+  s = await P(); expect(s.w === 100 && s.deger.D === 40 && s.hid.join() === 'false,false', 'Uzun: ' + JSON.stringify({ w: s.w, d: s.deger, h: s.hid }));
+  // geçişler: Ana ↔ Kısa ↔ Uzun
+  await act(page, 'vr-on--1'); await page.waitForTimeout(300);
+  s = await P(); expect(s.w === 60 && s.deger.D === 30 && s.hid.join() === 'false,false' && s.cfg.aktif === -1, 'Ana: ' + JSON.stringify({ w: s.w, h: s.hid }));
+  await act(page, 'vr-on-0'); await page.waitForTimeout(300);
+  s = await P(); expect(s.w === 40 && s.hid.join() === 'false,true', 'Kısa geri: ' + JSON.stringify({ w: s.w, h: s.hid }));
+  // geri al: Ana'ya döner
+  await act(page, 'undo'); await page.waitForTimeout(400);
+  s = await P(); expect(s.cfg.aktif === -1 && s.w === 60, 'geri al: ' + JSON.stringify({ a: s.cfg.aktif, w: s.w }));
+  await act(page, 'redo'); await page.waitForTimeout(400);
+  // CSV indir
+  await tab(page, 'param');
+  const dl = await download(page, () => act(page, 'vr-csv'));
+  expect(/tasarim-tablosu\.csv$/.test(dl.name) && dl.text.replace(/^﻿/, '').split('\r\n')[0] === 'Varyant;L;D' && dl.text.includes('Ana;120;30') && dl.text.includes('Kısa;80;') && dl.text.includes('Uzun;200;L/5'), 'CSV: ' + JSON.stringify(dl.text));
+  // Excel'de düzenlenmiş tablo yükle: Uzun L=250, yeni varyant Orta, yeni değişken T
+  const csv = '﻿Varyant;L;D;T\r\nAna;120;30;3\r\nKısa;80;;\r\nUzun;250;L/5;\r\nOrta;150;;2\r\n';
+  const f = path.join(OUT, 'tasarim-tablosu-test.csv'); fs.writeFileSync(f, csv);
+  await choose(page, () => act(page, 'vr-csv-in'), f); await page.waitForTimeout(600);
+  s = await P();
+  expect(s.cfg.list.map((v) => v.ad).join() === 'Kısa,Uzun,Orta' && s.vars.map((v) => v.ad + '=' + v.ifade).join() === 'L=120,D=30,T=3' && s.cfg.list[0].gizli.length === 1, 'yüklendi: ' + JSON.stringify({ l: s.cfg.list, v: s.vars }));
+  expect(s.cfg.list[s.cfg.aktif].ad === 'Kısa' && s.w === 40 && s.hid.join() === 'false,true', 'etkin varyant korundu: ' + JSON.stringify({ a: s.cfg.aktif, w: s.w, h: s.hid }));
+  await act(page, 'vr-on-1'); await page.waitForTimeout(300);
+  expect((await P()).w === 125, 'Uzun L=250');
+  // hatalı tablo: değişmez
+  fs.writeFileSync(f, 'Varyant;2x\r\nA;1\r\n');
+  await choose(page, () => act(page, 'vr-csv-in'), f); await page.waitForTimeout(500);
+  expect((await P()).cfg.list.length === 3, 'hatalı tablo yüklenmedi');
+  // Uzun'u sil (etkin) → Ana
+  await act(page, 'vr-del-1'); await page.waitForTimeout(300);
+  s = await P(); expect(s.cfg.list.map((v) => v.ad).join() === 'Kısa,Orta' && s.cfg.aktif === -1 && s.w === 60, 'silindi: ' + JSON.stringify({ l: s.cfg.list.map((v) => v.ad), a: s.cfg.aktif, w: s.w }));
+  await act(page, 'vr-on-1'); await page.waitForTimeout(300);
+  await shot(page, 'varyant');
+  // kayıt
+  await page.waitForTimeout(1500);
+  await page.reload(); await waitReady(page);
+  s = await P();
+  expect(s.cfg.list.length === 2 && s.cfg.aktif === 1 && s.w === 75 && s.cfg.list[0].gizli.length === 1, 'yenileyince: ' + JSON.stringify({ c: s.cfg, w: s.w }));
+});
+
 /* ---------- E-Tava: flanşlı sac (kenar flanşı, köşe kapatma, açınım) ---------- */
 await T('Sac tava: 4 kenar flanşı, açınım = ölçüler − büküm düşümü; flanş kaldırma, kapalı köşe, 90° dışı uyarı, düz açınım, DXF ve kayıt', 'E-Tava', async ({ page }) => {
   await page.evaluate(() => { const A = window.__app, p = A.parts[0]; Object.assign(p, { type: 'sheet', st: 2, sr: 2, sw: 50, sk: 0.44, flat: false, sh: 'L', sa0: 0, seg: [{ L: 40 }, { a: 90, L: 40 }], name: 'Tava' }); A.refreshAll(true); });

@@ -42,7 +42,7 @@ import * as DLK from './delik.js?v=20261120b';
 import * as TK from './teknik.js?v=20261119f';
 import * as STD from './stdparca.js?v=20261120b';
 import * as DIS from './dis.js?v=20261120b';
-import * as PRM from './degisken.js?v=20261120g';
+import * as PRM from './degisken.js?v=20261120h';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
 import { createMekaUI } from './meka/ui.js?v=20261119c';
@@ -104,6 +104,8 @@ let drawCfg = { ...DRAW_DEF };
 // parametrik model: global değişkenler [{ ad, ifade }] (projeyle saklanır), parça alanları p.eq = { alan: ifade } ile bağlanır.
 // geri sarma: modeli yalnız ilk rollTo adımla göster (yalnız görünüm; null = hepsi)
 let paramVars = [], paramState = { deger: {}, hata: {}, satir: [] }, paramErr = {}, rollTo = null;
+// varyantlar (SolidWorks "konfigürasyon"): { aktif: -1 = Ana | sıra, ana: { gizli }, list: [{ ad, deg: { değişken: ifade }, gizli: [parça id] }] }
+let paramCfg = PRM.varyantSan(null);
 const drawSan = (o) => {
   const d = { ...DRAW_DEF };
   if (o && typeof o === 'object') {
@@ -113,12 +115,12 @@ const drawSan = (o) => {
   }
   return d;
 };
-const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined, draw: drawCfg, vars: paramVars });
+const snapshot = () => JSON.stringify({ parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined, draw: drawCfg, vars: paramVars, cfg: paramCfg });
 // "Tek parça" ağları (üçgen verisi) geri al geçmişine girmesin diye parçada yalnızca anahtar (mk) durur, veri burada tutulur.
 // Kaydederken (otomatik kayıt, proje) veri de dosyaya yazılır.
 const meshStore = new Map();
 function snapshotSave() {
-  const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined, meka: mekaReady ? mekaUI.getProject() : mekaPending, draw: drawCfg, vars: paramVars };   // cam5: 4/5 eksen CNC ayarları; meka: Mekatronik ürün ağacı ve hesaplar
+  const o = { parts, sel, nextId, welds: weldPlan, asm: asmAnswers, sim: simData, mech: mechData, fem: femData, cam5: typeof cam5UI !== 'undefined' ? cam5UI.getCfg() : undefined, meka: mekaReady ? mekaUI.getProject() : mekaPending, draw: drawCfg, vars: paramVars, cfg: paramCfg };   // cam5: 4/5 eksen CNC ayarları; meka: Mekatronik ürün ağacı ve hesaplar
   const ks = [...new Set(parts.flatMap((q) => [q.mk, q.bk]).filter((k) => k && meshStore.has(k)))];   // bk: OCCT B-Rep metni
   if (ks.length) { o.meshes = {}; ks.forEach((k) => { o.meshes[k] = meshStore.get(k); }); }
   return JSON.stringify(o);
@@ -131,7 +133,7 @@ function restore(s) {
   if (typeof cam5UI !== 'undefined') cam5UI.setCfg(o.cam5);
   femData = o.fem && typeof o.fem === 'object' ? o.fem : null;   // eski projelerde yok: varsayılan (3 eksen)
   drawCfg = drawSan(o.draw);   // eski projelerde yok: varsayılan (ISO 2768-m, Ra 3,2)
-  paramVars = PRM.degiskenSan(o.vars); rollTo = null; paramState = PRM.degiskenleriCoz(paramVars);   // eski projelerde yok: boş
+  paramVars = PRM.degiskenSan(o.vars); paramCfg = PRM.varyantSan(o.cfg); rollTo = null; paramState = PRM.degiskenleriCoz(etkinVars());   // eski projelerde yok: boş
   // Mekatronik: yalnız proje kaydında var (geri al anlık görüntüsünde yok → dokunulmaz); 'meka' anahtarı olmayan eski proje boş ağaçla açılır
   if ('meka' in o) { if (mekaReady) mekaUI.setProject(o.meka || null); else mekaPending = o.meka || null; }
   if (!Array.isArray(parts)) parts = [];
@@ -1347,7 +1349,7 @@ function renderPanel() {
     hint = 'Üretilebilirlik kontrolü gerçek geometriyle yapılır ama bir ön kontroldür: kesin hata demek değildir, yapısal dayanımı göstermez. Sonuca dokununca kamera o bölgeye gider; kırmızı kutu problem bölgesi, turuncu parçalar ilgili parçalardır.';
   } else if (tab === 'param') {
     body = paramPanel(p, idx);
-    hint = 'Değişkenler mm (açılar derece) cinsindendir. Bir alana ifade yazınca o alan değişkene bağlanır ve Ölçü / Konum sekmesinde ƒ işaretiyle kilitli görünür; değişkeni değiştirince bağlı bütün parçalar güncellenir. Fonksiyonlar: sin cos tan (derece), sqrt, abs, min(a; b), max, round, pi.';
+    hint = 'Varyant: aynı modelin farklı ölçülü / farklı parçalı sürümü (SolidWorks konfigürasyonu). Bir varyant etkinken Parça sekmesinde gizlediğin parçalar yalnız o varyantta gizlidir. Değişkenler mm (açılar derece) cinsindendir. Bir alana ifade yazınca o alan değişkene bağlanır ve Ölçü / Konum sekmesinde ƒ işaretiyle kilitli görünür; değişkeni değiştirince bağlı bütün parçalar güncellenir. Fonksiyonlar: sin cos tan (derece), sqrt, abs, min(a; b), max, round, pi.';
   } else if (tab === 'part') {
     body = `<label class="f w2"><span>Parça adı</span><input type="text" data-k="name" data-t="text" value="${esc(p.name || '')}" placeholder="${esc(partName(p, idx))}"></label>` +
       `<div class="row" style="flex:1 0 100%;padding:0;flex-wrap:wrap">` +
@@ -1442,8 +1444,10 @@ function paramFields(p) {
   return [...fieldsFor(p).map(([l, k, kd]) => [l, k, kd || 'len']), ['X', 'x', 'len'], ['Y', 'y', 'len'], ['Z', 'z', 'len'], ['Dönüş X°', 'rx', 'deg'], ['Dönüş Y°', 'ry', 'deg'], ['Dönüş Z°', 'rz', 'deg']];
 }
 // değişkenleri çöz ve bağlı alanları parçalara yaz. Hatalı ifade parçayı değiştirmez (son geçerli değer kalır).
+const aktifVaryant = () => (paramCfg.aktif >= 0 ? paramCfg.list[paramCfg.aktif] : null);
+const etkinVars = () => PRM.varyantDegiskenleri(paramVars, aktifVaryant());
 function applyParams() {
-  paramState = PRM.degiskenleriCoz(paramVars);
+  paramState = PRM.degiskenleriCoz(etkinVars());
   paramErr = {};
   for (const r of PRM.bagliAlanlar(parts, paramState.deger)) {
     const q = parts.find((x) => x.id === r.id);
@@ -1457,7 +1461,7 @@ function applyParams() {
 }
 const pnum = (v) => (Number.isFinite(v) ? fmtNum(v, 4) : '');
 function paramPanel(p, idx) {
-  let h = '<div class="lbl h">Değişkenler (bütün model için)</div>';
+  let h = '<div class="lbl h">Değişkenler (bütün model için' + (paramCfg.aktif >= 0 ? '; değerler Ana, sonuç etkin varyanta göre' : '') + ')</div>';
   if (!paramVars.length) h += '<div class="lbl" style="flex:1 0 100%">Henüz değişken yok. Örnek: L = 120, D = L/4; sonra parçanın genişliğine "L/2" yaz.</div>';
   paramVars.forEach((d, i) => {
     const err = paramState.satir[i], v = paramState.deger[d.ad];
@@ -1472,10 +1476,42 @@ function paramPanel(p, idx) {
     const now = typeof p[k] === 'number' ? (kd === 'deg' ? fmtNum(p[k], 2) : fmtNum(p[k], 3)) : '';
     h += `<label class="f"><span>${esc(l)}${kd === 'len' ? ' (mm)' : ''} <i id="pe-info-${k}" style="font-style:normal;color:${err ? '#f87171' : '#a5b4fc'}">${err ? '⚠ ' + esc(err) : ex ? '= ' + now : ''}</i></span><input type="text" data-pe="${k}" value="${esc(ex)}" placeholder="${now === '' ? 'ifade yaz' : 'sabit: ' + now}" autocapitalize="off" spellcheck="false"></label>`;
   }
+  h += varyantPanel(p, idx);
   h += '<div class="lbl h">Geçmiş (adım adım)</div>';
   const n = parts.length, k = rollTo == null ? n : rollTo;
   h += `<label class="f w2"><span>Model şu adıma kadar: <b id="roll-v">${k} / ${n}</b>${k > 0 && k <= n ? ' — ' + esc(partName(parts[k - 1], k - 1)) : ''}</span><input type="range" min="1" max="${n}" step="1" value="${k}" data-roll="1"></label>` +
     btn('⏩ Tüm adımlar', 'roll-end');
+  return h;
+}
+// varyant değiştir: şimdiki gizli parçalar şimdiki varyantta saklanır, hedefinkiler uygulanır; değişkenler yeniden çözülür
+function varyantSec(k) {
+  const simdi = paramCfg.aktif < 0 ? paramCfg.ana : paramCfg.list[paramCfg.aktif];
+  if (simdi) simdi.gizli = parts.filter((q) => q.hidden).map((q) => q.id);
+  paramCfg.aktif = k >= 0 && k < paramCfg.list.length ? k : -1;
+  const hedef = paramCfg.aktif < 0 ? paramCfg.ana : paramCfg.list[paramCfg.aktif];
+  const g = new Set(hedef.gizli || []);
+  for (const q of parts) { if (g.has(q.id)) q.hidden = true; else delete q.hidden; }
+  applyParams();
+}
+function varyantPanel(p, idx) {
+  const L = paramCfg.list, A = paramCfg.aktif;
+  let h = '<div class="lbl h">Varyantlar (tasarım tablosu)</div>';
+  h += `<div class="lbl" style="flex:1 0 100%">Etkin: <b id="vr-aktif">${esc(A < 0 ? PRM.ANA : L[A].ad)}</b>. Varyant, değişkenlere kendi değerini verir (boş hücre Ana değeri kullanır) ve kendi gizli parça listesini tutar.</div>`;
+  const th = 'style="padding:3px 4px;text-align:left;font-weight:600;color:#94a3b8;white-space:nowrap"', td = 'style="padding:2px"';
+  const inp = 'style="width:100%;min-width:56px;box-sizing:border-box"';
+  h += '<div style="flex:1 0 100%;overflow-x:auto;padding:0"><table id="vr-tablo" style="border-collapse:collapse;font-size:13px;width:100%"><thead><tr>' +
+    `<th ${th}></th><th ${th}>Varyant</th>` + paramVars.map((d) => `<th ${th}>${esc(d.ad)}</th>`).join('') + `<th ${th}></th></tr></thead><tbody>`;
+  h += `<tr><td ${td}><button data-act="vr-on--1"${A < 0 ? ' class="on"' : ''} title="Etkin yap" style="width:auto;min-width:0;flex:none;padding:6px 10px;margin:0">${A < 0 ? '●' : '○'}</button></td><td ${td}><b>${PRM.ANA}</b></td>` +
+    paramVars.map((d) => `<td style="padding:2px 6px;color:#cbd5e1">${esc(d.ifade)}</td>`).join('') + `<td ${td}></td></tr>`;
+  L.forEach((v, i) => {
+    h += `<tr><td ${td}><button data-act="vr-on-${i}"${A === i ? ' class="on"' : ''} title="Etkin yap" style="width:auto;min-width:0;flex:none;padding:6px 10px;margin:0">${A === i ? '●' : '○'}</button></td>` +
+      `<td ${td}><input type="text" data-vr="${i}" value="${esc(v.ad)}" ${inp} autocapitalize="off" spellcheck="false"></td>` +
+      paramVars.map((d) => `<td ${td}><input type="text" data-vc="${i},${esc(d.ad)}" value="${esc((v.deg && v.deg[d.ad]) || '')}" placeholder="${esc(d.ifade)}" ${inp} autocapitalize="off" spellcheck="false"></td>`).join('') +
+      `<td ${td}><button data-act="vr-del-${i}" title="Varyantı sil" style="width:auto;min-width:0;flex:none;padding:6px 10px;margin:0">✕</button></td></tr>`;
+  });
+  h += '</tbody></table></div>';
+  h += btn('+ Varyant ekle', 'vr-add') + btn('⬇ Tabloyu indir (CSV)', 'vr-csv') + btn('⬆ Tablo yükle (CSV)', 'vr-csv-in');
+  h += btn(p.hidden ? '👁 Seçili parçayı bu varyantta göster' : '⊘ Seçili parçayı bu varyantta gizle', 'hide');
   return h;
 }
 function paramInfoUpdate(p) {
@@ -4583,8 +4619,49 @@ document.addEventListener('click', (e) => {
     paramVars.push({ ad: paramVars.length ? 'D' + k : 'L', ifade: '100' });
     applyParams(); refreshAll(); return;
   }
-  if (act.startsWith('pv-del-')) { commit(); paramVars.splice(+act.slice(7), 1); applyParams(); refreshAll(); return; }
+  if (act.startsWith('pv-del-')) {
+    commit();
+    const ad = (paramVars[+act.slice(7)] || {}).ad;
+    paramVars.splice(+act.slice(7), 1);
+    if (ad && !paramVars.some((d) => d.ad === ad)) for (const v of paramCfg.list) if (v.deg) delete v.deg[ad];   // tablodaki sütunu da sil
+    applyParams(); refreshAll(); return;
+  }
   if (act === 'roll-end') { rollTo = null; refreshAll(); return; }
+  if (act === 'vr-add') {
+    commit();
+    // yeni varyant şimdiki durumdan başlar: etkin varyantın değerleri ve gizli parçaları
+    const a = aktifVaryant();
+    paramCfg.list.push({ ad: PRM.yeniVaryantAdi(paramCfg.list), deg: { ...((a && a.deg) || {}) }, gizli: parts.filter((q) => q.hidden).map((q) => q.id) });
+    varyantSec(paramCfg.list.length - 1); refreshAll(); return;
+  }
+  if (act.startsWith('vr-on-')) { commit(); varyantSec(+act.slice(6)); refreshAll(); toast('Etkin varyant: ' + (paramCfg.aktif < 0 ? PRM.ANA : paramCfg.list[paramCfg.aktif].ad)); return; }
+  if (act.startsWith('vr-del-')) {
+    commit();
+    const i = +act.slice(7);
+    if (paramCfg.aktif === i) varyantSec(-1);
+    paramCfg.list.splice(i, 1);
+    if (paramCfg.aktif > i) paramCfg.aktif--;
+    applyParams(); refreshAll(); return;
+  }
+  if (act === 'vr-csv') { saveBlob(new Blob([PRM.tabloCsv(paramVars, paramCfg)], { type: 'text/csv;charset=utf-8' }), fileBase() + '-tasarim-tablosu.csv'); toast('Tasarım tablosu indirildi'); return; }
+  if (act === 'vr-csv-in') {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.csv,.txt,text/csv';
+    inp.onchange = async () => {
+      const f = inp.files && inp.files[0];
+      if (!f) return;
+      if (f.size > 500000) { toast('Dosya çok büyük (en çok 500 kB)'); return; }
+      const r = PRM.csvTablo(await f.text(), paramVars, paramCfg);
+      if (r.hata) { toast('Tablo yüklenemedi: ' + r.hata); return; }
+      commit();
+      const eskiAd = aktifVaryant() && aktifVaryant().ad;
+      varyantSec(-1);   // gizli parçalar şimdiki varyantta saklansın
+      paramVars = r.vars; paramCfg.list = r.list;
+      const k = eskiAd ? r.list.findIndex((v) => v.ad.toLowerCase() === eskiAd.toLowerCase()) : -1;
+      varyantSec(k); refreshAll();
+      toast('Tablo yüklendi: ' + r.list.length + ' varyant');
+    };
+    inp.click(); return;
+  }
   if (act.startsWith('kk-') && p.sm === 'tava') { commit(); p.kk = act.slice(3) === 'kapali' ? 'kapali' : 'acik'; refreshAll(); return; }
   if (act.startsWith('ko-') && p.sm === 'tava') { commit(); p.ko = act.slice(3) === 'z' ? 'z' : 'x'; refreshAll(); return; }
   if (act === 'sh-flat') { commit(); p.flat = !p.flat; refreshAll(); return; }
@@ -4724,6 +4801,25 @@ document.addEventListener('input', (e) => {
     const jl = document.querySelector('[data-jl]');
     if (jl) jl.textContent = (isH ? 'Açı: ' + fmtNum(c.joint.val, 1) + '°' : 'Kayma: ' + lenText(c.joint.val));
     scheduleSave();
+    return;
+  }
+  if (d.vr !== undefined || d.vc) {
+    const skey = 'vr.' + (d.vr ?? d.vc), snow = Date.now();
+    if (skey !== lastKey || snow - lastAt > 1500) { commit(); updateToolbar(); }
+    lastKey = skey; lastAt = snow;
+    if (d.vr !== undefined) {
+      const v = paramCfg.list[+d.vr], ad = el.value.trim().slice(0, 40);
+      // ad boş, "Ana" ya da başka varyantla aynıysa eski ad kalır
+      if (v && ad && ad.toLowerCase() !== PRM.ANA.toLowerCase() && !paramCfg.list.some((x) => x !== v && x.ad.toLowerCase() === ad.toLowerCase())) { v.ad = ad; el.style.color = ''; } else el.style.color = '#f87171';
+      const ak = document.getElementById('vr-aktif'); if (ak) ak.textContent = paramCfg.aktif < 0 ? PRM.ANA : paramCfg.list[paramCfg.aktif].ad;
+      scheduleSave(); return;
+    }
+    const j = d.vc.indexOf(','), v = paramCfg.list[+d.vc.slice(0, j)], vad = d.vc.slice(j + 1);
+    if (!v) return;
+    v.deg = { ...(v.deg || {}) };
+    const x = el.value.trim();
+    if (x) v.deg[vad] = x.slice(0, 500); else delete v.deg[vad];
+    applyParams(); rebuild(false); paramInfoUpdate(cur()); scheduleSave();
     return;
   }
   if (d.pv || d.pe || d.roll) {
@@ -4935,7 +5031,7 @@ try {
 } catch (e) { /* bozuk kayıt: varsayılanla devam */ }
 
 // test / hata ayıklama için küçük kanca (arayüzü etkilemez)
-window.__app = { get param() { return { vars: paramVars, deger: paramState.deger, satir: paramState.satir, err: paramErr, rollTo }; }, get sheetInfo() { return sheetInfo; }, get drawCfg() { return drawCfg; }, get lathe() { return latheUI; }, get edgeSel() { return { n: edgeSels.length, g: edgeG ? edgeG.edges.length : 0, busy: edgeBusy, sel: edgeSels.map((e) => ({ type: e.type, mid: e.mid.map((v) => Math.round(v * 100) / 100) })) }; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, get weightMarkerCount() { return wgtGroup.children.length; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
+window.__app = { get param() { return { vars: paramVars, cfg: paramCfg, deger: paramState.deger, satir: paramState.satir, err: paramErr, rollTo }; }, get sheetInfo() { return sheetInfo; }, get drawCfg() { return drawCfg; }, get lathe() { return latheUI; }, get edgeSel() { return { n: edgeSels.length, g: edgeG ? edgeG.edges.length : 0, busy: edgeBusy, sel: edgeSels.map((e) => ({ type: e.type, mid: e.mid.map((v) => Math.round(v * 100) / 100) })) }; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, get weightMarkerCount() { return wgtGroup.children.length; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
 
 renderPanel();
 updateToolbar();
