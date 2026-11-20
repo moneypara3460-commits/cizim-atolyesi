@@ -37,8 +37,10 @@ import { createCam5UI } from './cam5-ui.js?v=20261112u';
 import { createLatheUI } from './lathe-ui.js?v=20261112u';
 import { machinePose } from './kin.js?v=20261112u';
 import { createOcctUI } from './occt-ui.js?v=20261119d';
-import * as DLK from './delik.js?v=20261119f';
+import * as DLK from './delik.js?v=20261120b';
 import * as TK from './teknik.js?v=20261119f';
+import * as STD from './stdparca.js?v=20261120b';
+import * as DIS from './dis.js?v=20261120b';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
 import { createMekaUI } from './meka/ui.js?v=20261119c';
@@ -83,7 +85,9 @@ const cp = { n: 3, dx: 40, dy: 0, dz: 0, cn: 6, ang: 360, touched: false, shape:
   pat: 'single', px: 3, py: 2, sx: 20, sy: 20, pn: 6, pr: 20,            // delik deseni
   wall: 2, openTop: true, openBot: false,                                 // kabuk
   mgap: 0, mrot: 0, mcenter: true, mtype: 'coinc', mval: 0, mang: 90, mflip: false,
-  fmode: 'basic',                                                         // yüz sekmesi: basit delik / delik sihirbazı
+  fmode: 'basic',                                                         // yüz sekmesi: basit delik / delik sihirbazı / standart parça
+  spTur: 'vida', spOlcu: 'M8', spBoy: 25,
+  thYan: 'dis', thOlcu: 'M8', thP: 1.25, thD: 21, thBas: 0, thBoy: 20, thAd: '',      // kozmetik diş ekleme formu
   hwTur: 'klavuz', hwOlcu: 'M6', hwAdim: 1, hwSeri: 'orta', hwStd: 'iso15065', hwBoydan: false, hwDer: 12, hwUc: true, hwDis: 0, hwKad: 0 };                                      // montaj // çoğaltma + yüz ayarları (mm)
 
 const hist = new History();
@@ -847,6 +851,7 @@ function rebuild(refit) {
     capMesh.layers.set(1);
     capMesh.visible = section.on;
     modelGroup.add(capMesh);
+    try { drawThreadLines(vis); } catch (e) { /* kozmetik diş çizilemezse model yine gösterilir */ }
 
     setMsg('', false);
     refreshOverlays();
@@ -856,6 +861,25 @@ function rebuild(refit) {
   } catch (err) {
     setMsg('Hata: ' + (err && err.message ? err.message : err), true);
   }
+}
+
+// kozmetik diş: dişli bölge helis çizgisiyle (dış dişte yüzeyin hemen dışında, iç dişte hemen içinde)
+let threadLines = null;
+const threadMat = new THREE.LineBasicMaterial({ color: 0x0f172a, transparent: true, opacity: 0.85 });
+function drawThreadLines(vis) {
+  threadLines = null;
+  const seg = [];
+  for (const p of vis) {
+    for (const t of DIS.parcaDisleri(p)) {
+      const r = t.r + (t.yan === 'dis' ? 0.04 : -0.04);
+      const pts = DIS.helis(r, t.y0, t.y1, t.P).map(([x, y, z]) => toWorld(p, new THREE.Vector3(x, y, z)));
+      for (let i = 1; i < pts.length; i++) seg.push(pts[i - 1], pts[i]);
+    }
+  }
+  if (!seg.length) return;
+  threadLines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seg), threadMat);
+  threadLines.renderOrder = 3;
+  modelGroup.add(threadLines);
 }
 
 // Model geometrisi değişti: ona bağlı katmanlar (ağırlık merkezi, benzetim, CNC, montaj, OCCT) eskimesin.
@@ -1114,8 +1138,12 @@ function renderPanel() {
     if (!face) {
       body = '<div class="lbl" style="flex:1 0 100%">Modelde bir yüze dokun.</div>';
       hint = 'Dokunduğun yüz sarı renkte işaretlenir; delik, çıkıntı ya da kroki o yüze dik oluşur.';
+    } else if (cp.fmode === 'lib') {
+      body = btn('Basit delik / çıkıntı', 'fmode-basic') + btn('🔩 Delik sihirbazı', 'fmode-hw') + btn('🧰 Standart parça', 'fmode-lib', true) + stdPartHtml() +
+        btn('⬇ Parçayı ekle', 'face-std');
+      hint = 'Parça dokunduğun yüze oturur (vida başı yüzeyde, gövdesi içeri). Yakında delik varsa parça deliğin eksenine ortalanır. Ölçüler ISO 4762, ISO 4032, ISO 7089 ve rulman ana ölçülerinden (ISO 15); rulman sadeleştirilmiş halkadır.';
     } else if (cp.fmode === 'hw') {
-      body = btn('Basit delik / çıkıntı', 'fmode-basic') + btn('🔩 Delik sihirbazı', 'fmode-hw', true) + holeWizardHtml() +
+      body = btn('Basit delik / çıkıntı', 'fmode-basic') + btn('🔩 Delik sihirbazı', 'fmode-hw', true) + btn('🧰 Standart parça', 'fmode-lib') + holeWizardHtml() +
         '<div class="lbl" style="flex:1 0 100%">Desen</div>' +
         btn('Tek', 'pat-single', cp.pat === 'single') + btn('Izgara', 'pat-grid', cp.pat === 'grid') + btn('Daire', 'pat-circ', cp.pat === 'circ') +
         (cp.pat === 'grid' ? cfield('Sütun', 'px', 'num') + cfield('Satır', 'py', 'num') + cfield('Aralık 1', 'sx') + cfield('Aralık 2', 'sy') : '') +
@@ -1123,7 +1151,7 @@ function renderPanel() {
         btn('⬇ Delik aç (sihirbaz)', 'face-hw');
       hint = 'Ölçüler ISO tablolarından gelir (diş adımı ISO 261, geçiş deliği ISO 273, havşa ISO 15065 / ISO 10642, kademe ASME B18.3.1M). Diş modelde helis olarak çizilmez: delik matkap çapında açılır, diş bilgisi deliğe yazılır (SolidWorks\'teki gibi işaretli delik).';
     } else {
-      body = btn('Basit delik / çıkıntı', 'fmode-basic', true) + btn('🔩 Delik sihirbazı', 'fmode-hw') +
+      body = btn('Basit delik / çıkıntı', 'fmode-basic', true) + btn('🔩 Delik sihirbazı', 'fmode-hw') + btn('🧰 Standart parça', 'fmode-lib') +
         btn('○ Yuvarlak', 'fshape-round', cp.shape === 'round') + btn('□ Kare', 'fshape-square', cp.shape === 'square') +
         (cp.shape === 'round' ? cfield('Çap', 'fd') : cfield('Genişlik', 'fw') + cfield('Derinlik (yatay)', 'fl')) +
         cfield('Derinlik / yükseklik', 'depth') +
@@ -1326,6 +1354,7 @@ function renderPanel() {
         TK.GECME.map((g) => '<option value="' + g + '"' + (p.fit === g ? ' selected' : '') + '>' + g + '</option>').join('') + '</select></label>' +
         (p.fit ? '<div class="lbl" style="flex:1 0 100%">' + (sp ? 'Ø' + fmtNum(+p.d, 3).replace('.', ',') + ' ' + p.fit + ': +' + fmtNum(sp.es, 3).replace('.', ',') + ' / 0 mm' : '⚠ ' + p.fit + ' bu çapta tanımlı değil (0 – 500 mm)') + '</div>' : '');
     }
+    if (p.type === 'cylinder' || p.type === 'tube') body += threadPanel(p, idx);
     if (p.type === 'sheet') {
       const c = sheetCalc(p);
       body += (p.seg || []).map((sg, i) => '<div class="lbl h">' + (i + 1) + '. kenar</div>' +
@@ -2813,6 +2842,107 @@ function faceHoleWizard() {
   refreshAll();
   toast('Delik açıldı: ' + k.label + (offs.length > 1 ? ' · ' + offs.length + ' adet' : ''));
 }
+/* ---- kozmetik diş: silindire / boruya dış diş, deliğe / borunun içine iç diş (başlangıç ve boy seçilir) ---- */
+function threadPanel(p, idx) {
+  const sub = idx > 0 && p.op === 'sub';
+  const yanlar = sub ? [['ic', 'İç diş (delik)']] : p.type === 'tube' ? [['dis', 'Dış diş'], ['ic', 'İç diş']] : [['dis', 'Dış diş']];
+  if (!yanlar.some(([k]) => k === cp.thYan)) cp.thYan = yanlar[0][0];
+  const L = sub ? Math.max(0, clamp(p.h) - 1) : clamp(p.h);
+  let h = '<div class="lbl h" style="flex:1 0 100%">Diş (kozmetik: modelde helis çizgisi, resimde ISO 6410)</div>';
+  (p.threads || []).forEach((raw, i) => {
+    const t = DIS.disSan(raw); if (!t) return;
+    h += '<div style="flex:1 0 100%;display:flex;gap:6px;align-items:center"><div class="lbl" style="flex:1">' + (t.yan === 'dis' ? 'Dış' : 'İç') + ' ' + esc(DIS.disAdi(t)) + ' · ' + fmtNum(t.bas, 2).replace('.', ',') + ' – ' + fmtNum(t.bas + t.boy, 2).replace('.', ',') + ' mm</div>' +
+      '<button data-act="th-del-' + i + '" style="flex:0 0 auto;padding:6px 12px">✕ Sil</button></div>';
+  });
+  const pick = (key, label, opts, curv) => `<label class="f"><span>${label}</span><select data-thk="${key}">` +
+    opts.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(curv) ? ' selected' : ''}>${esc(t)}</option>`).join('') + '</select></label>';
+  h += pick('yan', 'Yan', yanlar, cp.thYan);
+  h += pick('olcu', 'Ölçü', [...DIS.MOLCU.map((m) => [m, m.replace('.', ',')]), ['ozel', 'Özel (boru dişi vb.)']], cp.thOlcu);
+  if (cp.thOlcu === 'ozel') {
+    h += cfield('Diş dış çapı', 'thD') + cfield('Adım', 'thP') +
+      `<label class="f"><span>Ad (ör. G 1/2)</span><input type="text" data-tht="ad" maxlength="40" value="${esc(cp.thAd)}"></label>`;
+  } else h += pick('adim', 'Adım', DIS.madimlar(cp.thOlcu).map((q, i) => [q, fmtNum(q, 2).replace('.', ',') + (i ? ' (ince)' : ' (kaba)')]), cp.thP);
+  h += cfield('Başlangıç (' + (sub ? 'delik dibinden' : 'parçanın tabanından') + ')', 'thBas') + cfield('Diş boyu', 'thBoy') + btn('+ Diş ekle', 'th-add');
+  h += '<div class="lbl" style="flex:1 0 100%;font-size:12px">Parça boyu ' + fmtNum(L, 2).replace('.', ',') + ' mm. Diş modelde çizilmez (model hafif kalır); imalat diş yazısından yapılır.</div>';
+  return h;
+}
+function threadAdd() {
+  const p = cur();
+  if (!p || (p.type !== 'cylinder' && p.type !== 'tube')) return;
+  const idx = parts.indexOf(p), sub = idx > 0 && p.op === 'sub';
+  const L = sub ? Math.max(0, clamp(p.h) - 1) : clamp(p.h);
+  const yan = sub ? 'ic' : cp.thYan;
+  const t = DIS.disSan({ yan, olcu: cp.thOlcu, d: cp.thD, P: cp.thP, bas: cp.thBas, boy: cp.thBoy, ad: cp.thAd });
+  if (!t) { toast('Diş ölçüsü geçersiz (çap, adım ve boy 0\'dan büyük olmalı; adım çapın yarısından küçük)'); return; }
+  if (t.bas + t.boy > L + 1e-6) { toast('Diş parçanın dışına taşıyor: başlangıç + boy en çok ' + fmtNum(L, 2).replace('.', ',') + ' mm'); return; }
+  // yüzey ile diş çapı uyuşmalı: dış dişte yüzey = diş dış çapı, iç dişte yüzey diş çapından küçük ama küçük çaptan büyük değil
+  const surf = p.type === 'tube' && yan === 'ic' ? pos(p.di) : clamp(p.d);
+  if (yan === 'dis' && Math.abs(surf - t.d) > Math.max(0.5, 0.05 * t.d)) toast('Uyarı: parça çapı Ø' + fmtNum(surf, 2) + ', diş Ø' + fmtNum(t.d, 2) + ' — çapı dişe göre ayarlamayı düşün');
+  if (yan === 'ic' && (surf > t.d + 0.01 || surf < DIS.dKucukIc(t.d, t.P) - Math.max(0.5, 0.1 * t.d))) toast('Uyarı: delik Ø' + fmtNum(surf, 2) + ', ' + DIS.disAdi(t) + ' için matkap çapı yaklaşık Ø' + fmtNum(t.d - t.P, 2));
+  commit();
+  p.threads = [...(p.threads || []), t];
+  refreshAll(); renderPanel();
+}
+/* ---- standart parça kütüphanesi: vida, somun, pul, rulman — dokunulan yüze, yakındaki deliğe ortalanarak ---- */
+function stdPartHtml() {
+  const o = STD.normalize({ tur: cp.spTur, olcu: cp.spOlcu, boy: cp.spBoy });
+  const pick = (key, label, opts, curv) => `<label class="f w2"><span>${label}</span><select data-spk="${key}">` +
+    opts.map(([v, t]) => `<option value="${esc(v)}"${String(v) === String(curv) ? ' selected' : ''}>${esc(t)}</option>`).join('') + '</select></label>';
+  let h = pick('tur', 'Parça', Object.entries(STD.TURLER), o.tur);
+  h += pick('olcu', o.tur === 'rulman' ? 'Rulman no' : 'Ölçü', STD.olculer(o.tur).map((m) => [m, o.tur === 'rulman' ? m + ' (' + STD.RULMAN[m].join(' × ') + ')' : m]), o.olcu);
+  if (o.tur === 'vida') h += pick('boy', 'Boy (baş altından)', STD.BOYLAR.map((b) => [b, b + ' mm']), o.boy);
+  const t = STD.tarif(o);
+  h += '<div class="lbl" data-spsum="1" style="flex:1 0 100%"><b>' + esc(t.ad) + '</b> · ' + esc(t.yazi) + '</div>';
+  return h;
+}
+// dokunulan noktaya yakın, ekseni yüze dik deliğin ağız merkezi (yoksa null)
+function holeMouthNear(pt, n) {
+  let best = null, bd = Infinity;
+  parts.forEach((q, i) => {
+    if (i === 0 || q.hidden || q.aux || q.op !== 'sub' || q.type !== 'cylinder') return;
+    const a = new THREE.Vector3(0, 1, 0).applyQuaternion(partQuat(q));
+    const dn = a.dot(n);
+    if (Math.abs(dn) < 0.999) return;
+    const base = new THREE.Vector3(pos(q.x), pos(q.y), pos(q.z));
+    const tt = pt.clone().sub(base).dot(n) / dn;
+    const mouth = base.clone().addScaledVector(a, tt);
+    const dd = mouth.distanceTo(pt);
+    // ağız yarıçapı: delik ya da ona bağlı kademe / havşa (hangisi büyükse) + 3 mm
+    const rr = Math.max(clamp(q.d), ...parts.filter((c) => c.aux && c.parent === q.id).map((c) => (c.type === 'cone' ? Math.max(clamp(c.d), pos(c.d2)) : clamp(c.d)))) / 2 + 3;
+    if (dd <= rr && dd < bd) { bd = dd; best = { mouth, id: q.id, kademe: q.hole && q.hole.kademe ? q.hole.kademe.der : 0, out: Math.sign(dn) }; }
+  });
+  return best;
+}
+function faceStdPart() {
+  if (!face) return;
+  const t = STD.tarif({ tur: cp.spTur, olcu: cp.spOlcu, boy: cp.spBoy });
+  const snap = holeMouthNear(face.point, face.normal);
+  const saved = face.point.clone();
+  if (snap) {
+    face.point.copy(snap.mouth);
+    // kademeli delikte vida başı kademenin tabanına oturur
+    if (snap.kademe && cp.spTur === 'vida') face.point.addScaledVector(face.normal, -snap.kademe);
+  }
+  commit();
+  let main = null;
+  try {
+    for (const sp of t.parcalar) {
+      const p = newPart(nextId++, sp.tip, sp.op, null);
+      if (sp.tip === 'sketch') {
+        Object.assign(p, { mode: sp.mode, pts: sp.pts.map((q) => q.slice()) });
+        if (sp.mode === 'revolve') { p.plane = 'front'; p.h = 0; } else { p.plane = 'top'; p.h = sp.h; if (sp.more) p.more = sp.more.map((l) => l.map((q) => q.slice())); }
+      } else Object.assign(p, { d: sp.d, di: sp.di, h: sp.h });
+      Object.assign(p, { r: 0, c: 0, tp: 0, name: sp.ad }, faceTransform(0, 0, -sp.taban));
+      if (!main) { main = p; p.std = { ...t.std, yazi: t.yazi }; if (t.disler.length) p.threads = t.disler.map((x) => ({ ...x })); }
+      else Object.assign(p, { aux: true, parent: main.id, joint: { type: 'fixed', axis: 'y', pv: [0, 0, 0], val: 0 } });
+      parts.push(p);
+    }
+  } finally { face.point.copy(saved); }
+  selOff = null; sel = main.id;
+  clearFace();
+  refreshAll();
+  toast(t.ad + ' eklendi' + (snap ? ' (deliğin eksenine ortalandı)' : ''));
+}
 function faceSketch(op) {
   if (!face) return;
   const f = { point: face.point.clone(), normal: face.normal.clone() };
@@ -3695,7 +3825,7 @@ function makeSheet(cut) {
   // parça listesi ve delik tablosu izometrik alanın altına yerleşir; izometrik görünüş küçülür (en az 35 mm kalır)
   const numT = (v) => fmtNum(toUnit(v, settings.unit), 2).replace('.', ',');
   const matName = (q) => (partMat(q) || {}).name || '';
-  const bomAll = TK.resimParcaListesi(parts, (q) => partDims(q, numT), matName);
+  const bomAll = TK.resimParcaListesi(parts, (q) => (q.std && q.std.yazi ? q.std.yazi : partDims(q, numT)), matName);
   const bom = drawCfg.bom && bomAll.length >= 2 ? bomAll : [];   // tek parçalı resimde liste yerine antette malzeme yazılır
   const dtab = drawCfg.delik ? TK.delikTablosu(parts, numT) : [];
   const RH = 4.6, TH = 10.4;   // satır yüksekliği; başlık + sütun adları
@@ -3790,6 +3920,8 @@ function makeSheet(cut) {
     g.save(); g.globalCompositeOperation = 'multiply'; g.drawImage(hc, box.x * K - pad, box.y * K - pad); g.restore();
     cm.dispose();
   };
+  const thVis = threadLines ? threadLines.visible : false;
+  if (threadLines) threadLines.visible = false;   // resimde dişler ISO 6410 çizgileriyle ayrıca çizilir
   try {
     edgeMat.uniforms.uColor.value.set(0x111111);
     const ppm = L.scale * K;
@@ -3805,6 +3937,7 @@ function makeSheet(cut) {
       shot(L.iso, new THREE.Vector3(1, 0.8, 1), new THREE.Vector3(0, 1, 0), ippm);
     }
   } finally {
+    if (threadLines) threadLines.visible = thVis;
     if (sec) { section.on = keepSec.on; section.axis = keepSec.axis; section.pos = keepSec.pos; section.flip = keepSec.flip; applySection(); }
     edgeMat.uniforms.uColor.value.copy(saved.color);
     camera.position.copy(saved.pos); camera.up.copy(saved.up); camera.quaternion.copy(saved.quat);
@@ -3957,11 +4090,76 @@ function makeSheet(cut) {
     g.restore();
   } catch (err) { /* delik ölçüsü eklenemezse resim yine de gösterilir */ }
   try { drawSheetWelds(g, views, bb, L, K); } catch (err) { /* kaynak sembolü çizilemezse resim yine de gösterilir */ }
+  try { drawSheetThreads(g, views, bb, L, K); } catch (err) { sheetInfo.thErr = String(err && err.message || err); }
   try { drawSheetNotes(g, L, K, tb, tables, tabY, bomAll); } catch (err) { sheetInfo.err = String(err && err.message || err); /* not ve tablolar çizilemezse resim yine de gösterilir */ }
 
   showSheet(cv, sheetCut);
 }
 let sheetInfo = null;   // son çizilen resmin yazıları (test ve hata ayıklama)
+// teknik resim: kozmetik dişler ISO 6410'a göre — dış diş: küçük çapta ince çizgi, diş sonunda kalın sınır çizgisi, uçtan bakışta
+// küçük çapta 3/4 ince daire; iç diş (kesitsiz, görünmez): dış çapta kesik çizgi, uçtan bakışta dış çapta 3/4 ince daire
+function drawSheetThreads(g, views, bb, L, K) {
+  const mm = (v) => v * K;
+  const bbo = { min: [bb.min.x, bb.min.y, bb.min.z], max: [bb.max.x, bb.max.y, bb.max.z] };
+  const dirs = { front: new THREE.Vector3(0, 0, 1), side: new THREE.Vector3(1, 0, 0), top: new THREE.Vector3(0, 1, 0) };
+  sheetInfo.threads = [];
+  g.save(); g.strokeStyle = '#111';
+  for (const p of parts) {
+    if (p.hidden) continue;
+    const ths = DIS.parcaDisleri(p);
+    if (!ths.length) continue;
+    const ax = new THREE.Vector3(0, 1, 0).applyQuaternion(partQuat(p)).normalize();
+    const plen = p.type === 'sketch' ? Math.max(...(p.pts || [[0, 0]]).map((q) => q[1])) : clamp(p.h);
+    for (const t of ths) {
+      let yazildi = !!(p.hole && p.hole.thread && t.yan === 'ic');   // kılavuz deliğin yazısı delik yazısında
+      const w0 = toWorld(p, new THREE.Vector3(0, t.y0, 0)), w1 = toWorld(p, new THREE.Vector3(0, t.y1, 0));
+      const minor = t.yan === 'dis' ? DIS.dKucukDis(t.d, t.P) : t.d;   // iç dişte görünmez dış çap kesik çizilir
+      for (const [name, box] of views) {
+        const dn = Math.abs(ax.dot(dirs[name]));
+        const P0 = sheetProject(name, [w0.x, w0.y, w0.z], bbo, box, L.scale), P1 = sheetProject(name, [w1.x, w1.y, w1.z], bbo, box, L.scale);
+        if (dn > 0.999) {
+          // uçtan bakış: 3/4 ince daire
+          g.lineWidth = 1; g.setLineDash([]);
+          g.beginPath(); g.arc(mm(P1[0]), mm(P1[1]), mm((t.yan === 'dis' ? minor : t.d) / 2 * L.scale), 0, 1.5 * Math.PI); g.stroke();
+          sheetInfo.threads.push({ view: name, kind: 'uc', yan: t.yan, ad: t.ad });
+        } else if (dn < 0.001) {
+          const ux = P1[0] - P0[0], uy = P1[1] - P0[1], ul = Math.hypot(ux, uy) || 1, vx = -uy / ul, vy = ux / ul;
+          const off = (dd) => dd / 2 * L.scale;
+          const line = (a, b) => { g.beginPath(); g.moveTo(mm(a[0]), mm(a[1])); g.lineTo(mm(b[0]), mm(b[1])); g.stroke(); };
+          const at = (P, o) => [P[0] + vx * o, P[1] + vy * o];
+          if (t.yan === 'dis') {
+            g.lineWidth = 1; g.setLineDash([]);
+            for (const sg of [1, -1]) line(at(P0, sg * off(minor)), at(P1, sg * off(minor)));
+            g.lineWidth = 2.2;   // diş sonu (parçanın ucunda değilse) kalın sınır çizgisi
+            if (t.y1 < plen - 1e-6) line(at(P1, off(t.d)), at(P1, -off(t.d)));
+            if (t.y0 > 1e-6) line(at(P0, off(t.d)), at(P0, -off(t.d)));
+          } else {
+            g.lineWidth = 1; g.setLineDash([mm(1.5), mm(0.8)]);
+            for (const sg of [1, -1]) line(at(P0, sg * off(t.d)), at(P1, sg * off(t.d)));
+            line(at(P0, off(t.d)), at(P0, -off(t.d)));
+            g.setLineDash([]);
+          }
+          if (!yazildi) {
+            // diş yazısı: dişin ortasından dışa doğru kısa gösterme çizgisi (yalnız bir görünüşte)
+            const M = [(P0[0] + P1[0]) / 2, (P0[1] + P1[1]) / 2];
+            let sgn = vy > 0 ? -1 : 1, a1 = at(M, sgn * (off(t.d) + 6));
+            if (a1[1] - 4 < 12 || a1[1] > L.sheet.h - 34) { sgn = -sgn; a1 = at(M, sgn * (off(t.d) + 3.5)); }   // çerçeveden taşmasın: öbür yana, kısa
+            if (a1[1] < 12) a1 = [a1[0], 16];
+            const a0 = at(M, sgn * off(t.d));
+            g.lineWidth = 1; g.setLineDash([]);
+            line(a0, a1); line(a1, [a1[0] + 4, a1[1]]);
+            g.fillStyle = '#111'; g.font = 'bold ' + Math.round(mm(3.3)) + 'px system-ui, Arial, sans-serif'; g.textAlign = 'left'; g.textBaseline = a1[1] > M[1] ? 'top' : 'bottom';
+            g.fillText(t.ad, mm(a1[0] + 0.5), mm(a1[1] + (a1[1] > M[1] ? 0.4 : -0.4)));
+            yazildi = true;
+            sheetInfo.threads.push({ view: name, kind: 'yazi', ad: t.ad });
+          }
+          sheetInfo.threads.push({ view: name, kind: 'yan', yan: t.yan, ad: t.ad });
+        }
+      }
+    }
+  }
+  g.restore();
+}
 // teknik resim: antette genel tolerans, malzeme, genel yüzey pürüzlülüğü; izometrik alanın altında parça listesi ve delik tablosu
 function drawSheetNotes(g, L, K, tb, tables, tabY, bomAll) {
   const mm = (v) => v * K;
@@ -4231,7 +4429,10 @@ document.addEventListener('click', (e) => {
   if (act === 'sheet-make') { makeSheet(false); return; }
   if (act === 'dc-bom' || act === 'dc-delik') { commit(); const k = act.slice(3); drawCfg[k] = !drawCfg[k]; renderPanel(); scheduleSave(); return; }
   if (act === 'edges') { settings.edges = settings.edges === false; afterSettings(); return; }
-  if (act === 'fmode-basic' || act === 'fmode-hw') { cp.fmode = act.slice(6); renderPanel(); return; }
+  if (act === 'fmode-basic' || act === 'fmode-hw' || act === 'fmode-lib') { cp.fmode = act.slice(6); renderPanel(); return; }
+  if (act === 'face-std') { faceStdPart(); return; }
+  if (act === 'th-add') { threadAdd(); return; }
+  if (act.startsWith('th-del-')) { const p = cur(), i = +act.slice(7); if (p && Array.isArray(p.threads) && p.threads[i]) { commit(); p.threads.splice(i, 1); if (!p.threads.length) delete p.threads; refreshAll(); renderPanel(); } return; }
   if (act === 'face-hw') { faceHoleWizard(); return; }
   if (act === 'hw-blind' || act === 'hw-thru') { cp.hwBoydan = act === 'hw-thru'; renderPanel(); return; }
   if (act === 'hw-uc') { cp.hwUc = !cp.hwUc; renderPanel(); return; }
@@ -4343,6 +4544,22 @@ document.addEventListener('input', (e) => {
   if (d.fm) { if (d.fm === 'frame' || d.fm.startsWith('me.')) femUI.input(el); return; }
   if (d.cs || d.cn || d.ct || d.co) return;   // CNC: değişince işlenir
   if (d.sf || d.sv || d.st) { simUI.input(el, 'input'); return; }
+  if (d.thk) {
+    const key = { yan: 'thYan', olcu: 'thOlcu', adim: 'thP' }[d.thk];
+    if (!key) return;
+    cp[key] = key === 'thP' ? +el.value : el.value;
+    if (key === 'thOlcu' && el.value !== 'ozel') cp.thP = DIS.madimlar(el.value)[0];
+    renderPanel(); return;
+  }
+  if (d.tht) { cp.thAd = String(el.value).slice(0, 40); return; }
+  if (d.spk) {
+    const key = { tur: 'spTur', olcu: 'spOlcu', boy: 'spBoy' }[d.spk];
+    if (!key) return;
+    cp[key] = key === 'spBoy' ? +el.value : el.value;
+    const o = STD.normalize({ tur: cp.spTur, olcu: cp.spOlcu, boy: cp.spBoy });
+    cp.spTur = o.tur; cp.spOlcu = o.olcu; cp.spBoy = o.boy;
+    renderPanel(); return;
+  }
   if (d.sm || d.sp || d.sl2) return;   // değişince (change) işlenir
   if (d.s) {
     section.pos = el.valueAsNumber;
