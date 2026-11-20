@@ -885,6 +885,55 @@ await T('Sac: U kanal örneği, açınım boyu panelde, açınım DXF boyu açı
   expect(Math.abs(Math.max(ex, ey) - Math.max(flatL, W)) < 0.6 && Math.abs(Math.min(ex, ey) - Math.min(flatL, W)) < 0.6, `DXF kapsamı ${ex.toFixed(2)}×${ey.toFixed(2)} ≠ ${flatL}×${W}`);
 });
 
+/* ---------- E-Tava: flanşlı sac (kenar flanşı, köşe kapatma, açınım) ---------- */
+await T('Sac tava: 4 kenar flanşı, açınım = ölçüler − büküm düşümü; flanş kaldırma, kapalı köşe, 90° dışı uyarı, düz açınım, DXF ve kayıt', 'E-Tava', async ({ page }) => {
+  await page.evaluate(() => { const A = window.__app, p = A.parts[0]; Object.assign(p, { type: 'sheet', st: 2, sr: 2, sw: 50, sk: 0.44, flat: false, sh: 'L', sa0: 0, seg: [{ L: 40 }, { a: 90, L: 40 }], name: 'Tava' }); A.refreshAll(true); });
+  await tab(page, 'type'); await act(page, 'shp-tava'); await page.waitForTimeout(400);
+  await tab(page, 'dims');
+  const info = () => page.evaluate(() => (document.getElementById('tava-info') || {}).textContent || '');
+  const geo = () => page.evaluate(() => {
+    const g = window.__app.lastClean; g.computeBoundingBox(); const s = g.boundingBox.getSize(new window.__app.THREE.Vector3());
+    const pa = g.attributes.position.array, ix = g.index ? g.index.array : null, n = ix ? ix.length : pa.length / 3; let V = 0;
+    const P = (k) => { const j = (ix ? ix[k] : k) * 3; return [pa[j], pa[j + 1], pa[j + 2]]; };
+    for (let k = 0; k < n; k += 3) { const a = P(k), b = P(k + 1), c = P(k + 2); V += (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6; }
+    return { s: [s.x, s.y, s.z].map((v) => Math.round(v * 100) / 100), V: Math.round(V) };
+  });
+  // BA = π/2·(2 + 0,44·2) = 4,524; BD = 2·4 − 4,524 = 3,476 → 120 + 60 − 6,952 = 173,05; 80 + 60 − 6,952 = 133,05
+  expect(/Açınım boyu: 173[.,]05 mm × 133[.,]05 mm · 4 büküm/.test(await info()) && /BD 3[.,]48 mm/.test(await info()), 'açınım bilgisi: ' + await info());
+  let g = await geo();
+  expect(JSON.stringify(g.s) === '[120,30,80]', 'dış ölçü ' + JSON.stringify(g.s));
+  expect(Math.abs(g.V - 38731) <= 3, 'hacim ' + g.V + ' (beklenen ≈ 38 731 mm³)');
+  // sol flanşı kaldır: X açınımı 120 + 30 − 3,476 = 146,52
+  const fl = async (k, v) => { const i = page.locator(`#tabbody [data-fl="${k}"]`); await i.fill(String(v)); await page.waitForTimeout(300); };
+  await fl('sol', 0);
+  expect(/Açınım boyu: 146[.,]52 mm × 133[.,]05 mm · 3 büküm/.test(await info()), 'sol flanşsız: ' + await info());
+  await fl('sol', 30);
+  // kapalı köşe: ön/arka 4 mm, sol/sağ 1,6 mm uzar → hacim + 4·2·26·4 + 4·2·26·1,6 = + 1165
+  await act(page, 'kk-kapali'); await page.waitForTimeout(400);
+  expect(/köşeler kapalı \(aralık 0[.,]4 mm\)/.test(await info()), 'kapalı köşe bilgisi: ' + await info());
+  const g2 = await geo();
+  expect(Math.abs(g2.V - g.V - 1165) <= 3, 'kapalı köşe hacim farkı ' + (g2.V - g.V));
+  await setK(page, 'tq', 60); await page.waitForTimeout(300);
+  expect(/Kapalı köşe yalnızca 90° flanşta/.test(await info()), '60° uyarısı: ' + await info());
+  await setK(page, 'tq', 90); await page.waitForTimeout(300);
+  // düz açınım
+  await tab(page, 'type'); await act(page, 'sh-flat'); await page.waitForTimeout(500);
+  g = await geo();
+  expect(JSON.stringify(g.s) === '[173.05,2,133.05]', 'açınım ölçüsü ' + JSON.stringify(g.s));
+  const dxf = await download(page, () => act(page, 'sh-dxf'));
+  const L = dxf.text.split(/\r?\n/).map((x) => x.trim()), xs = [], ys = [];
+  for (let i = 0; i < L.length - 1; i++) { if (L[i] === '10' || L[i] === '11') xs.push(+L[i + 1]); if (L[i] === '20' || L[i] === '21') ys.push(+L[i + 1]); }
+  const ex = Math.max(...xs) - Math.min(...xs), ey = Math.max(...ys) - Math.min(...ys);
+  expect(Math.abs(ex - 173.05) < 0.01 && Math.abs(ey - 133.05) < 0.01, `DXF kapsamı ${ex}×${ey}`);
+  expect(/BUKUM/.test(dxf.text), 'büküm katmanı');
+  await act(page, 'sh-flat'); await page.waitForTimeout(300);
+  // kayıt
+  await act(page, 'projects'); await page.locator('#pname').fill('e2e-tava'); await act(page, 'dlg-save'); await page.waitForTimeout(200);
+  await page.reload(); await waitReady(page); await act(page, 'projects'); await page.locator('[data-open="e2e-tava"]').click(); await page.waitForTimeout(800);
+  const p0 = await page.evaluate(() => { const p = window.__app.parts[0]; return { sm: p.sm, kk: p.kk, fl: p.fl }; });
+  expect(p0.sm === 'tava' && p0.kk === 'kapali' && p0.fl.sol === 30, 'kayıttan geri geldi: ' + JSON.stringify(p0));
+});
+
 /* ---------- F. Üretim ---------- */
 await T('Üretim: 100 mm çelik küp ağırlığı ρV = 7,85 kg; masa iskeleti kesim listesi, kesim optimizasyonu, kaynak ve maliyet panelleri', 'F-Üretim', async ({ page }) => {
   const c = await chips(page);

@@ -8,7 +8,7 @@ Sıra kolaydan zora. Her madde ayrı PR; tam test (birim, gerçek OCCT, iki aray
 | 2 | Delik sihirbazı / diş (işaretli diş) | **Tamam** (19.11.2026) |
 | 3 | Teknik resim: tolerans, pürüzlülük, parça listesi | **Tamam** (19.11.2026) |
 | 1 | Standart parça kütüphanesi (doğrulanmış ölçü tablolarıyla) | **Tamam** (20.11.2026) |
-| 8 | Sac metal: flanş, köşe kapatma | Bekliyor |
+| 8 | Sac metal: flanş, köşe kapatma | **Tamam** (20.11.2026) |
 | 4 | Kroki kısıtları ve serbest eğri | Bekliyor |
 | 5 | Parametrik geçmiş ve varyantlar | Bekliyor |
 | 7 | DWG | Lisans kararı bekliyor (ODA ücretli, LibreDWG GPL) |
@@ -135,3 +135,33 @@ Diş modellenmez (model hafif kalır; imalat diş yazısından yapılır, SolidW
 borunun yarı dış / yarı iç dişi, vida / somun / kılavuz deliği dişleri, helis), uçtan uca `C-Dis` (iki arayüzde: borunun
 iki dişi, taşan dişin reddi, helis parça sayısı, ISO 6410 çizgileri ve yazıları, silme, yeniden yükleme) ve `C-Standart`
 (vida dişi b = 28).
+
+## 8. Sac metal: kenar flanşı ve köşe kapatma
+
+Sac parça → **Tür** sekmesi → **Flanşlı sac → ▭ Tava / kutu (kenar flanşları)**. Kod: `sac.js` (hesap, 3B üçgenler, açınım;
+saf modül), `logic.js` (`sheetCalc` tava kipine geçer), `app.js` (`tavaPanel`, çizim).
+
+- **Ölçü** sekmesi: taban dış ölçüsü X × Z, sac kalınlığı, iç büküm yarıçapı, K faktörü, flanş açısı (düzden dönüş;
+  90° = dik, 90°'den küçükse dışa açılır). Dört kenarın her birine ayrı flanş boyu (dış ölçü, sanal keskin köşeden;
+  0 = flanş yok).
+- **Köşe**: *açık* — iki büküm bölgesinin kesiştiği kare, açınımda boş kalır (büküm teğet çizgilerine kadar köşe
+  boşaltması); *kapalı* — ön / arka (ya da seçilirse sol / sağ) flanş dış ölçüye kadar uzar, öbürü ona **köşe aralığı**
+  kadar boşluk bırakacak boyda uzar. Kapalı köşe yalnızca 90° flanşta yapılır (başka açıda uyarı verir, köşeyi açık
+  bırakır). Aralık 0,4 mm'den küçükse uyarır.
+- Panelde açınım ölçüsü, büküm sayısı, büküm payı (BA), geri çekilme (OSSB) ve büküm düşümü (BD); kısa flanş, dar taban
+  ve malzemenin en küçük büküm yarıçapı uyarıları.
+- **Açınım**: *Düz (açınım) göster* gerçek açınım şeklini (artı biçimi, kapalı köşede uzatmalarla) gösterir;
+  **Açınım DXF** dış konturu (KONTUR katmanı) ve büküm eksen çizgilerini (BUKUM katmanı) verir. Ağırlık gerçek 3B
+  geometriden, maliyetteki sac boyutu açınımın dış ölçüsünden.
+
+**Formüller** (`sac.js` başında, her biri en az iki kaynak): BA = θ·(R + K·T) (The Fabricator, Durma, SendCutSend,
+Proleantech / Inventor), OSSB = tan(θ/2)·(R + T) (The Fabricator, Durma, Proleantech, calculate.co.nz), BD = 2·OSSB − BA,
+açınım = dış ölçüler − BD (The Fabricator, Durma, SMLease, Harsle). Köşe boşaltması büküm teğet çizgileriyle sınırlı
+bölgeyi aşmaz (PTC Creo); kapalı köşe biçimi Solid Edge ve Inventor'daki gibi (bir flanş uzar, arada aralık). 0,4 mm aralık
+önerisi SendCutSend'den (kural değil, uyarı).
+
+**Doğrulama:** `tests/sac.test.mjs` (kaynak örneği R 3 T 3 K 0,33 → BA 6,27 / OSSB 6 / BD 5,73, açınım formülü, açınım
+alanı, 3B hacmin analitik değerle uyumu, kapalı köşe uzatmaları ve aralık, 60° flanş, tek flanş, hata ve uyarılar),
+uçtan uca `E-Tava` (iki arayüzde: açınım 173,05 × 133,05, dış ölçü 120 × 30 × 80, hacim, flanş kaldırma, kapalı köşe hacim
+farkı, 60° uyarısı, düz açınım ölçüsü, DXF kapsamı ve büküm katmanı, kayıttan geri yükleme).
+
