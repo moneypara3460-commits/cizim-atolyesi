@@ -201,6 +201,39 @@ t('sağlamlık: bozuk kare el yok sayılır, çıktı hep sonlu ve ekran içinde
   let down = 0; for (const x of a.ev) { if (x.type === 'down') { assert.equal(down, 0, 'çift basma'); down = 1; } if (x.type === 'up' || x.type === 'cancel') { assert.equal(down, 1, 'basmadan bırakma'); down = 0; } }
 });
 
+// Gerçek elde birleştirirken işaret parmağı belirgin bükülür: ucu ve orta eklemi (fazladan) aşağı kaydır; başparmak ucu onu karşılar.
+const bent = (h, k) => h.map((q, i) => (i === LM.INDEX_TIP || i === LM.THUMB_TIP ? { ...q, y: q.y + 0.08 * k } : i === LM.THUMB_IP ? { ...q, y: q.y + 0.04 * k } : i === 7 ? { ...q, y: q.y + 0.05 * k } : i === LM.INDEX_PIP ? { ...q, y: q.y + 0.02 * k } : q));
+t('sabit imleç noktası (kök): parmak ucu birleştirirken 0,08 aşağı bükülse de imleç ve çizginin başı kaymaz; uç ayarında kayardı', () => {
+  const steps = [0.9, 0.7, 0.5, 0.35, 0.25, 0.15, 0.1, 0.1, 0.1, 0.1];
+  const go = (anchor) => {
+    const e = new HandEngine(); e.setAnchor(anchor);
+    const a = run(e, rep(hand({ x: 0.5, y: 0.5 }), 20));
+    // parmaklar yavaşça kapanır (her karede biraz daha bükülür), sonra kapalı tutulur
+    const closing = steps.map((p, i) => bent(hand({ x: 0.5, y: 0.5, pinch: p }), Math.min(1, (i + 1) / 6)));
+    const r = run(e, [...closing, ...rep(bent(hand({ x: 0.5, y: 0.5, pinch: 0.1 }), 1), 20)], a.t);
+    const ys = [a.last.y, ...r.ev.filter((x) => 'y' in x).map((x) => x.y), r.last.y];
+    return { drift: Math.max(...ys.map((y) => Math.abs(y - a.last.y))), down: r.ev.find((x) => x.type === 'down') };
+  };
+  const kok = go('kok'), uc = go('uc');
+  assert.ok(kok.down && uc.down, 'basma oldu');
+  assert.ok(kok.drift < 2, 'kök ayarında imleç kayması ' + kok.drift.toFixed(2) + ' px');
+  assert.ok(uc.drift > 20, 'uç ayarında kayma görünmeli (testin duyarlılığı): ' + uc.drift.toFixed(1) + ' px');
+});
+t('sabit imleç noktası: kapalı parmakla el hareket edince çizgi eli izler, parmaklar açılınca imleç sıçramaz', () => {
+  const e = new HandEngine();
+  const a = run(e, rep(hand({ x: 0.5, y: 0.5 }), 20));
+  const r = run(e, [...rep(bent(hand({ x: 0.5, y: 0.5, pinch: 0.1 }), 1), 6),
+    ...Array.from({ length: 25 }, (_, i) => bent(hand({ x: 0.5 - i * 0.004, y: 0.5, pinch: 0.1 }), 1))], a.t);
+  const d = r.ev.find((x) => x.type === 'down');
+  near(d.y, a.last.y, 0.5, 'basma y');
+  assert.ok(r.last.x - d.x > 120 && Math.abs(r.last.y - d.y) < 3, `yatay çizgi: dx ${(r.last.x - d.x).toFixed(0)}, dy ${(r.last.y - d.y).toFixed(1)}`);
+  const end = r.last;
+  const u = run(e, rep(hand({ x: 0.5 - 24 * 0.004, y: 0.5 }), 20), r.t);
+  assert.equal(types(u.ev), 'up');
+  const moves = u.ev.filter((x) => x.type === 'move');
+  for (const m of moves) assert.ok(Math.hypot(m.x - end.x, m.y - end.y) < 3, 'açılınca sıçrama: ' + JSON.stringify(m));
+});
+
 for (const [name, fn] of tests) {
   try { await fn(); console.log('ok   ', name); }
   catch (e) { fail++; console.log('FAIL ', name, '\n     ', e.message.split('\n')[0].slice(0, 600)); }
