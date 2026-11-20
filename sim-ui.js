@@ -3,7 +3,7 @@
 //        setMat(id, matId), getSim(), setSim(o), draw(spec), enter(), leave(), focus(p, r), render(), toast(m), name(), snapshot(), prices() }
 import * as F from './fea.js?v=20261112u';
 import { pdfFromJpegs } from './cutopt.js?v=20261112u';
-import { toSTLBinary } from './logic.js?v=20261120d';
+import { toSTLBinary } from './logic.js?v=20261120f';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 1) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));

@@ -328,9 +328,15 @@ export function sketchFromDraw(d) {
   const base = { type: 'sketch', mode: d.mode, plane: d.plane, h: d.mode === 'revolve' ? 0 : d.h };
   if (Array.isArray(d.cons) && d.cons.some((c) => c && c.length)) base.cons = JSON.parse(JSON.stringify(d.cons));
   const r4 = (n) => Math.round(n * 1e4) / 1e4 + 0;
-  const withMore = (o, f) => { if (more.length) o.more = more.map((l) => l.map(f)); return o; };
+  // eğrili döngülerin kontrol noktaları da aynı kaydırmayla saklanır (kroki yeniden açılınca eğri düzenlenir)
+  const eg = (o, f) => {
+    if (Array.isArray(d.egri) && d.egri.some(Boolean)) o.egri = d.egri.map((e) => (e ? { cp: e.cp.map(f), sm: e.sm.slice(), cons: JSON.parse(JSON.stringify(e.cons || [])) } : null));
+    return o;
+  };
+  const withMore = (o, f) => { if (more.length) o.more = more.map((l) => l.map(f)); return eg(o, f); };
   if (d.mode === 'revolve') {
-    return { ...base, plane: 'front', x: 0, y: r4(bb.minV), z: 0, pts: d.pts.map(([u, v]) => [r4(u), r4(v - bb.minV)]) };
+    const f = ([u, v]) => [r4(u), r4(v - bb.minV)];
+    return eg({ ...base, plane: 'front', x: 0, y: r4(bb.minV), z: 0, pts: d.pts.map(f) }, f);
   }
   if (d.plane === 'top') {
     const f = ([u, v]) => [r4(u - cu), r4(v - cv)];
@@ -349,6 +355,7 @@ export function sketchToDraw(p) {
   const d = { mode: p.mode, plane: p.mode === 'revolve' ? 'front' : p.plane, pts: p.pts.map(f), h: fin(p.h, 20) };
   if (p.mode !== 'revolve' && p.more && p.more.length) d.more = p.more.map((l) => l.map(f));
   if (Array.isArray(p.cons)) d.cons = JSON.parse(JSON.stringify(p.cons));
+  if (Array.isArray(p.egri) && p.egri.some(Boolean)) d.egri = p.egri.map((e) => (e && Array.isArray(e.cp) ? { cp: e.cp.map(f), sm: (e.sm || []).slice(), cons: JSON.parse(JSON.stringify(e.cons || [])) } : null));
   return d;
 }
 export function sketchHeight(p) {

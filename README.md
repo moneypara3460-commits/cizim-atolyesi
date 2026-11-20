@@ -24,7 +24,7 @@ Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları öl
 - Yüze açılan delikler / pahlar, bağlı oldukları parçayla birlikte gider
 
 **Kroki (2D çizim → 3D)**
-- ✎ Kroki: çokgen, dikdörtgen (köşe yuvarlamalı), daire ve **yay** (başlangıç → bitiş → orta nokta; ilk noktaya bitirince şekil kapanır) çiz; köşeleri sürükleyerek düzelt; ölçüleri yazarak ayarla; yapışma (1 / 5 / 10 / 25 mm); iki parmakla yakınlaştır / kaydır
+- ✎ Kroki: çokgen, dikdörtgen (köşe yuvarlamalı), daire, **yay** (başlangıç → bitiş → orta nokta; ilk noktaya bitirince şekil kapanır) ve **〰 eğri** (dokunulan noktalardan yumuşak geçen serbest eğri; düz kenarla aynı şekilde olabilir, her köşe sonradan eğri ya da sivri yapılabilir) çiz; köşeleri sürükleyerek düzelt; ölçüleri yazarak ayarla; yapışma (1 / 5 / 10 / 25 mm); iki parmakla yakınlaştır / kaydır
 - **Birleşik kroki**: aynı krokide birden çok şekil çiz; başka şeklin içine çizdiğin şekil **delik** olur (iç içe: delik, onun içindeki ada…). "Seç" aracı ile şekle dokunup ölçüsünü değiştir ya da "Şekli sil"
 - **Kalınlık ver** (ekstrüzyon): üstten (X-Z) ya da önden (X-Y) düzlemde
 - **Döndür** (devir): profili dikey eksen etrafında döndürerek vazo, mil, tekerlek gibi parçalar

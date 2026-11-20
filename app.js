@@ -13,8 +13,8 @@ import {
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, partDims, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
-} from './logic.js?v=20261120d';
-import { openSketch } from './sketch.js?v=20261120d';
+} from './logic.js?v=20261120f';
+import { openSketch } from './sketch.js?v=20261120f';
 import { KENARLAR, KENAR_ADI } from './sac.js?v=20261120c';
 import { to3MF, toSTEP } from './export3d.js?v=20261112u';
 import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261112u';
@@ -1556,6 +1556,8 @@ function editSketch() {
     if (draw.mode === 'revolve') { delete f.x; delete f.z; }
     else if (draw.plane === 'top') { delete f.y; }
     else { delete f.z; }
+    // düzenlemede silinen delik / kısıt / eğri bilgisi parçada kalmasın
+    delete p.more; delete p.cons; delete p.egri;
     Object.assign(p, f);
     if (draw.mode === 'revolve') { p.x = keep.x; p.z = keep.z; }
     refreshAll();
