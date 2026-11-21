@@ -7,7 +7,10 @@ This branch introduces the UI-agnostic foundation for the desktop command ecosys
 - Safe tokenization and typed positional parameter parsing.
 - A single dispatcher for keyboard, palette, terminal, and macro callers.
 - Shortcut conflict detection and editable-field protection.
-- No direct access to CAD state and no arbitrary code evaluation.
+- A first desktop adapter for box/cylinder/sphere/cone creation, selected-part deletion, undo/redo, fit-all, and save.
+- A searchable command palette opened with Ctrl+K; it accepts commands such as `BOX 100 50 30`.
+- Keyboard shortcuts are scoped to the focused 3D workspace. Editable fields are excluded.
+- No arbitrary code evaluation.
 
 ## Integration boundary
 The current application is a browser-based JavaScript application. The command core is deliberately framework-agnostic and does not mutate CAD state. Existing model operations must be connected later through explicit adapters after their actual entry points and undo/redo behavior are mapped. Do not duplicate the model history.
