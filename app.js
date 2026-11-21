@@ -5037,11 +5037,96 @@ const commandDispatcher = new CommandDispatcher(commandRegistry, {
 });
 
 const registerCadCommand = (definition) => commandRegistry.register(definition);
+
+let commandPalette = null;
+let commandPaletteInput = null;
+let commandPaletteResults = null;
+function closeCommandPalette() {
+  if (commandPalette) commandPalette.hidden = true;
+  if (document.activeElement === commandPaletteInput) view.focus({ preventScroll: true });
+}
+function renderCommandPaletteResults(query = '') {
+  if (!commandPaletteResults) return;
+  const q = String(query).trim().toLocaleLowerCase('tr-TR');
+  const items = commandRegistry.list().filter((c) => {
+    const hay = [c.id, c.names.tr, c.names.en, ...c.aliases.tr, ...c.aliases.en].join(' ').toLocaleLowerCase('tr-TR');
+    return !q || hay.includes(q);
+  }).slice(0, 10);
+  commandPaletteResults.replaceChildren();
+  for (const command of items) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.style.cssText = 'display:flex;width:100%;justify-content:space-between;gap:12px;padding:10px 12px;border:0;border-radius:8px;background:transparent;color:#e5e7eb;text-align:left;cursor:pointer';
+    const label = document.createElement('span');
+    label.textContent = command.names.tr;
+    const shortcut = document.createElement('small');
+    shortcut.textContent = command.shortcuts.join(' · ');
+    shortcut.style.color = '#94a3b8';
+    button.append(label, shortcut);
+    button.addEventListener('mouseenter', () => { button.style.background = '#263449'; });
+    button.addEventListener('mouseleave', () => { button.style.background = 'transparent'; });
+    button.addEventListener('click', () => {
+      closeCommandPalette();
+      commandDispatcher.dispatch(command.id, {}, { source: 'palette' }).catch(() => {});
+    });
+    commandPaletteResults.appendChild(button);
+  }
+  if (!items.length) {
+    const empty = document.createElement('p');
+    empty.textContent = 'Eşleşen komut bulunamadı. Örnek: BOX 100 50 30';
+    empty.style.cssText = 'margin:8px 12px;color:#94a3b8;font-size:13px';
+    commandPaletteResults.appendChild(empty);
+  }
+}
+function openCommandPalette() {
+  if (!commandPalette) {
+    commandPalette = document.createElement('section');
+    commandPalette.setAttribute('aria-label', 'Komut paleti');
+    commandPalette.style.cssText = 'position:fixed;z-index:10000;top:12vh;left:50%;transform:translateX(-50%);width:min(560px,calc(100vw - 28px));max-height:70vh;overflow:auto;padding:12px;background:#111c2e;border:1px solid #475569;border-radius:14px;box-shadow:0 18px 60px #0009;color:#e5e7eb';
+    const heading = document.createElement('div');
+    heading.textContent = 'KOMUT PALETİ  ·  Ctrl+K';
+    heading.style.cssText = 'padding:4px 8px 10px;color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:.08em';
+    commandPaletteInput = document.createElement('input');
+    commandPaletteInput.type = 'text';
+    commandPaletteInput.placeholder = 'Komut yaz… ör. BOX 100 50 30 / KUTU';
+    commandPaletteInput.autocomplete = 'off';
+    commandPaletteInput.spellcheck = false;
+    commandPaletteInput.style.cssText = 'box-sizing:border-box;width:100%;padding:13px 14px;border:1px solid #64748b;border-radius:9px;background:#0b1220;color:#fff;font-size:16px;outline:none';
+    commandPaletteResults = document.createElement('div');
+    commandPaletteResults.style.cssText = 'display:grid;gap:3px;margin-top:9px';
+    commandPalette.append(heading, commandPaletteInput, commandPaletteResults);
+    document.body.appendChild(commandPalette);
+    commandPaletteInput.addEventListener('input', () => renderCommandPaletteResults(commandPaletteInput.value));
+    commandPaletteInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeCommandPalette(); }
+      if (event.key === 'Enter') {
+        const line = commandPaletteInput.value.trim();
+        if (!line) return;
+        event.preventDefault();
+        closeCommandPalette();
+        commandDispatcher.dispatchLine(line, { source: 'terminal' }).catch((error) => toast(error.message));
+      }
+    });
+    commandPalette.addEventListener('pointerdown', (event) => event.stopPropagation());
+    renderCommandPaletteResults();
+  }
+  commandPalette.hidden = false;
+  commandPaletteInput.value = '';
+  renderCommandPaletteResults();
+  commandPaletteInput.focus({ preventScroll: true });
+}
+
 registerCadCommand({
   id: 'model.createBox', names: { tr: 'Kutu oluştur', en: 'Create box' },
   aliases: { tr: ['kutu', 'kutu oluştur'], en: ['box', 'create box'] },
+  description: { tr: 'İsteğe bağlı genişlik, derinlik ve yükseklik (mm)', en: 'Optional width, depth and height (mm)' },
+  parameters: [
+    { name: 'width', type: 'number', min: 0.1 },
+    { name: 'depth', type: 'number', min: 0.1 },
+    { name: 'height', type: 'number', min: 0.1 }
+  ],
   category: 'model', shortcuts: ['B'],
-  execute: () => addPart('box', 'add')
+  execute: (_ctx, args) => addPart('box', 'add', Object.keys(args).length ? { w: args.width, l: args.depth, h: args.height } : undefined)
 });
 registerCadCommand({
   id: 'model.createCylinder', names: { tr: 'Silindir oluştur', en: 'Create cylinder' },
@@ -5088,6 +5173,13 @@ registerCadCommand({
   id: 'file.save', names: { tr: 'Projeyi kaydet', en: 'Save project' },
   aliases: { tr: ['kaydet'], en: ['save'] }, category: 'file', shortcuts: ['CTRL+S'],
   execute: () => saveProject(projName || 'model')
+});
+
+registerCadCommand({
+  id: 'ui.commandPalette', names: { tr: 'Komut paletini aç', en: 'Open command palette' },
+  aliases: { tr: ['komut paleti'], en: ['command palette'] },
+  category: 'interface', shortcuts: ['CTRL+K'],
+  execute: () => openCommandPalette()
 });
 
 for (const command of commandRegistry.list()) {
