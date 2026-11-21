@@ -5126,7 +5126,7 @@ registerCadCommand({
     { name: 'height', type: 'number', min: 0.1 }
   ],
   category: 'model', shortcuts: ['B'],
-  execute: (_ctx, args) => addPart('box', 'add', Object.keys(args).length ? { w: args.width, l: args.depth, h: args.height } : undefined)
+  execute: (_ctx, args) => { const dims = {}; if (args.width != null) dims.w = args.width; if (args.depth != null) dims.l = args.depth; if (args.height != null) dims.h = args.height; return addPart('box', 'add', Object.keys(dims).length ? dims : undefined); }
 });
 registerCadCommand({
   id: 'model.createCylinder', names: { tr: 'Silindir oluştur', en: 'Create cylinder' },
