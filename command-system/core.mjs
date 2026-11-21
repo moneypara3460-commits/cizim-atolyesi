@@ -80,7 +80,7 @@ export function tokenizeCommandLine(source) {
   let token = "", quote = null, escaped = false;
   for (const char of input) {
     if (escaped) { token += char; escaped = false; continue; }
-    if (char === "\\\\" && quote) { escaped = true; continue; }
+    if (char === "\\" && quote) { escaped = true; continue; }
     if ((char === '"' || char === "'") && (!quote || quote === char)) {
       quote = quote ? null : char;
       continue;
@@ -91,7 +91,7 @@ export function tokenizeCommandLine(source) {
     }
     token += char;
   }
-  if (escaped) token += "\\\\";
+  if (escaped) token += "\\";
   if (quote) throw new CommandError("UNCLOSED_QUOTE", "Komut satırında kapanmamış tırnak var.");
   if (token) tokens.push(token);
   return tokens;
