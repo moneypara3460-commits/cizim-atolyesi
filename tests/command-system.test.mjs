@@ -43,3 +43,16 @@ test("kısayol çakışmaları reddedilir ve yazı alanları korunur", () => {
   const command = resolver.resolve({ key: "s", ctrlKey: true, target: { tagName: "INPUT" } });
   assert.equal(command, null);
 });
+
+
+test("tırnak içindeki kaçışlı tırnak ve ters eğik çizgi korunur", () => {
+  assert.deepEqual(
+    tokenizeCommandLine('EXPORT STEP "parça \\"özel\\" \\\\ klasör.step"'),
+    ["EXPORT", "STEP", 'parça "özel" \\ klasör.step']
+  );
+  assert.deepEqual(tokenizeCommandLine('EXPORT "son\\\\"'), ["EXPORT", "son\\"]);
+});
+
+test("tırnak kapanmamışsa komut güvenli biçimde reddedilir", () => {
+  assert.throws(() => tokenizeCommandLine('EXPORT "dosya.step'), { code: "UNCLOSED_QUOTE" });
+});
