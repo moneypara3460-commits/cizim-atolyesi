@@ -4,7 +4,7 @@ This branch introduces the UI-agnostic foundation for the desktop command ecosys
 
 ## Scope of this first increment
 - Stable command IDs and a bilingual Turkish/English alias registry.
-- Safe tokenization and typed positional parameter parsing.
+- Safe tokenization and typed positional parameter parsing, including escaped quotes and backslashes inside quoted arguments.
 - A single dispatcher for keyboard, palette, terminal, and macro callers.
 - Shortcut conflict detection and editable-field protection.
 - A first desktop adapter for box/cylinder/sphere/cone creation, selected-part deletion, undo/redo, fit-all, and save.
