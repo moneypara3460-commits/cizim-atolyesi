@@ -1341,7 +1341,12 @@ await T('Ağırlık merkezi işareti: son parça silinince, parçalar gizlenince
   const marks = () => page.evaluate(() => window.__app.weightMarkerCount);
   const on = async (msg) => { await page.waitForFunction(() => window.__app.weightMarkerCount > 0, null, { timeout: 8000 }).catch(() => {}); expect(await marks() > 0, msg); };
   const off = async (msg) => { await page.waitForTimeout(500); expect(await marks() === 0, msg + ' (kalan: ' + await marks() + ')'); };
-  await tab(page, 'wgt'); await on('ağırlık sekmesinde işaret çizildi');
+  await tab(page, 'wgt');
+  // İşaret kullanıcı ayarına bağlıdır; testi gerçek arayüzdeki anahtarla görünür yap.
+  if (!(await page.evaluate(() => window.__app.settings.cogShow))) {
+    await page.locator('[data-act="wg-3d"]').click();
+  }
+  await on('ağırlık sekmesinde işaret çizildi');
   // 1) son parçayı sil
   // (düğmeler iki arayüzde farklı yerde: doğrudan basılır; sınanan şey çizim katmanı)
   const press = (a) => page.evaluate((a) => document.querySelector(`[data-act="${a}"]`).click(), a);
@@ -1349,9 +1354,11 @@ await T('Ağırlık merkezi işareti: son parça silinince, parçalar gizlenince
   await press('undo'); await on('geri alınca işaret geri geldi');
   // 2) bütün parçaları gizle (Tasarım sekmesinde "ağırlık merkezini göster" açıkken — kullanıcının ekranındaki durum)
   await page.evaluate(() => { window.__app.settings.cogShow = true; });
-  await tab(page, 'dims'); await page.evaluate(() => window.__app.rebuild()); await on('ayar açıkken başka sekmede de işaret var');
+  await tab(page, 'dims'); await page.evaluate(() => window.__app.rebuild()); await off('başka sekmeye geçince işaret kalktı');
+  // İşaretin parça görünürlüğüne bağlı davranışını kendi sekmesinde sınayalım.
+  await tab(page, 'wgt'); await on('Ağırlık sekmesine dönünce işaret geri geldi');
   await page.evaluate(() => { for (const p of window.__app.parts) p.hidden = true; window.__app.rebuild(); }); await off('hepsi gizlenince işaret kalktı');
-  await page.evaluate(() => { for (const p of window.__app.parts) p.hidden = false; window.__app.rebuild(); }); await on('görünür yapınca geri geldi');
+  await page.evaluate(() => { for (const p of window.__app.parts) p.hidden = false; window.__app.rebuild(); }); await on('parçalar görünür olunca işaret geri geldi');
   // 3) oyuk parça bütün modeli yok etsin
   await page.evaluate(() => { const P = window.__app.parts; P.push({ ...P[0], id: 999, op: 'sub', w: P[0].w + 20, l: P[0].l + 20, h: P[0].h + 20 }); window.__app.rebuild(); });
   await off('oyuk modeli yok edince işaret kalktı');
