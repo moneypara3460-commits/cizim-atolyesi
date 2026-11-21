@@ -1341,7 +1341,12 @@ await T('Ağırlık merkezi işareti: son parça silinince, parçalar gizlenince
   const marks = () => page.evaluate(() => window.__app.weightMarkerCount);
   const on = async (msg) => { await page.waitForFunction(() => window.__app.weightMarkerCount > 0, null, { timeout: 8000 }).catch(() => {}); expect(await marks() > 0, msg); };
   const off = async (msg) => { await page.waitForTimeout(500); expect(await marks() === 0, msg + ' (kalan: ' + await marks() + ')'); };
-  await tab(page, 'wgt'); await on('ağırlık sekmesinde işaret çizildi');
+  await tab(page, 'wgt');
+  // İşaret kullanıcı ayarına bağlıdır; testi gerçek arayüzdeki anahtarla görünür yap.
+  if (!(await page.evaluate(() => window.__app.settings.cogShow))) {
+    await page.locator('[data-act="wg-3d"]').click();
+  }
+  await on('ağırlık sekmesinde işaret çizildi');
   // 1) son parçayı sil
   // (düğmeler iki arayüzde farklı yerde: doğrudan basılır; sınanan şey çizim katmanı)
   const press = (a) => page.evaluate((a) => document.querySelector(`[data-act="${a}"]`).click(), a);
