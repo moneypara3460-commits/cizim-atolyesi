@@ -1354,9 +1354,11 @@ await T('Ağırlık merkezi işareti: son parça silinince, parçalar gizlenince
   await press('undo'); await on('geri alınca işaret geri geldi');
   // 2) bütün parçaları gizle (Tasarım sekmesinde "ağırlık merkezini göster" açıkken — kullanıcının ekranındaki durum)
   await page.evaluate(() => { window.__app.settings.cogShow = true; });
-  await tab(page, 'dims'); await page.evaluate(() => window.__app.rebuild()); await on('ayar açıkken başka sekmede de işaret var');
+  await tab(page, 'dims'); await page.evaluate(() => window.__app.rebuild()); await off('başka sekmeye geçince işaret kalktı');
+  // İşaretin parça görünürlüğüne bağlı davranışını kendi sekmesinde sınayalım.
+  await tab(page, 'wgt'); await on('Ağırlık sekmesine dönünce işaret geri geldi');
   await page.evaluate(() => { for (const p of window.__app.parts) p.hidden = true; window.__app.rebuild(); }); await off('hepsi gizlenince işaret kalktı');
-  await page.evaluate(() => { for (const p of window.__app.parts) p.hidden = false; window.__app.rebuild(); }); await on('görünür yapınca geri geldi');
+  await page.evaluate(() => { for (const p of window.__app.parts) p.hidden = false; window.__app.rebuild(); }); await on('parçalar görünür olunca işaret geri geldi');
   // 3) oyuk parça bütün modeli yok etsin
   await page.evaluate(() => { const P = window.__app.parts; P.push({ ...P[0], id: 999, op: 'sub', w: P[0].w + 20, l: P[0].l + 20, h: P[0].h + 20 }); window.__app.rebuild(); });
   await off('oyuk modeli yok edince işaret kalktı');
