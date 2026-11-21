@@ -46,6 +46,7 @@ import * as PRM from './degisken.js?v=20261120h';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
 import { createMekaUI } from './meka/ui.js?v=20261119c';
+import { CommandRegistry, CommandDispatcher, ShortcutResolver } from './command-system/core.mjs';
 
 const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -5023,6 +5024,99 @@ function openGuide() {
   document.body.appendChild(o);
   try { localStorage.setItem('cizim:guideSeen', '1'); } catch (e) { /* */ }
 }
+
+
+/* ================= Masaüstü komut sistemi ================= */
+// Kısayollar yalnızca 3B çalışma alanı odaktayken çalışır.
+// Form alanları ve metin editörleri ShortcutResolver tarafından korunur.
+const commandRegistry = new CommandRegistry();
+const shortcutResolver = new ShortcutResolver();
+const commandDispatcher = new CommandDispatcher(commandRegistry, {
+  getContext: () => ({ hasSelection: hasSel(), partCount: parts.length, tab, unit: settings.unit }),
+  onError: ({ error }) => toast(error.message || 'Komut çalıştırılamadı.')
+});
+
+const registerCadCommand = (definition) => commandRegistry.register(definition);
+registerCadCommand({
+  id: 'model.createBox', names: { tr: 'Kutu oluştur', en: 'Create box' },
+  aliases: { tr: ['kutu', 'kutu oluştur'], en: ['box', 'create box'] },
+  category: 'model', shortcuts: ['B'],
+  execute: () => addPart('box', 'add')
+});
+registerCadCommand({
+  id: 'model.createCylinder', names: { tr: 'Silindir oluştur', en: 'Create cylinder' },
+  aliases: { tr: ['silindir'], en: ['cylinder'] },
+  category: 'model', shortcuts: ['C'],
+  execute: () => addPart('cylinder', 'add')
+});
+registerCadCommand({
+  id: 'model.createSphere', names: { tr: 'Küre oluştur', en: 'Create sphere' },
+  aliases: { tr: ['küre'], en: ['sphere'] },
+  category: 'model', shortcuts: ['S'],
+  execute: () => addPart('sphere', 'add')
+});
+registerCadCommand({
+  id: 'model.createCone', names: { tr: 'Koni oluştur', en: 'Create cone' },
+  aliases: { tr: ['koni'], en: ['cone'] },
+  category: 'model', shortcuts: ['K'],
+  execute: () => addPart('cone', 'add')
+});
+registerCadCommand({
+  id: 'model.deleteSelected', names: { tr: 'Seçili parçayı sil', en: 'Delete selected part' },
+  aliases: { tr: ['sil', 'seçili parçayı sil'], en: ['delete', 'delete selected'] },
+  category: 'edit', shortcuts: ['DELETE'],
+  canExecute: (ctx) => ctx.hasSelection,
+  execute: () => removeCur()
+});
+registerCadCommand({
+  id: 'edit.undo', names: { tr: 'Geri al', en: 'Undo' },
+  aliases: { tr: ['geri al'], en: ['undo'] }, category: 'edit', shortcuts: ['CTRL+Z'],
+  execute: () => doUndo()
+});
+registerCadCommand({
+  id: 'edit.redo', names: { tr: 'Yinele', en: 'Redo' },
+  aliases: { tr: ['yinele', 'ileri al'], en: ['redo'] }, category: 'edit',
+  shortcuts: ['CTRL+Y', 'CTRL+SHIFT+Z'], execute: () => doRedo()
+});
+registerCadCommand({
+  id: 'view.fitAll', names: { tr: 'Modeli ekrana sığdır', en: 'Fit all' },
+  aliases: { tr: ['ekrana sığdır', 'tümünü sığdır'], en: ['fit', 'fit all'] },
+  category: 'view', shortcuts: ['F'],
+  execute: () => fit(lastClean ? lastClean.boundingBox : null)
+});
+registerCadCommand({
+  id: 'file.save', names: { tr: 'Projeyi kaydet', en: 'Save project' },
+  aliases: { tr: ['kaydet'], en: ['save'] }, category: 'file', shortcuts: ['CTRL+S'],
+  execute: () => saveProject(projName || 'model')
+});
+
+for (const command of commandRegistry.list()) {
+  for (const shortcut of command.shortcuts) shortcutResolver.bind(shortcut, command.id);
+}
+
+view.tabIndex = view.tabIndex >= 0 ? view.tabIndex : 0;
+view.addEventListener('pointerdown', () => {
+  if (document.activeElement !== view) view.focus({ preventScroll: true });
+}, { passive: true });
+
+document.addEventListener('keydown', (event) => {
+  // Sadece CAD çalışma alanı odaktayken kısayol yakala. Formlarda ve diğer panellerde yazıyı bozma.
+  if (document.activeElement !== view && !view.contains(event.target)) return;
+  const commandId = shortcutResolver.resolve(event);
+  if (!commandId) return;
+  event.preventDefault();
+  event.stopPropagation();
+  commandDispatcher.dispatch(commandId, {}, { source: 'keyboard' }).catch(() => {});
+}, true);
+
+// E2E ve ilerideki komut paleti / komut satırı aynı dispatcher'ı kullanır.
+window.__commandSystem = {
+  registry: commandRegistry,
+  dispatcher: commandDispatcher,
+  shortcuts: shortcutResolver,
+  run: (id, args = {}, source = 'api') => commandDispatcher.dispatch(id, args, { source }),
+  runLine: (line) => commandDispatcher.dispatchLine(line)
+};
 
 /* ================= Başlangıç ================= */
 try {
