@@ -24,7 +24,7 @@ export function createWeightUI(api) {
       (c ? row('Ağırlık merkezi X', f0(c[0]) + ' mm') + row('Ağırlık merkezi Y (yükseklik)', f0(c[1]) + ' mm') + row('Ağırlık merkezi Z', f0(c[2]) + ' mm') : row('Ağırlık merkezi', 'hesaplanamadı')) +
       (R.balance ? row('Zeminden yükseklik', f0(R.balance.comHeight) + ' mm') : ''));
     for (const n of R.notes) h += note((n.sev === 'warn' ? '⚠ ' : 'ℹ ') + esc(n.text));
-    h += btn((api.show3D ? '◉' : '○') + ' 3B işaret her sekmede görünsün', 'wg-3d', api.show3D) + btn('📄 PDF ağırlık raporu', 'wg-pdf');
+    h += btn((api.show3D ? '◉' : '○') + ' 3B ağırlık merkezi işaretini göster', 'wg-3d', api.show3D) + btn('📄 PDF ağırlık raporu', 'wg-pdf');
     // dağılımlar
     h += '<div class="lbl h">Malzemeye göre</div>' + card(R.byMat.map(([k, v]) => bar(k, v, T.kg)).join('') || note('—'));
     h += '<div class="lbl h">Türe göre</div>' + card(R.byCat.map(([k, v]) => bar(k, v, T.kg)).join(''));
