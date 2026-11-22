@@ -5087,7 +5087,8 @@ function openCommandPalette() {
     commandPalette.setAttribute('aria-label', 'Komut paleti');
     commandPalette.style.cssText = 'position:fixed;z-index:10000;top:12vh;left:50%;transform:translateX(-50%);width:min(560px,calc(100vw - 28px));max-height:70vh;overflow:auto;padding:12px;background:#111c2e;border:1px solid #475569;border-radius:14px;box-shadow:0 18px 60px #0009;color:#e5e7eb';
     const heading = document.createElement('div');
-    heading.textContent = commandUiLanguage === 'en' ? 'COMMAND PALETTE  ·  Ctrl+K' : 'KOMUT PALETİ  ·  Ctrl+K';
+    const headingLabel = document.createElement('span');
+    headingLabel.textContent = commandUiLanguage === 'en' ? 'COMMAND PALETTE  ·  Ctrl+K' : 'KOMUT PALETİ  ·  Ctrl+K';
     const languageButton = document.createElement('button');
     languageButton.type = 'button';
     languageButton.textContent = commandUiLanguage === 'en' ? 'TR' : 'EN';
@@ -5096,13 +5097,13 @@ function openCommandPalette() {
     languageButton.addEventListener('click', () => {
       commandUiLanguage = commandUiLanguage === 'tr' ? 'en' : 'tr';
       try { localStorage.setItem('cizim:command-language', commandUiLanguage); } catch (e) { /* */ }
-      heading.textContent = commandUiLanguage === 'en' ? 'COMMAND PALETTE  ·  Ctrl+K' : 'KOMUT PALETİ  ·  Ctrl+K';
+      headingLabel.textContent = commandUiLanguage === 'en' ? 'COMMAND PALETTE  ·  Ctrl+K' : 'KOMUT PALETİ  ·  Ctrl+K';
       languageButton.textContent = commandUiLanguage === 'en' ? 'TR' : 'EN';
       languageButton.title = commandUiLanguage === 'en' ? 'Switch to Turkish' : 'Switch to English';
       commandPaletteInput.placeholder = commandUiLanguage === 'en' ? 'Type a command… e.g. BOX 100 50 30 / KUTU' : 'Komut yaz… ör. BOX 100 50 30 / KUTU';
       renderCommandPaletteResults(commandPaletteInput.value);
     });
-    heading.appendChild(languageButton);
+    heading.append(headingLabel, languageButton);
     heading.style.cssText = 'padding:4px 8px 10px;color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:.08em';
     commandPaletteInput = document.createElement('input');
     commandPaletteInput.type = 'text';
