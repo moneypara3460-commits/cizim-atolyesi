@@ -1572,7 +1572,8 @@ await T('Kısayol yardımı: ? açar, arama, B tuşunu Q yap (Q kutu ekler, B ek
   const focusView = () => page.evaluate(() => document.getElementById('view').focus());
   await page.evaluate(() => document.activeElement && document.activeElement.blur());
   await page.keyboard.press('?'); await page.waitForSelector('#kbh');
-  expect(/3B tuşları/i.test(await page.locator('#kbh').innerText()), 'yardım açıldı, 3B bölümü var');
+  // başlıklar ekranda büyük harfle gösterilir (CSS); denetim yazının kendisiyle (textContent) yapılır
+  expect(/3B tuşları/.test(await page.locator('#kbh').textContent()), 'yardım açıldı, 3B bölümü var');
   await page.locator('#kbh input').fill('geri al'); await page.waitForTimeout(100);
   expect(/Geri al/.test(await page.locator('#kbh .ls').innerText()) && !/Kutu oluştur/.test(await page.locator('#kbh .ls').innerText()), 'arama süzdü');
   await page.locator('#kbh input').fill('Kutu oluştur');
@@ -1599,7 +1600,7 @@ await T('Kısayol yardımı: ? açar, arama, B tuşunu Q yap (Q kutu ekler, B ek
   await act(page, 'cad2d'); await page.waitForSelector('#cad');
   await page.evaluate(() => document.activeElement && document.activeElement.blur());
   await page.keyboard.press('?'); await page.waitForSelector('#kbh');
-  expect(/^2B çizim/i.test(await page.locator('#kbh h3').first().innerText()), '2B bölümü önce: ' + await page.locator('#kbh h3').first().innerText());
+  expect(/^2B çizim/.test(await page.locator('#kbh h3').first().textContent()), '2B bölümü önce: ' + await page.locator('#kbh h3').first().textContent());
   await page.keyboard.press('l'); expect(await page.evaluate(() => window.__cad2d.cmd) === '', 'yardım açıkken 2B komut satırına yazılmadı');
   await page.keyboard.press('Escape'); expect(await page.locator('#kbh').count() === 0 && await page.locator('#cad').count() === 1, 'Esc yalnız yardımı kapattı');
 });
