@@ -18,7 +18,10 @@ import { openSketch } from './sketch.js?v=20261120f';
 import { KENARLAR, KENAR_ADI } from './sac.js?v=20261120c';
 import { to3MF, toSTEP } from './export3d.js?v=20261112u';
 import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261112u';
-import { openCad2D } from './cad2d.js?v=20261112u';
+import { openCad2D } from './cad2d.js?v=20261122a';
+import { COMMANDS as CAD2D_COMMANDS } from './cad2d-keys.js?v=20261122a';
+import { openHelp, installHelpKey } from './kb/help.js?v=20261122a';
+import { effectiveKey } from './kb/keys.js?v=20261122a';
 import { openCutOpt } from './cutopt-ui.js?v=20261112u';
 import { createMfg } from './mfg-ui.js?v=20261112u';
 import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261112u';
@@ -46,7 +49,7 @@ import * as PRM from './degisken.js?v=20261120h';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
 import { createMekaUI } from './meka/ui.js?v=20261119c';
-import { CommandRegistry, CommandDispatcher, ShortcutResolver, parseCommandLine } from './command-system/core.mjs?v=20261122a';
+import { CommandRegistry, CommandDispatcher, ShortcutResolver, parseCommandLine } from './command-system/core.mjs?v=20261122b';
 
 const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -5263,7 +5266,7 @@ registerCadCommand({
 });
 registerCadCommand({
   id: 'sketch.extrude', names: { tr: '2B çizimden ekstrüzyon', en: 'Extrude from 2D sketch' },
-  aliases: { tr: ['ekstrüzyon', 'ekstrüde et'], en: ['extrude', 'extrusion'] },
+  aliases: { tr: ['ekstrüzyon', 'ekstrüde et', '2b', '2b çizim'], en: ['extrude', 'extrusion', '2d', 'cad2d'] },
   description: { tr: '2B çizim ekranını açar; çizimi tamamlayınca 3B parça oluşur', en: 'Opens the 2D sketch editor; completing the sketch creates a 3D part' },
   category: 'features', execute: () => open2D()
 });
@@ -5284,6 +5287,202 @@ registerCadCommand({
   execute: (_ctx, args) => { if (args.radius != null) cp.es = args.radius; return edgeFeature('fillet'); }
 });
 
+/* ---- Klavye 2. aşama: 3B'nin geri kalanı, görünümler, sekmeler ---- */
+// düğme işlemini klavyeden çalıştır: aynı tıklama işleyicisinden geçer (sekme geçişi, panel temizliği vb. aynen olur)
+function clickAct(a) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.dataset.act = a; b.hidden = true;
+  document.body.appendChild(b);
+  try { b.click(); } finally { b.remove(); }
+}
+const tabFold = (s) => String(s || '').replace(/[^\p{L}\p{N} ]/gu, '').trim().toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i');
+const TAB_SYN = { cnc: 'cam', freze: 'cam', torna: 'cam', gkodu: 'cam', analiz: 'fem', fea: 'fem', fem: 'fem', brep: 'occt', occt: 'occt', mekatronik: 'meka', teknik: 'sheet', 'teknik resim': 'sheet', resim: 'sheet', kenar: 'edge', yuz: 'face', delik: 'face', olcu: 'dims', konum: 'pos', dondur: 'rot', cogalt: 'copy', kabuk: 'shell', montaj: 'mate', bag: 'link', parca: 'part', gorunum: 'view', hareket: 'anim', dayanim: 'str', hesap: 'calc', agirlik: 'wgt', maliyet: 'cost', uretim: 'mfg', kaynak: 'weld', 'montaj plani': 'asm', gelecek: 'sim', degisken: 'param', tur: 'type' };
+function findTab(name) {
+  const q = tabFold(name);
+  if (!q) return null;
+  const hit = TABS.find(([k]) => k === q) || TABS.find(([, l]) => tabFold(l) === q);
+  return hit ? hit[0] : (TAB_SYN[q] || TAB_SYN[q.replace(/ /g, '')] || null);
+}
+function gotoTab(k) {
+  if (!TABS.some(([t]) => t === k)) return false;
+  if (window.__shell) window.__shell.showTab(k); else clickAct('tab-' + k);
+  return true;
+}
+const AXIS_ARG = (v) => { const a = tabFold(v); return a === 'x' || a === 'y' || a === 'z' ? a : null; };
+const simpleAdd = (id, tr, en, trAl, enAl, run, desc) => registerCadCommand({
+  id, names: { tr, en }, aliases: { tr: trAl, en: enAl }, description: desc || { tr: '', en: '' }, category: 'model', execute: run
+});
+simpleAdd('model.createTube', 'Boru oluştur', 'Create tube', ['boru', 'tüp'], ['tube', 'pipe'], () => addPart('tube', 'add'));
+simpleAdd('model.createGear', 'Dişli oluştur', 'Create gear', ['dişli', 'dişli çark'], ['gear'], () => addGear());
+simpleAdd('model.createSketch', 'Kroki çiz', 'New sketch', ['kroki', 'kroki çiz', 'profil'], ['sketch', 'new sketch'], () => newSketch());
+simpleAdd('model.createSweep', 'Süpürme oluştur', 'Create sweep', ['süpürme', 'süpür'], ['sweep'], () => addPart('sweep', 'add'));
+simpleAdd('model.createLoft', 'Loft oluştur', 'Create loft', ['loft', 'geçiş'], ['loft'], () => addPart('loft', 'add'));
+simpleAdd('model.createSheet', 'Sac metal oluştur', 'Create sheet metal', ['sac', 'sac metal'], ['sheet', 'sheet metal'], () => addPart('sheet', 'add'));
+simpleAdd('model.createFrame', 'Konstrüksiyon oluştur', 'Create frame', ['konstrüksiyon', 'iskelet', 'çerçeve'], ['frame', 'weldment'], () => addPart('frame', 'add'));
+simpleAdd('model.squareHole', 'Kare delik / cep', 'Square hole / pocket', ['kare delik', 'cep'], ['square hole', 'pocket'], () => { if (!needPart()) return false; return addPart('box', 'sub'); },
+  { tr: 'Seçili parçaya kare oyuk parça ekler (ölçüsü Ölçü sekmesinden)', en: 'Adds a square cutting part' });
+registerCadCommand({
+  id: 'model.shell', names: { tr: 'Kabuk yap', en: 'Shell' }, aliases: { tr: ['kabuk', 'içini boşalt'], en: ['shell'] },
+  description: { tr: 'Et kalınlığı (mm). Örnek: KABUK 2', en: 'Wall thickness (mm). Example: SHELL 2' },
+  parameters: [{ name: 'wall', type: 'number', min: 0.1 }], category: 'features', canExecute: (ctx) => ctx.hasSelection,
+  execute: (_c, a) => { if (a.wall != null) cp.wall = a.wall; return shellFeature(); }
+});
+registerCadCommand({
+  id: 'model.duplicate', names: { tr: 'Çoğalt', en: 'Duplicate' }, aliases: { tr: ['çoğalt', 'kopyala', 'kopya'], en: ['duplicate', 'copy'] },
+  description: { tr: 'Seçili parçanın kopyası (Ctrl+D)', en: 'Copy of the selected part (Ctrl+D)' },
+  category: 'edit', shortcuts: ['CTRL+D'], canExecute: (ctx) => ctx.hasSelection, execute: () => doDup(1)
+});
+registerCadCommand({
+  id: 'model.mirror', names: { tr: 'Ayna kopya', en: 'Mirror copy' }, aliases: { tr: ['ayna', 'aynala'], en: ['mirror'] },
+  description: { tr: 'Eksen X ya da Z. Örnek: AYNA X', en: 'Axis X or Z. Example: MIRROR X' },
+  parameters: [{ name: 'axis', type: 'string', required: true }], category: 'edit', canExecute: (ctx) => ctx.hasSelection,
+  execute: (_c, a) => { const ax = AXIS_ARG(a.axis); if (ax !== 'x' && ax !== 'z') { toast('Ayna ekseni X ya da Z olmalı'); return false; } return doMirror(ax); }
+});
+registerCadCommand({
+  id: 'model.linearArray', names: { tr: 'Doğrusal dizi', en: 'Linear pattern' }, aliases: { tr: ['dizi', 'doğrusal dizi'], en: ['array', 'linear pattern'] },
+  description: { tr: 'Kopya sayısı ve X Y Z aralığı (mm). Örnek: DİZİ 4 40 0 0', en: 'Copies and X Y Z spacing (mm). Example: ARRAY 4 40 0 0' },
+  parameters: [{ name: 'n', type: 'number', required: true, min: 1, max: 40 }, { name: 'dx', type: 'number' }, { name: 'dy', type: 'number' }, { name: 'dz', type: 'number' }],
+  category: 'edit', canExecute: (ctx) => ctx.hasSelection,
+  execute: (_c, a) => {
+    if (!Number.isInteger(a.n)) { toast('Kopya sayısı tam sayı olmalı'); return false; }
+    cp.n = a.n; if (a.dx != null || a.dy != null || a.dz != null) { cp.dx = a.dx || 0; cp.dy = a.dy || 0; cp.dz = a.dz || 0; }
+    if (!(cp.dx || cp.dy || cp.dz)) { toast('Aralık 0 olamaz: DİZİ 4 40 0 0'); return false; }
+    return doLinear();
+  }
+});
+registerCadCommand({
+  id: 'model.circularArray', names: { tr: 'Dairesel dizi', en: 'Circular pattern' }, aliases: { tr: ['dairesel dizi', 'çember dizi'], en: ['polar array', 'circular pattern'] },
+  description: { tr: 'Toplam adet ve açı (derece). Örnek: DAİRESEL DİZİ 6 360', en: 'Total count and angle. Example: POLAR ARRAY 6 360' },
+  parameters: [{ name: 'n', type: 'number', required: true, min: 2, max: 41 }, { name: 'ang', type: 'number' }],
+  category: 'edit', canExecute: (ctx) => ctx.hasSelection,
+  execute: (_c, a) => { if (!Number.isInteger(a.n)) { toast('Adet tam sayı olmalı'); return false; } cp.cn = a.n; if (a.ang != null) { if (!a.ang) { toast('Açı 0 olamaz'); return false; } cp.ang = a.ang; } return doCircular(); }
+});
+registerCadCommand({
+  id: 'model.toggleHidden', names: { tr: 'Gizle / göster', en: 'Hide / show' }, aliases: { tr: ['gizle', 'göster'], en: ['hide', 'show'] },
+  category: 'view', shortcuts: ['H'], canExecute: (ctx) => ctx.hasSelection,
+  execute: () => { commit(); const p = cur(); p.hidden = !p.hidden; refreshAll(); toast(p.hidden ? 'Parça gizlendi (H ile geri gelir)' : 'Parça gösteriliyor'); }
+});
+registerCadCommand({
+  id: 'model.setAdd', names: { tr: 'Birleştir (ekle)', en: 'Set as add' }, aliases: { tr: ['birleştir', 'ekle'], en: ['union', 'add'] },
+  description: { tr: 'Seçili parça dolu (eklenen) olur', en: 'Selected part becomes solid' },
+  category: 'features', canExecute: (ctx) => ctx.hasSelection, execute: () => { commit(); cur().op = 'add'; refreshAll(); }
+});
+registerCadCommand({
+  id: 'model.setSub', names: { tr: 'Oyuk aç (çıkar)', en: 'Set as cut' }, aliases: { tr: ['oyuk', 'çıkar', 'oyuk aç'], en: ['subtract', 'cut'] },
+  description: { tr: 'Seçili parça diğerlerinden oyulur', en: 'Selected part cuts the others' },
+  category: 'features', canExecute: (ctx) => ctx.hasSelection, execute: () => { commit(); cur().op = 'sub'; refreshAll(); }
+});
+simpleAdd('model.bake', 'Tek parça yap', 'Combine to one part', ['tek parça', 'tek parça yap'], ['combine', 'bake'], () => bakeAll());
+registerCadCommand({
+  id: 'view.measure', names: { tr: 'Ölçüm aracı', en: 'Measure tool' }, aliases: { tr: ['ölç', 'ölçüm', 'mesafe'], en: ['measure', 'dist'] },
+  description: { tr: 'İki noktaya dokunarak mesafe ölç (M)', en: 'Measure distance between two points (M)' },
+  category: 'view', shortcuts: ['M'], execute: () => { setMeasure(!measure.on); renderPanel(); toast(measure.on ? 'Ölçüm açık: iki noktaya dokun' : 'Ölçüm kapandı'); }
+});
+registerCadCommand({
+  id: 'view.section', names: { tr: 'Kesit görünüşü', en: 'Section view' }, aliases: { tr: ['kesit', 'kesit al'], en: ['section'] },
+  description: { tr: 'KESİT (aç / kapat) ya da KESİT X / Y / Z', en: 'SECTION (toggle) or SECTION X / Y / Z' },
+  parameters: [{ name: 'axis', type: 'string' }], category: 'view',
+  execute: (_c, a) => {
+    if (a.axis == null) { clickAct('sec-toggle'); return; }
+    const ax = AXIS_ARG(a.axis);
+    if (!ax) { toast('Kesit ekseni X, Y ya da Z olmalı'); return false; }
+    if (!section.on) clickAct('sec-toggle');
+    clickAct('sec-' + ax);
+  }
+});
+const VIEW_ARG = { on: 'front', onden: 'front', front: 'front', ust: 'top', usten: 'top', top: 'top', yan: 'side', yandan: 'side', side: 'side', right: 'side', izo: 'iso', izometrik: 'iso', iso: 'iso', isometric: 'iso' };
+registerCadCommand({
+  id: 'view.named', names: { tr: 'Görünüm', en: 'View' }, aliases: { tr: ['görünüm', 'bakış'], en: ['view'] },
+  description: { tr: 'ÖN, ÜST, YAN ya da İZO (kısayol 1 2 3 4)', en: 'FRONT, TOP, SIDE or ISO (keys 1 2 3 4)' },
+  parameters: [{ name: 'name', type: 'string', required: true }], category: 'view',
+  execute: (_c, a) => { const v = VIEW_ARG[tabFold(a.name)]; if (!v) { toast('Görünüm: ÖN, ÜST, YAN ya da İZO'); return false; } setView(v); }
+});
+for (const [k, v, tr, en] of [['1', 'front', 'Önden bak', 'Front view'], ['2', 'top', 'Üstten bak', 'Top view'], ['3', 'side', 'Yandan bak', 'Side view'], ['4', 'iso', 'İzometrik bak', 'Isometric view']]) {
+  registerCadCommand({ id: 'view.' + v, names: { tr, en }, aliases: { tr: [tabFold(tr)], en: [v + ' view'] }, category: 'view', shortcuts: [k], execute: () => setView(v) });
+}
+registerCadCommand({
+  id: 'edit.clearSelection', names: { tr: 'Seçimi bırak', en: 'Clear selection' }, aliases: { tr: ['seçimi bırak', 'seçme'], en: ['deselect', 'clear selection'] },
+  category: 'edit', shortcuts: ['ESCAPE'],
+  execute: () => { if (measure.on) { setMeasure(false); renderPanel(); return; } if (hasSel()) { selOff = sel; renderPanel(); refreshOverlays(); } }
+});
+registerCadCommand({
+  id: 'ui.gotoTab', names: { tr: 'Sekmeye git', en: 'Go to tab' }, aliases: { tr: ['git', 'sekme', 'aç'], en: ['go', 'tab', 'goto'] },
+  description: { tr: 'Örnek: GİT KAYNAK, GİT CNC, GİT ANALİZ, GİT RESİM', en: 'Example: GO WELD, GO CNC, GO FEA' },
+  parameters: [{ name: 'tab', type: 'string', required: true }], category: 'interface',
+  execute: (_c, a) => { const k = findTab(a.tab); if (!k || !gotoTab(k)) { toast('Sekme bulunamadı: ' + a.tab); return false; } }
+});
+const stepTab = (d) => { const i = Math.max(0, TABS.findIndex(([k]) => k === tab)); gotoTab(TABS[(i + d + TABS.length) % TABS.length][0]); };
+registerCadCommand({ id: 'ui.nextTab', names: { tr: 'Sonraki sekme', en: 'Next tab' }, aliases: { tr: ['sonraki sekme'], en: ['next tab'] }, category: 'interface', shortcuts: ['PAGEDOWN'], execute: () => stepTab(1) });
+registerCadCommand({ id: 'ui.prevTab', names: { tr: 'Önceki sekme', en: 'Previous tab' }, aliases: { tr: ['önceki sekme'], en: ['previous tab', 'prev tab'] }, category: 'interface', shortcuts: ['PAGEUP'], execute: () => stepTab(-1) });
+registerCadCommand({
+  id: 'settings.unit', names: { tr: 'Birim', en: 'Units' }, aliases: { tr: ['birim'], en: ['units', 'unit'] },
+  description: { tr: 'BİRİM MM, CM ya da İNÇ', en: 'UNITS MM, CM or IN' }, parameters: [{ name: 'u', type: 'string', required: true }], category: 'interface',
+  execute: (_c, a) => { const u = { mm: 'mm', cm: 'cm', in: 'in', inc: 'in', inch: 'in' }[tabFold(a.u)]; if (!u) { toast('Birim: MM, CM ya da İNÇ'); return false; } clickAct('unit-' + u); }
+});
+
+/* ---- Klavye 3. aşama: üretim ve analiz ---- */
+// Sekmeyi aç, o sekmede görünen gerçek düğmeye bas (kullanıcının basacağı düğmenin aynısı). Panel geç çiziliyorsa kısa süre bekler.
+async function pressInTab(k, acts, missing) {
+  if (k && tab !== k) gotoTab(k);
+  for (let i = 0; i < 12; i++) {
+    for (const a of acts) {
+      const b = [...document.querySelectorAll(`#tabbody [data-act="${a}"]`)].find((x) => !x.disabled);
+      if (b) { b.click(); return true; }
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  toast(missing || 'Bu işlem şu an yapılamıyor; sekmedeki adımları tamamla');
+  return false;
+}
+const prodCmd = (id, tr, en, trAl, enAl, run, desc, shortcuts) => registerCadCommand({
+  id, names: { tr, en }, aliases: { tr: trAl, en: enAl }, description: desc || { tr: '', en: '' }, category: 'production', shortcuts: shortcuts || [], execute: run
+});
+// dışa aktarma
+prodCmd('export.step', 'STEP dışa aktar', 'Export STEP', ['step', 'step kaydet'], ['step out', 'export step'], () => clickAct('step-out'), { tr: 'SolidWorks, Fusion, FreeCAD için (Ctrl+E)', en: 'For SolidWorks, Fusion, FreeCAD (Ctrl+E)' }, ['CTRL+E']);
+prodCmd('export.stl', 'STL indir', 'Export STL', ['stl', 'stl indir'], ['export stl'], () => clickAct('stl'));
+prodCmd('export.3mf', '3MF indir (3B yazıcı)', 'Export 3MF', ['3mf'], ['export 3mf'], () => clickAct('mf-out'));
+prodCmd('export.dxfViews', 'DXF görünüşler', 'Export DXF views', ['dxf görünüş', 'dxf görünüşler'], ['dxf views', 'export dxf'], () => clickAct('dxf-out'), { tr: 'Ön, yan ve üst görünüş DXF', en: 'Front, side, top DXF' });
+prodCmd('export.bom', 'Parça listesi (CSV)', 'Bill of materials (CSV)', ['parça listesi', 'malzeme listesi'], ['bom', 'bill of materials'], () => clickAct('bom-csv'));
+// teknik resim
+prodCmd('drawing.open', 'Teknik resim', 'Technical drawing', ['teknik resim', 'resim'], ['drawing', 'drafting'], () => clickAct('sheet-make'), { tr: 'A4 teknik resmi açar (Ctrl+P: PDF)', en: 'Opens the A4 drawing (Ctrl+P: PDF)' });
+prodCmd('drawing.pdf', 'Teknik resim PDF', 'Drawing PDF', ['resim pdf', 'teknik resim pdf'], ['drawing pdf', 'print'], () => {
+  if (!document.getElementById('sheetov')) clickAct('sheet-make');
+  const b = document.querySelector('#sheetov [data-sh="pdf"]');
+  if (!b) return false;
+  b.click();
+}, { tr: 'Teknik resmi PDF olarak indirir', en: 'Downloads the drawing as PDF' }, ['CTRL+P']);
+// CNC
+prodCmd('cam.toolpath', 'Takım yolu oluştur', 'Generate toolpath', ['takım yolu'], ['toolpath'], () => pressInTab('cam', ['c5-run', 'cn-go'], 'CNC sekmesinde parçayı ve takımı seç'));
+prodCmd('cam.gcode', 'G-kodu indir', 'Download G-code', ['g kodu', 'gkodu', 'g-kodu', 'nc'], ['gcode', 'g-code'], () => pressInTab('cam', ['lz-dl-nc', 'c5-gcode', 'cn-dl'], 'Önce takım yolunu oluştur (TAKIM YOLU)'), { tr: 'Etkin CNC modunun (freze, 4/5 eksen, torna) G-kodu (Ctrl+G)', en: 'G-code of the active CNC mode (Ctrl+G)' }, ['CTRL+G']);
+prodCmd('cam.sim', 'CNC simülasyonu', 'CNC simulation', ['cnc simülasyon', 'talaş simülasyonu'], ['cnc sim', 'machining sim'], () => pressInTab('cam', ['cn-sim', 'c5-run'], 'Önce takım yolunu oluştur'));
+prodCmd('cam.jobsheet', 'CNC iş kartı (PDF)', 'CNC job sheet (PDF)', ['iş kartı'], ['job sheet'], () => pressInTab('cam', ['cn-pdf'], 'İş kartı 3 eksen freze modunda; önce takım yolunu oluştur'));
+prodCmd('cam.lathe', 'CNC torna', 'CNC lathe', ['torna'], ['lathe', 'turning'], () => pressInTab('cam', ['lz-on']));
+// analiz ve testler
+prodCmd('fea.mesh', 'Analiz ağı oluştur', 'Generate FEA mesh', ['ağ', 'ağ oluştur'], ['mesh'], () => pressInTab('fem', ['fm-mesh']));
+prodCmd('fea.solve', 'Analizi çöz', 'Solve FEA', ['analiz', 'analiz çöz', 'çöz'], ['solve', 'fea', 'run analysis'], () => pressInTab('fem', ['fm-solve'], 'Analiz sekmesinde mesnet ve yük ekle'), { tr: 'Mühendislik analizi (statik, modal, ısı, burkulma)', en: 'Engineering analysis' });
+prodCmd('fea.report', 'Analiz raporu indir', 'Download FEA report', ['analiz raporu'], ['fea report'], () => pressInTab('fem', ['fm-repdl'], 'Önce analizi çöz'));
+prodCmd('sim.strength', 'Dayanım testi', 'Strength test', ['dayanım testi', 'sanal test'], ['strength test', 'virtual test'], () => pressInTab('sim', ['sm-run']));
+prodCmd('sim.vibration', 'Titreşim testi', 'Vibration test', ['titreşim testi'], ['vibration test'], () => pressInTab('sim', ['sm-vib']));
+prodCmd('sim.thermal', 'Sıcaklık testi', 'Thermal test', ['sıcaklık testi'], ['thermal test'], () => pressInTab('sim', ['sm-temp']));
+prodCmd('occt.validate', 'B-Rep doğrula', 'Validate B-Rep', ['brep', 'doğrula'], ['validate', 'brep'], () => pressInTab('occt', ['oc-model']));
+// üretim raporları
+prodCmd('mfg.check', 'Üretilebilirlik kontrolü', 'Manufacturability check', ['üretilebilirlik', 'üretim kontrolü'], ['dfm', 'manufacturability'], () => clickAct('mfg-go'));
+prodCmd('mfg.cutopt', 'Kesim optimizasyonu', 'Cut optimization', ['kesim optimizasyonu', 'kesim'], ['cut list', 'nesting'], () => clickAct('cut-opt'));
+prodCmd('report.mfg', 'Üretim raporu (PDF)', 'Manufacturing report (PDF)', ['üretim raporu'], ['mfg report'], () => pressInTab('mfg', ['mfg-pdf'], 'Önce üretilebilirlik kontrolünü çalıştır'));
+prodCmd('report.weight', 'Ağırlık raporu (PDF)', 'Weight report (PDF)', ['ağırlık raporu', 'ağırlık'], ['weight report', 'mass'], () => pressInTab('wgt', ['wg-pdf']));
+prodCmd('report.cost', 'Maliyet raporu (PDF)', 'Cost report (PDF)', ['maliyet raporu', 'maliyet'], ['cost report', 'cost'], () => pressInTab('cost', ['cs-pdf']));
+prodCmd('report.weld', 'Kaynak raporu (PDF)', 'Weld report (PDF)', ['kaynak raporu'], ['weld report'], () => pressInTab('weld', ['wd-pdf']));
+prodCmd('report.assembly', 'Montaj raporu (PDF)', 'Assembly report (PDF)', ['montaj raporu', 'montaj sırası'], ['assembly report'], () => pressInTab('asm', ['as-pdf', 'as-go']));
+prodCmd('report.meka', 'Mekatronik raporu (PDF)', 'Mechatronics report (PDF)', ['mekatronik raporu'], ['mechatronics report'], () => pressInTab('meka', ['mk-bompdf', 'mk-pdf'], 'Mekatronik sekmesinde bir hesap kartı doldur'));
+// F9: bulunulan sekmenin "çalıştır" düğmesi
+const RUN_IN_TAB = { fem: ['fm-solve'], sim: ['sm-run'], cam: ['c5-run', 'cn-go'], mfg: ['mfg-run', 'mfg-go'], asm: ['as-go'], occt: ['oc-model'] };
+prodCmd('run.tab', 'Sekmede çalıştır', 'Run in tab', ['çalıştır'], ['run'], () => {
+  const acts = RUN_IN_TAB[tab];
+  if (!acts) { toast('Bu sekmede çalıştırılacak bir işlem yok (F9: Analiz, Gelecek, CNC, Üretim, Montaj planı, B-Rep)'); return false; }
+  if (tab === 'mfg') { clickAct('mfg-go'); return; }
+  return pressInTab(tab, acts);
+}, { tr: 'Analiz: çöz · Gelecek: dayanım testi · CNC: takım yolu · Üretim: kontrol · Montaj planı: analiz · B-Rep: doğrula (F9)', en: 'Runs the current tab (F9)' }, ['F9']);
+
 registerCadCommand({
   id: 'ui.commandPalette', names: { tr: 'Komut paletini aç', en: 'Open command palette' },
   aliases: { tr: ['komut paleti'], en: ['command palette'] },
@@ -5294,12 +5493,52 @@ registerCadCommand({
 // Yeni arayüzde (yeni/index.html) Ctrl+K kabuğun kendi arama paletini açar; komut satırı da oraya bağlanır.
 // Aynı tuşla ikinci bir palet açılmasın diye o arayüzde Ctrl+K bu sisteme bağlanmaz.
 const shellPalette = !!document.getElementById('palette');
-for (const command of commandRegistry.list()) {
-  for (const shortcut of command.shortcuts) {
-    if (shellPalette && command.id === 'ui.commandPalette') continue;
-    shortcutResolver.bind(shortcut, command.id);
+// kullanıcının ? ekranında değiştirdiği tuşlar uygulanır (bölüm kimliği: makine)
+function rebindShortcuts() {
+  shortcutResolver.bindings.clear();
+  for (const command of commandRegistry.list()) {
+    for (const shortcut of command.shortcuts) {
+      if (shellPalette && command.id === 'ui.commandPalette') continue;
+      try { shortcutResolver.bind(effectiveKey('makine', shortcut), command.id); } catch (e) { /* çakışan kullanıcı tuşu: varsayılan kalır */ try { shortcutResolver.bind(shortcut, command.id); } catch (e2) { /* */ } }
+    }
   }
 }
+rebindShortcuts();
+
+/* ---- Klavye 6. aşama: ? yardım ekranı ---- */
+const KEYS_2D = [['ENTER', 'Komut satırını çalıştır · boşsa bitir / son komutu tekrarla'], ['SPACE', 'Enter ile aynı'], ['ESCAPE', 'Yazılanı, sonra komutu ve seçimi iptal et'],
+  ['BACKSPACE', 'Komut satırından bir karakter sil'], ['DELETE', 'Seçilenleri sil'], ['CTRL+Z', 'Geri al'], ['CTRL+Y', 'İleri al'], ['CTRL+A', 'Tümünü seç'], ['CTRL+S', 'DXF kaydet'],
+  ['F3', 'Uç nokta yakalama aç / kapat'], ['F8', 'Dik çizim (ortho) aç / kapat']];
+const NUM_2D = [['X,Y', 'Mutlak nokta (ör. 0,0)'], ['@dX,dY', 'Son noktaya göre (dikdörtgende genişlik,yükseklik)'], ['@L<açı', 'Son noktadan L uzunlukta, açıyla'], ['L', 'İmleç yönünde L mm (çizgi, taşı, kopyala) · daire çapı · ofset · radyus · açı'], ['R5', 'Daire yarıçapı'], ['Ø12', 'Çap'], ['X;Y', 'Türkçe ondalıkla nokta (10;2,5)']];
+const KEYS_SHEET = [['ESCAPE', 'Kapat'], ['CTRL+P', 'PDF'], ['CTRL+SHIFT+P', 'PNG'], ['Z', 'Büyüt / küçült'], ['K', 'Kesit ↔ izometrik']];
+function helpSections() {
+  const keyItems = [], cmdItems = [];
+  for (const c of commandRegistry.list()) {
+    for (const k of c.shortcuts) if (!(shellPalette && c.id === 'ui.commandPalette')) keyItems.push({ key: k, label: c.names.tr });
+    const words = [...new Set([...c.aliases.tr, ...c.aliases.en].map((w) => w.toLocaleUpperCase('tr-TR')))].slice(0, 4).join(' / ');
+    const pars = c.parameters.map((p) => (p.required ? p.name : '[' + p.name + ']')).join(' ');
+    cmdItems.push({ cmd: words + (pars ? ' ' + pars : ''), label: c.names.tr, note: c.description.tr || '' });
+  }
+  const s2 = [
+    { id: '2b-tus', title: '2B çizim: tuşlar', editable: false, items: KEYS_2D.map(([key, label]) => ({ key, label })) },
+    { id: '2b-komut', title: '2B çizim: komutlar (yaz + Enter)', editable: false, items: CAD2D_COMMANDS.map((c) => ({ cmd: c.names.slice(0, 3).map((w) => w.toLocaleUpperCase('tr-TR')).join(' / '), label: c.label })) },
+    { id: '2b-deger', title: '2B çizim: nokta ve değer girişi', editable: false, items: NUM_2D.map(([cmd, label]) => ({ cmd, label })) },
+  ];
+  const s3 = [
+    { id: 'makine', title: '3B tuşları (çizim alanı seçiliyken) — değiştirilebilir', items: keyItems },
+    { id: '3b-komut', title: '3B yazılı komutlar (Ctrl+K paletine yaz)', editable: false, items: cmdItems },
+    { id: 'resim', title: 'Teknik resim ekranı', editable: false, items: KEYS_SHEET.map(([key, label]) => ({ key, label })) },
+  ];
+  return document.getElementById('cad') ? [...s2, ...s3] : [...s3, ...s2];
+}
+const openKeysHelp = () => openHelp({ title: 'Klavye kısayolları · Makine', sections: helpSections(), onChange: rebindShortcuts });
+installHelpKey(() => ({ title: 'Klavye kısayolları · Makine', sections: helpSections(), onChange: rebindShortcuts }));
+registerCadCommand({
+  id: 'ui.help', names: { tr: 'Klavye kısayolları', en: 'Keyboard shortcuts' },
+  aliases: { tr: ['kısayollar', 'kısayol', 'tuşlar', 'yardım'], en: ['shortcuts', 'keys', 'help'] },
+  description: { tr: 'Bütün tuşlar ve komutlar; tuşları değiştir (? ya da F1)', en: 'All keys and commands; change keys (? or F1)' },
+  category: 'interface', execute: () => { openKeysHelp(); }
+});
 
 view.tabIndex = view.tabIndex >= 0 ? view.tabIndex : 0;
 view.addEventListener('pointerdown', () => {
@@ -5309,13 +5548,30 @@ view.addEventListener('pointerdown', () => {
 document.addEventListener('keydown', (event) => {
   // Sadece CAD çalışma alanı odaktayken kısayol yakala. Formlarda ve diğer panellerde yazıyı bozma.
   if (document.activeElement !== view && !view.contains(event.target)) return;
+  // 2B çizim / teknik resim ekranı açıkken 3B kısayolları çalışmaz (o ekranların kendi tuşları var)
+  if (document.getElementById('cad') || document.getElementById('sheetov') || document.getElementById('kbh')) return;
   const commandId = shortcutResolver.resolve(event);
   if (!commandId) return;
   event.preventDefault();
-  event.stopPropagation();
+  // aynı tuşu, komutun açtığı ekranın (teknik resim vb.) kendi dinleyicisi ikinci kez işlemesin
+  event.stopImmediatePropagation();
   // tuş basılı tutulunca: geri al / yinele tekrarlansın; parça oluşturma, silme, kaydetme tekrarlanmasın
   if (event.repeat && commandId !== 'edit.undo' && commandId !== 'edit.redo') return;
   commandDispatcher.dispatch(commandId, {}, { source: 'keyboard' }).catch(() => {});
+}, true);
+
+// Teknik resim ekranı: Esc kapatır, Ctrl+P PDF, Ctrl+Shift+P / P PNG, Z büyüt / küçült, K kesit ↔ izometrik
+document.addEventListener('keydown', (event) => {
+  const o = document.getElementById('sheetov');
+  if (!o || document.getElementById('cad')) return;
+  const t = event.target;
+  if (t && /^(input|textarea|select)$/i.test(t.tagName || '')) return;
+  const k = String(event.key || '').toLowerCase(), mod = event.ctrlKey || event.metaKey;
+  const press = (a) => { event.preventDefault(); event.stopImmediatePropagation(); const b = o.querySelector(`[data-sh="${a}"]`); if (b) b.click(); };
+  if (k === 'escape') press('close');
+  else if (mod && k === 'p') press(event.shiftKey ? 'png' : 'pdf');
+  else if (!mod && !event.altKey && k === 'z') press('zoom');
+  else if (!mod && !event.altKey && k === 'k') press('mode');
 }, true);
 
 // E2E ve ilerideki komut paleti / komut satırı aynı dispatcher'ı kullanır.
@@ -5348,7 +5604,7 @@ try {
 } catch (e) { /* bozuk kayıt: varsayılanla devam */ }
 
 // test / hata ayıklama için küçük kanca (arayüzü etkilemez)
-window.__app = { get param() { return { vars: paramVars, cfg: paramCfg, deger: paramState.deger, satir: paramState.satir, err: paramErr, rollTo }; }, get sheetInfo() { return sheetInfo; }, get drawCfg() { return drawCfg; }, get lathe() { return latheUI; }, get edgeSel() { return { n: edgeSels.length, g: edgeG ? edgeG.edges.length : 0, busy: edgeBusy, sel: edgeSels.map((e) => ({ type: e.type, mid: e.mid.map((v) => Math.round(v * 100) / 100) })) }; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, get weightMarkerCount() { return wgtGroup.children.length; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
+window.__app = { get param() { return { vars: paramVars, cfg: paramCfg, deger: paramState.deger, satir: paramState.satir, err: paramErr, rollTo }; }, get sheetInfo() { return sheetInfo; }, get drawCfg() { return drawCfg; }, get lathe() { return latheUI; }, get edgeSel() { return { n: edgeSels.length, g: edgeG ? edgeG.edges.length : 0, busy: edgeBusy, sel: edgeSels.map((e) => ({ type: e.type, mid: e.mid.map((v) => Math.round(v * 100) / 100) })) }; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, get weightMarkerCount() { return wgtGroup.children.length; }, get tab() { return tab; }, get hasSel() { return hasSel(); }, settings, section, measure, rebuild, refreshAll, THREE, camera };
 
 renderPanel();
 updateToolbar();

@@ -94,6 +94,70 @@ await T('2B: dikdörtgen + daire + ölçü çiz, geri al / ileri al, kalıcılı
   expect(await stat() >= 0, 'bozuk DXF sonrası uygulama çalışıyor');
 });
 
+await T('2B klavye (AutoCAD tarzı): REC 0,0 @100,50 · C merkez + çap / R · L @ ve @L<açı, boş Enter bitirir ve tekrarlar · fare yönünde mesafe · O 2,5 · Esc · Ctrl+Z / Y · F3 / F8 · yazı alanı ve 3B kısayolu karışmaz · 3B ile parça', 'A-2B', async ({ page }) => {
+  await act(page, 'cad2d'); await page.waitForSelector('#cad');
+  const A = async (a) => { await page.locator(`#cad [data-a="${a}"]`).first().click(); await page.waitForTimeout(60); };
+  await A('tab-file'); await A('f-clear'); await A('f-clear');
+  const ents = () => page.evaluate(() => window.__cad2d.doc.ents.map((e) => ({ t: e.t, a: e.a, b: e.b, c: e.c, r: e.r })));
+  const st = () => page.evaluate(() => ({ tool: window.__cad2d.tool, pts: window.__cad2d.pts.length, cmd: window.__cad2d.cmd, osnap: window.__cad2d.osnap, ortho: window.__cad2d.ortho }));
+  const cmd = async (...lines) => { for (const l of lines) { if (l) await page.keyboard.type(l); await page.keyboard.press('Enter'); await page.waitForTimeout(40); } };
+  const near = (p, q) => p && q && Math.hypot(p[0] - q[0], p[1] - q[1]) < 1e-6;
+  // dikdörtgen: 4 çizgi, 100 × 50
+  await cmd('REC', '0,0', '@100,50');
+  let E = await ents();
+  expect(E.length === 4 && E.every((e) => e.t === 'line'), 'REC 4 çizgi: ' + E.length);
+  expect(E.some((e) => near(e.a, [100, 0]) || near(e.b, [100, 0])) && E.some((e) => near(e.a, [100, 50]) || near(e.b, [100, 50])), 'köşeler 100 × 50');
+  // daire: çap ve R
+  await cmd('C', '50,25', '20'); await cmd('C', '0,0', 'R5');
+  E = await ents(); const cs = E.filter((e) => e.t === 'circle');
+  expect(cs.length === 2 && cs.some((c) => near(c.c, [50, 25]) && Math.abs(c.r - 10) < 1e-9) && cs.some((c) => near(c.c, [0, 0]) && Math.abs(c.r - 5) < 1e-9), 'daireler: ' + JSON.stringify(cs));
+  // çizgi zinciri: mutlak, göreli, kutupsal; boş Enter bitirir
+  const n0 = (await ents()).length;
+  await page.keyboard.type('l'); await page.keyboard.press(' ');   // boşluk = Enter
+  await cmd('200,0', '@30,0', '@0,30', '@30<180', '');
+  E = await ents(); const L = E.slice(n0);
+  expect(L.length === 3 && near(L[0].a, [200, 0]) && near(L[0].b, [230, 0]) && near(L[1].b, [230, 30]) && near(L[2].b, [200, 30]), 'zincir: ' + JSON.stringify(L));
+  expect((await st()).pts === 0, 'boş Enter komutu bitirdi');
+  await cmd(''); expect((await st()).tool === 'line', 'boş Enter son komutu (L) tekrarladı');
+  // Esc: başlamış komutu iptal eder
+  await cmd('300,300'); expect((await st()).pts === 1, 'başlangıç noktası kondu');
+  await page.keyboard.press('Escape'); expect((await st()).pts === 0, 'Esc iptal etti');
+  // fare yönünde mesafe (masaüstü): L, nokta, imleci sağa götür, 40 yaz
+  const box = await page.locator('#cad canvas').boundingBox();
+  await cmd('L', '0,-40');
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5); await page.mouse.move(box.x + box.width * 0.9, box.y + box.height * 0.5);
+  const n1 = (await ents()).length; await cmd('40', '');
+  E = await ents(); const dl = E[n1];
+  expect(E.length === n1 + 1 && near(dl.a, [0, -40]) && Math.abs(Math.hypot(dl.b[0] - dl.a[0], dl.b[1] - dl.a[1]) - 40) < 1e-6, 'imleç yönünde 40 mm: ' + JSON.stringify(dl));
+  // ofset mesafesi: "2,5" sayı olarak
+  await cmd('O', '2,5');
+  expect((await st()).tool === 'offset' && await page.locator('#cad [data-k="off"]').inputValue() === '2.5', 'ofset 2,5 mm');
+  // geri al / ileri al
+  const n2 = (await ents()).length;
+  await page.keyboard.press('Control+z'); expect((await ents()).length === n2 - 1, 'Ctrl+Z');
+  await page.keyboard.press('Control+y'); expect((await ents()).length === n2, 'Ctrl+Y');
+  // F3 / F8
+  const s0 = await st(); await page.keyboard.press('F3'); await page.keyboard.press('F8');
+  const s1 = await st(); expect(s1.osnap === !s0.osnap && s1.ortho === !s0.ortho, 'F3 yakalama, F8 dik çizim');
+  await page.keyboard.press('F3'); await page.keyboard.press('F8');
+  // bilinmeyen komut
+  await cmd('QQQ'); expect(await page.locator('#cad-hint.err').count() === 1, 'bilinmeyen komut uyarısı');
+  // yazı alanında harf komut sayılmaz
+  await cmd('L'); await page.locator('#cad [data-k="x"]').fill('12');
+  await page.locator('#cad [data-k="x"]').press('c'); expect((await st()).cmd === '' && (await st()).tool === 'line', 'yazı alanı komut satırına karışmadı');
+  await page.locator('#cad [data-k="x"]').press('Escape');
+  // 3B kısayolları 2B açıkken çalışmaz (C = silindir değil, daire)
+  const p0 = await page.evaluate(() => window.__app.parts.length);
+  await page.evaluate(() => document.getElementById('view') && document.getElementById('view').focus());
+  await cmd('c'); await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => window.__app.parts.length) === p0 && (await st()).tool === 'circle', '2B açıkken 3B parça eklenmedi');
+  // temiz şekil → 3B
+  await A('tab-file'); await A('f-clear'); await A('f-clear');
+  await cmd('REC', '0,0', '@40,20', '3B');
+  await page.waitForTimeout(500);
+  expect(await page.locator('#cad').count() === 0 && await page.evaluate(() => window.__app.parts.length) === p0 + 1, '3B komutu parça yaptı');
+});
+
 /* ---------- B. 3B CAD ---------- */
 await T('3B: kutu + ölçü + yuvarlama + oyuk (delik), kaydet, sayfayı yenile, aç', 'B-3B', async ({ page }) => {
   const c0 = await chips(page);
@@ -1420,6 +1484,127 @@ await T('Komutlar: MOVE / TAŞI 2,5 / ROTATE, ƒx bağlı konum korunur, HOLE ç
   expect(Math.abs((moved.z || 0) - ((last.z || 0) + 3)) < 1e-9, 'paletten MOVE: ' + JSON.stringify(moved));
 });
 
+await T('Komutlar 2: BORU / DİŞLİ / SAC / KONSTRÜKSİYON / SÜPÜRME / LOFT, KABUK 2, Ctrl+D, AYNA X, DİZİ, DAİRESEL DİZİ, H gizle, OYUK / BİRLEŞTİR, GİT ve PageDown sekme, 1–4 görünüm, KESİT X, M ölçüm, Esc, BİRİM', 'L-Komut', async ({ page }) => {
+  const n = () => page.evaluate(() => window.__app.parts.length);
+  const last = () => page.evaluate(() => { const P = window.__app.parts; const p = P[P.length - 1]; return { type: p.type, op: p.op, hidden: !!p.hidden, gear: !!p.gear }; });
+  const line = (l) => page.evaluate((l) => window.__commandSystem.runLine(l).then((r) => r.result).catch((e) => 'HATA:' + e.code), l);
+  const focusView = () => page.evaluate(() => document.getElementById('view').focus());
+  const key = async (k) => { await focusView(); await page.keyboard.press(k); await page.waitForTimeout(200); };
+  let c = await n();
+  for (const [cmd, type] of [['BORU', 'tube'], ['SAC', 'sheet'], ['KONSTRÜKSİYON', 'frame'], ['SÜPÜRME', 'sweep'], ['LOFT', 'loft']]) {
+    await line(cmd); expect(await n() === c + 1 && (await last()).type === type, cmd + ' → ' + type + ': ' + JSON.stringify(await last())); c++;
+  }
+  await line('DİŞLİ'); expect(await n() === c + 1 && (await last()).gear, 'DİŞLİ'); c++;
+  // kabuk: dolu kutuda iç boşluk parçası
+  await line('KUTU 50 50 50'); c++;
+  await line('KABUK 2'); expect(await n() === c + 1 && (await last()).op === 'sub', 'KABUK 2 iç boşluk ekledi'); c++;
+  await line('KUTU 20 20 20'); c++;
+  await key('Control+d'); expect(await n() === c + 1, 'Ctrl+D çoğalttı'); c++;
+  expect(String(await line('AYNA Q')) === 'false' && await n() === c, 'yanlış ayna ekseni reddedildi');
+  await line('AYNA X'); expect(await n() === c + 1, 'AYNA X'); c++;
+  await line('DİZİ 3 60 0 0'); expect(await n() === c + 3, 'DİZİ 3 → 3 kopya'); c += 3;
+  await line('DAİRESEL DİZİ 4'); expect(await n() === c + 3, 'DAİRESEL DİZİ 4 → 3 kopya'); c += 3;
+  // gizle / göster, oyuk / birleştir (seçili = son parça)
+  const cnt = (f) => page.evaluate((f) => window.__app.parts.filter((p) => (f === 'hidden' ? p.hidden : p.op === 'sub')).length, f);
+  const h0 = await cnt('hidden'), s0 = await cnt('sub');
+  await key('h'); expect(await cnt('hidden') === h0 + 1, 'H gizledi'); await key('h'); expect(await cnt('hidden') === h0, 'H geri getirdi');
+  await line('OYUK'); expect(await cnt('sub') === s0 + 1, 'OYUK'); await line('BİRLEŞTİR'); expect(await cnt('sub') === s0, 'BİRLEŞTİR');
+  // sekmeler
+  await line('GİT KAYNAK'); expect(await page.evaluate(() => window.__app.tab) === 'weld', 'GİT KAYNAK');
+  await line('GİT CNC'); expect(await page.evaluate(() => window.__app.tab) === 'cam', 'GİT CNC (eş anlamlı)');
+  await key('PageDown'); expect(await page.evaluate(() => window.__app.tab) === 'occt', 'PageDown sonraki sekme');
+  await key('PageUp'); expect(await page.evaluate(() => window.__app.tab) === 'cam', 'PageUp önceki sekme');
+  expect(String(await line('GİT YOKBÖYLE')) === 'false', 'olmayan sekme reddedildi');
+  await line('GİT ÖLÇÜ');
+  // görünümler: kamera yönü
+  const dir = () => page.evaluate(() => { const A = window.__app, c = A.camera; const t = new A.THREE.Vector3(); c.getWorldDirection(t); return [t.x, t.y, t.z].map((v) => Math.round(v * 100) / 100); });
+  await key('1'); let d = await dir(); expect(Math.abs(d[2]) > 0.98, 'önden: ' + d);
+  await key('2'); d = await dir(); expect(Math.abs(d[1]) > 0.98, 'üstten: ' + d);
+  await key('3'); d = await dir(); expect(Math.abs(d[0]) > 0.98, 'yandan: ' + d);
+  await key('4'); d = await dir(); expect(Math.abs(d[0]) > 0.3 && Math.abs(d[1]) > 0.3 && Math.abs(d[2]) > 0.3, 'izometrik: ' + d);
+  await line('GÖRÜNÜM ÜST'); d = await dir(); expect(Math.abs(d[1]) > 0.98, 'GÖRÜNÜM ÜST: ' + d);
+  // kesit, ölçüm, Esc
+  await line('KESİT X'); expect(await page.evaluate(() => window.__app.section.on && window.__app.section.axis === 'x'), 'KESİT X');
+  await line('KESİT'); expect(await page.evaluate(() => !window.__app.section.on), 'KESİT kapattı');
+  await key('m'); expect(await page.evaluate(() => window.__app.measure.on), 'M ölçüm açtı');
+  await key('Escape'); expect(await page.evaluate(() => !window.__app.measure.on), 'Esc ölçümü kapattı');
+  expect(await page.evaluate(() => window.__app.hasSel), 'seçim var');
+  await key('Escape'); expect(await page.evaluate(() => !window.__app.hasSel), 'Esc seçimi bıraktı');
+  // birim
+  await line('BİRİM CM'); expect(await page.evaluate(() => window.__app.settings.unit) === 'cm', 'BİRİM CM');
+  await line('BİRİM MM'); expect(await page.evaluate(() => window.__app.settings.unit) === 'mm', 'BİRİM MM');
+});
+
+await T('Komutlar 3: TEKNİK RESİM (Z, Esc), Ctrl+P PDF, STL, PARÇA LİSTESİ, AĞIRLIK RAPORU, TAKIM YOLU + Ctrl+G G-kodu, F9 sekmede çalıştır, ÜRETİLEBİLİRLİK', 'L-Komut', async ({ page }) => {
+  const line = (l) => page.evaluate((l) => window.__commandSystem.runLine(l).then((r) => r.result).catch((e) => 'HATA:' + e.code), l);
+  const focusView = () => page.evaluate(() => document.getElementById('view').focus());
+  // teknik resim ekranı ve tuşları
+  await line('TEKNİK RESİM'); await page.waitForSelector('#sheetov');
+  const zb = page.locator('#sheetov [data-sh="zoom"]'); const z0 = await zb.innerText();
+  await page.keyboard.press('z'); expect(await zb.innerText() !== z0, 'Z büyüttü');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150); expect(await page.locator('#sheetov').count() === 0, 'Esc teknik resmi kapattı');
+  const p0 = await page.evaluate(() => window.__app.parts.length);
+  await focusView();
+  const pdf = await download(page, () => page.keyboard.press('Control+p'));
+  expect(/\.pdf$/.test(pdf.name) && /^%PDF/.test(pdf.text), 'Ctrl+P teknik resim PDF: ' + pdf.name);
+  await page.keyboard.press('b'); expect(await page.evaluate(() => window.__app.parts.length) === p0, 'teknik resim açıkken B parça eklemedi');
+  await page.keyboard.press('Escape');
+  // dışa aktarma
+  const stl = await download(page, () => line('STL')); expect(/\.stl$/i.test(stl.name) && stl.size > 84, 'STL: ' + stl.name);
+  const bom = await download(page, () => line('PARÇA LİSTESİ')); expect(/\.csv$/i.test(bom.name), 'parça listesi CSV: ' + bom.name);
+  const wg = await download(page, () => line('AĞIRLIK RAPORU')); expect(/\.pdf$/i.test(wg.name), 'ağırlık raporu: ' + wg.name);
+  expect(await page.evaluate(() => window.__app.tab) === 'wgt', 'ağırlık sekmesine geçti');
+  // CNC: 3 eksen takım yolu ve G-kodu
+  await line('GİT CNC'); await act(page, 'c5-mode-3').catch(() => {});
+  await line('TAKIM YOLU'); await waitText(page, '#tabbody', /G-kodunu indir|⛔|hata/i, 120000);
+  await focusView();
+  const g = await download(page, () => page.keyboard.press('Control+g'));
+  expect(/G21/.test(g.text) && /M30/.test(g.text), 'Ctrl+G G-kodu: ' + g.name);
+  // F9: bulunulan sekmede çalıştır; çalıştırılacak işi olmayan sekmede uyarı
+  await line('GİT ÖLÇÜ'); await focusView(); await page.keyboard.press('F9'); await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.__app.tab) === 'dims', 'F9 ölçü sekmesinde bir şey çalıştırmadı');
+  await line('ÜRETİLEBİLİRLİK'); expect(await page.evaluate(() => window.__app.tab) === 'mfg', 'ÜRETİLEBİLİRLİK üretim sekmesini açtı');
+  await waitText(page, '#tabbody', /Yeniden analiz et|ÜRETİMİ ANALİZ ET/, 60000);
+});
+
+await T('Kısayol yardımı: ? açar, arama, B tuşunu Q yap (Q kutu ekler, B eklemez), çakışma uyarısı, varsayılana dön; KISAYOLLAR komutu; 2B ekranında 2B bölümü önce', 'L-Komut', async ({ page }) => {
+  const n = () => page.evaluate(() => window.__app.parts.length);
+  const focusView = () => page.evaluate(() => document.getElementById('view').focus());
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await page.keyboard.press('?'); await page.waitForSelector('#kbh');
+  // başlıklar ekranda büyük harfle gösterilir (CSS); denetim yazının kendisiyle (textContent) yapılır
+  expect(/3B tuşları/.test(await page.locator('#kbh').textContent()), 'yardım açıldı, 3B bölümü var');
+  await page.locator('#kbh input').fill('geri al'); await page.waitForTimeout(100);
+  expect(/Geri al/.test(await page.locator('#kbh .ls').innerText()) && !/Kutu oluştur/.test(await page.locator('#kbh .ls').innerText()), 'arama süzdü');
+  await page.locator('#kbh input').fill('Kutu oluştur');
+  const row = page.locator('#kbh .rw', { hasText: 'Kutu oluştur' }).filter({ has: page.locator('button') }).first();
+  // çakışma: C silindirin tuşu
+  await row.locator('button').click(); await page.keyboard.press('c');
+  expect(/zaten/.test(await page.locator('#kbh .msg').innerText()), 'çakışan tuş reddedildi');
+  await row.locator('button').click(); await page.keyboard.press('q');
+  expect(/Q/.test(await row.locator('kbd').innerText()), 'tuş Q oldu');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(100); expect(await page.locator('#kbh').count() === 0, 'Esc yardımı kapattı');
+  const c0 = await n();
+  await focusView(); await page.keyboard.press('q'); await page.waitForTimeout(200); expect(await n() === c0 + 1, 'Q kutu ekledi');
+  await focusView(); await page.keyboard.press('b'); await page.waitForTimeout(200); expect(await n() === c0 + 1, 'B artık kutu eklemiyor');
+  // yenileyince de kalır, sonra varsayılana dön
+  await page.reload(); await waitReady(page);
+  const c1 = await n();
+  await focusView(); await page.keyboard.press('q'); await page.waitForTimeout(200); expect(await n() === c1 + 1, 'yenilemeden sonra da Q');
+  await page.evaluate(() => window.__commandSystem.runLine('KISAYOLLAR')); await page.waitForSelector('#kbh');
+  await page.locator('#kbh [data-h="reset"]').click(); expect(/varsayılana döndü/.test(await page.locator('#kbh .msg').innerText()), 'varsayılana dön');
+  await page.keyboard.press('Escape');
+  const c2 = await n();
+  await focusView(); await page.keyboard.press('b'); await page.waitForTimeout(200); expect(await n() === c2 + 1, 'B yeniden kutu ekliyor');
+  // 2B ekranında ? → 2B bölümleri önce
+  await act(page, 'cad2d'); await page.waitForSelector('#cad');
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await page.keyboard.press('?'); await page.waitForSelector('#kbh');
+  expect(/^2B çizim/.test(await page.locator('#kbh h3').first().textContent()), '2B bölümü önce: ' + await page.locator('#kbh h3').first().textContent());
+  await page.keyboard.press('l'); expect(await page.evaluate(() => window.__cad2d.cmd) === '', 'yardım açıkken 2B komut satırına yazılmadı');
+  await page.keyboard.press('Escape'); expect(await page.locator('#kbh').count() === 0 && await page.locator('#cad').count() === 1, 'Esc yalnız yardımı kapattı');
+});
+
 /* ---------- K. Proje bütünlüğü ---------- */
 await T('Proje bütünlüğü: parça + malzeme + OCCT parçası + 5 eksen ayarları + analiz sonucu kaydedilip açılır', 'K-Proje', async ({ page }) => {
   await tab(page, 'dims'); await setK(page, 'w', 80); await setK(page, 'h', 20); await setK(page, 'l', 40);
@@ -1676,6 +1861,32 @@ await TX('Tekstil teknik çizim: gömlek şablonu, simetrik çizgi, eğri, ölç
   await page.waitForFunction(() => /Ön \d+ · Arka \d+/.test(document.querySelector('#main').innerText));
   const c3 = (await txBody(page)).match(/Ön (\d+) · Arka (\d+)/);
   expect(c3[0] === c2[0], 'yeniden uygulamada öğe kaybı yok: ' + c3[0] + ' / ' + c2[0]);
+});
+
+await TX('Tekstil klavye: 1–9 ve PageDown / PageUp sekme, Ctrl+S kaydet; teknik çizimde L / V / N araç, Enter bitir, 1–9 görünüş, Esc → Seç → Kapat; yazı alanı karışmaz', async ({ page }) => {
+  await page.fill('#np-name', 'Klavye E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await page.selectOption('#ap-type', 'gomlek'); await page.fill('#ap-code', 'GM-K'); await A(page, 'add-prod');
+  await page.locator('#ap-code').press('Escape');
+  const on = (v) => page.locator(`[data-a="tab"][data-v="${v}"].on`).count();
+  await page.keyboard.press('2'); await page.waitForTimeout(150); expect(await on('draw') === 1, '2 → Teknik çizim sekmesi');
+  await page.keyboard.press('PageDown'); await page.waitForTimeout(150); expect(await on('pat') === 1, 'PageDown → Kalıp');
+  await page.keyboard.press('PageUp'); await page.waitForTimeout(150); expect(await on('draw') === 1, 'PageUp → Teknik çizim');
+  await page.keyboard.press('Control+s'); await page.waitForFunction(() => /Kaydedildi/.test(document.getElementById('toast').textContent), null, { timeout: 4000 });
+  await A(page, 'add-sketch'); await page.waitForSelector('#skx canvas');
+  const toolOn = (v) => page.locator(`#skx [data-k="tool"][data-v="${v}"].on`).count();
+  await page.keyboard.press('l'); expect(await toolOn('line') === 1, 'L → çizgi aracı');
+  for (const [x, y] of [['5', '30'], ['20', '30']]) { await page.fill('#skx-x', x); await page.fill('#skx-y', y); await page.locator('#skx [data-k="add-pt"]').click(); }
+  await page.keyboard.press('Enter'); await page.waitForTimeout(150);
+  await page.keyboard.press('v'); expect(await toolOn('sel') === 1, 'V → seç aracı');
+  await page.keyboard.press('n'); expect(await toolOn('point') === 1, 'N → nokta aracı');
+  // yazı alanında harf araç değiştirmez
+  const fld = page.locator('#skx input:visible').first();
+  if (await fld.count()) { await fld.focus(); await page.keyboard.press('l'); expect(await toolOn('point') === 1, 'yazı alanında L araç değiştirmedi'); await page.keyboard.press('Escape'); }
+  const views = page.locator('#skx [data-k="view"]');
+  if (await views.count() > 1) { await page.keyboard.press('2'); await page.waitForTimeout(100); expect(await page.locator('#skx [data-k="view"]').nth(1).evaluate((b) => b.classList.contains('on')), '2 → ikinci görünüş'); await page.keyboard.press('1'); }
+  await page.keyboard.press('Escape'); expect(await toolOn('sel') === 1, 'Esc → seç aracı');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(200); expect(await page.locator('#skx').count() === 0, 'Esc → teknik çizim kapandı');
+  expect(await on('draw') === 1, 'proje sayfasına dönüldü');
 });
 
 await TX('Tekstil kalıp: beden tablosundan gömlek bloğu, 7 dikiş eşleşmesi tutar, kenar payı / çıt, sayıyla yeni parça, 1:1 PDF ve SVG, kaydet ve yeniden aç', async ({ page }) => {
