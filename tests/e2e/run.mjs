@@ -94,6 +94,70 @@ await T('2B: dikdörtgen + daire + ölçü çiz, geri al / ileri al, kalıcılı
   expect(await stat() >= 0, 'bozuk DXF sonrası uygulama çalışıyor');
 });
 
+await T('2B klavye (AutoCAD tarzı): REC 0,0 @100,50 · C merkez + çap / R · L @ ve @L<açı, boş Enter bitirir ve tekrarlar · fare yönünde mesafe · O 2,5 · Esc · Ctrl+Z / Y · F3 / F8 · yazı alanı ve 3B kısayolu karışmaz · 3B ile parça', 'A-2B', async ({ page }) => {
+  await act(page, 'cad2d'); await page.waitForSelector('#cad');
+  const A = async (a) => { await page.locator(`#cad [data-a="${a}"]`).first().click(); await page.waitForTimeout(60); };
+  await A('tab-file'); await A('f-clear'); await A('f-clear');
+  const ents = () => page.evaluate(() => window.__cad2d.doc.ents.map((e) => ({ t: e.t, a: e.a, b: e.b, c: e.c, r: e.r })));
+  const st = () => page.evaluate(() => ({ tool: window.__cad2d.tool, pts: window.__cad2d.pts.length, cmd: window.__cad2d.cmd, osnap: window.__cad2d.osnap, ortho: window.__cad2d.ortho }));
+  const cmd = async (...lines) => { for (const l of lines) { if (l) await page.keyboard.type(l); await page.keyboard.press('Enter'); await page.waitForTimeout(40); } };
+  const near = (p, q) => p && q && Math.hypot(p[0] - q[0], p[1] - q[1]) < 1e-6;
+  // dikdörtgen: 4 çizgi, 100 × 50
+  await cmd('REC', '0,0', '@100,50');
+  let E = await ents();
+  expect(E.length === 4 && E.every((e) => e.t === 'line'), 'REC 4 çizgi: ' + E.length);
+  expect(E.some((e) => near(e.a, [100, 0]) || near(e.b, [100, 0])) && E.some((e) => near(e.a, [100, 50]) || near(e.b, [100, 50])), 'köşeler 100 × 50');
+  // daire: çap ve R
+  await cmd('C', '50,25', '20'); await cmd('C', '0,0', 'R5');
+  E = await ents(); const cs = E.filter((e) => e.t === 'circle');
+  expect(cs.length === 2 && cs.some((c) => near(c.c, [50, 25]) && Math.abs(c.r - 10) < 1e-9) && cs.some((c) => near(c.c, [0, 0]) && Math.abs(c.r - 5) < 1e-9), 'daireler: ' + JSON.stringify(cs));
+  // çizgi zinciri: mutlak, göreli, kutupsal; boş Enter bitirir
+  const n0 = (await ents()).length;
+  await page.keyboard.type('l'); await page.keyboard.press(' ');   // boşluk = Enter
+  await cmd('200,0', '@30,0', '@0,30', '@30<180', '');
+  E = await ents(); const L = E.slice(n0);
+  expect(L.length === 3 && near(L[0].a, [200, 0]) && near(L[0].b, [230, 0]) && near(L[1].b, [230, 30]) && near(L[2].b, [200, 30]), 'zincir: ' + JSON.stringify(L));
+  expect((await st()).pts === 0, 'boş Enter komutu bitirdi');
+  await cmd(''); expect((await st()).tool === 'line', 'boş Enter son komutu (L) tekrarladı');
+  // Esc: başlamış komutu iptal eder
+  await cmd('300,300'); expect((await st()).pts === 1, 'başlangıç noktası kondu');
+  await page.keyboard.press('Escape'); expect((await st()).pts === 0, 'Esc iptal etti');
+  // fare yönünde mesafe (masaüstü): L, nokta, imleci sağa götür, 40 yaz
+  const box = await page.locator('#cad canvas').boundingBox();
+  await cmd('L', '0,-40');
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5); await page.mouse.move(box.x + box.width * 0.9, box.y + box.height * 0.5);
+  const n1 = (await ents()).length; await cmd('40', '');
+  E = await ents(); const dl = E[n1];
+  expect(E.length === n1 + 1 && near(dl.a, [0, -40]) && Math.abs(Math.hypot(dl.b[0] - dl.a[0], dl.b[1] - dl.a[1]) - 40) < 1e-6, 'imleç yönünde 40 mm: ' + JSON.stringify(dl));
+  // ofset mesafesi: "2,5" sayı olarak
+  await cmd('O', '2,5');
+  expect((await st()).tool === 'offset' && await page.locator('#cad [data-k="off"]').inputValue() === '2.5', 'ofset 2,5 mm');
+  // geri al / ileri al
+  const n2 = (await ents()).length;
+  await page.keyboard.press('Control+z'); expect((await ents()).length === n2 - 1, 'Ctrl+Z');
+  await page.keyboard.press('Control+y'); expect((await ents()).length === n2, 'Ctrl+Y');
+  // F3 / F8
+  const s0 = await st(); await page.keyboard.press('F3'); await page.keyboard.press('F8');
+  const s1 = await st(); expect(s1.osnap === !s0.osnap && s1.ortho === !s0.ortho, 'F3 yakalama, F8 dik çizim');
+  await page.keyboard.press('F3'); await page.keyboard.press('F8');
+  // bilinmeyen komut
+  await cmd('QQQ'); expect(await page.locator('#cad-hint.err').count() === 1, 'bilinmeyen komut uyarısı');
+  // yazı alanında harf komut sayılmaz
+  await cmd('L'); await page.locator('#cad [data-k="x"]').fill('12');
+  await page.locator('#cad [data-k="x"]').press('c'); expect((await st()).cmd === '' && (await st()).tool === 'line', 'yazı alanı komut satırına karışmadı');
+  await page.locator('#cad [data-k="x"]').press('Escape');
+  // 3B kısayolları 2B açıkken çalışmaz (C = silindir değil, daire)
+  const p0 = await page.evaluate(() => window.__app.parts.length);
+  await page.evaluate(() => document.getElementById('view') && document.getElementById('view').focus());
+  await cmd('c'); await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => window.__app.parts.length) === p0 && (await st()).tool === 'circle', '2B açıkken 3B parça eklenmedi');
+  // temiz şekil → 3B
+  await A('tab-file'); await A('f-clear'); await A('f-clear');
+  await cmd('REC', '0,0', '@40,20', '3B');
+  await page.waitForTimeout(500);
+  expect(await page.locator('#cad').count() === 0 && await page.evaluate(() => window.__app.parts.length) === p0 + 1, '3B komutu parça yaptı');
+});
+
 /* ---------- B. 3B CAD ---------- */
 await T('3B: kutu + ölçü + yuvarlama + oyuk (delik), kaydet, sayfayı yenile, aç', 'B-3B', async ({ page }) => {
   const c0 = await chips(page);

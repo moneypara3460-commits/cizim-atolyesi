@@ -7,6 +7,7 @@ import {
   stretchToLength, setRadius, matchDims, applyDims, findHatchRegion, hatchSegs, pointInPoly, rdimParts, rdimText, angDimFrom, adimParts, adimText, adimTextPos, mapPoints, arrayRect, arrayPolar, snapPoints, nearestOn, closedLoops, toDXF, parseDXF, dimLine, dimParts, dimText, arcSpan, arcEnds, entBBox, dist, normA, ACI,
 } from './cad2d-geom.js?v=20261112u';
 import { openPhotoImport } from './photoimport.js?v=20261112u';
+import { parseLine, directPoint, polarPoint, isTypingKey, COMMANDS } from './cad2d-keys.js?v=20261122a';
 
 const KEY = 'cizim:2d';
 const CSS = `
@@ -36,6 +37,10 @@ const CSS = `
 #cad input, #cad select { box-sizing: border-box; width: 100%; font: inherit; font-size: 15px; color: #fff; background: #1e293b; border: 0; border-radius: 8px; padding: 7px 9px; }
 #cad .bot { padding-bottom: 8px; max-height: 30vh; overflow-y: auto; }
 #cad .bot > button { flex: 1 1 44%; min-width: 130px; white-space: normal; line-height: 1.25; }
+#cad .cmdl { position: absolute; left: 8px; right: 60px; bottom: 30px; font: 600 14px ui-monospace, Menlo, Consolas, monospace; color: #e2e8f0;
+             background: rgba(2,6,23,.92); border: 1px solid #38bdf8; border-radius: 7px; padding: 6px 9px; pointer-events: none; }
+#cad .cmdl[hidden] { display: none; }
+#cad .cmdl small { display: block; font: 500 11px system-ui, sans-serif; color: #94a3b8; margin-top: 2px; }
 #cad .lb { flex: 1 0 100%; font-size: 12px; color: #cbd5e1; font-weight: 700; padding: 3px 2px 0; }
 #cad .ly { flex: 1 0 100%; display: flex; gap: 5px; align-items: center; }
 #cad .ly .sw { width: 22px; height: 22px; border-radius: 5px; flex: none; }
@@ -126,6 +131,7 @@ export function openCad2D(opts = {}) {
     <div class="cv"><canvas></canvas>
       <div class="zoom"><button data-a="zin">+</button><button data-a="zout">−</button><button data-a="zfit">⌖</button></div>
       <div class="stat" id="cad-stat"></div>
+      <div class="cmdl" id="cad-cmd" hidden></div>
     </div>
     <div class="r bot" id="cad-fields"></div>`;
   document.body.appendChild(root);
@@ -602,6 +608,8 @@ export function openCad2D(opts = {}) {
   let pinch = null, down = null, panning = null;
   const local = (e) => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const pointTools = ['line', 'circle', 'arc', 'rect', 'dim', 'text', 'move', 'copy', 'rotate', 'mirror'];
+  const wantsPointNow = () => pointTools.includes(tool) || (tool === 'offset' && pickA) || (tool === 'array' && F.amode === 'polar' && sel.size > 0);
+  let hover = null;            // fare imlecinin yakalanmış noktası (yalnız fare; dokunmada yok)
   cv.addEventListener('pointerdown', (e) => {
     cv.setPointerCapture(e.pointerId);
     ptrs.set(e.pointerId, local(e));
@@ -613,12 +621,15 @@ export function openCad2D(opts = {}) {
     if (ptrs.size > 2) return;
     const [sx, sy] = local(e);
     down = { sx, sy, moved: false };
-    const wantsPoint = pointTools.includes(tool) || (tool === 'offset' && pickA) || (tool === 'array' && F.amode === 'polar' && sel.size > 0);
+    const wantsPoint = wantsPointNow();
     if (wantsPoint) { aim = snapAt(sx, sy); draw(); }
     else panning = { sx, sy, ox: V.ox, oy: V.oy };
   });
   cv.addEventListener('pointermove', (e) => {
-    if (!ptrs.has(e.pointerId)) return;
+    if (!ptrs.has(e.pointerId)) {
+      if (e.pointerType === 'mouse' && !ptrs.size) { const [sx, sy] = local(e); hover = wantsPointNow() ? snapAt(sx, sy) : null; aim = hover; draw(); }
+      return;
+    }
     ptrs.set(e.pointerId, local(e));
     if (ptrs.size >= 2 && pinch) {
       const a = [...ptrs.values()];
@@ -645,11 +656,12 @@ export function openCad2D(opts = {}) {
     placePoint(a.p);
   }
   cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && !ptrs.size && hover) { hover = null; aim = null; draw(); } });
   cv.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); pinch = null; down = null; aim = null; panning = null; draw(); });
   cv.addEventListener('wheel', (e) => { e.preventDefault(); const [sx, sy] = local(e); zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, sx, sy); draw(); }, { passive: false });
 
   /* ---------- düğmeler ---------- */
-  function close() { ro.disconnect(); clearTimeout(saveT); try { localStorage.setItem(KEY, snap()); } catch (e) { /* */ } root.remove(); if (opts.onClose) opts.onClose(); }
+  function close() { document.removeEventListener('keydown', onKey, true); if (window.__cad2d === api) delete window.__cad2d; ro.disconnect(); clearTimeout(saveT); try { localStorage.setItem(KEY, snap()); } catch (e) { /* */ } root.remove(); if (opts.onClose) opts.onClose(); }
   function download(blob, name) {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -690,7 +702,11 @@ export function openCad2D(opts = {}) {
   root.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b || !b.dataset.a) return;
-    const a = b.dataset.a;
+    // klavye odağı düğmede kalmasın: Enter / Boşluk komut satırına gitsin, düğmeye yeniden basmasın
+    b.blur();
+    doAct(b.dataset.a, b);
+  });
+  function doAct(a, b = null) {
     if (a !== 'f-clear') clearArm = false;
     if (a === 'close') { close(); return; }
     if (a === 'undo' || a === 'redo') {
@@ -730,7 +746,7 @@ export function openCad2D(opts = {}) {
     if (a === 'sel-none') { sel.clear(); refresh(); return; }
     if (a === 'sel-del') { commit(); doc.ents = doc.ents.filter((x) => !(sel.has(x.id) && editable(x))); sel.clear(); changed(); refresh(); return; }
     // katmanlar
-    const L = b.dataset.n ? doc.layers.find((l) => l.name === decodeURIComponent(b.dataset.n)) : null;
+    const L = b && b.dataset.n ? doc.layers.find((l) => l.name === decodeURIComponent(b.dataset.n)) : null;
     if (a === 'ly-cur' && L) { doc.cur = L.name; save(); refresh(); return; }
     if (a === 'ly-col' && L) { commit(); L.aci = ACI_LIST[(ACI_LIST.indexOf(L.aci) + 1) % ACI_LIST.length]; changed(); refresh(); return; }
     if (a === 'ly-lt' && L) { commit(); const k = Object.keys(LT_NAME); L.lt = k[(k.indexOf(L.lt || 'CONTINUOUS') + 1) % k.length]; changed(); refresh(); return; }
@@ -845,7 +861,7 @@ export function openCad2D(opts = {}) {
       if (!clearArm) { clearArm = true; refresh(); return; }
       clearArm = false; commit(); doc.ents = []; sel.clear(); reset(); changed(); refresh(); return;
     }
-  });
+  }
   function scaleRef(e) { return e.t === 'line' ? dist(e.a, e.b) : 2 * e.r; }
   function scaleEnt(e, f) {
     const o = mapPoints(e, (p) => [p[0] * f, p[1] * f]);
@@ -921,7 +937,143 @@ export function openCad2D(opts = {}) {
   });
   root.addEventListener('change', (e) => { if (e.target.dataset && e.target.dataset.k === 'grid') grid = parseFloat(e.target.value) || 0; });
 
+  /* ---------- klavye (AutoCAD tarzı komut satırı) ---------- */
+  // Harf / rakam yazılınca komut satırı açılır; Enter ya da Boşluk çalıştırır. Boş Enter: komutu bitirir, komut
+  // yoksa son komutu tekrarlar. Esc: yazılanı, sonra komutu ve seçimi iptal eder. Ayrıntı: docs/KISAYOLLAR.md
+  let buf = '', lastCmd = null, cmdMsg = '';
+  const TOOL_TAB = (k) => (TOOLS.draw.some(([t]) => t === k) ? 'draw' : 'edit');
+  function showCmd() {
+    const el = $('cad-cmd');
+    if (!buf && !cmdMsg) { el.hidden = true; return; }
+    el.hidden = false;
+    el.textContent = '⌨ ' + (buf || '') + (buf ? '▌' : '');
+    if (cmdMsg) { const sm = document.createElement('small'); sm.textContent = cmdMsg; el.appendChild(sm); }
+  }
+  function say(m, err) { cmdMsg = m; setHint(m, err); showCmd(); }
+  function pickTool(k) {
+    if (TOOLS[tab] && TOOLS[tab].some(([t]) => t === k)) doAct('tool-' + k);
+    else { tab = TOOL_TAB(k); tool = k; reset(); refresh(); }
+  }
+  function runCommand(c) {
+    lastCmd = c;
+    if (c.tool) { pickTool(c.tool); say(c.label + ': ' + hintNow()); return; }
+    if ((c.act === 'f-dxf' || c.act === 'f-open') && tab !== 'file') { tab = 'file'; refresh(); }
+    doAct(c.act);
+    if (c.act === 'osnap') say('Uç nokta yakalama ' + (osnap ? 'açık' : 'kapalı'));
+    else if (c.act === 'ortho') say('Dik çizim (ortho) ' + (ortho ? 'açık' : 'kapalı'));
+    else if (root.isConnected) say(c.label);
+  }
+  const lastPt = () => (pts.length ? pts[pts.length - 1] : null);
+  const cursor = () => (hover ? hover.p : null);
+  function enterValue(r) {
+    const base = tool === 'move' || tool === 'copy' ? (pts[0] || null) : lastPt();
+    const wantsPt = wantsPointNow();
+    // "2,5" gibi yazım: nokta beklenen adımda (2, 5) koordinatı; sayı beklenen adımda (daire çapı, açı, ofset…) 2,5 sayısı
+    const numFirst = !wantsPt || (tool === 'circle' && pts.length > 0) || (tool === 'rotate' && pts.length > 0);
+    if (r.kind === 'abs' && r.alt != null && numFirst) r = { kind: 'num', v: r.alt };
+    if (r.kind === 'radius') {
+      if (tool === 'circle' && pts.length) { if (!(r.v > 0)) return say('Yarıçap sıfırdan büyük olmalı.', true); placePoint([pts[0][0] + r.v, pts[0][1]]); return say('Daire eklendi (R' + fmtNum(r.v, 3) + ').'); }
+      if (tool === 'fillet') r = { kind: 'num', v: r.v };
+      else return say('R yalnız dairenin yarıçapı ya da radyus için yazılır.', true);
+    }
+    if (r.kind === 'abs' || r.kind === 'rel' || r.kind === 'polar') {
+      if (!wantsPt) return say('Bu adımda nokta beklenmiyor.', true);
+      let p;
+      if (r.kind === 'abs') p = [r.x, r.y];
+      else if (r.kind === 'rel') { if (!base) return say('Göreli nokta (@) için önce bir başlangıç noktası koy.', true); p = [base[0] + r.x, base[1] + r.y]; }
+      else {
+        // L<açı: başlangıç noktası varsa ondan (AutoCAD dinamik giriş), yoksa orijinden; @L<açı başlangıç noktası ister
+        if (r.rel && !base) return say('Göreli nokta (@) için önce bir başlangıç noktası koy.', true);
+        p = polarPoint(base || [0, 0], r.len, r.ang);
+      }
+      placePoint(p); say(hintNow()); return;
+    }
+    if (r.kind !== 'num') return;
+    const v = r.v;
+    switch (tool) {
+      case 'line': case 'move': case 'copy':
+        if (!base) return say('Önce başlangıç noktasını koy (dokun ya da X,Y yaz).', true);
+        if (!(v > 0)) return say('Mesafe sıfırdan büyük olmalı.', true);
+        placePoint(directPoint(base, cursor(), v, num('ang') || 0, ortho)); say(hintNow()); return;
+      case 'circle':
+        if (!pts.length) return say('Önce merkezi koy (dokun ya da X,Y yaz).', true);
+        if (!(v > 0)) return say('Çap sıfırdan büyük olmalı.', true);
+        F.d = String(v); doAct('in-circle'); return say('Daire eklendi (Ø' + fmtNum(v, 3) + '). Yarıçap için R5 yaz.');
+      case 'offset': if (!(v > 0)) return say('Ofset mesafesi sıfırdan büyük olmalı.', true); F.off = String(v); refresh(); return say('Ofset ' + fmtNum(v, 3) + ' mm: ofsetlenecek varlığa dokun.');
+      case 'fillet': if (!(v >= 0)) return say('Yarıçap 0 ya da büyük olmalı.', true); F.rad = String(v); refresh(); return say('Radyus R' + fmtNum(v, 3) + ': birinci çizgiye dokun.');
+      case 'rotate':
+        if (!sel.size) return say('Önce Seç ile varlıkları seç.', true);
+        if (!pts.length) return say('Önce döndürme merkezine dokun.', true);
+        F.rot = String(v); doAct('in-rot'); return say('Döndürüldü: ' + fmtNum(v, 3) + '°');
+      case 'scale':
+        if (!(v > 0)) return say('Değer sıfırdan büyük olmalı.', true);
+        if (pickA) { F.real = String(v); doAct('in-scale'); } else { F.kf = String(v); doAct('in-scalek'); }
+        return;
+      case 'setdim':
+        if (!pickA) return say('Önce ölçüsünü vereceğin çizgiye / daireye dokun.', true);
+        F.dv = String(v); doAct('in-setdim'); return;
+      case 'rect': return say(pts.length ? 'Karşı köşe: @genişlik,yükseklik yaz (ör. @100,50).' : 'İlk köşe: X,Y yaz (ör. 0,0).', true);
+      case 'text': if (v > 0) { F.th = String(v); refresh(); return say('Yazı yüksekliği ' + fmtNum(v, 3) + ' mm'); } return;
+      case 'hatch': F.hang = String(v); refresh(); return say('Tarama açısı ' + fmtNum(v, 3) + '°');
+      default: say('Bu araçta sayı girişi yok. Komut yazmak için harfle başla (L, C, TR…).', true);
+    }
+  }
+  function execBuf() {
+    const line = buf; buf = '';
+    const r = parseLine(line);
+    if (r.kind === 'empty') {
+      // AutoCAD: Enter komutu bitirir; komut yokken son komutu tekrarlar
+      if (pts.length || pickA || pickB) { doAct('end'); return say('Komut bitti.'); }
+      if (lastCmd) return runCommand(lastCmd);
+      return showCmd();
+    }
+    if (r.kind === 'cmd') return runCommand(r.cmd);
+    if (r.kind === 'bad') return say('Bilinmeyen komut: ' + r.text + '  (yardım: ? ya da L, C, A, REC, TR, EX, O, F, M, CO, RO, MI, DIM)', true);
+    enterValue(r);
+  }
+  function onKey(e) {
+    if (!root.isConnected) return;
+    const t = e.target;
+    const editable = t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName || ''));
+    if (editable) {
+      if (e.key === 'Escape') { t.blur(); e.preventDefault(); e.stopImmediatePropagation(); }
+      return;
+    }
+    // başka bir pencere 2B'nin üstündeyse (fotoğraf içe aktarma, arama paleti) ona karışma
+    if (document.querySelector('.pal-open, #ph')) return;
+    const k = e.key;
+    const stop = () => { e.preventDefault(); e.stopImmediatePropagation(); };
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const kl = String(k).toLowerCase();
+      if (kl === 'z') { stop(); doAct(e.shiftKey ? 'redo' : 'undo'); return; }
+      if (kl === 'y') { stop(); doAct('redo'); return; }
+      if (kl === 'a') { stop(); doAct('sel-all'); return say('Tümü seçildi (' + sel.size + ').'); }
+      if (kl === 's') { stop(); if (tab !== 'file') { tab = 'file'; refresh(); } doAct('f-dxf'); return; }
+      return;
+    }
+    if (k === 'F3') { stop(); return runCommand(COMMANDS.find((c) => c.act === 'osnap')); }
+    if (k === 'F8') { stop(); return runCommand(COMMANDS.find((c) => c.act === 'ortho')); }
+    if (k === 'Escape') {
+      stop();
+      if (buf) { buf = ''; return say('İptal.'); }
+      if (pts.length || pickA || pickB || sel.size) { reset(); sel.clear(); refresh(); return say('Komut ve seçim iptal.'); }
+      cmdMsg = ''; showCmd(); return;
+    }
+    if (k === 'Enter' || (k === ' ' && !e.repeat)) { stop(); execBuf(); return; }
+    if (k === 'Backspace') { if (buf) { stop(); buf = buf.slice(0, -1); showCmd(); } return; }
+    if (k === 'Delete') { if (sel.size) { stop(); doAct('sel-del'); say('Seçilenler silindi.'); } return; }
+    if (k === '?' && !buf) { stop(); say('Komutlar: L çizgi · C daire · A yay · REC dikdörtgen · DIM ölçü · DRA çap · DAN açı · H tarama · T yazı · TR kırp · EX uzat · O ofset · F radyus · M taşı · CO kopyala · RO döndür · MI ayna · AR dizi · SC ölçekle · E sil · Z sığdır · 3B parça. Nokta: X,Y · @dX,dY · @L<açı'); return; }
+    if (isTypingKey(e)) { stop(); buf += k; cmdMsg = ''; showCmd(); }
+  }
+  document.addEventListener('keydown', onKey, true);
+
   refresh();
   resize();
-  return { close, importPhoto, get doc() { return doc; }, get view() { return { ...V }; } };
+  const api = {
+    close, importPhoto, get doc() { return doc; }, get view() { return { ...V }; },
+    // test ve hata ayıklama kancası (arayüzü etkilemez)
+    get tool() { return tool; }, get pts() { return pts.map((p) => p.slice()); }, get selCount() { return sel.size; }, get osnap() { return osnap; }, get ortho() { return ortho; }, get cmd() { return buf; },
+  };
+  window.__cad2d = api;
+  return api;
 }

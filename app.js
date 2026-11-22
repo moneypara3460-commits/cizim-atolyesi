@@ -18,7 +18,7 @@ import { openSketch } from './sketch.js?v=20261120f';
 import { KENARLAR, KENAR_ADI } from './sac.js?v=20261120c';
 import { to3MF, toSTEP } from './export3d.js?v=20261112u';
 import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261112u';
-import { openCad2D } from './cad2d.js?v=20261112u';
+import { openCad2D } from './cad2d.js?v=20261122a';
 import { openCutOpt } from './cutopt-ui.js?v=20261112u';
 import { createMfg } from './mfg-ui.js?v=20261112u';
 import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261112u';
@@ -46,7 +46,7 @@ import * as PRM from './degisken.js?v=20261120h';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
 import { createMekaUI } from './meka/ui.js?v=20261119c';
-import { CommandRegistry, CommandDispatcher, ShortcutResolver, parseCommandLine } from './command-system/core.mjs?v=20261122a';
+import { CommandRegistry, CommandDispatcher, ShortcutResolver, parseCommandLine } from './command-system/core.mjs?v=20261122b';
 
 const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -5309,6 +5309,8 @@ view.addEventListener('pointerdown', () => {
 document.addEventListener('keydown', (event) => {
   // Sadece CAD çalışma alanı odaktayken kısayol yakala. Formlarda ve diğer panellerde yazıyı bozma.
   if (document.activeElement !== view && !view.contains(event.target)) return;
+  // 2B çizim ekranı açıkken klavye onundur (L, C, TR…); 3B kısayolları çalışmaz
+  if (document.getElementById('cad')) return;
   const commandId = shortcutResolver.resolve(event);
   if (!commandId) return;
   event.preventDefault();
