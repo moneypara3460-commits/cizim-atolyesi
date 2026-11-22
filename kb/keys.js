@@ -30,9 +30,9 @@ export function isEditable(t) {
 
 const visible = (b) => !b.disabled && !b.hidden && (b.offsetParent !== null || getComputedStyle(b).position === 'fixed');
 // kök içinde data-k (ya da data-a) = k, isteğe bağlı data-v = v olan, görünen ilk düğme; nth: aynı türden n'inci
-export function findBtn(root, { k, v, a, nth }) {
+export function findBtn(root, { k, v, a, nth, sel: css }) {
   if (!root) return null;
-  const sel = a != null ? `[data-a="${a}"]` : `[data-k="${k}"]` + (v != null ? `[data-v="${v}"]` : '');
+  const sel = css || (a != null ? `[data-a="${a}"]` : `[data-k="${k}"]` + (v != null ? `[data-v="${v}"]` : ''));
   const list = [...root.querySelectorAll(sel)].filter(visible);
   return nth != null ? list[nth] || null : list[0] || null;
 }
@@ -49,7 +49,9 @@ export function loadOverrides() { try { return JSON.parse(localStorage.getItem(O
 export function saveOverrides(o) { try { localStorage.setItem(OVR_KEY, JSON.stringify(o)); } catch (e) { /* */ } }
 export const effectiveKey = (screen, key, ovr = loadOverrides()) => normKey(ovr[screen + ':' + normKey(key)] || key);
 
-// contexts: [{ id, title, root: () => öğe | null, keys: [...] }] — ilk etkin bağlam tuşu alır (üstteki ekran önce)
+// contexts: [{ id, title, root: () => öğe | null, keys: [...], pass? }] — ilk etkin bağlam tuşu alır (üstteki ekran önce).
+// pass: bu bağlamda olmayan tuş alttaki bağlama geçer (ör. ayakkabı çizim ekranında sayfa tuşları).
+// Tuşta when(root, e): false dönerse tuş bu bağlamda yok sayılır (ör. ekranın kendi işleyicisine bırakılır).
 export function installKeys(contexts, { onUnhandled, blocked } = {}) {
   const handler = (e) => {
     if (isEditable(e.target)) {
@@ -63,7 +65,8 @@ export function installKeys(contexts, { onUnhandled, blocked } = {}) {
     for (const c of contexts) {
       const root = c.root();
       if (!root) continue;
-      const hit = c.keys.find((x) => effectiveKey(c.id, x.key, ovr) === name);
+      const hit = c.keys.find((x) => effectiveKey(c.id, x.key, ovr) === name && (!x.when || x.when(root, e)));
+      if (!hit && c.pass) continue;
       if (!hit) { if (onUnhandled && onUnhandled(e, c, root, name)) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
       if (e.repeat && !hit.repeat) { e.preventDefault(); return; }
       let ok;

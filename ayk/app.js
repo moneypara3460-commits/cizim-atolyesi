@@ -16,6 +16,7 @@ import * as AIP from './aiparts.js?v=20261119c';
 import * as L3 from './last3d.js?v=20261119c';
 import { run as l3run } from './last3d-worker.js?v=20261119c';
 import { saveBlob } from '../tx/download.js?v=20261112u';
+import { installKeys, findBtn, press } from '../kb/keys.js?v=20261122a';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -997,6 +998,36 @@ document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
 });
+
+/* ---------- klavye (docs/KISAYOLLAR.md · 5. bölüm) ---------- */
+// Stampa çizim ekranı: araç harfleri; çizim alanındayken Esc / Enter / Delete / Ctrl+Z ekranın kendi işleyicisinde kalır.
+const notCanvas = (_r, e) => !(e.target && e.target.tagName === 'CANVAS');
+const toolKey = (key, id, label) => ({ key, label, press: { sel: `[data-tool="${id}"]` } });
+export const AYK_KEYS = [
+  { id: 'ayk-stampa', title: 'Stampa çizim ekranı', root: () => document.querySelector('.ed'), pass: true, keys: [
+    toolKey('V', 'sec', 'Seç'), toolKey('L', 'cizgi', 'Çizgi'), toolKey('E', 'egri', 'Eğri'), toolKey('B', 'bezier', 'Bezier'), toolKey('S', 'serbest', 'Serbest çizim'),
+    toolKey('N', 'nokta', 'Nokta ekle'), toolKey('X', 'sil', 'Nokta sil'), toolKey('K', 'bol', 'Böl'), toolKey('J', 'birlestir', 'Birleştir'),
+    toolKey('G', 'kenar', 'Kenar başı'), toolKey('C', 'centik', 'Çentik'), toolKey('M', 'binme', 'Binme noktası'), toolKey('H', 'delik', 'Delik'),
+    toolKey('A', 'aksesuar', 'Aksesuar'), toolKey('R', 'referans', 'Referans'), toolKey('D', 'olcu', 'Ölçü'), toolKey('T', 'yazi', 'Yazı'),
+    { key: 'P', label: 'Yeni saya parçası', press: { a: 'newpiece' } },
+    { key: 'CTRL+D', label: 'Parçayı kopyala', press: { a: 'copypc' } },
+    { key: 'ENTER', label: 'Çizgiyi bitir', press: { a: 'finish' }, when: notCanvas },
+    { key: 'SHIFT+ENTER', label: 'Çizgiyi kapat', press: [{ sel: '.ed-opts [data-a="close"]' }, { a: 'closepath' }] },
+    { key: 'DELETE', label: 'Seçileni sil', press: { a: 'delsel' }, when: notCanvas },
+    { key: 'ESCAPE', label: 'Vazgeç → Seç', when: notCanvas, run: (root) => press(root, { a: 'cancel' }) || press(root, { sel: '[data-tool="sec"]:not(.on)' }) },
+    { key: 'F', label: 'Ortala', press: { a: 'fit' } }, { key: '+', label: 'Yakınlaştır', press: { a: 'zin' }, repeat: true }, { key: '-', label: 'Uzaklaştır', press: { a: 'zout' }, repeat: true },
+    { key: 'CTRL+Z', label: 'Geri al', press: { a: 'undo' }, repeat: true, when: notCanvas }, { key: 'CTRL+Y', label: 'İleri al', press: { a: 'redo' }, repeat: true, when: notCanvas },
+    { key: 'CTRL+SHIFT+Z', label: 'İleri al', press: { a: 'redo' }, repeat: true, when: notCanvas },
+  ] },
+  { id: 'ayk-sayfa', title: 'Ayakkabı sayfaları', root: () => document.getElementById('nav'), keys: [
+    ...PAGES.map(([id, name], i) => ({ key: String(i + 1), label: name, run: () => { if (S.page !== id) go(id); } })),
+    { key: 'PAGEDOWN', label: 'Sonraki sayfa', run: () => go(PAGES[(PAGES.findIndex(([k]) => k === S.page) + 1) % PAGES.length][0]) },
+    { key: 'PAGEUP', label: 'Önceki sayfa', run: () => go(PAGES[(PAGES.findIndex(([k]) => k === S.page) - 1 + PAGES.length) % PAGES.length][0]) },
+    { key: 'CTRL+S', label: 'Kaydet', run: () => { flush().then(() => toast(S.p ? 'Kaydedildi' : 'Açık proje yok')); } },
+  ] },
+];
+installKeys(AYK_KEYS);
+window.__aykKeys = AYK_KEYS;
 
 /* ---------- başlangıç: son açık proje ---------- */
 let last = null; try { last = localStorage.getItem(LKEY); } catch (e) { /* */ }

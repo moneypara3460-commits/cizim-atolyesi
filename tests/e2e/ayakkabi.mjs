@@ -262,6 +262,24 @@ await R.test('Parça silme (stampadan) ve geri alma', async () => {
   await page.click('[data-a="undo"]'); expect((await A()).p.pieces.length === 1, 'geri geldi');
 });
 
+await R.test('Klavye: V / L araç harfleri, F ortala, 1–8 ve PageDown / PageUp sayfa, Ctrl+S kaydet; yazı alanında harf araç değiştirmez', async () => {
+  if (!(await page.locator('.ed canvas').count())) { await page.click('[data-page="stampa"]'); await page.waitForSelector('.ed canvas'); }
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  const on = (id) => page.locator(`[data-tool="${id}"].on`).count();
+  await page.keyboard.press('l'); expect(await on('cizgi') === 1, 'L → çizgi');
+  await page.keyboard.press('e'); expect(await on('egri') === 1, 'E → eğri');
+  await page.keyboard.press('v'); expect(await on('sec') === 1, 'V → seç');
+  await page.keyboard.press('f');
+  const inp = page.locator('.ed input').first();
+  if (await inp.count()) { await inp.focus(); await page.keyboard.press('l'); expect(await on('sec') === 1, 'yazı alanında L araç değiştirmedi'); await page.keyboard.press('Escape'); }
+  await page.keyboard.press('4'); await page.waitForTimeout(250); expect((await A()).page === 'parcalar', '4 → Saya Parçaları');
+  await page.keyboard.press('PageUp'); await page.waitForTimeout(250); expect((await A()).page === 'stampa', 'PageUp → Stampa');
+  await page.waitForSelector('.ed canvas');
+  await page.keyboard.press('PageDown'); await page.waitForTimeout(250); expect((await A()).page === 'parcalar', 'PageDown → Saya Parçaları');
+  await page.keyboard.press('3'); await page.waitForSelector('.ed canvas'); expect((await A()).page === 'stampa', '3 → Stampa');
+  await page.keyboard.press('Control+s'); await page.waitForFunction(() => /Kaydedildi/.test(document.getElementById('toast').textContent), null, { timeout: 4000 });
+});
+
 await R.test('Sayfa hatası yok, dış siteye istek yok', async () => {
   expect(!errors.length, 'hatalar: ' + errors.join(' | '));
   expect(!external.length, 'dış istek: ' + external.join(', '));

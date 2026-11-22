@@ -167,3 +167,12 @@ En üstteki ekran tuşu alır (3B görünüm → örgü çizelgesi → pastal �
 **Örgü çizelgesi:** B boya · D alan doldur · T tekrar alanı · S sıra bilgisi · H kaydır · F sığdır · 1–9 ilmek seç · Ctrl+Z / Ctrl+Y · Ctrl+S · Ctrl+P PDF · Ctrl+Shift+P PNG · Esc kapat.
 
 **3B görünüm:** Esc kapat.
+
+## 5. Ayakkabı Modelhanesi
+
+**Sayfalar:** 1 Projelerim · 2 Yeni proje · 3 Stampa Atölyesi · 4 Saya Parçaları · 5 Malzeme · 6 Dosyalar · 7 Dışa Aktarma · 8 Ayarlar · PageDown / PageUp sonraki / önceki sayfa · Ctrl+S kaydet · Ctrl+Z / Ctrl+Y geri al / ileri al.
+
+**Stampa çizim ekranı (araçlar):** V seç · L çizgi · E eğri · B bezier · S serbest · N nokta ekle · X nokta sil · K böl · J birleştir · G kenar başı · C çentik · M binme noktası · H delik · A aksesuar · R referans · D ölçü · T yazı (parça araçları yalnız bir parça düzenlenirken çalışır).
+
+**Stampa çizim ekranı (işlemler):** P yeni saya parçası · Ctrl+D parçayı kopyala · Enter çizgiyi bitir · Shift+Enter çizgiyi kapat · Delete seçileni sil · Esc vazgeç → seç · F ortala · + / − yakınlaştır / uzaklaştır · Ctrl+Z / Ctrl+Y.
+Çizim alanı (kanvas) seçiliyken Esc, Enter, Delete / Backspace ve Ctrl+Z ekranın kendi davranışıyla çalışır.
