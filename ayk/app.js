@@ -17,6 +17,7 @@ import * as L3 from './last3d.js?v=20261119c';
 import { run as l3run } from './last3d-worker.js?v=20261119c';
 import { saveBlob } from '../tx/download.js?v=20261112u';
 import { installKeys, findBtn, press } from '../kb/keys.js?v=20261122a';
+import { installHelpKey, sectionsFromContexts } from '../kb/help.js?v=20261122a';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1027,6 +1028,7 @@ export const AYK_KEYS = [
   ] },
 ];
 installKeys(AYK_KEYS);
+installHelpKey(() => { const act = AYK_KEYS.filter((c) => c.root()), rest = AYK_KEYS.filter((c) => !c.root()); return { title: 'Klavye kısayolları · Ayakkabı', sections: sectionsFromContexts([...act, ...rest]) }; });
 window.__aykKeys = AYK_KEYS;
 
 /* ---------- başlangıç: son açık proje ---------- */

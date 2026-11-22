@@ -23,6 +23,7 @@ import { productionPDF } from './production-pdf.js?v=20261112u';
 import { writeAAMA } from './woven/dxf-aama.js?v=20261112u';
 import { saveBlob, safeName } from './download.js?v=20261112u';
 import { installKeys, press, findBtn, escChain } from '../kb/keys.js?v=20261122a';
+import { installHelpKey, sectionsFromContexts } from '../kb/help.js?v=20261122a';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -806,6 +807,7 @@ function stepTxTab(d) {
   return true;
 }
 installKeys(TX_KEYS);
+installHelpKey(() => { const act = TX_KEYS.filter((c) => c.root()), rest = TX_KEYS.filter((c) => !c.root()); return { title: 'Klavye kısayolları · Tekstil', sections: sectionsFromContexts([...act, ...rest]) }; });
 window.__txKeys = TX_KEYS;
 
 render();

@@ -19,6 +19,9 @@ import { KENARLAR, KENAR_ADI } from './sac.js?v=20261120c';
 import { to3MF, toSTEP } from './export3d.js?v=20261112u';
 import { EXAMPLES, buildExample, GUIDE } from './examples.js?v=20261112u';
 import { openCad2D } from './cad2d.js?v=20261122a';
+import { COMMANDS as CAD2D_COMMANDS } from './cad2d-keys.js?v=20261122a';
+import { openHelp, installHelpKey } from './kb/help.js?v=20261122a';
+import { effectiveKey } from './kb/keys.js?v=20261122a';
 import { openCutOpt } from './cutopt-ui.js?v=20261112u';
 import { createMfg } from './mfg-ui.js?v=20261112u';
 import { createWeldUI, newPlan as newWeldPlan } from './weld-ui.js?v=20261112u';
@@ -5490,12 +5493,52 @@ registerCadCommand({
 // Yeni arayüzde (yeni/index.html) Ctrl+K kabuğun kendi arama paletini açar; komut satırı da oraya bağlanır.
 // Aynı tuşla ikinci bir palet açılmasın diye o arayüzde Ctrl+K bu sisteme bağlanmaz.
 const shellPalette = !!document.getElementById('palette');
-for (const command of commandRegistry.list()) {
-  for (const shortcut of command.shortcuts) {
-    if (shellPalette && command.id === 'ui.commandPalette') continue;
-    shortcutResolver.bind(shortcut, command.id);
+// kullanıcının ? ekranında değiştirdiği tuşlar uygulanır (bölüm kimliği: makine)
+function rebindShortcuts() {
+  shortcutResolver.bindings.clear();
+  for (const command of commandRegistry.list()) {
+    for (const shortcut of command.shortcuts) {
+      if (shellPalette && command.id === 'ui.commandPalette') continue;
+      try { shortcutResolver.bind(effectiveKey('makine', shortcut), command.id); } catch (e) { /* çakışan kullanıcı tuşu: varsayılan kalır */ try { shortcutResolver.bind(shortcut, command.id); } catch (e2) { /* */ } }
+    }
   }
 }
+rebindShortcuts();
+
+/* ---- Klavye 6. aşama: ? yardım ekranı ---- */
+const KEYS_2D = [['ENTER', 'Komut satırını çalıştır · boşsa bitir / son komutu tekrarla'], ['SPACE', 'Enter ile aynı'], ['ESCAPE', 'Yazılanı, sonra komutu ve seçimi iptal et'],
+  ['BACKSPACE', 'Komut satırından bir karakter sil'], ['DELETE', 'Seçilenleri sil'], ['CTRL+Z', 'Geri al'], ['CTRL+Y', 'İleri al'], ['CTRL+A', 'Tümünü seç'], ['CTRL+S', 'DXF kaydet'],
+  ['F3', 'Uç nokta yakalama aç / kapat'], ['F8', 'Dik çizim (ortho) aç / kapat']];
+const NUM_2D = [['X,Y', 'Mutlak nokta (ör. 0,0)'], ['@dX,dY', 'Son noktaya göre (dikdörtgende genişlik,yükseklik)'], ['@L<açı', 'Son noktadan L uzunlukta, açıyla'], ['L', 'İmleç yönünde L mm (çizgi, taşı, kopyala) · daire çapı · ofset · radyus · açı'], ['R5', 'Daire yarıçapı'], ['Ø12', 'Çap'], ['X;Y', 'Türkçe ondalıkla nokta (10;2,5)']];
+const KEYS_SHEET = [['ESCAPE', 'Kapat'], ['CTRL+P', 'PDF'], ['CTRL+SHIFT+P', 'PNG'], ['Z', 'Büyüt / küçült'], ['K', 'Kesit ↔ izometrik']];
+function helpSections() {
+  const keyItems = [], cmdItems = [];
+  for (const c of commandRegistry.list()) {
+    for (const k of c.shortcuts) if (!(shellPalette && c.id === 'ui.commandPalette')) keyItems.push({ key: k, label: c.names.tr });
+    const words = [...new Set([...c.aliases.tr, ...c.aliases.en].map((w) => w.toLocaleUpperCase('tr-TR')))].slice(0, 4).join(' / ');
+    const pars = c.parameters.map((p) => (p.required ? p.name : '[' + p.name + ']')).join(' ');
+    cmdItems.push({ cmd: words + (pars ? ' ' + pars : ''), label: c.names.tr, note: c.description.tr || '' });
+  }
+  const s2 = [
+    { id: '2b-tus', title: '2B çizim: tuşlar', editable: false, items: KEYS_2D.map(([key, label]) => ({ key, label })) },
+    { id: '2b-komut', title: '2B çizim: komutlar (yaz + Enter)', editable: false, items: CAD2D_COMMANDS.map((c) => ({ cmd: c.names.slice(0, 3).map((w) => w.toLocaleUpperCase('tr-TR')).join(' / '), label: c.label })) },
+    { id: '2b-deger', title: '2B çizim: nokta ve değer girişi', editable: false, items: NUM_2D.map(([cmd, label]) => ({ cmd, label })) },
+  ];
+  const s3 = [
+    { id: 'makine', title: '3B tuşları (çizim alanı seçiliyken) — değiştirilebilir', items: keyItems },
+    { id: '3b-komut', title: '3B yazılı komutlar (Ctrl+K paletine yaz)', editable: false, items: cmdItems },
+    { id: 'resim', title: 'Teknik resim ekranı', editable: false, items: KEYS_SHEET.map(([key, label]) => ({ key, label })) },
+  ];
+  return document.getElementById('cad') ? [...s2, ...s3] : [...s3, ...s2];
+}
+const openKeysHelp = () => openHelp({ title: 'Klavye kısayolları · Makine', sections: helpSections(), onChange: rebindShortcuts });
+installHelpKey(() => ({ title: 'Klavye kısayolları · Makine', sections: helpSections(), onChange: rebindShortcuts }));
+registerCadCommand({
+  id: 'ui.help', names: { tr: 'Klavye kısayolları', en: 'Keyboard shortcuts' },
+  aliases: { tr: ['kısayollar', 'kısayol', 'tuşlar', 'yardım'], en: ['shortcuts', 'keys', 'help'] },
+  description: { tr: 'Bütün tuşlar ve komutlar; tuşları değiştir (? ya da F1)', en: 'All keys and commands; change keys (? or F1)' },
+  category: 'interface', execute: () => { openKeysHelp(); }
+});
 
 view.tabIndex = view.tabIndex >= 0 ? view.tabIndex : 0;
 view.addEventListener('pointerdown', () => {
@@ -5506,7 +5549,7 @@ document.addEventListener('keydown', (event) => {
   // Sadece CAD çalışma alanı odaktayken kısayol yakala. Formlarda ve diğer panellerde yazıyı bozma.
   if (document.activeElement !== view && !view.contains(event.target)) return;
   // 2B çizim / teknik resim ekranı açıkken 3B kısayolları çalışmaz (o ekranların kendi tuşları var)
-  if (document.getElementById('cad') || document.getElementById('sheetov')) return;
+  if (document.getElementById('cad') || document.getElementById('sheetov') || document.getElementById('kbh')) return;
   const commandId = shortcutResolver.resolve(event);
   if (!commandId) return;
   event.preventDefault();
