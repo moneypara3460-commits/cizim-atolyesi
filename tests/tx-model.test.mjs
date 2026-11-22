@@ -142,16 +142,23 @@ t('10. Göç ve bozuk dosya: tekstil olmayan / bozuk / daha yeni şema reddedili
   const c = M.addColor(p, { name: 'y', hex: '#111111' }); assert.equal(c.id, 'c8', 'kimlik çakışmaz');
 });
 
-t('11. Makine projeleri ile ayrılık: tekstil modülleri (tx/ ve alt klasörleri) yalnız tx/ içinden içe aktarır, makine kayıtlarına dokunmaz', async () => {
+t('11. Makine projeleri ile ayrılık: tekstil modülleri (tx/ ve alt klasörleri) yalnız tx/ ve ortak klavye modülünden (kb/) içe aktarır, makine kayıtlarına dokunmaz', async () => {
   const fs = await import('node:fs'), path = await import('node:path'), url = await import('node:url');
   const root = url.fileURLToPath(new URL('../tx/', import.meta.url));
+  // kb/ (ortak klavye köprüsü) makineye bağlı değildir: yalnız kendi içinden içe aktarır
+  const kb = url.fileURLToPath(new URL('../kb/', import.meta.url));
+  for (const f of fs.readdirSync(kb).filter((x) => x.endsWith('.js'))) {
+    const src = fs.readFileSync(path.join(kb, f), 'utf8');
+    for (const m of src.matchAll(/from '([^']+)'/g)) assert.ok(path.resolve(kb, m[1].split('?')[0]).startsWith(kb), 'kb/' + f + ' → ' + m[1] + ' kb/ dışında');
+    assert.ok(!/cizim:projects|cizim:auto/.test(src), 'kb/' + f + ' makine kayıtlarına dokunmaz');
+  }
   const files = fs.readdirSync(root, { recursive: true }).filter((x) => String(x).endsWith('.js'));
   assert.ok(files.length >= 10);
   for (const f of files) {
     const abs = path.join(root, String(f)), src = fs.readFileSync(abs, 'utf8');
     for (const m of src.matchAll(/from '([^']+)'/g)) {
       const target = path.resolve(path.dirname(abs), m[1].split('?')[0]);
-      assert.ok(target.startsWith(root), f + ' → ' + m[1] + ' tx/ dışında');
+      assert.ok(target.startsWith(root) || target.startsWith(kb), f + ' → ' + m[1] + ' tx/ dışında');
     }
     assert.ok(!/cizim:projects|cizim:auto/.test(src), f + ' makine kayıtlarına dokunmaz');
   }
