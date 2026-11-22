@@ -78,3 +78,50 @@ Bir yazı alanındayken (X, Y, uzunluk…) yazılanlar komut sayılmaz.
 | Fare tekerleği | Yakınlaştır / uzaklaştır |
 
 Mac'te Ctrl yerine Cmd de çalışır. Masaüstünde fare gezinirken çizilecek çizgi önizlenir; doğrudan mesafe girişi bu imleç yönünü kullanır.
+
+## 2. 3B (Makine bölümü)
+
+Tuşlar çizim alanı seçiliyken çalışır (önce 3B alana bir kez dokun / tıkla). Yazılı komutlar Ctrl+K paletine yazılır.
+
+| Tuş | İş |
+|---|---|
+| B · C · S · K | Kutu · silindir · küre · koni ekle |
+| Delete | Seçili parçayı sil |
+| Ctrl+D | Seçili parçayı çoğalt |
+| H | Seçili parçayı gizle / göster |
+| M | Ölçüm aracı aç / kapat |
+| 1 · 2 · 3 · 4 | Önden · üstten · yandan · izometrik bak |
+| F | Modeli ekrana sığdır |
+| PageDown · PageUp | Sonraki · önceki sekme |
+| Esc | Ölçümü kapat, sonra seçimi bırak |
+| Ctrl+Z · Ctrl+Y | Geri al · ileri al |
+| Ctrl+S | Projeyi kaydet |
+| Ctrl+K | Komut paleti |
+
+| Komut (Türkçe / İngilizce) | İş | Örnek |
+|---|---|---|
+| KUTU / BOX [G D Y] | Kutu | `KUTU 100 50 30` |
+| SİLİNDİR, KÜRE, KONİ, BORU, DİŞLİ | Parça ekle | `BORU` |
+| KROKİ / SKETCH | Yeni kroki | `KROKİ` |
+| SÜPÜRME / SWEEP · LOFT | Süpürme · loft parçası | `LOFT` |
+| SAC / SHEET · KONSTRÜKSİYON / FRAME | Sac metal · profil iskelet | `SAC` |
+| 2B / 2D, EKSTRÜZYON / EXTRUDE | 2B çizim ekranı | `2B` |
+| TAŞI / MOVE X Y Z | Taşı (mm) | `TAŞI 10 0 -5` |
+| DÖNDÜR / ROTATE eksen açı | Döndür | `DÖNDÜR Z 90` |
+| DELİK / HOLE çap | Ortadan boydan boya delik | `DELİK 10` |
+| KARE DELİK / POCKET | Kare oyuk parça | `KARE DELİK` |
+| PAH / CHAMFER [ölçü] · YUVARLAT / FILLET [R] | Seçili kenarlara | `PAH 2` |
+| KABUK / SHELL [et] | İçini boşalt | `KABUK 2` |
+| ÇOĞALT / DUPLICATE | Kopya | `ÇOĞALT` |
+| AYNA / MIRROR X\|Z | Ayna kopya | `AYNA X` |
+| DİZİ / ARRAY n dX dY dZ | Doğrusal dizi | `DİZİ 4 40 0 0` |
+| DAİRESEL DİZİ / POLAR ARRAY n [açı] | Dairesel dizi | `DAİRESEL DİZİ 6 360` |
+| GİZLE / HIDE | Gizle / göster | `GİZLE` |
+| OYUK / CUT · BİRLEŞTİR / UNION | Parçayı oyuk ya da dolu yap | `OYUK` |
+| TEK PARÇA / COMBINE | Bütün parçaları tek parça yap | `TEK PARÇA` |
+| ÖLÇ / MEASURE | Ölçüm aracı | `ÖLÇ` |
+| KESİT / SECTION [X\|Y\|Z] | Kesit aç / kapat | `KESİT X` |
+| GÖRÜNÜM / VIEW ÖN\|ÜST\|YAN\|İZO | Bakış yönü | `GÖRÜNÜM ÜST` |
+| GİT / GO sekme | Sekmeye git (ÖLÇÜ, KAYNAK, CNC, ANALİZ, RESİM, MEKATRONİK…) | `GİT KAYNAK` |
+| BİRİM / UNITS MM\|CM\|İNÇ | Ölçü birimi | `BİRİM CM` |
+| SİL, GERİ AL, YİNELE, SIĞDIR, KAYDET | Düzen | `KAYDET` |

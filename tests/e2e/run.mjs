@@ -1484,6 +1484,57 @@ await T('Komutlar: MOVE / TAŞI 2,5 / ROTATE, ƒx bağlı konum korunur, HOLE ç
   expect(Math.abs((moved.z || 0) - ((last.z || 0) + 3)) < 1e-9, 'paletten MOVE: ' + JSON.stringify(moved));
 });
 
+await T('Komutlar 2: BORU / DİŞLİ / SAC / KONSTRÜKSİYON / SÜPÜRME / LOFT, KABUK 2, Ctrl+D, AYNA X, DİZİ, DAİRESEL DİZİ, H gizle, OYUK / BİRLEŞTİR, GİT ve PageDown sekme, 1–4 görünüm, KESİT X, M ölçüm, Esc, BİRİM', 'L-Komut', async ({ page }) => {
+  const n = () => page.evaluate(() => window.__app.parts.length);
+  const last = () => page.evaluate(() => { const P = window.__app.parts; const p = P[P.length - 1]; return { type: p.type, op: p.op, hidden: !!p.hidden, gear: !!p.gear }; });
+  const line = (l) => page.evaluate((l) => window.__commandSystem.runLine(l).then((r) => r.result).catch((e) => 'HATA:' + e.code), l);
+  const focusView = () => page.evaluate(() => document.getElementById('view').focus());
+  const key = async (k) => { await focusView(); await page.keyboard.press(k); await page.waitForTimeout(200); };
+  let c = await n();
+  for (const [cmd, type] of [['BORU', 'tube'], ['SAC', 'sheet'], ['KONSTRÜKSİYON', 'frame'], ['SÜPÜRME', 'sweep'], ['LOFT', 'loft']]) {
+    await line(cmd); expect(await n() === c + 1 && (await last()).type === type, cmd + ' → ' + type + ': ' + JSON.stringify(await last())); c++;
+  }
+  await line('DİŞLİ'); expect(await n() === c + 1 && (await last()).gear, 'DİŞLİ'); c++;
+  // kabuk: dolu kutuda iç boşluk parçası
+  await line('KUTU 50 50 50'); c++;
+  await line('KABUK 2'); expect(await n() === c + 1 && (await last()).op === 'sub', 'KABUK 2 iç boşluk ekledi'); c++;
+  await line('KUTU 20 20 20'); c++;
+  await key('Control+d'); expect(await n() === c + 1, 'Ctrl+D çoğalttı'); c++;
+  expect(String(await line('AYNA Q')) === 'false' && await n() === c, 'yanlış ayna ekseni reddedildi');
+  await line('AYNA X'); expect(await n() === c + 1, 'AYNA X'); c++;
+  await line('DİZİ 3 60 0 0'); expect(await n() === c + 3, 'DİZİ 3 → 3 kopya'); c += 3;
+  await line('DAİRESEL DİZİ 4'); expect(await n() === c + 3, 'DAİRESEL DİZİ 4 → 3 kopya'); c += 3;
+  // gizle / göster, oyuk / birleştir (seçili = son parça)
+  const cnt = (f) => page.evaluate((f) => window.__app.parts.filter((p) => (f === 'hidden' ? p.hidden : p.op === 'sub')).length, f);
+  const h0 = await cnt('hidden'), s0 = await cnt('sub');
+  await key('h'); expect(await cnt('hidden') === h0 + 1, 'H gizledi'); await key('h'); expect(await cnt('hidden') === h0, 'H geri getirdi');
+  await line('OYUK'); expect(await cnt('sub') === s0 + 1, 'OYUK'); await line('BİRLEŞTİR'); expect(await cnt('sub') === s0, 'BİRLEŞTİR');
+  // sekmeler
+  await line('GİT KAYNAK'); expect(await page.evaluate(() => window.__app.tab) === 'weld', 'GİT KAYNAK');
+  await line('GİT CNC'); expect(await page.evaluate(() => window.__app.tab) === 'cam', 'GİT CNC (eş anlamlı)');
+  await key('PageDown'); expect(await page.evaluate(() => window.__app.tab) === 'occt', 'PageDown sonraki sekme');
+  await key('PageUp'); expect(await page.evaluate(() => window.__app.tab) === 'cam', 'PageUp önceki sekme');
+  expect(String(await line('GİT YOKBÖYLE')) === 'false', 'olmayan sekme reddedildi');
+  await line('GİT ÖLÇÜ');
+  // görünümler: kamera yönü
+  const dir = () => page.evaluate(() => { const A = window.__app, c = A.camera; const t = new A.THREE.Vector3(); c.getWorldDirection(t); return [t.x, t.y, t.z].map((v) => Math.round(v * 100) / 100); });
+  await key('1'); let d = await dir(); expect(Math.abs(d[2]) > 0.98, 'önden: ' + d);
+  await key('2'); d = await dir(); expect(Math.abs(d[1]) > 0.98, 'üstten: ' + d);
+  await key('3'); d = await dir(); expect(Math.abs(d[0]) > 0.98, 'yandan: ' + d);
+  await key('4'); d = await dir(); expect(Math.abs(d[0]) > 0.3 && Math.abs(d[1]) > 0.3 && Math.abs(d[2]) > 0.3, 'izometrik: ' + d);
+  await line('GÖRÜNÜM ÜST'); d = await dir(); expect(Math.abs(d[1]) > 0.98, 'GÖRÜNÜM ÜST: ' + d);
+  // kesit, ölçüm, Esc
+  await line('KESİT X'); expect(await page.evaluate(() => window.__app.section.on && window.__app.section.axis === 'x'), 'KESİT X');
+  await line('KESİT'); expect(await page.evaluate(() => !window.__app.section.on), 'KESİT kapattı');
+  await key('m'); expect(await page.evaluate(() => window.__app.measure.on), 'M ölçüm açtı');
+  await key('Escape'); expect(await page.evaluate(() => !window.__app.measure.on), 'Esc ölçümü kapattı');
+  expect(await page.evaluate(() => window.__app.hasSel), 'seçim var');
+  await key('Escape'); expect(await page.evaluate(() => !window.__app.hasSel), 'Esc seçimi bıraktı');
+  // birim
+  await line('BİRİM CM'); expect(await page.evaluate(() => window.__app.settings.unit) === 'cm', 'BİRİM CM');
+  await line('BİRİM MM'); expect(await page.evaluate(() => window.__app.settings.unit) === 'mm', 'BİRİM MM');
+});
+
 /* ---------- K. Proje bütünlüğü ---------- */
 await T('Proje bütünlüğü: parça + malzeme + OCCT parçası + 5 eksen ayarları + analiz sonucu kaydedilip açılır', 'K-Proje', async ({ page }) => {
   await tab(page, 'dims'); await setK(page, 'w', 80); await setK(page, 'h', 20); await setK(page, 'l', 40);

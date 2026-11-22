@@ -5263,7 +5263,7 @@ registerCadCommand({
 });
 registerCadCommand({
   id: 'sketch.extrude', names: { tr: '2B çizimden ekstrüzyon', en: 'Extrude from 2D sketch' },
-  aliases: { tr: ['ekstrüzyon', 'ekstrüde et'], en: ['extrude', 'extrusion'] },
+  aliases: { tr: ['ekstrüzyon', 'ekstrüde et', '2b', '2b çizim'], en: ['extrude', 'extrusion', '2d', 'cad2d'] },
   description: { tr: '2B çizim ekranını açar; çizimi tamamlayınca 3B parça oluşur', en: 'Opens the 2D sketch editor; completing the sketch creates a 3D part' },
   category: 'features', execute: () => open2D()
 });
@@ -5282,6 +5282,139 @@ registerCadCommand({
   parameters: [{ name: 'radius', type: 'number', min: 0.01 }],
   category: 'features', canExecute: () => edgeSels.length > 0 && !!edgeG && !edgeBusy,
   execute: (_ctx, args) => { if (args.radius != null) cp.es = args.radius; return edgeFeature('fillet'); }
+});
+
+/* ---- Klavye 2. aşama: 3B'nin geri kalanı, görünümler, sekmeler ---- */
+// düğme işlemini klavyeden çalıştır: aynı tıklama işleyicisinden geçer (sekme geçişi, panel temizliği vb. aynen olur)
+function clickAct(a) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.dataset.act = a; b.hidden = true;
+  document.body.appendChild(b);
+  try { b.click(); } finally { b.remove(); }
+}
+const tabFold = (s) => String(s || '').replace(/[^\p{L}\p{N} ]/gu, '').trim().toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i');
+const TAB_SYN = { cnc: 'cam', freze: 'cam', torna: 'cam', gkodu: 'cam', analiz: 'fem', fea: 'fem', fem: 'fem', brep: 'occt', occt: 'occt', mekatronik: 'meka', teknik: 'sheet', 'teknik resim': 'sheet', resim: 'sheet', kenar: 'edge', yuz: 'face', delik: 'face', olcu: 'dims', konum: 'pos', dondur: 'rot', cogalt: 'copy', kabuk: 'shell', montaj: 'mate', bag: 'link', parca: 'part', gorunum: 'view', hareket: 'anim', dayanim: 'str', hesap: 'calc', agirlik: 'wgt', maliyet: 'cost', uretim: 'mfg', kaynak: 'weld', 'montaj plani': 'asm', gelecek: 'sim', degisken: 'param', tur: 'type' };
+function findTab(name) {
+  const q = tabFold(name);
+  if (!q) return null;
+  const hit = TABS.find(([k]) => k === q) || TABS.find(([, l]) => tabFold(l) === q);
+  return hit ? hit[0] : (TAB_SYN[q] || TAB_SYN[q.replace(/ /g, '')] || null);
+}
+function gotoTab(k) {
+  if (!TABS.some(([t]) => t === k)) return false;
+  if (window.__shell) window.__shell.showTab(k); else clickAct('tab-' + k);
+  return true;
+}
+const AXIS_ARG = (v) => { const a = tabFold(v); return a === 'x' || a === 'y' || a === 'z' ? a : null; };
+const simpleAdd = (id, tr, en, trAl, enAl, run, desc) => registerCadCommand({
+  id, names: { tr, en }, aliases: { tr: trAl, en: enAl }, description: desc || { tr: '', en: '' }, category: 'model', execute: run
+});
+simpleAdd('model.createTube', 'Boru oluştur', 'Create tube', ['boru', 'tüp'], ['tube', 'pipe'], () => addPart('tube', 'add'));
+simpleAdd('model.createGear', 'Dişli oluştur', 'Create gear', ['dişli', 'dişli çark'], ['gear'], () => addGear());
+simpleAdd('model.createSketch', 'Kroki çiz', 'New sketch', ['kroki', 'kroki çiz', 'profil'], ['sketch', 'new sketch'], () => newSketch());
+simpleAdd('model.createSweep', 'Süpürme oluştur', 'Create sweep', ['süpürme', 'süpür'], ['sweep'], () => addPart('sweep', 'add'));
+simpleAdd('model.createLoft', 'Loft oluştur', 'Create loft', ['loft', 'geçiş'], ['loft'], () => addPart('loft', 'add'));
+simpleAdd('model.createSheet', 'Sac metal oluştur', 'Create sheet metal', ['sac', 'sac metal'], ['sheet', 'sheet metal'], () => addPart('sheet', 'add'));
+simpleAdd('model.createFrame', 'Konstrüksiyon oluştur', 'Create frame', ['konstrüksiyon', 'iskelet', 'çerçeve'], ['frame', 'weldment'], () => addPart('frame', 'add'));
+simpleAdd('model.squareHole', 'Kare delik / cep', 'Square hole / pocket', ['kare delik', 'cep'], ['square hole', 'pocket'], () => { if (!needPart()) return false; return addPart('box', 'sub'); },
+  { tr: 'Seçili parçaya kare oyuk parça ekler (ölçüsü Ölçü sekmesinden)', en: 'Adds a square cutting part' });
+registerCadCommand({
+  id: 'model.shell', names: { tr: 'Kabuk yap', en: 'Shell' }, aliases: { tr: ['kabuk', 'içini boşalt'], en: ['shell'] },
+  description: { tr: 'Et kalınlığı (mm). Örnek: KABUK 2', en: 'Wall thickness (mm). Example: SHELL 2' },
+  parameters: [{ name: 'wall', type: 'number', min: 0.1 }], category: 'features', canExecute: (ctx) => ctx.hasSelection,
+  execute: (_c, a) => { if (a.wall != null) cp.wall = a.wall; return shellFeature(); }
+});
+registerCadCommand({
+  id: 'model.duplicate', names: { tr: 'Çoğalt', en: 'Duplicate' }, aliases: { tr: ['çoğalt', 'kopyala', 'kopya'], en: ['duplicate', 'copy'] },
+  description: { tr: 'Seçili parçanın kopyası (Ctrl+D)', en: 'Copy of the selected part (Ctrl+D)' },
+  category: 'edit', shortcuts: ['CTRL+D'], canExecute: (ctx) => ctx.hasSelection, execute: () => doDup(1)
+});
+registerCadCommand({
+  id: 'model.mirror', names: { tr: 'Ayna kopya', en: 'Mirror copy' }, aliases: { tr: ['ayna', 'aynala'], en: ['mirror'] },
+  description: { tr: 'Eksen X ya da Z. Örnek: AYNA X', en: 'Axis X or Z. Example: MIRROR X' },
+  parameters: [{ name: 'axis', type: 'string', required: true }], category: 'edit', canExecute: (ctx) => ctx.hasSelection,
+  execute: (_c, a) => { const ax = AXIS_ARG(a.axis); if (ax !== 'x' && ax !== 'z') { toast('Ayna ekseni X ya da Z olmalı'); return false; } return doMirror(ax); }
+});
+registerCadCommand({
+  id: 'model.linearArray', names: { tr: 'Doğrusal dizi', en: 'Linear pattern' }, aliases: { tr: ['dizi', 'doğrusal dizi'], en: ['array', 'linear pattern'] },
+  description: { tr: 'Kopya sayısı ve X Y Z aralığı (mm). Örnek: DİZİ 4 40 0 0', en: 'Copies and X Y Z spacing (mm). Example: ARRAY 4 40 0 0' },
+  parameters: [{ name: 'n', type: 'number', required: true, min: 1, max: 40 }, { name: 'dx', type: 'number' }, { name: 'dy', type: 'number' }, { name: 'dz', type: 'number' }],
+  category: 'edit', canExecute: (ctx) => ctx.hasSelection,
+  execute: (_c, a) => {
+    if (!Number.isInteger(a.n)) { toast('Kopya sayısı tam sayı olmalı'); return false; }
+    cp.n = a.n; if (a.dx != null || a.dy != null || a.dz != null) { cp.dx = a.dx || 0; cp.dy = a.dy || 0; cp.dz = a.dz || 0; }
+    if (!(cp.dx || cp.dy || cp.dz)) { toast('Aralık 0 olamaz: DİZİ 4 40 0 0'); return false; }
+    return doLinear();
+  }
+});
+registerCadCommand({
+  id: 'model.circularArray', names: { tr: 'Dairesel dizi', en: 'Circular pattern' }, aliases: { tr: ['dairesel dizi', 'çember dizi'], en: ['polar array', 'circular pattern'] },
+  description: { tr: 'Toplam adet ve açı (derece). Örnek: DAİRESEL DİZİ 6 360', en: 'Total count and angle. Example: POLAR ARRAY 6 360' },
+  parameters: [{ name: 'n', type: 'number', required: true, min: 2, max: 41 }, { name: 'ang', type: 'number' }],
+  category: 'edit', canExecute: (ctx) => ctx.hasSelection,
+  execute: (_c, a) => { if (!Number.isInteger(a.n)) { toast('Adet tam sayı olmalı'); return false; } cp.cn = a.n; if (a.ang != null) { if (!a.ang) { toast('Açı 0 olamaz'); return false; } cp.ang = a.ang; } return doCircular(); }
+});
+registerCadCommand({
+  id: 'model.toggleHidden', names: { tr: 'Gizle / göster', en: 'Hide / show' }, aliases: { tr: ['gizle', 'göster'], en: ['hide', 'show'] },
+  category: 'view', shortcuts: ['H'], canExecute: (ctx) => ctx.hasSelection,
+  execute: () => { commit(); const p = cur(); p.hidden = !p.hidden; refreshAll(); toast(p.hidden ? 'Parça gizlendi (H ile geri gelir)' : 'Parça gösteriliyor'); }
+});
+registerCadCommand({
+  id: 'model.setAdd', names: { tr: 'Birleştir (ekle)', en: 'Set as add' }, aliases: { tr: ['birleştir', 'ekle'], en: ['union', 'add'] },
+  description: { tr: 'Seçili parça dolu (eklenen) olur', en: 'Selected part becomes solid' },
+  category: 'features', canExecute: (ctx) => ctx.hasSelection, execute: () => { commit(); cur().op = 'add'; refreshAll(); }
+});
+registerCadCommand({
+  id: 'model.setSub', names: { tr: 'Oyuk aç (çıkar)', en: 'Set as cut' }, aliases: { tr: ['oyuk', 'çıkar', 'oyuk aç'], en: ['subtract', 'cut'] },
+  description: { tr: 'Seçili parça diğerlerinden oyulur', en: 'Selected part cuts the others' },
+  category: 'features', canExecute: (ctx) => ctx.hasSelection, execute: () => { commit(); cur().op = 'sub'; refreshAll(); }
+});
+simpleAdd('model.bake', 'Tek parça yap', 'Combine to one part', ['tek parça', 'tek parça yap'], ['combine', 'bake'], () => bakeAll());
+registerCadCommand({
+  id: 'view.measure', names: { tr: 'Ölçüm aracı', en: 'Measure tool' }, aliases: { tr: ['ölç', 'ölçüm', 'mesafe'], en: ['measure', 'dist'] },
+  description: { tr: 'İki noktaya dokunarak mesafe ölç (M)', en: 'Measure distance between two points (M)' },
+  category: 'view', shortcuts: ['M'], execute: () => { setMeasure(!measure.on); renderPanel(); toast(measure.on ? 'Ölçüm açık: iki noktaya dokun' : 'Ölçüm kapandı'); }
+});
+registerCadCommand({
+  id: 'view.section', names: { tr: 'Kesit görünüşü', en: 'Section view' }, aliases: { tr: ['kesit', 'kesit al'], en: ['section'] },
+  description: { tr: 'KESİT (aç / kapat) ya da KESİT X / Y / Z', en: 'SECTION (toggle) or SECTION X / Y / Z' },
+  parameters: [{ name: 'axis', type: 'string' }], category: 'view',
+  execute: (_c, a) => {
+    if (a.axis == null) { clickAct('sec-toggle'); return; }
+    const ax = AXIS_ARG(a.axis);
+    if (!ax) { toast('Kesit ekseni X, Y ya da Z olmalı'); return false; }
+    if (!section.on) clickAct('sec-toggle');
+    clickAct('sec-' + ax);
+  }
+});
+const VIEW_ARG = { on: 'front', onden: 'front', front: 'front', ust: 'top', usten: 'top', top: 'top', yan: 'side', yandan: 'side', side: 'side', right: 'side', izo: 'iso', izometrik: 'iso', iso: 'iso', isometric: 'iso' };
+registerCadCommand({
+  id: 'view.named', names: { tr: 'Görünüm', en: 'View' }, aliases: { tr: ['görünüm', 'bakış'], en: ['view'] },
+  description: { tr: 'ÖN, ÜST, YAN ya da İZO (kısayol 1 2 3 4)', en: 'FRONT, TOP, SIDE or ISO (keys 1 2 3 4)' },
+  parameters: [{ name: 'name', type: 'string', required: true }], category: 'view',
+  execute: (_c, a) => { const v = VIEW_ARG[tabFold(a.name)]; if (!v) { toast('Görünüm: ÖN, ÜST, YAN ya da İZO'); return false; } setView(v); }
+});
+for (const [k, v, tr, en] of [['1', 'front', 'Önden bak', 'Front view'], ['2', 'top', 'Üstten bak', 'Top view'], ['3', 'side', 'Yandan bak', 'Side view'], ['4', 'iso', 'İzometrik bak', 'Isometric view']]) {
+  registerCadCommand({ id: 'view.' + v, names: { tr, en }, aliases: { tr: [tabFold(tr)], en: [v + ' view'] }, category: 'view', shortcuts: [k], execute: () => setView(v) });
+}
+registerCadCommand({
+  id: 'edit.clearSelection', names: { tr: 'Seçimi bırak', en: 'Clear selection' }, aliases: { tr: ['seçimi bırak', 'seçme'], en: ['deselect', 'clear selection'] },
+  category: 'edit', shortcuts: ['ESCAPE'],
+  execute: () => { if (measure.on) { setMeasure(false); renderPanel(); return; } if (hasSel()) { selOff = sel; renderPanel(); refreshOverlays(); } }
+});
+registerCadCommand({
+  id: 'ui.gotoTab', names: { tr: 'Sekmeye git', en: 'Go to tab' }, aliases: { tr: ['git', 'sekme', 'aç'], en: ['go', 'tab', 'goto'] },
+  description: { tr: 'Örnek: GİT KAYNAK, GİT CNC, GİT ANALİZ, GİT RESİM', en: 'Example: GO WELD, GO CNC, GO FEA' },
+  parameters: [{ name: 'tab', type: 'string', required: true }], category: 'interface',
+  execute: (_c, a) => { const k = findTab(a.tab); if (!k || !gotoTab(k)) { toast('Sekme bulunamadı: ' + a.tab); return false; } }
+});
+const stepTab = (d) => { const i = Math.max(0, TABS.findIndex(([k]) => k === tab)); gotoTab(TABS[(i + d + TABS.length) % TABS.length][0]); };
+registerCadCommand({ id: 'ui.nextTab', names: { tr: 'Sonraki sekme', en: 'Next tab' }, aliases: { tr: ['sonraki sekme'], en: ['next tab'] }, category: 'interface', shortcuts: ['PAGEDOWN'], execute: () => stepTab(1) });
+registerCadCommand({ id: 'ui.prevTab', names: { tr: 'Önceki sekme', en: 'Previous tab' }, aliases: { tr: ['önceki sekme'], en: ['previous tab', 'prev tab'] }, category: 'interface', shortcuts: ['PAGEUP'], execute: () => stepTab(-1) });
+registerCadCommand({
+  id: 'settings.unit', names: { tr: 'Birim', en: 'Units' }, aliases: { tr: ['birim'], en: ['units', 'unit'] },
+  description: { tr: 'BİRİM MM, CM ya da İNÇ', en: 'UNITS MM, CM or IN' }, parameters: [{ name: 'u', type: 'string', required: true }], category: 'interface',
+  execute: (_c, a) => { const u = { mm: 'mm', cm: 'cm', in: 'in', inc: 'in', inch: 'in' }[tabFold(a.u)]; if (!u) { toast('Birim: MM, CM ya da İNÇ'); return false; } clickAct('unit-' + u); }
 });
 
 registerCadCommand({
@@ -5350,7 +5483,7 @@ try {
 } catch (e) { /* bozuk kayıt: varsayılanla devam */ }
 
 // test / hata ayıklama için küçük kanca (arayüzü etkilemez)
-window.__app = { get param() { return { vars: paramVars, cfg: paramCfg, deger: paramState.deger, satir: paramState.satir, err: paramErr, rollTo }; }, get sheetInfo() { return sheetInfo; }, get drawCfg() { return drawCfg; }, get lathe() { return latheUI; }, get edgeSel() { return { n: edgeSels.length, g: edgeG ? edgeG.edges.length : 0, busy: edgeBusy, sel: edgeSels.map((e) => ({ type: e.type, mid: e.mid.map((v) => Math.round(v * 100) / 100) })) }; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, get weightMarkerCount() { return wgtGroup.children.length; }, settings, section, measure, rebuild, refreshAll, THREE, camera };
+window.__app = { get param() { return { vars: paramVars, cfg: paramCfg, deger: paramState.deger, satir: paramState.satir, err: paramErr, rollTo }; }, get sheetInfo() { return sheetInfo; }, get drawCfg() { return drawCfg; }, get lathe() { return latheUI; }, get edgeSel() { return { n: edgeSels.length, g: edgeG ? edgeG.edges.length : 0, busy: edgeBusy, sel: edgeSels.map((e) => ({ type: e.type, mid: e.mid.map((v) => Math.round(v * 100) / 100) })) }; }, edgeMat, selfTestEdges, get edgesBroken() { return edgesBroken; }, applyCommands, parseVoice, get parts() { return parts; }, get lastClean() { return lastClean; }, get modelMesh() { return modelMesh; }, get weightMarkerCount() { return wgtGroup.children.length; }, get tab() { return tab; }, get hasSel() { return hasSel(); }, settings, section, measure, rebuild, refreshAll, THREE, camera };
 
 renderPanel();
 updateToolbar();
