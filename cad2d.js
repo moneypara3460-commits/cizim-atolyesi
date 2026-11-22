@@ -338,7 +338,8 @@ export function openCad2D(opts = {}) {
     }
     // durum satırı
     const kName = { end: 'uç nokta', mid: 'orta nokta', cen: 'merkez', int: 'kesişim', quad: 'çeyrek', grid: '' };
-    let st = aim ? 'X ' + fmt(aim.p[0]) + '  Y ' + fmt(aim.p[1]) + (aim.k !== 'grid' ? '  · ' + kName[aim.k] : '') : 'Varlık: ' + doc.ents.length + (sel.size ? '  · Seçili: ' + sel.size : '');
+    // fare gezinirken de varlık sayısı görünür kalır (imleç koordinatı ondan sonra)
+    let st = 'Varlık: ' + doc.ents.length + (sel.size ? '  · Seçili: ' + sel.size : '') + (aim ? '  · X ' + fmt(aim.p[0]) + '  Y ' + fmt(aim.p[1]) + (aim.k !== 'grid' ? '  · ' + kName[aim.k] : '') : '');
     if (aim && pts.length && ['line', 'move', 'copy', 'dim', 'rect'].includes(tool)) {
       const b = pts[pts.length - 1], d = dist(b, aim.p), a = Math.atan2(aim.p[1] - b[1], aim.p[0] - b[0]) * 180 / Math.PI;
       st += tool === 'rect' ? '  · ' + fmt(Math.abs(aim.p[0] - b[0])) + ' × ' + fmt(Math.abs(aim.p[1] - b[1])) : '  · L ' + fmt(d) + '  ∠ ' + fmt(a) + '°';
