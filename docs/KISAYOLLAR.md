@@ -1,6 +1,6 @@
 # Klavye kısayolları ve komutlar
 
-Uygulamanın bütün klavye kısayolları ve yazılı komutları. Uygulamada **?** ya da **F1** (yazı alanı dışında) bu listeyi açar;
+Uygulamanın bütün klavye kısayolları ve yazılı komutları (tuşlar sabittir). Uygulamada **?** ya da **F1** (yazı alanı dışında) bu listeyi açar;
 Makine bölümünde Ctrl+K paletine **KISAYOLLAR** yazmak da açar.
 3B komut sisteminin iç yapısı: [COMMAND-SYSTEM.md](COMMAND-SYSTEM.md).
 
@@ -178,15 +178,10 @@ En üstteki ekran tuşu alır (3B görünüm → örgü çizelgesi → pastal �
 **Stampa çizim ekranı (işlemler):** P yeni saya parçası · Ctrl+D parçayı kopyala · Enter çizgiyi bitir · Shift+Enter çizgiyi kapat · Delete seçileni sil · Esc vazgeç → seç · F ortala · + / − yakınlaştır / uzaklaştır · Ctrl+Z / Ctrl+Y.
 Çizim alanı (kanvas) seçiliyken Esc, Enter, Delete / Backspace ve Ctrl+Z ekranın kendi davranışıyla çalışır.
 
-## 6. Yardım ekranı ve tuş değiştirme
+## 6. Yardım ekranı
 
-**?** ya da **F1**: bulunulan bölümün bütün tuşları ve komutları (açık olan ekranın bölümü en üstte). Arama kutusu ada, komuta ve tuşa göre süzer. **Esc** kapatır.
-Yardım açıkken alttaki ekran tuş almaz.
+**?** ya da **F1** (yazı alanı dışında): bulunulan bölümün bütün tuşları ve komutları (açık olan ekranın bölümü en üstte). Arama kutusu ada, komuta ve tuşa göre süzer. **Esc** kapatır.
+Yardım açıkken alttaki ekran tuş almaz. Makine'de palete **KISAYOLLAR** yazmak da açar.
 
-**Tuş değiştirme:** Satırdaki **Değiştir** → yeni tuşa ya da birleşime bas (Esc: vazgeç).
-- Aynı ekranda başka bir işin kullandığı tuş reddedilir ("zaten … için kullanılıyor").
-- Tarayıcıya ayrılmış tuşlar atanamaz: Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+Tab, Ctrl+1–9, Ctrl+L, Ctrl+Q, Ctrl+R, F5, F11, F12, Tab.
-- Değişen tuş turuncu görünür; üstüne gelince varsayılanı yazar. **Varsayılana dön** o bölümdeki bütün değişiklikleri siler.
-- Değişiklikler bu cihazda (tarayıcıda) saklanır: `cizim:kisayol`. Sayfa yenilense de kalır.
-
-Değiştirilebilen: Makine 3B tuşları, Tekstil ve Ayakkabı ekranlarının tuşları. 2B çizimin AutoCAD tuşları (Enter, Esc, F3, F8…) ve yazılı komutlar sabittir; listede gösterilir.
+**Tuşlar sabittir.** Kullanıcı tuş değiştiremez: herkes aynı tuşlarla çalışır, kılavuz ve destek her kullanıcı için geçerlidir (23.11.2026 kararı).
+Eski sürümde kaydedilmiş kullanıcı tuşu (`cizim:kisayol`) açılışta silinir.

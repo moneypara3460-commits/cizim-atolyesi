@@ -155,7 +155,7 @@ window.addEventListener('pointercancel', () => { dragY = null; });
 const C = (grp, title, sub, kw, run, icon, tag) => ({ grp, title, sub, kw, run, icon, tag });
 const T = (k, title, sub, kw, icon) => C(MODE_NAME[TAB_MODE[k]], title, sub, kw, { tab: k }, icon);
 const CMDS = [
-  C('Uygulama', 'Klavye kısayolları', 'Bütün tuşlar ve komutlar; tuşları değiştir (? ya da F1)', 'kısayol kısayollar klavye tuş tuşlar yardım komut listesi', { line: 'KISAYOLLAR' }, 'help'),
+  C('Uygulama', 'Klavye kısayolları', 'Bütün tuşlar ve komutlar (? ya da F1)', 'kısayol kısayollar klavye tuş tuşlar yardım komut listesi', { line: 'KISAYOLLAR' }, 'help'),
   C('Tasarım', 'Kutu ekle', 'Dikdörtgen prizma, blok', 'kutu prizma blok plaka', { act: 'add-box' }, 'cube'),
   C('Tasarım', 'Silindir ekle', 'Mil, disk, flanş tabanı', 'silindir mil disk yuvarlak', { act: 'add-cylinder' }, 'cyl'),
   C('Tasarım', 'Küre ekle', '', 'küre top bilye', { act: 'add-sphere' }, 'sphere'),
