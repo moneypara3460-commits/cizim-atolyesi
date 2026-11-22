@@ -46,7 +46,7 @@ import * as PRM from './degisken.js?v=20261120h';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
 import { createMekaUI } from './meka/ui.js?v=20261119c';
-import { CommandRegistry, CommandDispatcher, ShortcutResolver } from './command-system/core.mjs';
+import { CommandRegistry, CommandDispatcher, ShortcutResolver, parseCommandLine } from './command-system/core.mjs?v=20261122a';
 
 const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -5038,6 +5038,15 @@ const commandDispatcher = new CommandDispatcher(commandRegistry, {
 });
 
 const registerCadCommand = (definition) => commandRegistry.register(definition);
+// parça ya da onunla taşınan alt parçalarından birinin konumu / açısı değişkene bağlıysa komut değiştirmez (ƒx kuralı)
+const POSE_EQ = ['x', 'y', 'z', 'rx', 'ry', 'rz'];
+const poseLocked = (p) => [p, ...descendantsOf(parts, p.id)].some((q) => q.eq && POSE_EQ.some((k) => q.eq[k]));
+// merkezden boydan boya deliğin sığacağı çap sınırı (parçanın en dar kesiti)
+function holeRoom(p) {
+  if (p.type === 'box') return Math.min(clamp(p.w), clamp(p.l));
+  if (p.type === 'cone') return p.d2 > 0 ? Math.min(clamp(p.d), clamp(p.d2)) : 0;
+  return clamp(p.d);
+}
 
 let commandUiLanguage = 'tr';
 try { commandUiLanguage = localStorage.getItem('cizim:command-language') === 'en' ? 'en' : 'tr'; } catch (e) { /* varsayılan */ }
@@ -5123,7 +5132,8 @@ function openCommandPalette() {
         if (!line) return;
         event.preventDefault();
         closeCommandPalette();
-        commandDispatcher.dispatchLine(line, { source: 'terminal' }).catch((error) => toast(error.message));
+        // çalışma sırasındaki hatayı dispatcher zaten gösterir (onError); burada yalnız ayrıştırma hataları
+        commandDispatcher.dispatchLine(line, { source: 'terminal' }).catch((error) => { if (error.code !== 'EXECUTION_FAILED' && error.code !== 'NOT_AVAILABLE') toast(error.message); });
       }
     });
     commandPalette.addEventListener('pointerdown', (event) => event.stopPropagation());
@@ -5205,6 +5215,7 @@ registerCadCommand({
   execute: (_ctx, args) => {
     const dx = args.dx || 0, dy = args.dy || 0, dz = args.dz || 0;
     if (![dx, dy, dz].some((v) => v !== 0)) { toast('Kullanım: MOVE 10 0 0 (mm)'); return false; }
+    if (poseLocked(cur())) { toast('Parçanın ya da alt parçalarının konumu değişkene bağlı; ƒx sekmesinden değiştir'); return false; }
     commit();
     carry(cur(), () => { cur().x = pos(cur().x) + dx; cur().y = pos(cur().y) + dy; cur().z = pos(cur().z) + dz; });
     refreshAll(); return true;
@@ -5220,6 +5231,7 @@ registerCadCommand({
     const axis = String(args.axis || '').toLowerCase();
     if (!['x', 'y', 'z'].includes(axis)) { toast('Eksen x, y veya z olmalı'); return false; }
     if (args.degrees === 0) { toast('Dönüş açısı 0 olamaz'); return false; }
+    if (poseLocked(cur())) { toast('Parçanın ya da alt parçalarının konumu değişkene bağlı; ƒx sekmesinden değiştir'); return false; }
     commit();
     carry(cur(), () => { const key = 'r' + axis; cur()[key] = pos(cur()[key]) + args.degrees; });
     refreshAll(); return true;
@@ -5237,7 +5249,12 @@ registerCadCommand({
     if (!Number.isFinite(h) || !['box', 'cylinder', 'cone', 'sphere', 'tube'].includes(base.type)) {
       toast('Bu parça türünde otomatik delik açılamıyor'); return false;
     }
+    if (base.op === 'sub') { toast('Oyuk (çıkarma) parçasına delik açılmaz; dolu bir parça seç'); return false; }
     const diameter = args.diameter;
+    const room = holeRoom(base);
+    if (!(room > 0)) { toast('Sivri koninin tepesinden boydan boya delik geçmez'); return false; }
+    if (!(diameter < room)) { toast('Delik çapı parçadan büyük: Ø' + fmtNum(room, 2) + ' mm\'den küçük olmalı'); return false; }
+    if (base.type === 'tube' && diameter <= clamp(base.di)) { toast('Borunun iç çapı zaten Ø' + fmtNum(clamp(base.di), 2) + ' mm; daha büyük çap gir'); return false; }
     const cutter = cutterPart(base, 'sub', 'cylinder', { d: diameter, h: h + 2, w: diameter, l: diameter },
       new THREE.Vector3(0, h / 2, 0), new THREE.Quaternion(), 'Komut deliği Ø' + diameter);
     commit(); parts.push(cutter); selOff = null; sel = cutter.id; refreshAll();
@@ -5274,8 +5291,14 @@ registerCadCommand({
   execute: () => openCommandPalette()
 });
 
+// Yeni arayüzde (yeni/index.html) Ctrl+K kabuğun kendi arama paletini açar; komut satırı da oraya bağlanır.
+// Aynı tuşla ikinci bir palet açılmasın diye o arayüzde Ctrl+K bu sisteme bağlanmaz.
+const shellPalette = !!document.getElementById('palette');
 for (const command of commandRegistry.list()) {
-  for (const shortcut of command.shortcuts) shortcutResolver.bind(shortcut, command.id);
+  for (const shortcut of command.shortcuts) {
+    if (shellPalette && command.id === 'ui.commandPalette') continue;
+    shortcutResolver.bind(shortcut, command.id);
+  }
 }
 
 view.tabIndex = view.tabIndex >= 0 ? view.tabIndex : 0;
@@ -5290,6 +5313,8 @@ document.addEventListener('keydown', (event) => {
   if (!commandId) return;
   event.preventDefault();
   event.stopPropagation();
+  // tuş basılı tutulunca: geri al / yinele tekrarlansın; parça oluşturma, silme, kaydetme tekrarlanmasın
+  if (event.repeat && commandId !== 'edit.undo' && commandId !== 'edit.redo') return;
   commandDispatcher.dispatch(commandId, {}, { source: 'keyboard' }).catch(() => {});
 }, true);
 
@@ -5299,7 +5324,21 @@ window.__commandSystem = {
   dispatcher: commandDispatcher,
   shortcuts: shortcutResolver,
   run: (id, args = {}, source = 'api') => commandDispatcher.dispatch(id, args, { source }),
-  runLine: (line) => commandDispatcher.dispatchLine(line)
+  runLine: (line, source = 'terminal') => commandDispatcher.dispatchLine(line, { source }),
+  // yeni arayüzün arama paleti için: satır bir komut mu? (çalıştırmadan) → { id, name, usage, error } ya da null
+  inspect(line, lang = commandUiLanguage) {
+    const info = (c, error) => ({ id: c.id, name: c.names[lang] || c.names.tr, usage: c.description[lang] || c.description.tr || '', error });
+    try {
+      const r = parseCommandLine(line, commandRegistry);
+      return r ? info(r.command, null) : null;
+    } catch (e) {
+      if (e.code === 'UNKNOWN_COMMAND' || e.code === 'UNCLOSED_QUOTE') return null;
+      const w = String(line).trim().split(/\s+/);
+      for (let n = Math.min(3, w.length); n >= 1; n--) { const c = commandRegistry.resolve(w.slice(0, n).join(' ')); if (c) return info(c, e.message); }
+      return null;
+    }
+  },
+  toast: (m) => toast(m)
 };
 
 /* ================= Başlangıç ================= */

@@ -67,3 +67,49 @@ test("CAD komut örnekleri için Türkçe ve İngilizce adlar ortak komuta çöz
   assert.deepEqual(parseCommandLine("MOVE 10 0 -5", registry).args, { dx: 10, dy: 0, dz: -5 });
   assert.deepEqual(parseCommandLine("ROTATE Z 90", registry).args, { axis: "Z", degrees: 90 });
 });
+
+test("Türkçe ondalık virgül kabul edilir; binlik ayırıcılı yazım reddedilir", () => {
+  const registry = new CommandRegistry();
+  registry.register({ id: "model.move", names: { tr: "Taşı", en: "Move" }, parameters: [{ name: "dx", type: "number" }, { name: "dy", type: "number" }], execute: () => true });
+  assert.deepEqual(parseCommandLine("TAŞI 2,5 -0,75", registry).args, { dx: 2.5, dy: -0.75 });
+  assert.deepEqual(parseCommandLine("MOVE 2.5 1e1", registry).args, { dx: 2.5, dy: 10 });
+  assert.throws(() => parseCommandLine("MOVE 1.000,5", registry), { code: "INVALID_NUMBER" });
+  assert.throws(() => parseCommandLine("MOVE 1,2,3", registry), { code: "INVALID_NUMBER" });
+});
+
+test("çok kelimeli adlar komut satırında çözülür; en uzun ad önce", () => {
+  const registry = new CommandRegistry();
+  registry.register({ id: "model.hole", names: { tr: "Delik", en: "Hole" }, aliases: { tr: ["delik aç"], en: ["drill"] }, parameters: [{ name: "d", type: "number", required: true }], execute: () => true });
+  registry.register({ id: "model.box", names: { tr: "Kutu", en: "Box" }, aliases: { tr: ["kutu oluştur"], en: ["create box"] }, parameters: [{ name: "w", type: "number" }], execute: () => true });
+  const a = parseCommandLine("delik aç 10", registry);
+  assert.equal(a.command.id, "model.hole"); assert.deepEqual(a.args, { d: 10 });
+  assert.deepEqual(parseCommandLine("DELIK 8", registry).args, { d: 8 });
+  const b = parseCommandLine("create box 100", registry);
+  assert.equal(b.command.id, "model.box"); assert.deepEqual(b.args, { w: 100 });
+  assert.deepEqual(parseCommandLine("KUTU OLUŞTUR", registry).args, {});
+});
+
+test("Mac'te Cmd tuşu Ctrl kısayolu gibi çalışır; düz harf kısayolu Ctrl'li sayılmaz", () => {
+  const resolver = new ShortcutResolver();
+  resolver.bind("CTRL+Z", "edit.undo");
+  resolver.bind("B", "model.box");
+  const div = { tagName: "DIV" };
+  assert.equal(resolver.resolve({ key: "z", metaKey: true, target: div }), "edit.undo");
+  assert.equal(resolver.resolve({ key: "z", ctrlKey: true, target: div }), "edit.undo");
+  assert.equal(resolver.resolve({ key: "b", target: div }), "model.box");
+  assert.equal(resolver.resolve({ key: "b", metaKey: true, target: div }), null);
+});
+
+test("çalışmayan bağlamda komut çalıştırılmaz, meşgulken ikinci komut reddedilir", async () => {
+  const registry = new CommandRegistry();
+  let n = 0, release;
+  registry.register({ id: "edit.del", names: { tr: "Sil", en: "Delete" }, canExecute: (c) => c.hasSelection, execute: () => { n++; } });
+  registry.register({ id: "slow", names: { tr: "Yavaş", en: "Slow" }, execute: () => new Promise((r) => { release = r; }) });
+  const d = new CommandDispatcher(registry, { getContext: () => ({ hasSelection: false }) });
+  await assert.rejects(d.dispatch("edit.del"), { code: "NOT_AVAILABLE" });
+  assert.equal(n, 0);
+  const p = d.dispatch("slow");
+  await assert.rejects(d.dispatch("slow"), { code: "COMMAND_BUSY" });
+  release(); await p;
+  assert.equal(d.running, false);
+});
