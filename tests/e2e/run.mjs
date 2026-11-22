@@ -1341,6 +1341,9 @@ await T('Ağırlık merkezi işareti: son parça silinince, parçalar gizlenince
   const marks = () => page.evaluate(() => window.__app.weightMarkerCount);
   const on = async (msg) => { await page.waitForFunction(() => window.__app.weightMarkerCount > 0, null, { timeout: 8000 }).catch(() => {}); expect(await marks() > 0, msg); };
   const off = async (msg) => { await page.waitForTimeout(500); expect(await marks() === 0, msg + ' (kalan: ' + await marks() + ')'); };
+  // Testin başlangıç koşulunu açıkça kur: 3B ağırlık merkezi kullanıcı ayarı varsayılan olarak kapalıdır.
+  // Görünürlük açılmadan marker beklemek uygulama hatası değil, hatalı test beklentisidir.
+  await page.evaluate(() => { window.__app.settings.cogShow = true; window.__app.rebuild(); });
   await tab(page, 'wgt'); await on('ağırlık sekmesinde işaret çizildi');
   // 1) son parçayı sil
   // (düğmeler iki arayüzde farklı yerde: doğrudan basılır; sınanan şey çizim katmanı)
