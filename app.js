@@ -1910,12 +1910,13 @@ const wgtGroup = new THREE.Group();
 scene.add(wgtGroup);
 const wgtShowLift = { on: false };
 let wgtTimer = 0;
-function scheduleWeightMarker() { clearTimeout(wgtTimer); if (tab === 'wgt' && settings.cogShow) wgtTimer = setTimeout(drawWeightMarker, 250); }
+function scheduleWeightMarker() { clearTimeout(wgtTimer); if (settings.cogShow) wgtTimer = setTimeout(drawWeightMarker, 250); }
 function drawWeightMarker() {
   wgtGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); });
   wgtGroup.clear();
   wgtSprites.length = 0;
-  if (!(tab === 'wgt' && settings.cogShow) || !lastClean) return;
+  // Ağırlık merkezi katmanı sekmeden bağımsızdır: kullanıcı görünürlüğü açtıysa tüm çalışma alanlarında kalır.
+  if (!settings.cogShow || !lastClean) return;
   let R;
   try { R = weightCompute(); } catch (err) { return; }
   if (!R || !R.total.com) return;
