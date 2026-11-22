@@ -78,7 +78,7 @@ t('8. Uygulama ile sunucu fonksiyonu aynı ürün → bölüm eşlemesini kullan
   assert.deepEqual(server, client);
 });
 
-t('9. Veritabanı: iki tablo da satır güvenliğiyle korunur, kullanıcı yalnız okur; deneme süresi sunucuda 14 gün', () => {
+t('9. Veritabanı: iki tablo da satır güvenliğiyle korunur, kullanıcı yalnız okur; deneme süresi sunucuda 7 gün (23.11.2026)', () => {
   const sql = fs.readFileSync(path.join(ROOT, 'supabase/migrations/20261114170000_abonelik_temel.sql'), 'utf8');
   for (const tb of ['profiles', 'subscriptions']) assert.match(sql, new RegExp(`alter table public\\.${tb} enable row level security`));
   assert.equal((sql.match(/create policy/g) || []).length, 2);
@@ -86,6 +86,14 @@ t('9. Veritabanı: iki tablo da satır güvenliğiyle korunur, kullanıcı yaln�
   assert.doesNotMatch(sql, /for (insert|update|delete|all)/, 'kullanıcıya yazma izni yok');
   assert.match(sql, /trial_ends_at timestamptz not null default \(now\(\) \+ interval '14 days'\)/);
   assert.match(sql, /revoke execute on function public\.my_access\(\) from public, anon/);
+  // deneme 7 güne indirildi: en son migration hem varsayılanı hem yeni hesap işlevini 7 gün yapar
+  const d7 = fs.readFileSync(path.join(ROOT, 'supabase/migrations/20261123000000_deneme_7_gun.sql'), 'utf8');
+  assert.match(d7, /alter column trial_ends_at set default \(now\(\) \+ interval '7 days'\)/);
+  assert.match(d7, /else now\(\) \+ interval '7 days' end/);
+  assert.doesNotMatch(d7, /14 days/);
+  const later = fs.readdirSync(path.join(ROOT, 'supabase/migrations')).filter((f) => f > '20261123000000');
+  for (const f of later) assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'supabase/migrations', f), 'utf8'), /interval '14 days'/, f + ' denemeyi 14 güne döndürmesin');
+  assert.match(fs.readFileSync(path.join(ROOT, 'hesap/index.html'), 'utf8'), /7 gün boyunca tüm bölümler ücretsiz/);
 });
 
 t('10. Kilit varsayılan olarak kapalı; ayarlar doğru proje adresini gösterir; gizli anahtar yok', () => {
