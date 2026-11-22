@@ -1910,7 +1910,7 @@ const wgtGroup = new THREE.Group();
 scene.add(wgtGroup);
 const wgtShowLift = { on: false };
 let wgtTimer = 0;
-function scheduleWeightMarker() { clearTimeout(wgtTimer); if (settings.cogShow) wgtTimer = setTimeout(drawWeightMarker, 250); }
+function scheduleWeightMarker() { clearTimeout(wgtTimer); wgtTimer = setTimeout(drawWeightMarker, 250); }
 function drawWeightMarker() {
   wgtGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); });
   wgtGroup.clear();
