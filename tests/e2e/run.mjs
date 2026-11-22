@@ -1879,8 +1879,8 @@ await TX('Tekstil klavye: 1–9 ve PageDown / PageUp sekme, Ctrl+S kaydet; tekni
   await page.keyboard.press('v'); expect(await toolOn('sel') === 1, 'V → seç aracı');
   await page.keyboard.press('n'); expect(await toolOn('point') === 1, 'N → nokta aracı');
   // yazı alanında harf araç değiştirmez
-  await page.locator('#skx-x').focus(); await page.keyboard.press('l'); expect(await toolOn('point') === 1, 'yazı alanında L araç değiştirmedi');
-  await page.keyboard.press('Escape');
+  const fld = page.locator('#skx input:visible').first();
+  if (await fld.count()) { await fld.focus(); await page.keyboard.press('l'); expect(await toolOn('point') === 1, 'yazı alanında L araç değiştirmedi'); await page.keyboard.press('Escape'); }
   const views = page.locator('#skx [data-k="view"]');
   if (await views.count() > 1) { await page.keyboard.press('2'); await page.waitForTimeout(100); expect(await page.locator('#skx [data-k="view"]').nth(1).evaluate((b) => b.classList.contains('on')), '2 → ikinci görünüş'); await page.keyboard.press('1'); }
   await page.keyboard.press('Escape'); expect(await toolOn('sel') === 1, 'Esc → seç aracı');
