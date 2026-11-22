@@ -1567,35 +1567,29 @@ await T('Komutlar 3: TEKNİK RESİM (Z, Esc), Ctrl+P PDF, STL, PARÇA LİSTESİ,
   await waitText(page, '#tabbody', /Yeniden analiz et|ÜRETİMİ ANALİZ ET/, 60000);
 });
 
-await T('Kısayol yardımı: ? açar, arama, B tuşunu Q yap (Q kutu ekler, B eklemez), çakışma uyarısı, varsayılana dön; KISAYOLLAR komutu; 2B ekranında 2B bölümü önce', 'L-Komut', async ({ page }) => {
+await T('Kısayol yardımı: ? açar, arama süzer, liste yalnız okunur (değiştirme yok), açıkken alttaki ekran tuş almaz, Esc kapatır; KISAYOLLAR komutu; 2B ekranında 2B bölümü önce', 'L-Komut', async ({ page }) => {
   const n = () => page.evaluate(() => window.__app.parts.length);
-  const focusView = () => page.evaluate(() => document.getElementById('view').focus());
   await page.evaluate(() => document.activeElement && document.activeElement.blur());
   await page.keyboard.press('?'); await page.waitForSelector('#kbh');
   // başlıklar ekranda büyük harfle gösterilir (CSS); denetim yazının kendisiyle (textContent) yapılır
   expect(/3B tuşları/.test(await page.locator('#kbh').textContent()), 'yardım açıldı, 3B bölümü var');
+  expect(await page.locator('#kbh [data-h="edit"], #kbh [data-h="reset"]').count() === 0, 'değiştir / varsayılana dön düğmesi yok');
+  expect(/Kutu oluştur/.test(await page.locator('#kbh .ls').innerText()), 'B Kutu oluştur listede');
   await page.locator('#kbh input').fill('geri al'); await page.waitForTimeout(100);
   expect(/Geri al/.test(await page.locator('#kbh .ls').innerText()) && !/Kutu oluştur/.test(await page.locator('#kbh .ls').innerText()), 'arama süzdü');
-  await page.locator('#kbh input').fill('Kutu oluştur');
-  const row = page.locator('#kbh .rw', { hasText: 'Kutu oluştur' }).filter({ has: page.locator('button') }).first();
-  // çakışma: C silindirin tuşu
-  await row.locator('button').click(); await page.keyboard.press('c');
-  expect(/zaten/.test(await page.locator('#kbh .msg').innerText()), 'çakışan tuş reddedildi');
-  await row.locator('button').click(); await page.keyboard.press('q');
-  expect(/Q/.test(await row.locator('kbd').innerText()), 'tuş Q oldu');
-  await page.keyboard.press('Escape'); await page.waitForTimeout(100); expect(await page.locator('#kbh').count() === 0, 'Esc yardımı kapattı');
   const c0 = await n();
-  await focusView(); await page.keyboard.press('q'); await page.waitForTimeout(200); expect(await n() === c0 + 1, 'Q kutu ekledi');
-  await focusView(); await page.keyboard.press('b'); await page.waitForTimeout(200); expect(await n() === c0 + 1, 'B artık kutu eklemiyor');
-  // yenileyince de kalır, sonra varsayılana dön
+  await page.locator('#kbh input').press('b'); await page.waitForTimeout(150);
+  expect(await n() === c0, 'yardım açıkken B parça eklemedi');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(100); expect(await page.locator('#kbh').count() === 0, 'Esc yardımı kapattı');
+  // tuşlar sabit: eski sürümden kalan kullanıcı tuşu kaydı yok sayılır
+  await page.evaluate(() => localStorage.setItem('cizim:kisayol', JSON.stringify({ 'makine:B': 'Q' })));
   await page.reload(); await waitReady(page);
+  expect(await page.evaluate(() => localStorage.getItem('cizim:kisayol')) === null, 'eski kısayol kaydı temizlendi');
   const c1 = await n();
-  await focusView(); await page.keyboard.press('q'); await page.waitForTimeout(200); expect(await n() === c1 + 1, 'yenilemeden sonra da Q');
+  await page.evaluate(() => document.getElementById('view').focus()); await page.keyboard.press('b'); await page.waitForTimeout(200);
+  expect(await n() === c1 + 1, 'B kutu ekliyor (sabit tuş)');
   await page.evaluate(() => window.__commandSystem.runLine('KISAYOLLAR')); await page.waitForSelector('#kbh');
-  await page.locator('#kbh [data-h="reset"]').click(); expect(/varsayılana döndü/.test(await page.locator('#kbh .msg').innerText()), 'varsayılana dön');
   await page.keyboard.press('Escape');
-  const c2 = await n();
-  await focusView(); await page.keyboard.press('b'); await page.waitForTimeout(200); expect(await n() === c2 + 1, 'B yeniden kutu ekliyor');
   // 2B ekranında ? → 2B bölümleri önce
   await act(page, 'cad2d'); await page.waitForSelector('#cad');
   await page.evaluate(() => document.activeElement && document.activeElement.blur());

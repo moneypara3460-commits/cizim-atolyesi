@@ -16,8 +16,8 @@ import * as AIP from './aiparts.js?v=20261119c';
 import * as L3 from './last3d.js?v=20261119c';
 import { run as l3run } from './last3d-worker.js?v=20261119c';
 import { saveBlob } from '../tx/download.js?v=20261112u';
-import { installKeys, findBtn, press } from '../kb/keys.js?v=20261122a';
-import { installHelpKey, sectionsFromContexts } from '../kb/help.js?v=20261122a';
+import { installKeys, findBtn, press } from '../kb/keys.js?v=20261123a';
+import { installHelpKey, sectionsFromContexts } from '../kb/help.js?v=20261123a';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

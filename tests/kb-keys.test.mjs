@@ -1,7 +1,7 @@
 // Ortak klavye köprüsü (kb/keys.js): tuş adları, kullanıcı tuş değişiklikleri
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { keyName, normKey, effectiveKey, isEditable } from '../kb/keys.js';
+import { keyName, normKey, isEditable } from '../kb/keys.js';
 
 test('tuş adı: harf büyük, Ctrl / Cmd aynı, Shift yalnız Ctrl\'li ve özel tuşlarda', () => {
   assert.equal(keyName({ key: 'l' }), 'L');
@@ -18,14 +18,10 @@ test('tuş adı: harf büyük, Ctrl / Cmd aynı, Shift yalnız Ctrl\'li ve özel
   assert.equal(keyName({ key: 'p', ctrlKey: true, altKey: true }), 'CTRL+ALT+P');
 });
 
-test('tuş yazımı sıradan bağımsız; kullanıcı değişikliği ekran bazında uygulanır', () => {
+test('tuş yazımı sıradan bağımsız', () => {
   assert.equal(normKey('shift+ctrl+p'), 'CTRL+SHIFT+P');
   assert.equal(normKey('Ctrl + Z'), 'CTRL+Z');
-  const ovr = { 'tx-kalip:C': 'Q', 'tx-cizim:CTRL+P': 'ctrl+shift+x' };
-  assert.equal(effectiveKey('tx-kalip', 'C', ovr), 'Q');
-  assert.equal(effectiveKey('tx-cizim', 'CTRL+P', ovr), 'CTRL+SHIFT+X');
-  assert.equal(effectiveKey('tx-cizim', 'C', ovr), 'C');
-  assert.equal(effectiveKey('tx-orgu', 'CTRL+P', ovr), 'CTRL+P');
+  assert.equal(normKey('escape'), 'ESCAPE');
 });
 
 test('yazı alanı ayrımı', () => {

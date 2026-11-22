@@ -1,7 +1,7 @@
 // Ortak klavye köprüsü: bir ekranın (kök öğe) düğmelerine tuşla basmak.
 // Her ekran bir tuş listesi verir: { key: 'CTRL+Z', label: 'Geri al', press: { k: 'undo' } } ya da { run(root) }.
 // Düğmeye basmak, kullanıcının dokunmasıyla aynı yoldan geçer; ekranın kendi kodu değişmez.
-// Yardım ekranı (?) ve kısayol değiştirme aynı listeleri kullanır (kb/help.js).
+// Yardım ekranı (?) aynı listeleri gösterir (kb/help.js). Tuşlar sabittir: herkes aynı tuşlarla çalışır, kılavuz hep geçerlidir.
 
 const MOD_ORDER = ['CTRL', 'ALT', 'SHIFT'];
 export function keyName(e) {
@@ -43,11 +43,8 @@ export function press(root, spec) {
   return true;
 }
 
-// Kullanıcının değiştirdiği tuşlar: { "<ekran>:<eski tuş>": "<yeni tuş>" } (kb/help.js yazar)
-const OVR_KEY = 'cizim:kisayol';
-export function loadOverrides() { try { return JSON.parse(localStorage.getItem(OVR_KEY) || '{}') || {}; } catch (e) { return {}; } }
-export function saveOverrides(o) { try { localStorage.setItem(OVR_KEY, JSON.stringify(o)); } catch (e) { /* */ } }
-export const effectiveKey = (screen, key, ovr = loadOverrides()) => normKey(ovr[screen + ':' + normKey(key)] || key);
+// Eski sürümde kullanıcı tuş değiştirebiliyordu; o kayıt artık kullanılmaz, temizlenir.
+try { localStorage.removeItem('cizim:kisayol'); } catch (e) { /* */ }
 
 // contexts: [{ id, title, root: () => öğe | null, keys: [...], pass? }] — ilk etkin bağlam tuşu alır (üstteki ekran önce).
 // pass: bu bağlamda olmayan tuş alttaki bağlama geçer (ör. ayakkabı çizim ekranında sayfa tuşları).
@@ -61,11 +58,10 @@ export function installKeys(contexts, { onUnhandled, blocked } = {}) {
     if (blocked && blocked()) return;
     const name = keyName(e);
     if (!name || ['CONTROL', 'SHIFT', 'ALT', 'META'].includes(name.split('+').pop())) return;
-    const ovr = loadOverrides();
     for (const c of contexts) {
       const root = c.root();
       if (!root) continue;
-      const hit = c.keys.find((x) => effectiveKey(c.id, x.key, ovr) === name && (!x.when || x.when(root, e)));
+      const hit = c.keys.find((x) => normKey(x.key) === name && (!x.when || x.when(root, e)));
       if (!hit && c.pass) continue;
       if (!hit) { if (onUnhandled && onUnhandled(e, c, root, name)) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
       if (e.repeat && !hit.repeat) { e.preventDefault(); return; }

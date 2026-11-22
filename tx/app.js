@@ -22,8 +22,8 @@ import { OP_MACHINES, OP_TEMPLATES, opsSummary } from './production.js?v=2026111
 import { productionPDF } from './production-pdf.js?v=20261112u';
 import { writeAAMA } from './woven/dxf-aama.js?v=20261112u';
 import { saveBlob, safeName } from './download.js?v=20261112u';
-import { installKeys, press, findBtn, escChain } from '../kb/keys.js?v=20261122a';
-import { installHelpKey, sectionsFromContexts } from '../kb/help.js?v=20261122a';
+import { installKeys, press, findBtn, escChain } from '../kb/keys.js?v=20261123a';
+import { installHelpKey, sectionsFromContexts } from '../kb/help.js?v=20261123a';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

@@ -7,7 +7,7 @@ import {
   stretchToLength, setRadius, matchDims, applyDims, findHatchRegion, hatchSegs, pointInPoly, rdimParts, rdimText, angDimFrom, adimParts, adimText, adimTextPos, mapPoints, arrayRect, arrayPolar, snapPoints, nearestOn, closedLoops, toDXF, parseDXF, dimLine, dimParts, dimText, arcSpan, arcEnds, entBBox, dist, normA, ACI,
 } from './cad2d-geom.js?v=20261112u';
 import { openPhotoImport } from './photoimport.js?v=20261112u';
-import { parseLine, directPoint, polarPoint, isTypingKey, COMMANDS } from './cad2d-keys.js?v=20261122a';
+import { parseLine, directPoint, polarPoint, isTypingKey, COMMANDS } from './cad2d-keys.js?v=20261123a';
 
 const KEY = 'cizim:2d';
 const CSS = `
