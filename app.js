@@ -46,6 +46,7 @@ import * as PRM from './degisken.js?v=20261120h';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
 import { createMekaUI } from './meka/ui.js?v=20261119c';
+import { CommandRegistry, CommandDispatcher, ShortcutResolver } from './command-system/core.mjs';
 
 const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -1909,12 +1910,13 @@ const wgtGroup = new THREE.Group();
 scene.add(wgtGroup);
 const wgtShowLift = { on: false };
 let wgtTimer = 0;
-function scheduleWeightMarker() { clearTimeout(wgtTimer); if (tab === 'wgt' && settings.cogShow) wgtTimer = setTimeout(drawWeightMarker, 250); }
+function scheduleWeightMarker() { clearTimeout(wgtTimer); wgtTimer = setTimeout(drawWeightMarker, 250); }
 function drawWeightMarker() {
   wgtGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); });
   wgtGroup.clear();
   wgtSprites.length = 0;
-  if (!(tab === 'wgt' && settings.cogShow) || !lastClean) return;
+  // Ağırlık merkezi katmanı sekmeden bağımsızdır: kullanıcı görünürlüğü açtıysa tüm çalışma alanlarında kalır.
+  if (!settings.cogShow || !lastClean) return;
   let R;
   try { R = weightCompute(); } catch (err) { return; }
   if (!R || !R.total.com) return;
@@ -5023,6 +5025,191 @@ function openGuide() {
   document.body.appendChild(o);
   try { localStorage.setItem('cizim:guideSeen', '1'); } catch (e) { /* */ }
 }
+
+
+/* ================= Masaüstü komut sistemi ================= */
+// Kısayollar yalnızca 3B çalışma alanı odaktayken çalışır.
+// Form alanları ve metin editörleri ShortcutResolver tarafından korunur.
+const commandRegistry = new CommandRegistry();
+const shortcutResolver = new ShortcutResolver();
+const commandDispatcher = new CommandDispatcher(commandRegistry, {
+  getContext: () => ({ hasSelection: hasSel(), partCount: parts.length, tab, unit: settings.unit }),
+  onError: ({ error }) => toast(error.message || 'Komut çalıştırılamadı.')
+});
+
+const registerCadCommand = (definition) => commandRegistry.register(definition);
+
+let commandPalette = null;
+let commandPaletteInput = null;
+let commandPaletteResults = null;
+function closeCommandPalette() {
+  if (commandPalette) commandPalette.hidden = true;
+  if (document.activeElement === commandPaletteInput) view.focus({ preventScroll: true });
+}
+function renderCommandPaletteResults(query = '') {
+  if (!commandPaletteResults) return;
+  const q = String(query).trim().toLocaleLowerCase('tr-TR');
+  const items = commandRegistry.list().filter((c) => {
+    const hay = [c.id, c.names.tr, c.names.en, ...c.aliases.tr, ...c.aliases.en].join(' ').toLocaleLowerCase('tr-TR');
+    return !q || hay.includes(q);
+  }).slice(0, 10);
+  commandPaletteResults.replaceChildren();
+  for (const command of items) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.style.cssText = 'display:flex;width:100%;justify-content:space-between;gap:12px;padding:10px 12px;border:0;border-radius:8px;background:transparent;color:#e5e7eb;text-align:left;cursor:pointer';
+    const label = document.createElement('span');
+    label.textContent = command.names.tr;
+    const shortcut = document.createElement('small');
+    shortcut.textContent = command.shortcuts.join(' · ');
+    shortcut.style.color = '#94a3b8';
+    button.append(label, shortcut);
+    button.addEventListener('mouseenter', () => { button.style.background = '#263449'; });
+    button.addEventListener('mouseleave', () => { button.style.background = 'transparent'; });
+    button.addEventListener('click', () => {
+      closeCommandPalette();
+      commandDispatcher.dispatch(command.id, {}, { source: 'palette' }).catch(() => {});
+    });
+    commandPaletteResults.appendChild(button);
+  }
+  if (!items.length) {
+    const empty = document.createElement('p');
+    empty.textContent = 'Eşleşen komut bulunamadı. Örnek: BOX 100 50 30';
+    empty.style.cssText = 'margin:8px 12px;color:#94a3b8;font-size:13px';
+    commandPaletteResults.appendChild(empty);
+  }
+}
+function openCommandPalette() {
+  if (!commandPalette) {
+    commandPalette = document.createElement('section');
+    commandPalette.setAttribute('aria-label', 'Komut paleti');
+    commandPalette.style.cssText = 'position:fixed;z-index:10000;top:12vh;left:50%;transform:translateX(-50%);width:min(560px,calc(100vw - 28px));max-height:70vh;overflow:auto;padding:12px;background:#111c2e;border:1px solid #475569;border-radius:14px;box-shadow:0 18px 60px #0009;color:#e5e7eb';
+    const heading = document.createElement('div');
+    heading.textContent = 'KOMUT PALETİ  ·  Ctrl+K';
+    heading.style.cssText = 'padding:4px 8px 10px;color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:.08em';
+    commandPaletteInput = document.createElement('input');
+    commandPaletteInput.type = 'text';
+    commandPaletteInput.placeholder = 'Komut yaz… ör. BOX 100 50 30 / KUTU';
+    commandPaletteInput.autocomplete = 'off';
+    commandPaletteInput.spellcheck = false;
+    commandPaletteInput.style.cssText = 'box-sizing:border-box;width:100%;padding:13px 14px;border:1px solid #64748b;border-radius:9px;background:#0b1220;color:#fff;font-size:16px;outline:none';
+    commandPaletteResults = document.createElement('div');
+    commandPaletteResults.style.cssText = 'display:grid;gap:3px;margin-top:9px';
+    commandPalette.append(heading, commandPaletteInput, commandPaletteResults);
+    document.body.appendChild(commandPalette);
+    commandPaletteInput.addEventListener('input', () => renderCommandPaletteResults(commandPaletteInput.value));
+    commandPaletteInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeCommandPalette(); }
+      if (event.key === 'Enter') {
+        const line = commandPaletteInput.value.trim();
+        if (!line) return;
+        event.preventDefault();
+        closeCommandPalette();
+        commandDispatcher.dispatchLine(line, { source: 'terminal' }).catch((error) => toast(error.message));
+      }
+    });
+    commandPalette.addEventListener('pointerdown', (event) => event.stopPropagation());
+    renderCommandPaletteResults();
+  }
+  commandPalette.hidden = false;
+  commandPaletteInput.value = '';
+  renderCommandPaletteResults();
+  commandPaletteInput.focus({ preventScroll: true });
+}
+
+registerCadCommand({
+  id: 'model.createBox', names: { tr: 'Kutu oluştur', en: 'Create box' },
+  aliases: { tr: ['kutu', 'kutu oluştur'], en: ['box', 'create box'] },
+  description: { tr: 'İsteğe bağlı genişlik, derinlik ve yükseklik (mm)', en: 'Optional width, depth and height (mm)' },
+  parameters: [
+    { name: 'width', type: 'number', min: 0.1 },
+    { name: 'depth', type: 'number', min: 0.1 },
+    { name: 'height', type: 'number', min: 0.1 }
+  ],
+  category: 'model', shortcuts: ['B'],
+  execute: (_ctx, args) => { const dims = {}; if (args.width != null) dims.w = args.width; if (args.depth != null) dims.l = args.depth; if (args.height != null) dims.h = args.height; return addPart('box', 'add', Object.keys(dims).length ? dims : undefined); }
+});
+registerCadCommand({
+  id: 'model.createCylinder', names: { tr: 'Silindir oluştur', en: 'Create cylinder' },
+  aliases: { tr: ['silindir'], en: ['cylinder'] },
+  category: 'model', shortcuts: ['C'],
+  execute: () => addPart('cylinder', 'add')
+});
+registerCadCommand({
+  id: 'model.createSphere', names: { tr: 'Küre oluştur', en: 'Create sphere' },
+  aliases: { tr: ['küre'], en: ['sphere'] },
+  category: 'model', shortcuts: ['S'],
+  execute: () => addPart('sphere', 'add')
+});
+registerCadCommand({
+  id: 'model.createCone', names: { tr: 'Koni oluştur', en: 'Create cone' },
+  aliases: { tr: ['koni'], en: ['cone'] },
+  category: 'model', shortcuts: ['K'],
+  execute: () => addPart('cone', 'add')
+});
+registerCadCommand({
+  id: 'model.deleteSelected', names: { tr: 'Seçili parçayı sil', en: 'Delete selected part' },
+  aliases: { tr: ['sil', 'seçili parçayı sil'], en: ['delete', 'delete selected'] },
+  category: 'edit', shortcuts: ['DELETE'],
+  canExecute: (ctx) => ctx.hasSelection,
+  execute: () => removeCur()
+});
+registerCadCommand({
+  id: 'edit.undo', names: { tr: 'Geri al', en: 'Undo' },
+  aliases: { tr: ['geri al'], en: ['undo'] }, category: 'edit', shortcuts: ['CTRL+Z'],
+  execute: () => doUndo()
+});
+registerCadCommand({
+  id: 'edit.redo', names: { tr: 'Yinele', en: 'Redo' },
+  aliases: { tr: ['yinele', 'ileri al'], en: ['redo'] }, category: 'edit',
+  shortcuts: ['CTRL+Y', 'CTRL+SHIFT+Z'], execute: () => doRedo()
+});
+registerCadCommand({
+  id: 'view.fitAll', names: { tr: 'Modeli ekrana sığdır', en: 'Fit all' },
+  aliases: { tr: ['ekrana sığdır', 'tümünü sığdır'], en: ['fit', 'fit all'] },
+  category: 'view', shortcuts: ['F'],
+  execute: () => fit(lastClean ? lastClean.boundingBox : null)
+});
+registerCadCommand({
+  id: 'file.save', names: { tr: 'Projeyi kaydet', en: 'Save project' },
+  aliases: { tr: ['kaydet'], en: ['save'] }, category: 'file', shortcuts: ['CTRL+S'],
+  execute: () => saveProject(projName || 'model')
+});
+
+registerCadCommand({
+  id: 'ui.commandPalette', names: { tr: 'Komut paletini aç', en: 'Open command palette' },
+  aliases: { tr: ['komut paleti'], en: ['command palette'] },
+  category: 'interface', shortcuts: ['CTRL+K'],
+  execute: () => openCommandPalette()
+});
+
+for (const command of commandRegistry.list()) {
+  for (const shortcut of command.shortcuts) shortcutResolver.bind(shortcut, command.id);
+}
+
+view.tabIndex = view.tabIndex >= 0 ? view.tabIndex : 0;
+view.addEventListener('pointerdown', () => {
+  if (document.activeElement !== view) view.focus({ preventScroll: true });
+}, { passive: true });
+
+document.addEventListener('keydown', (event) => {
+  // Sadece CAD çalışma alanı odaktayken kısayol yakala. Formlarda ve diğer panellerde yazıyı bozma.
+  if (document.activeElement !== view && !view.contains(event.target)) return;
+  const commandId = shortcutResolver.resolve(event);
+  if (!commandId) return;
+  event.preventDefault();
+  event.stopPropagation();
+  commandDispatcher.dispatch(commandId, {}, { source: 'keyboard' }).catch(() => {});
+}, true);
+
+// E2E ve ilerideki komut paleti / komut satırı aynı dispatcher'ı kullanır.
+window.__commandSystem = {
+  registry: commandRegistry,
+  dispatcher: commandDispatcher,
+  shortcuts: shortcutResolver,
+  run: (id, args = {}, source = 'api') => commandDispatcher.dispatch(id, args, { source }),
+  runLine: (line) => commandDispatcher.dispatchLine(line)
+};
 
 /* ================= Başlangıç ================= */
 try {
