@@ -151,3 +151,19 @@ Teknik resim ekranında: **Esc** kapat · **Ctrl+P** PDF · **Ctrl+Shift+P** PNG
 | ÜRETİLEBİLİRLİK / DFM · KESİM OPTİMİZASYONU | Üretim kontrolü · kesim planı |
 | ÜRETİM RAPORU · AĞIRLIK RAPORU · MALİYET RAPORU · KAYNAK RAPORU · MONTAJ RAPORU · MEKATRONİK RAPORU | PDF raporlar |
 | ÇALIŞTIR / RUN | F9 ile aynı |
+
+## 4. Tekstil ve Moda
+
+En üstteki ekran tuşu alır (3B görünüm → örgü çizelgesi → pastal → kalıp → teknik çizim → proje sayfası). Yazı alanındayken harfler yazıdır; Esc alandan çıkarır.
+
+**Proje sayfası:** 1–9 sekme · PageDown / PageUp sonraki / önceki sekme · Ctrl+S kaydet · Ctrl+E projeyi dışa aktar (JSON).
+
+**Teknik çizim:** V seç · L çizgi · E eğri · N nokta · D ölçü · T yazı · K detay · Enter şekli bitir · Shift+Enter kapatarak bitir · Backspace son noktayı geri al · Delete sil · Ctrl+D ayna kopya · F sığdır · 1–9 görünüş · Ctrl+Z / Ctrl+Y · Ctrl+S · Ctrl+P PDF · Ctrl+Shift+P PNG · Esc vazgeç → seç → kapat.
+
+**Kalıp:** V seç · C çıt · P pens · I işaret · B böl · M birleştir · N yeni parça · E dikiş eşle · R döndür · H ters çevir · Ctrl+D çoğalt · Delete sil · Enter yeni parçayı / dikiş eşlemesini bitir · Backspace son noktayı geri al · F sığdır · Ctrl+Z / Ctrl+Y · Ctrl+S · Ctrl+P PDF · Ctrl+Shift+P SVG · Esc vazgeç → seç → kapat.
+
+**Pastal:** A otomatik yerleştir · R seçili parçayı döndür · Ctrl+S pastalı kaydet · Ctrl+P PDF · Ctrl+Shift+P SVG · Esc kapat.
+
+**Örgü çizelgesi:** B boya · D alan doldur · T tekrar alanı · S sıra bilgisi · H kaydır · F sığdır · 1–9 ilmek seç · Ctrl+Z / Ctrl+Y · Ctrl+S · Ctrl+P PDF · Ctrl+Shift+P PNG · Esc kapat.
+
+**3B görünüm:** Esc kapat.

@@ -22,6 +22,7 @@ import { OP_MACHINES, OP_TEMPLATES, opsSummary } from './production.js?v=2026111
 import { productionPDF } from './production-pdf.js?v=20261112u';
 import { writeAAMA } from './woven/dxf-aama.js?v=20261112u';
 import { saveBlob, safeName } from './download.js?v=20261112u';
+import { installKeys, press, findBtn, escChain } from '../kb/keys.js?v=20261122a';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -746,5 +747,65 @@ document.addEventListener('click', async (e) => {
   } catch (er) { toast('⚠ ' + er.message); }
 });
 window.addEventListener('pagehide', () => { if (saveT && S.p) { clearTimeout(saveT); store.put(S.p); } });
+
+/* ---------- klavye (docs/KISAYOLLAR.md · 4. bölüm) ---------- */
+// En üstteki ekran tuşu alır: 3B görünüm → örgü çizelgesi → pastal → kalıp → teknik çizim → proje sayfası.
+const byId = (id) => () => document.getElementById(id);
+const nthOf = (k, a) => [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ key: String(n), label: n + '. ' + a, press: { k, nth: n - 1 } }));
+const SAVE = { key: 'CTRL+S', label: 'Kaydet', run: () => { flush().then(() => toast('Kaydedildi')); } };
+const UNDO = [SAVE, { key: 'CTRL+Z', label: 'Geri al', press: { k: 'undo' }, repeat: true }, { key: 'CTRL+Y', label: 'İleri al', press: { k: 'redo' }, repeat: true }, { key: 'CTRL+SHIFT+Z', label: 'İleri al', press: { k: 'redo' }, repeat: true }];
+export const TX_KEYS = [
+  { id: 'tx-3b', title: '3B görünüm', root: byId('v3x'), keys: [{ key: 'ESCAPE', label: 'Kapat', press: { k: 'close' } }] },
+  { id: 'tx-orgu', title: 'Örgü çizelgesi', root: byId('kcx'), keys: [
+    { key: 'B', label: 'Boya (fırça)', press: { k: 'tool', v: 'paint' } }, { key: 'D', label: 'Alan doldur', press: { k: 'tool', v: 'rect' } },
+    { key: 'T', label: 'Tekrar alanı', press: { k: 'tool', v: 'repeat' } }, { key: 'S', label: 'Sıra bilgisi', press: { k: 'tool', v: 'row' } },
+    { key: 'H', label: 'Kaydır (el)', press: { k: 'tool', v: 'pan' } }, { key: 'F', label: 'Ekrana sığdır', press: { k: 'fit' } },
+    ...UNDO, { key: 'CTRL+P', label: 'PDF', press: { k: 'pdf' } }, { key: 'CTRL+SHIFT+P', label: 'PNG', press: { k: 'png' } },
+    ...nthOf('stitch', 'ilmek'), { key: 'ESCAPE', label: 'Kapat', press: { k: 'close' } },
+  ] },
+  { id: 'tx-pastal', title: 'Pastal (marker)', root: byId('mkx'), keys: [
+    { key: 'A', label: 'Otomatik yerleştir', press: { k: 'auto' } }, { key: 'R', label: 'Seçili parçayı döndür', press: { k: 'rot' } },
+    { key: 'CTRL+S', label: 'Pastalı kaydet', press: { k: 'save' } }, { key: 'CTRL+P', label: 'PDF', press: { k: 'pdf' } }, { key: 'CTRL+SHIFT+P', label: 'SVG', press: { k: 'svg' } },
+    { key: 'ESCAPE', label: 'Kapat', press: { k: 'close' } },
+  ] },
+  { id: 'tx-kalip', title: 'Kalıp', root: byId('pkx'), keys: [
+    { key: 'V', label: 'Seç', press: { k: 'tool', v: 'sel' } }, { key: 'C', label: 'Çıt', press: { k: 'tool', v: 'notch' } },
+    { key: 'P', label: 'Pens', press: { k: 'tool', v: 'dart' } }, { key: 'I', label: 'İşaret', press: { k: 'tool', v: 'mark' } },
+    { key: 'B', label: 'Böl', press: { k: 'tool', v: 'split' } }, { key: 'M', label: 'Birleştir', press: { k: 'tool', v: 'merge' } },
+    { key: 'N', label: 'Yeni parça', press: { k: 'tool', v: 'new' } }, { key: 'E', label: 'Dikiş eşle', press: { k: 'tool', v: 'seam' } },
+    { key: 'R', label: 'Döndür', press: { k: 'rot' } }, { key: 'H', label: 'Ters çevir (ayna)', press: { k: 'flip' } },
+    { key: 'CTRL+D', label: 'Parçayı çoğalt', press: { k: 'dup' } }, { key: 'DELETE', label: 'Seçileni sil', press: [{ k: 'del' }, { k: 'notch-del' }, { k: 'seam-del' }] },
+    { key: 'ENTER', label: 'Yeni parçayı bitir', press: [{ k: 'new-finish' }, { k: 'seam-save' }] }, { key: 'BACKSPACE', label: 'Son noktayı geri al', press: { k: 'pop' } },
+    { key: 'F', label: 'Ekrana sığdır', press: { k: 'fit' } }, ...UNDO,
+    { key: 'CTRL+P', label: 'PDF', press: { k: 'pdf' } }, { key: 'CTRL+SHIFT+P', label: 'SVG', press: { k: 'svg' } },
+    { key: 'ESCAPE', label: 'Vazgeç → Seç → Kapat', run: escChain('sel') },
+  ] },
+  { id: 'tx-cizim', title: 'Teknik çizim', root: byId('skx'), keys: [
+    { key: 'V', label: 'Seç', press: { k: 'tool', v: 'sel' } }, { key: 'L', label: 'Çizgi', press: { k: 'tool', v: 'line' } },
+    { key: 'E', label: 'Eğri', press: { k: 'tool', v: 'curve' } }, { key: 'N', label: 'Nokta', press: { k: 'tool', v: 'point' } },
+    { key: 'D', label: 'Ölçü', press: { k: 'tool', v: 'dim' } }, { key: 'T', label: 'Yazı', press: { k: 'tool', v: 'text' } },
+    { key: 'K', label: 'Detay', press: { k: 'tool', v: 'detail' } },
+    { key: 'ENTER', label: 'Şekli bitir (açık)', press: { k: 'finish' } }, { key: 'SHIFT+ENTER', label: 'Şekli kapatarak bitir', press: { k: 'finish-closed' } },
+    { key: 'BACKSPACE', label: 'Son noktayı geri al', press: { k: 'pop' } }, { key: 'DELETE', label: 'Seçileni sil', press: { k: 'del' } },
+    { key: 'CTRL+D', label: 'Ayna kopya', press: { k: 'dup-mirror' } }, { key: 'F', label: 'Ekrana sığdır', press: { k: 'fit' } }, ...UNDO,
+    { key: 'CTRL+P', label: 'PDF', press: { k: 'pdf' } }, { key: 'CTRL+SHIFT+P', label: 'PNG', press: { k: 'png' } },
+    ...nthOf('view', 'görünüş'), { key: 'ESCAPE', label: 'Vazgeç → Seç → Kapat', run: escChain('sel') },
+  ] },
+  { id: 'tx-proje', title: 'Proje sayfası', root: () => (S.view === 'proj' && S.p ? document.body : null), keys: [
+    ...nthOf('tab', 'sekme').map((x) => ({ ...x, press: { a: 'tab', nth: x.press.nth } })),
+    { key: 'PAGEDOWN', label: 'Sonraki sekme', run: () => stepTxTab(1) }, { key: 'PAGEUP', label: 'Önceki sekme', run: () => stepTxTab(-1) },
+    SAVE,
+    { key: 'CTRL+E', label: 'Projeyi dışa aktar (JSON)', press: { a: 'export' } },
+  ] },
+];
+function stepTxTab(d) {
+  const list = [...document.querySelectorAll('[data-a="tab"]')].filter((b) => b.offsetParent !== null);
+  if (!list.length) return false;
+  const i = Math.max(0, list.findIndex((b) => b.classList.contains('on')));
+  list[(i + d + list.length) % list.length].click();
+  return true;
+}
+installKeys(TX_KEYS);
+window.__txKeys = TX_KEYS;
 
 render();

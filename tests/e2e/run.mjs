@@ -1825,6 +1825,32 @@ await TX('Tekstil teknik çizim: gömlek şablonu, simetrik çizgi, eğri, ölç
   expect(c3[0] === c2[0], 'yeniden uygulamada öğe kaybı yok: ' + c3[0] + ' / ' + c2[0]);
 });
 
+await TX('Tekstil klavye: 1–9 ve PageDown / PageUp sekme, Ctrl+S kaydet; teknik çizimde L / V / N araç, Enter bitir, 1–9 görünüş, Esc → Seç → Kapat; yazı alanı karışmaz', async ({ page }) => {
+  await page.fill('#np-name', 'Klavye E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
+  await page.selectOption('#ap-type', 'gomlek'); await page.fill('#ap-code', 'GM-K'); await A(page, 'add-prod');
+  await page.locator('#ap-code').press('Escape');
+  const on = (v) => page.locator(`[data-a="tab"][data-v="${v}"].on`).count();
+  await page.keyboard.press('2'); await page.waitForTimeout(150); expect(await on('draw') === 1, '2 → Teknik çizim sekmesi');
+  await page.keyboard.press('PageDown'); await page.waitForTimeout(150); expect(await on('pat') === 1, 'PageDown → Kalıp');
+  await page.keyboard.press('PageUp'); await page.waitForTimeout(150); expect(await on('draw') === 1, 'PageUp → Teknik çizim');
+  await page.keyboard.press('Control+s'); await page.waitForFunction(() => /Kaydedildi/.test(document.getElementById('toast').textContent), null, { timeout: 4000 });
+  await A(page, 'add-sketch'); await page.waitForSelector('#skx canvas');
+  const toolOn = (v) => page.locator(`#skx [data-k="tool"][data-v="${v}"].on`).count();
+  await page.keyboard.press('l'); expect(await toolOn('line') === 1, 'L → çizgi aracı');
+  for (const [x, y] of [['5', '30'], ['20', '30']]) { await page.fill('#skx-x', x); await page.fill('#skx-y', y); await page.locator('#skx [data-k="add-pt"]').click(); }
+  await page.keyboard.press('Enter'); await page.waitForTimeout(150);
+  await page.keyboard.press('v'); expect(await toolOn('sel') === 1, 'V → seç aracı');
+  await page.keyboard.press('n'); expect(await toolOn('point') === 1, 'N → nokta aracı');
+  // yazı alanında harf araç değiştirmez
+  await page.locator('#skx-x').focus(); await page.keyboard.press('l'); expect(await toolOn('point') === 1, 'yazı alanında L araç değiştirmedi');
+  await page.keyboard.press('Escape');
+  const views = page.locator('#skx [data-k="view"]');
+  if (await views.count() > 1) { await page.keyboard.press('2'); await page.waitForTimeout(100); expect(await page.locator('#skx [data-k="view"]').nth(1).evaluate((b) => b.classList.contains('on')), '2 → ikinci görünüş'); await page.keyboard.press('1'); }
+  await page.keyboard.press('Escape'); expect(await toolOn('sel') === 1, 'Esc → seç aracı');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(200); expect(await page.locator('#skx').count() === 0, 'Esc → teknik çizim kapandı');
+  expect(await on('draw') === 1, 'proje sayfasına dönüldü');
+});
+
 await TX('Tekstil kalıp: beden tablosundan gömlek bloğu, 7 dikiş eşleşmesi tutar, kenar payı / çıt, sayıyla yeni parça, 1:1 PDF ve SVG, kaydet ve yeniden aç', async ({ page }) => {
   await page.fill('#np-name', 'Kalıp E2E'); await A(page, 'create'); await page.waitForSelector('[data-a="add-prod"]');
   await page.selectOption('#ap-type', 'gomlek'); await A(page, 'add-prod');
