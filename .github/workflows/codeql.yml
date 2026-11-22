@@ -37,6 +37,9 @@ jobs:
         uses: github/codeql-action/analyze@d2aacf54c2fbc910db8d7ec338fdb54ea48c692d # v3
         with:
           output: codeql-sonuc
+          # Gizli depoda GitHub Code Scanning ücretli (Code Security); yükleme yapılmaz, sonuç aşağıda bu işte denetlenir.
+          # Depo herkese açıkken sonuçlar Güvenlik sekmesine de yüklenir.
+          upload: ${{ github.event.repository.private && 'never' || 'always' }}
       - name: Bulguları iş günlüğüne yaz
         if: always()
         run: |
@@ -44,6 +47,12 @@ jobs:
             echo "CODEQL-OZET $(jq '[.runs[].results[]] | length' "$f") bulgu"
             jq -r '.runs[] as $r | $r.results[] | "CODEQL-BULGU \(.ruleId) | \(.level) | \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine) | \(.message.text | gsub("\n"; " ") | .[0:200]) | kaynak: \([.relatedLocations[]? | "\(.physicalLocation.artifactLocation.uri):\(.physicalLocation.region.startLine)"] | join(", ")) | yol: \([.codeFlows[]?.threadFlows[]? | [.locations[]? | "\(.location.physicalLocation.region.startLine)"] | join(">")] | join(" ; "))"' "$f"
           done
+      - name: Bulgu varsa işi durdur
+        run: |
+          n=0
+          for f in codeql-sonuc/*.sarif; do n=$((n + $(jq '[.runs[].results[] | select((.level // "warning") != "note" and (.level // "warning") != "none")] | length' "$f"))); done
+          echo "Uyarı / hata düzeyinde $n bulgu"
+          if [ "$n" -gt 0 ]; then echo "::error::CodeQL $n bulgu buldu (ayrıntı: 'Bulguları iş günlüğüne yaz' adımı ve codeql-sarif dosyası)"; exit 1; fi
       - name: Sonuç dosyasını sakla (SARIF)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

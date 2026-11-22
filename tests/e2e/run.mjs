@@ -1361,6 +1361,65 @@ await T('Ağırlık merkezi işareti: son parça silinince, parçalar gizlenince
   await page.evaluate(() => { window.__app.settings.cogShow = false; });
 });
 
+/* ---------- L. Komut sistemi (klavye, komut satırı, arama paleti) ---------- */
+await T('Komutlar: MOVE / TAŞI 2,5 / ROTATE, ƒx bağlı konum korunur, HOLE çap sınırı ve oyuk kuralı; B / Delete / Ctrl+Z kısayolu, basılı tutunca tek parça; Ctrl+K tek palet, paletten MOVE', 'L-Komut', async ({ page }) => {
+  const P = () => page.evaluate(() => window.__app.parts.map((p) => ({ id: p.id, type: p.type, op: p.op, x: p.x, y: p.y, z: p.z, rz: p.rz, d: p.d, h: p.h, parent: p.parent })));
+  const line = (l) => page.evaluate((l) => window.__commandSystem.runLine(l).then((r) => r.result).catch((e) => 'HATA:' + e.code), l);
+  let ps = await P();
+  expect(ps.length === 1 && ps[0].type === 'box', 'başlangıç kutusu: ' + JSON.stringify(ps));
+  // taşı / döndür (Türkçe ondalık virgül dahil)
+  await line('MOVE 10 0 -5'); await line('TAŞI 2,5 0 0');
+  ps = await P(); expect(Math.abs(ps[0].x - 12.5) < 1e-9 && Math.abs(ps[0].z + 5) < 1e-9, 'taşıma: ' + JSON.stringify(ps[0]));
+  await line('ROTATE Z 90'); ps = await P(); expect(Math.abs(ps[0].rz - 90) < 1e-9, 'döndürme: ' + ps[0].rz);
+  await page.evaluate(() => window.__commandSystem.run('edit.undo')); ps = await P(); expect(Math.abs(ps[0].rz) < 1e-9 && Math.abs(ps[0].x - 12.5) < 1e-9, 'geri al yalnız dönmeyi geri aldı: ' + JSON.stringify(ps[0]));
+  expect(String(await line('MOVE abc')).startsWith('HATA:INVALID_NUMBER'), 'geçersiz sayı reddedildi');
+  // değişkene bağlı konum: komut değiştirmez
+  await page.evaluate(() => { window.__app.parts[0].eq = { x: '12.5' }; });
+  expect(await line('MOVE 5 0 0') === false, 'bağlı konumda MOVE yapılmadı');
+  ps = await P(); expect(Math.abs(ps[0].x - 12.5) < 1e-9, 'bağlı konum aynı kaldı: ' + ps[0].x);
+  await page.evaluate(() => { delete window.__app.parts[0].eq; });
+  // delik: kutu 80 × 60 → Ø60 ve üstü reddedilir; Ø10 boydan boya, kutunun ortasında
+  expect(await line('HOLE 60') === false && (await P()).length === 1, 'kutudan büyük delik açılmadı');
+  expect(await line('DELİK AÇ 10') === true, 'delik açıldı (çok kelimeli Türkçe ad)');
+  ps = await P(); const cut = ps[1];
+  expect(ps.length === 2 && cut.op === 'sub' && cut.type === 'cylinder' && cut.d === 10 && cut.h === 42 && cut.parent === ps[0].id, 'kesici: ' + JSON.stringify(cut));
+  expect(Math.abs(cut.x - 12.5) < 1e-6 && Math.abs(cut.z + 5) < 1e-6 && Math.abs(cut.y + 1) < 1e-6, 'kesici ortada ve boydan boya: ' + JSON.stringify(cut));
+  expect(await line('HOLE 5') === false && (await P()).length === 2, 'oyuk parçaya delik açılmadı');
+  // kısayollar: çizim alanı odaktayken
+  const focusView = () => page.evaluate(() => document.getElementById('view').focus());
+  await focusView(); await page.keyboard.press('b'); await page.waitForTimeout(200);
+  ps = await P(); expect(ps.length === 3 && ps[2].type === 'box', 'B kutu ekledi: ' + ps.length);
+  await focusView(); await page.keyboard.press('Delete'); await page.waitForTimeout(200);
+  expect((await P()).length === 2, 'Delete seçili parçayı sildi');
+  await focusView(); await page.keyboard.press('Control+z'); await page.waitForTimeout(200);
+  expect((await P()).length === 3, 'Ctrl+Z silmeyi geri aldı');
+  await focusView(); await page.keyboard.down('c'); await page.keyboard.down('c'); await page.keyboard.down('c'); await page.keyboard.up('c'); await page.waitForTimeout(200);
+  ps = await P(); expect(ps.length === 4 && ps.filter((p) => p.type === 'cylinder' && p.op === 'add').length === 1, 'C basılı tutulunca tek silindir: ' + ps.length);
+  // bir yazı alanındayken harf komut değildir
+  const inp = page.locator('#tabbody input[type="number"]').first();
+  if (await inp.count()) { await inp.focus(); await page.keyboard.press('b'); await page.waitForTimeout(150); expect((await P()).length === 4, 'yazı alanında B parça eklemedi'); }
+  // Ctrl+K: tek palet; paletten komut satırı
+  await line('BOX 20 20 20'); ps = await P(); const last = ps[ps.length - 1];
+  expect(last.type === 'box' && ps.length === 5, 'BOX 20 20 20 eklendi');
+  const yeni = await page.evaluate(() => !!window.__shell);
+  await focusView(); await page.keyboard.press('Control+k'); await page.waitForTimeout(300);
+  const appPal = await page.evaluate(() => { const s = document.querySelector('section[aria-label="Komut paleti"]'); return !!s && !s.hidden; });
+  if (yeni) {
+    const shellPal = await page.evaluate(() => document.getElementById('app').classList.contains('pal-open'));
+    expect(shellPal && !appPal, 'yeni arayüzde yalnız kabuğun paleti açıldı (uygulama paleti: ' + appPal + ')');
+    await page.locator('#pal-q').fill('MOVE 0 0 3'); await page.waitForTimeout(200);
+    const first = await page.locator('#pal-list .pal-it').first().innerText();
+    expect(/MOVE 0 0 3/.test(first) && /Komut/.test(first), 'komut satırı en üstte: ' + first);
+    await page.keyboard.press('Enter');
+  } else {
+    expect(appPal, 'eski arayüzde komut paleti açıldı');
+    await page.locator('section[aria-label="Komut paleti"] input').fill('MOVE 0 0 3'); await page.keyboard.press('Enter');
+  }
+  await page.waitForTimeout(300);
+  ps = await P(); const moved = ps.find((p) => p.id === last.id);
+  expect(Math.abs((moved.z || 0) - ((last.z || 0) + 3)) < 1e-9, 'paletten MOVE: ' + JSON.stringify(moved));
+});
+
 /* ---------- K. Proje bütünlüğü ---------- */
 await T('Proje bütünlüğü: parça + malzeme + OCCT parçası + 5 eksen ayarları + analiz sonucu kaydedilip açılır', 'K-Proje', async ({ page }) => {
   await tab(page, 'dims'); await setK(page, 'w', 80); await setK(page, 'h', 20); await setK(page, 'l', 40);

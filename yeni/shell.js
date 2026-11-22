@@ -240,6 +240,15 @@ function renderPalette() {
       else if (k.split(/\s+/).some((w) => w.startsWith(q))) s = 1.5; else if (k.includes(q)) s = 1;
       return [s, c];
     }).filter(([s]) => s > 0).sort((a, b) => b[0] - a[0]).map(([, c]) => c).slice(0, 14);
+    // komut satırı (MOVE 10 0 0, DELİK 8, BOX 100 50 30): uygulamanın komut sistemine gider.
+    // Parametreli satır en üste (Enter onu çalıştırır); tek kelimelik komut adı aramanın sonuna eklenir.
+    const raw = $('pal-q').value.trim();
+    const info = window.__commandSystem && window.__commandSystem.inspect(raw);
+    if (info) {
+      const hasArgs = /\s/.test(raw) && !info.error;
+      const item = { title: (hasArgs ? '▶ ' : '') + raw, sub: info.error ? info.name + ' — ' + info.error + (info.usage ? ' · ' + info.usage : '') : info.name + (info.usage ? ' · ' + info.usage : ''), icon: 'play', tag: 'Komut', run: { line: raw } };
+      if (hasArgs) list = [item, ...list]; else list = [...list, item];
+    }
   }
   palItems = list; palSel = 0;
   const box = $('pal-list');
@@ -275,7 +284,10 @@ function showTab(k) {
 function runCmd(c) {
   closePalette();
   const r = c.run;
-  if (r.act) clickAct(r.act);
+  if (r.line != null) {
+    const cs = window.__commandSystem;
+    if (cs) cs.runLine(r.line, 'palette').catch((e) => { if (e && e.code !== 'EXECUTION_FAILED' && e.code !== 'NOT_AVAILABLE') cs.toast(e.message); });
+  } else if (r.act) clickAct(r.act);
   else if (r.tab) showTab(r.tab);
   else if (r.ex) { clickAct('guide'); waitFor(`[data-ex="${r.ex}"]`, (el) => el.click()); }
   else if (r.lathe) { showTab('cam'); waitFor('#tabbody [data-act="lz-on"]', (el) => el.click()); }

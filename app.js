@@ -46,7 +46,7 @@ import * as PRM from './degisken.js?v=20261120h';
 import { createFemUI } from './fem-ui.js?v=20261112u';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
 import { createMekaUI } from './meka/ui.js?v=20261119c';
-import { CommandRegistry, CommandDispatcher, ShortcutResolver } from './command-system/core.mjs';
+import { CommandRegistry, CommandDispatcher, ShortcutResolver, parseCommandLine } from './command-system/core.mjs?v=20261122a';
 
 const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
 const $ = (id) => document.getElementById(id);
@@ -5038,7 +5038,18 @@ const commandDispatcher = new CommandDispatcher(commandRegistry, {
 });
 
 const registerCadCommand = (definition) => commandRegistry.register(definition);
+// parça ya da onunla taşınan alt parçalarından birinin konumu / açısı değişkene bağlıysa komut değiştirmez (ƒx kuralı)
+const POSE_EQ = ['x', 'y', 'z', 'rx', 'ry', 'rz'];
+const poseLocked = (p) => [p, ...descendantsOf(parts, p.id)].some((q) => q.eq && POSE_EQ.some((k) => q.eq[k]));
+// merkezden boydan boya deliğin sığacağı çap sınırı (parçanın en dar kesiti)
+function holeRoom(p) {
+  if (p.type === 'box') return Math.min(clamp(p.w), clamp(p.l));
+  if (p.type === 'cone') return p.d2 > 0 ? Math.min(clamp(p.d), clamp(p.d2)) : 0;
+  return clamp(p.d);
+}
 
+let commandUiLanguage = 'tr';
+try { commandUiLanguage = localStorage.getItem('cizim:command-language') === 'en' ? 'en' : 'tr'; } catch (e) { /* varsayılan */ }
 let commandPalette = null;
 let commandPaletteInput = null;
 let commandPaletteResults = null;
@@ -5059,7 +5070,7 @@ function renderCommandPaletteResults(query = '') {
     button.type = 'button';
     button.style.cssText = 'display:flex;width:100%;justify-content:space-between;gap:12px;padding:10px 12px;border:0;border-radius:8px;background:transparent;color:#e5e7eb;text-align:left;cursor:pointer';
     const label = document.createElement('span');
-    label.textContent = command.names.tr;
+    label.textContent = command.names[commandUiLanguage] || command.names.tr;
     const shortcut = document.createElement('small');
     shortcut.textContent = command.shortcuts.join(' · ');
     shortcut.style.color = '#94a3b8';
@@ -5074,7 +5085,7 @@ function renderCommandPaletteResults(query = '') {
   }
   if (!items.length) {
     const empty = document.createElement('p');
-    empty.textContent = 'Eşleşen komut bulunamadı. Örnek: BOX 100 50 30';
+    empty.textContent = commandUiLanguage === 'en' ? 'No matching command. Example: BOX 100 50 30' : 'Eşleşen komut bulunamadı. Örnek: BOX 100 50 30';
     empty.style.cssText = 'margin:8px 12px;color:#94a3b8;font-size:13px';
     commandPaletteResults.appendChild(empty);
   }
@@ -5085,11 +5096,27 @@ function openCommandPalette() {
     commandPalette.setAttribute('aria-label', 'Komut paleti');
     commandPalette.style.cssText = 'position:fixed;z-index:10000;top:12vh;left:50%;transform:translateX(-50%);width:min(560px,calc(100vw - 28px));max-height:70vh;overflow:auto;padding:12px;background:#111c2e;border:1px solid #475569;border-radius:14px;box-shadow:0 18px 60px #0009;color:#e5e7eb';
     const heading = document.createElement('div');
-    heading.textContent = 'KOMUT PALETİ  ·  Ctrl+K';
+    const headingLabel = document.createElement('span');
+    headingLabel.textContent = commandUiLanguage === 'en' ? 'COMMAND PALETTE  ·  Ctrl+K' : 'KOMUT PALETİ  ·  Ctrl+K';
+    const languageButton = document.createElement('button');
+    languageButton.type = 'button';
+    languageButton.textContent = commandUiLanguage === 'en' ? 'TR' : 'EN';
+    languageButton.title = commandUiLanguage === 'en' ? 'Switch to Turkish' : 'Switch to English';
+    languageButton.style.cssText = 'float:right;padding:3px 8px;border:1px solid #475569;border-radius:6px;background:#1e293b;color:#e5e7eb;cursor:pointer';
+    languageButton.addEventListener('click', () => {
+      commandUiLanguage = commandUiLanguage === 'tr' ? 'en' : 'tr';
+      try { localStorage.setItem('cizim:command-language', commandUiLanguage); } catch (e) { /* */ }
+      headingLabel.textContent = commandUiLanguage === 'en' ? 'COMMAND PALETTE  ·  Ctrl+K' : 'KOMUT PALETİ  ·  Ctrl+K';
+      languageButton.textContent = commandUiLanguage === 'en' ? 'TR' : 'EN';
+      languageButton.title = commandUiLanguage === 'en' ? 'Switch to Turkish' : 'Switch to English';
+      commandPaletteInput.placeholder = commandUiLanguage === 'en' ? 'Type a command… e.g. BOX 100 50 30 / KUTU' : 'Komut yaz… ör. BOX 100 50 30 / KUTU';
+      renderCommandPaletteResults(commandPaletteInput.value);
+    });
+    heading.append(headingLabel, languageButton);
     heading.style.cssText = 'padding:4px 8px 10px;color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:.08em';
     commandPaletteInput = document.createElement('input');
     commandPaletteInput.type = 'text';
-    commandPaletteInput.placeholder = 'Komut yaz… ör. BOX 100 50 30 / KUTU';
+    commandPaletteInput.placeholder = commandUiLanguage === 'en' ? 'Type a command… e.g. BOX 100 50 30 / KUTU' : 'Komut yaz… ör. BOX 100 50 30 / KUTU';
     commandPaletteInput.autocomplete = 'off';
     commandPaletteInput.spellcheck = false;
     commandPaletteInput.style.cssText = 'box-sizing:border-box;width:100%;padding:13px 14px;border:1px solid #64748b;border-radius:9px;background:#0b1220;color:#fff;font-size:16px;outline:none';
@@ -5105,7 +5132,8 @@ function openCommandPalette() {
         if (!line) return;
         event.preventDefault();
         closeCommandPalette();
-        commandDispatcher.dispatchLine(line, { source: 'terminal' }).catch((error) => toast(error.message));
+        // çalışma sırasındaki hatayı dispatcher zaten gösterir (onError); burada yalnız ayrıştırma hataları
+        commandDispatcher.dispatchLine(line, { source: 'terminal' }).catch((error) => { if (error.code !== 'EXECUTION_FAILED' && error.code !== 'NOT_AVAILABLE') toast(error.message); });
       }
     });
     commandPalette.addEventListener('pointerdown', (event) => event.stopPropagation());
@@ -5177,14 +5205,100 @@ registerCadCommand({
 });
 
 registerCadCommand({
+  id: 'model.moveSelected', names: { tr: 'Seçili parçayı taşı', en: 'Move selected part' },
+  aliases: { tr: ['taşı', 'hareket ettir'], en: ['move', 'translate'] },
+  description: { tr: 'X, Y ve Z yönlerinde mm cinsinden hareket', en: 'Translate along X, Y and Z in mm' },
+  parameters: [
+    { name: 'dx', type: 'number' }, { name: 'dy', type: 'number' }, { name: 'dz', type: 'number' }
+  ],
+  category: 'transform', canExecute: (ctx) => ctx.hasSelection,
+  execute: (_ctx, args) => {
+    const dx = args.dx || 0, dy = args.dy || 0, dz = args.dz || 0;
+    if (![dx, dy, dz].some((v) => v !== 0)) { toast('Kullanım: MOVE 10 0 0 (mm)'); return false; }
+    if (poseLocked(cur())) { toast('Parçanın ya da alt parçalarının konumu değişkene bağlı; ƒx sekmesinden değiştir'); return false; }
+    commit();
+    carry(cur(), () => { cur().x = pos(cur().x) + dx; cur().y = pos(cur().y) + dy; cur().z = pos(cur().z) + dz; });
+    refreshAll(); return true;
+  }
+});
+registerCadCommand({
+  id: 'model.rotateSelected', names: { tr: 'Seçili parçayı döndür', en: 'Rotate selected part' },
+  aliases: { tr: ['döndür', 'döndürme'], en: ['rotate', 'turn'] },
+  description: { tr: 'Eksen ve açı: ROTATE Z 90', en: 'Axis and angle: ROTATE Z 90' },
+  parameters: [{ name: 'axis', type: 'string', required: true }, { name: 'degrees', type: 'number', required: true }],
+  category: 'transform', canExecute: (ctx) => ctx.hasSelection,
+  execute: (_ctx, args) => {
+    const axis = String(args.axis || '').toLowerCase();
+    if (!['x', 'y', 'z'].includes(axis)) { toast('Eksen x, y veya z olmalı'); return false; }
+    if (args.degrees === 0) { toast('Dönüş açısı 0 olamaz'); return false; }
+    if (poseLocked(cur())) { toast('Parçanın ya da alt parçalarının konumu değişkene bağlı; ƒx sekmesinden değiştir'); return false; }
+    commit();
+    carry(cur(), () => { const key = 'r' + axis; cur()[key] = pos(cur()[key]) + args.degrees; });
+    refreshAll(); return true;
+  }
+});
+registerCadCommand({
+  id: 'model.createHole', names: { tr: 'Seçili parçaya delik aç', en: 'Create hole in selected part' },
+  aliases: { tr: ['delik aç', 'delik'], en: ['hole', 'drill'] },
+  description: { tr: 'Seçili parçanın merkezinden Y ekseninde boydan boya delik. Örnek: HOLE 10', en: 'Through-hole along local Y through selected part. Example: HOLE 10' },
+  parameters: [{ name: 'diameter', type: 'number', required: true, min: 0.1 }],
+  category: 'features', canExecute: (ctx) => ctx.hasSelection,
+  execute: (_ctx, args) => {
+    const base = cur();
+    const h = Math.max(heightOf(base), 0.1);
+    if (!Number.isFinite(h) || !['box', 'cylinder', 'cone', 'sphere', 'tube'].includes(base.type)) {
+      toast('Bu parça türünde otomatik delik açılamıyor'); return false;
+    }
+    if (base.op === 'sub') { toast('Oyuk (çıkarma) parçasına delik açılmaz; dolu bir parça seç'); return false; }
+    const diameter = args.diameter;
+    const room = holeRoom(base);
+    if (!(room > 0)) { toast('Sivri koninin tepesinden boydan boya delik geçmez'); return false; }
+    if (!(diameter < room)) { toast('Delik çapı parçadan büyük: Ø' + fmtNum(room, 2) + ' mm\'den küçük olmalı'); return false; }
+    if (base.type === 'tube' && diameter <= clamp(base.di)) { toast('Borunun iç çapı zaten Ø' + fmtNum(clamp(base.di), 2) + ' mm; daha büyük çap gir'); return false; }
+    const cutter = cutterPart(base, 'sub', 'cylinder', { d: diameter, h: h + 2, w: diameter, l: diameter },
+      new THREE.Vector3(0, h / 2, 0), new THREE.Quaternion(), 'Komut deliği Ø' + diameter);
+    commit(); parts.push(cutter); selOff = null; sel = cutter.id; refreshAll();
+    toast('Boydan boya delik açıldı'); return true;
+  }
+});
+registerCadCommand({
+  id: 'sketch.extrude', names: { tr: '2B çizimden ekstrüzyon', en: 'Extrude from 2D sketch' },
+  aliases: { tr: ['ekstrüzyon', 'ekstrüde et'], en: ['extrude', 'extrusion'] },
+  description: { tr: '2B çizim ekranını açar; çizimi tamamlayınca 3B parça oluşur', en: 'Opens the 2D sketch editor; completing the sketch creates a 3D part' },
+  category: 'features', execute: () => open2D()
+});
+registerCadCommand({
+  id: 'model.chamferSelectedEdges', names: { tr: 'Seçili kenarlara pah', en: 'Chamfer selected edges' },
+  aliases: { tr: ['pah', 'kenara pah'], en: ['chamfer', 'bevel'] },
+  description: { tr: 'Önce Kenar sekmesinde kenarları seç. Örnek: CHAMFER 2', en: 'Select edges in the Edges tab first. Example: CHAMFER 2' },
+  parameters: [{ name: 'size', type: 'number', min: 0.01 }],
+  category: 'features', canExecute: () => edgeSels.length > 0 && !!edgeG && !edgeBusy,
+  execute: (_ctx, args) => { if (args.size != null) cp.es = args.size; return edgeFeature('chamfer'); }
+});
+registerCadCommand({
+  id: 'model.filletSelectedEdges', names: { tr: 'Seçili kenarları yuvarlat', en: 'Fillet selected edges' },
+  aliases: { tr: ['yuvarlat', 'kenar yuvarlat'], en: ['fillet', 'round edges'] },
+  description: { tr: 'Önce Kenar sekmesinde kenarları seç. Örnek: FILLET 2', en: 'Select edges in the Edges tab first. Example: FILLET 2' },
+  parameters: [{ name: 'radius', type: 'number', min: 0.01 }],
+  category: 'features', canExecute: () => edgeSels.length > 0 && !!edgeG && !edgeBusy,
+  execute: (_ctx, args) => { if (args.radius != null) cp.es = args.radius; return edgeFeature('fillet'); }
+});
+
+registerCadCommand({
   id: 'ui.commandPalette', names: { tr: 'Komut paletini aç', en: 'Open command palette' },
   aliases: { tr: ['komut paleti'], en: ['command palette'] },
   category: 'interface', shortcuts: ['CTRL+K'],
   execute: () => openCommandPalette()
 });
 
+// Yeni arayüzde (yeni/index.html) Ctrl+K kabuğun kendi arama paletini açar; komut satırı da oraya bağlanır.
+// Aynı tuşla ikinci bir palet açılmasın diye o arayüzde Ctrl+K bu sisteme bağlanmaz.
+const shellPalette = !!document.getElementById('palette');
 for (const command of commandRegistry.list()) {
-  for (const shortcut of command.shortcuts) shortcutResolver.bind(shortcut, command.id);
+  for (const shortcut of command.shortcuts) {
+    if (shellPalette && command.id === 'ui.commandPalette') continue;
+    shortcutResolver.bind(shortcut, command.id);
+  }
 }
 
 view.tabIndex = view.tabIndex >= 0 ? view.tabIndex : 0;
@@ -5199,6 +5313,8 @@ document.addEventListener('keydown', (event) => {
   if (!commandId) return;
   event.preventDefault();
   event.stopPropagation();
+  // tuş basılı tutulunca: geri al / yinele tekrarlansın; parça oluşturma, silme, kaydetme tekrarlanmasın
+  if (event.repeat && commandId !== 'edit.undo' && commandId !== 'edit.redo') return;
   commandDispatcher.dispatch(commandId, {}, { source: 'keyboard' }).catch(() => {});
 }, true);
 
@@ -5208,7 +5324,21 @@ window.__commandSystem = {
   dispatcher: commandDispatcher,
   shortcuts: shortcutResolver,
   run: (id, args = {}, source = 'api') => commandDispatcher.dispatch(id, args, { source }),
-  runLine: (line) => commandDispatcher.dispatchLine(line)
+  runLine: (line, source = 'terminal') => commandDispatcher.dispatchLine(line, { source }),
+  // yeni arayüzün arama paleti için: satır bir komut mu? (çalıştırmadan) → { id, name, usage, error } ya da null
+  inspect(line, lang = commandUiLanguage) {
+    const info = (c, error) => ({ id: c.id, name: c.names[lang] || c.names.tr, usage: c.description[lang] || c.description.tr || '', error });
+    try {
+      const r = parseCommandLine(line, commandRegistry);
+      return r ? info(r.command, null) : null;
+    } catch (e) {
+      if (e.code === 'UNKNOWN_COMMAND' || e.code === 'UNCLOSED_QUOTE') return null;
+      const w = String(line).trim().split(/\s+/);
+      for (let n = Math.min(3, w.length); n >= 1; n--) { const c = commandRegistry.resolve(w.slice(0, n).join(' ')); if (c) return info(c, e.message); }
+      return null;
+    }
+  },
+  toast: (m) => toast(m)
 };
 
 /* ================= Başlangıç ================= */

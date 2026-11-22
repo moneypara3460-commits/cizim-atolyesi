@@ -100,9 +100,14 @@ export function tokenizeCommandLine(source) {
 export function parseCommandLine(source, registry) {
   const tokens = tokenizeCommandLine(source);
   if (!tokens.length) return null;
-  const command = registry.resolve(tokens[0]);
+  // Çok kelimeli adlar ("delik aç 10", "create box 100"): en uzun eşleşen ad önce denenir.
+  let command = null, used = 1;
+  for (let n = Math.min(3, tokens.length); n >= 1 && !command; n--) {
+    const hit = registry.resolve(tokens.slice(0, n).join(" "));
+    if (hit) { command = hit; used = n; }
+  }
   if (!command) throw new CommandError("UNKNOWN_COMMAND", `Bilinmeyen komut: ${tokens[0]}`, { input: tokens[0] });
-  const rawArgs = tokens.slice(1);
+  const rawArgs = tokens.slice(used);
   const args = {};
   for (let i = 0; i < command.parameters.length; i++) {
     const parameter = command.parameters[i];
@@ -113,7 +118,8 @@ export function parseCommandLine(source, registry) {
     }
     let value = raw;
     if (parameter.type === "number") {
-      value = Number(raw);
+      // Türkçe ondalık virgül: "2,5" → 2.5 (binlik ayırıcı kabul edilmez: "1.000,5" geçersiz sayılır)
+      value = Number(/^[-+]?\d+,\d+$/.test(raw) ? raw.replace(",", ".") : raw);
       if (!Number.isFinite(value)) throw new CommandError("INVALID_NUMBER", `Geçersiz sayı: ${raw}`, { parameter: parameter.name });
       if (parameter.min != null && value < parameter.min || parameter.max != null && value > parameter.max) {
         throw new CommandError("OUT_OF_RANGE", `Parametre aralık dışında: ${parameter.name}`, { parameter: parameter.name, min: parameter.min, max: parameter.max });
@@ -177,10 +183,10 @@ export function normalizeShortcut(event) {
   const key = String(event.key || "").toUpperCase();
   if (!key) return null;
   const parts = [];
-  if (event.ctrlKey) parts.push("CTRL");
+  // Mac'te Cmd (meta) tuşu Ctrl gibi davranır: Cmd+Z = Ctrl+Z
+  if (event.ctrlKey || event.metaKey) parts.push("CTRL");
   if (event.altKey) parts.push("ALT");
   if (event.shiftKey) parts.push("SHIFT");
-  if (event.metaKey) parts.push("META");
   parts.push(key === " " ? "SPACE" : key);
   return parts.join("+");
 }
