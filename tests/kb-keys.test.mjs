@@ -49,7 +49,8 @@ test('yardım ekranı: tuş gösterimi ve bağlamdan bölüm (tekrarlar tek sat�
 test('tekstil ve ayakkabı tuş listelerinde aynı ekranda iki iş aynı tuşu kullanmaz', async () => {
   const fs = await import('node:fs');
   for (const f of ['tx/app.js', 'ayk/app.js']) {
-    const src = fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+    // kaynak metin denetimi: derlenmiş kopyada (dist/tests) küçültülmüş dosya yerine depodaki kaynak okunur
+    const src = ['../', '../../'].map((up) => { try { return fs.readFileSync(new URL(up + f, import.meta.url), 'utf8'); } catch (e) { return ''; } }).find((t) => /\{ id: '(tx|ayk)-/.test(t)) || '';
     const blocks = src.split(/\{ id: '(?=(?:tx|ayk)-)/).slice(1);
     assert.ok(blocks.length >= 2, f + ' bağlamları bulunamadı');
     for (const b of blocks) {
