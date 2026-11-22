@@ -125,3 +125,29 @@ Tuşlar çizim alanı seçiliyken çalışır (önce 3B alana bir kez dokun / t�
 | GİT / GO sekme | Sekmeye git (ÖLÇÜ, KAYNAK, CNC, ANALİZ, RESİM, MEKATRONİK…) | `GİT KAYNAK` |
 | BİRİM / UNITS MM\|CM\|İNÇ | Ölçü birimi | `BİRİM CM` |
 | SİL, GERİ AL, YİNELE, SIĞDIR, KAYDET | Düzen | `KAYDET` |
+
+## 3. Üretim, analiz ve dışa aktarma (Makine bölümü)
+
+Komut, ilgili sekmeyi açar ve o sekmedeki gerçek düğmeye basar (elle basmakla aynı sonuç). Bir ön adım eksikse ne yapılacağını söyler.
+
+| Tuş | İş |
+|---|---|
+| Ctrl+P | Teknik resim PDF |
+| Ctrl+E | STEP dışa aktar |
+| Ctrl+G | Etkin CNC modunun G-kodu |
+| F9 | Bulunulan sekmede çalıştır: Analiz çöz · Gelecek dayanım testi · CNC takım yolu · Üretim kontrolü · Montaj planı analizi · B-Rep doğrula |
+
+Teknik resim ekranında: **Esc** kapat · **Ctrl+P** PDF · **Ctrl+Shift+P** PNG · **Z** büyüt / küçült · **K** kesit ↔ izometrik.
+
+| Komut (Türkçe / İngilizce) | İş |
+|---|---|
+| TEKNİK RESİM / DRAWING · RESİM PDF / DRAWING PDF | Teknik resmi aç · PDF indir |
+| STEP · STL · 3MF · DXF GÖRÜNÜŞ / DXF VIEWS | Dışa aktar |
+| PARÇA LİSTESİ / BOM | Parça listesi CSV |
+| TAKIM YOLU / TOOLPATH · G KODU / GCODE · CNC SİMÜLASYON · İŞ KARTI · TORNA / LATHE | CNC |
+| AĞ / MESH · ANALİZ, ÇÖZ / SOLVE · ANALİZ RAPORU | Mühendislik analizi |
+| DAYANIM TESTİ · TİTREŞİM TESTİ · SICAKLIK TESTİ | Sanal testler (Gelecek sekmesi) |
+| B-REP, DOĞRULA / VALIDATE | OCCT ile kur ve doğrula |
+| ÜRETİLEBİLİRLİK / DFM · KESİM OPTİMİZASYONU | Üretim kontrolü · kesim planı |
+| ÜRETİM RAPORU · AĞIRLIK RAPORU · MALİYET RAPORU · KAYNAK RAPORU · MONTAJ RAPORU · MEKATRONİK RAPORU | PDF raporlar |
+| ÇALIŞTIR / RUN | F9 ile aynı |

@@ -1535,6 +1535,38 @@ await T('Komutlar 2: BORU / DİŞLİ / SAC / KONSTRÜKSİYON / SÜPÜRME / LOFT,
   await line('BİRİM MM'); expect(await page.evaluate(() => window.__app.settings.unit) === 'mm', 'BİRİM MM');
 });
 
+await T('Komutlar 3: TEKNİK RESİM (Z, Esc), Ctrl+P PDF, STL, PARÇA LİSTESİ, AĞIRLIK RAPORU, TAKIM YOLU + Ctrl+G G-kodu, F9 sekmede çalıştır, ÜRETİLEBİLİRLİK', 'L-Komut', async ({ page }) => {
+  const line = (l) => page.evaluate((l) => window.__commandSystem.runLine(l).then((r) => r.result).catch((e) => 'HATA:' + e.code), l);
+  const focusView = () => page.evaluate(() => document.getElementById('view').focus());
+  // teknik resim ekranı ve tuşları
+  await line('TEKNİK RESİM'); await page.waitForSelector('#sheetov');
+  const zb = page.locator('#sheetov [data-sh="zoom"]'); const z0 = await zb.innerText();
+  await page.keyboard.press('z'); expect(await zb.innerText() !== z0, 'Z büyüttü');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150); expect(await page.locator('#sheetov').count() === 0, 'Esc teknik resmi kapattı');
+  const p0 = await page.evaluate(() => window.__app.parts.length);
+  await focusView();
+  const pdf = await download(page, () => page.keyboard.press('Control+p'));
+  expect(/\.pdf$/.test(pdf.name) && /^%PDF/.test(pdf.text), 'Ctrl+P teknik resim PDF: ' + pdf.name);
+  await page.keyboard.press('b'); expect(await page.evaluate(() => window.__app.parts.length) === p0, 'teknik resim açıkken B parça eklemedi');
+  await page.keyboard.press('Escape');
+  // dışa aktarma
+  const stl = await download(page, () => line('STL')); expect(/\.stl$/i.test(stl.name) && stl.size > 84, 'STL: ' + stl.name);
+  const bom = await download(page, () => line('PARÇA LİSTESİ')); expect(/\.csv$/i.test(bom.name), 'parça listesi CSV: ' + bom.name);
+  const wg = await download(page, () => line('AĞIRLIK RAPORU')); expect(/\.pdf$/i.test(wg.name), 'ağırlık raporu: ' + wg.name);
+  expect(await page.evaluate(() => window.__app.tab) === 'wgt', 'ağırlık sekmesine geçti');
+  // CNC: 3 eksen takım yolu ve G-kodu
+  await line('GİT CNC'); await act(page, 'c5-mode-3').catch(() => {});
+  await line('TAKIM YOLU'); await waitText(page, '#tabbody', /G-kodunu indir|⛔|hata/i, 120000);
+  await focusView();
+  const g = await download(page, () => page.keyboard.press('Control+g'));
+  expect(/G21/.test(g.text) && /M30/.test(g.text), 'Ctrl+G G-kodu: ' + g.name);
+  // F9: bulunulan sekmede çalıştır; çalıştırılacak işi olmayan sekmede uyarı
+  await line('GİT ÖLÇÜ'); await focusView(); await page.keyboard.press('F9'); await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.__app.tab) === 'dims', 'F9 ölçü sekmesinde bir şey çalıştırmadı');
+  await line('ÜRETİLEBİLİRLİK'); expect(await page.evaluate(() => window.__app.tab) === 'mfg', 'ÜRETİLEBİLİRLİK üretim sekmesini açtı');
+  await waitText(page, '#tabbody', /Yeniden analiz et|ÜRETİMİ ANALİZ ET/, 60000);
+});
+
 /* ---------- K. Proje bütünlüğü ---------- */
 await T('Proje bütünlüğü: parça + malzeme + OCCT parçası + 5 eksen ayarları + analiz sonucu kaydedilip açılır', 'K-Proje', async ({ page }) => {
   await tab(page, 'dims'); await setK(page, 'w', 80); await setK(page, 'h', 20); await setK(page, 'l', 40);

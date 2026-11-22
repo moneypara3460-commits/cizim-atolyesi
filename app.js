@@ -5417,6 +5417,69 @@ registerCadCommand({
   execute: (_c, a) => { const u = { mm: 'mm', cm: 'cm', in: 'in', inc: 'in', inch: 'in' }[tabFold(a.u)]; if (!u) { toast('Birim: MM, CM ya da İNÇ'); return false; } clickAct('unit-' + u); }
 });
 
+/* ---- Klavye 3. aşama: üretim ve analiz ---- */
+// Sekmeyi aç, o sekmede görünen gerçek düğmeye bas (kullanıcının basacağı düğmenin aynısı). Panel geç çiziliyorsa kısa süre bekler.
+async function pressInTab(k, acts, missing) {
+  if (k && tab !== k) gotoTab(k);
+  for (let i = 0; i < 12; i++) {
+    for (const a of acts) {
+      const b = [...document.querySelectorAll(`#tabbody [data-act="${a}"]`)].find((x) => !x.disabled);
+      if (b) { b.click(); return true; }
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  toast(missing || 'Bu işlem şu an yapılamıyor; sekmedeki adımları tamamla');
+  return false;
+}
+const prodCmd = (id, tr, en, trAl, enAl, run, desc, shortcuts) => registerCadCommand({
+  id, names: { tr, en }, aliases: { tr: trAl, en: enAl }, description: desc || { tr: '', en: '' }, category: 'production', shortcuts: shortcuts || [], execute: run
+});
+// dışa aktarma
+prodCmd('export.step', 'STEP dışa aktar', 'Export STEP', ['step', 'step kaydet'], ['step out', 'export step'], () => clickAct('step-out'), { tr: 'SolidWorks, Fusion, FreeCAD için (Ctrl+E)', en: 'For SolidWorks, Fusion, FreeCAD (Ctrl+E)' }, ['CTRL+E']);
+prodCmd('export.stl', 'STL indir', 'Export STL', ['stl', 'stl indir'], ['export stl'], () => clickAct('stl'));
+prodCmd('export.3mf', '3MF indir (3B yazıcı)', 'Export 3MF', ['3mf'], ['export 3mf'], () => clickAct('mf-out'));
+prodCmd('export.dxfViews', 'DXF görünüşler', 'Export DXF views', ['dxf görünüş', 'dxf görünüşler'], ['dxf views', 'export dxf'], () => clickAct('dxf-out'), { tr: 'Ön, yan ve üst görünüş DXF', en: 'Front, side, top DXF' });
+prodCmd('export.bom', 'Parça listesi (CSV)', 'Bill of materials (CSV)', ['parça listesi', 'malzeme listesi'], ['bom', 'bill of materials'], () => clickAct('bom-csv'));
+// teknik resim
+prodCmd('drawing.open', 'Teknik resim', 'Technical drawing', ['teknik resim', 'resim'], ['drawing', 'drafting'], () => clickAct('sheet-make'), { tr: 'A4 teknik resmi açar (Ctrl+P: PDF)', en: 'Opens the A4 drawing (Ctrl+P: PDF)' });
+prodCmd('drawing.pdf', 'Teknik resim PDF', 'Drawing PDF', ['resim pdf', 'teknik resim pdf'], ['drawing pdf', 'print'], () => {
+  if (!document.getElementById('sheetov')) clickAct('sheet-make');
+  const b = document.querySelector('#sheetov [data-sh="pdf"]');
+  if (!b) return false;
+  b.click();
+}, { tr: 'Teknik resmi PDF olarak indirir', en: 'Downloads the drawing as PDF' }, ['CTRL+P']);
+// CNC
+prodCmd('cam.toolpath', 'Takım yolu oluştur', 'Generate toolpath', ['takım yolu'], ['toolpath'], () => pressInTab('cam', ['c5-run', 'cn-go'], 'CNC sekmesinde parçayı ve takımı seç'));
+prodCmd('cam.gcode', 'G-kodu indir', 'Download G-code', ['g kodu', 'gkodu', 'g-kodu', 'nc'], ['gcode', 'g-code'], () => pressInTab('cam', ['lz-dl-nc', 'c5-gcode', 'cn-dl'], 'Önce takım yolunu oluştur (TAKIM YOLU)'), { tr: 'Etkin CNC modunun (freze, 4/5 eksen, torna) G-kodu (Ctrl+G)', en: 'G-code of the active CNC mode (Ctrl+G)' }, ['CTRL+G']);
+prodCmd('cam.sim', 'CNC simülasyonu', 'CNC simulation', ['cnc simülasyon', 'talaş simülasyonu'], ['cnc sim', 'machining sim'], () => pressInTab('cam', ['cn-sim', 'c5-run'], 'Önce takım yolunu oluştur'));
+prodCmd('cam.jobsheet', 'CNC iş kartı (PDF)', 'CNC job sheet (PDF)', ['iş kartı'], ['job sheet'], () => pressInTab('cam', ['cn-pdf'], 'İş kartı 3 eksen freze modunda; önce takım yolunu oluştur'));
+prodCmd('cam.lathe', 'CNC torna', 'CNC lathe', ['torna'], ['lathe', 'turning'], () => pressInTab('cam', ['lz-on']));
+// analiz ve testler
+prodCmd('fea.mesh', 'Analiz ağı oluştur', 'Generate FEA mesh', ['ağ', 'ağ oluştur'], ['mesh'], () => pressInTab('fem', ['fm-mesh']));
+prodCmd('fea.solve', 'Analizi çöz', 'Solve FEA', ['analiz', 'analiz çöz', 'çöz'], ['solve', 'fea', 'run analysis'], () => pressInTab('fem', ['fm-solve'], 'Analiz sekmesinde mesnet ve yük ekle'), { tr: 'Mühendislik analizi (statik, modal, ısı, burkulma)', en: 'Engineering analysis' });
+prodCmd('fea.report', 'Analiz raporu indir', 'Download FEA report', ['analiz raporu'], ['fea report'], () => pressInTab('fem', ['fm-repdl'], 'Önce analizi çöz'));
+prodCmd('sim.strength', 'Dayanım testi', 'Strength test', ['dayanım testi', 'sanal test'], ['strength test', 'virtual test'], () => pressInTab('sim', ['sm-run']));
+prodCmd('sim.vibration', 'Titreşim testi', 'Vibration test', ['titreşim testi'], ['vibration test'], () => pressInTab('sim', ['sm-vib']));
+prodCmd('sim.thermal', 'Sıcaklık testi', 'Thermal test', ['sıcaklık testi'], ['thermal test'], () => pressInTab('sim', ['sm-temp']));
+prodCmd('occt.validate', 'B-Rep doğrula', 'Validate B-Rep', ['brep', 'doğrula'], ['validate', 'brep'], () => pressInTab('occt', ['oc-model']));
+// üretim raporları
+prodCmd('mfg.check', 'Üretilebilirlik kontrolü', 'Manufacturability check', ['üretilebilirlik', 'üretim kontrolü'], ['dfm', 'manufacturability'], () => clickAct('mfg-go'));
+prodCmd('mfg.cutopt', 'Kesim optimizasyonu', 'Cut optimization', ['kesim optimizasyonu', 'kesim'], ['cut list', 'nesting'], () => clickAct('cut-opt'));
+prodCmd('report.mfg', 'Üretim raporu (PDF)', 'Manufacturing report (PDF)', ['üretim raporu'], ['mfg report'], () => pressInTab('mfg', ['mfg-pdf'], 'Önce üretilebilirlik kontrolünü çalıştır'));
+prodCmd('report.weight', 'Ağırlık raporu (PDF)', 'Weight report (PDF)', ['ağırlık raporu', 'ağırlık'], ['weight report', 'mass'], () => pressInTab('wgt', ['wg-pdf']));
+prodCmd('report.cost', 'Maliyet raporu (PDF)', 'Cost report (PDF)', ['maliyet raporu', 'maliyet'], ['cost report', 'cost'], () => pressInTab('cost', ['cs-pdf']));
+prodCmd('report.weld', 'Kaynak raporu (PDF)', 'Weld report (PDF)', ['kaynak raporu'], ['weld report'], () => pressInTab('weld', ['wd-pdf']));
+prodCmd('report.assembly', 'Montaj raporu (PDF)', 'Assembly report (PDF)', ['montaj raporu', 'montaj sırası'], ['assembly report'], () => pressInTab('asm', ['as-pdf', 'as-go']));
+prodCmd('report.meka', 'Mekatronik raporu (PDF)', 'Mechatronics report (PDF)', ['mekatronik raporu'], ['mechatronics report'], () => pressInTab('meka', ['mk-bompdf', 'mk-pdf'], 'Mekatronik sekmesinde bir hesap kartı doldur'));
+// F9: bulunulan sekmenin "çalıştır" düğmesi
+const RUN_IN_TAB = { fem: ['fm-solve'], sim: ['sm-run'], cam: ['c5-run', 'cn-go'], mfg: ['mfg-run', 'mfg-go'], asm: ['as-go'], occt: ['oc-model'] };
+prodCmd('run.tab', 'Sekmede çalıştır', 'Run in tab', ['çalıştır'], ['run'], () => {
+  const acts = RUN_IN_TAB[tab];
+  if (!acts) { toast('Bu sekmede çalıştırılacak bir işlem yok (F9: Analiz, Gelecek, CNC, Üretim, Montaj planı, B-Rep)'); return false; }
+  if (tab === 'mfg') { clickAct('mfg-go'); return; }
+  return pressInTab(tab, acts);
+}, { tr: 'Analiz: çöz · Gelecek: dayanım testi · CNC: takım yolu · Üretim: kontrol · Montaj planı: analiz · B-Rep: doğrula (F9)', en: 'Runs the current tab (F9)' }, ['F9']);
+
 registerCadCommand({
   id: 'ui.commandPalette', names: { tr: 'Komut paletini aç', en: 'Open command palette' },
   aliases: { tr: ['komut paleti'], en: ['command palette'] },
@@ -5442,15 +5505,30 @@ view.addEventListener('pointerdown', () => {
 document.addEventListener('keydown', (event) => {
   // Sadece CAD çalışma alanı odaktayken kısayol yakala. Formlarda ve diğer panellerde yazıyı bozma.
   if (document.activeElement !== view && !view.contains(event.target)) return;
-  // 2B çizim ekranı açıkken klavye onundur (L, C, TR…); 3B kısayolları çalışmaz
-  if (document.getElementById('cad')) return;
+  // 2B çizim / teknik resim ekranı açıkken 3B kısayolları çalışmaz (o ekranların kendi tuşları var)
+  if (document.getElementById('cad') || document.getElementById('sheetov')) return;
   const commandId = shortcutResolver.resolve(event);
   if (!commandId) return;
   event.preventDefault();
-  event.stopPropagation();
+  // aynı tuşu, komutun açtığı ekranın (teknik resim vb.) kendi dinleyicisi ikinci kez işlemesin
+  event.stopImmediatePropagation();
   // tuş basılı tutulunca: geri al / yinele tekrarlansın; parça oluşturma, silme, kaydetme tekrarlanmasın
   if (event.repeat && commandId !== 'edit.undo' && commandId !== 'edit.redo') return;
   commandDispatcher.dispatch(commandId, {}, { source: 'keyboard' }).catch(() => {});
+}, true);
+
+// Teknik resim ekranı: Esc kapatır, Ctrl+P PDF, Ctrl+Shift+P / P PNG, Z büyüt / küçült, K kesit ↔ izometrik
+document.addEventListener('keydown', (event) => {
+  const o = document.getElementById('sheetov');
+  if (!o || document.getElementById('cad')) return;
+  const t = event.target;
+  if (t && /^(input|textarea|select)$/i.test(t.tagName || '')) return;
+  const k = String(event.key || '').toLowerCase(), mod = event.ctrlKey || event.metaKey;
+  const press = (a) => { event.preventDefault(); event.stopImmediatePropagation(); const b = o.querySelector(`[data-sh="${a}"]`); if (b) b.click(); };
+  if (k === 'escape') press('close');
+  else if (mod && k === 'p') press(event.shiftKey ? 'png' : 'pdf');
+  else if (!mod && !event.altKey && k === 'z') press('zoom');
+  else if (!mod && !event.altKey && k === 'k') press('mode');
 }, true);
 
 // E2E ve ilerideki komut paleti / komut satırı aynı dispatcher'ı kullanır.
