@@ -56,3 +56,14 @@ test("tırnak içindeki kaçışlı tırnak ve ters eğik çizgi korunur", () =>
 test("tırnak kapanmamışsa komut güvenli biçimde reddedilir", () => {
   assert.throws(() => tokenizeCommandLine('EXPORT "dosya.step'), { code: "UNCLOSED_QUOTE" });
 });
+
+test("CAD komut örnekleri için Türkçe ve İngilizce adlar ortak komuta çözülür", () => {
+  const registry = new CommandRegistry();
+  registry.register({ id: "model.moveSelected", names: { tr: "Seçili parçayı taşı", en: "Move selected part" }, aliases: { tr: ["taşı"], en: ["move", "translate"] }, parameters: [{ name: "dx", type: "number" }, { name: "dy", type: "number" }, { name: "dz", type: "number" }], execute: () => true });
+  registry.register({ id: "model.rotateSelected", names: { tr: "Seçili parçayı döndür", en: "Rotate selected part" }, aliases: { tr: ["döndür"], en: ["rotate"] }, parameters: [{ name: "axis", type: "string", required: true }, { name: "degrees", type: "number", required: true }], execute: () => true });
+  assert.equal(registry.resolve("MOVE").id, "model.moveSelected");
+  assert.equal(registry.resolve("TAŞI").id, "model.moveSelected");
+  assert.equal(registry.resolve("ROTATE").id, "model.rotateSelected");
+  assert.deepEqual(parseCommandLine("MOVE 10 0 -5", registry).args, { dx: 10, dy: 0, dz: -5 });
+  assert.deepEqual(parseCommandLine("ROTATE Z 90", registry).args, { axis: "Z", degrees: 90 });
+});
