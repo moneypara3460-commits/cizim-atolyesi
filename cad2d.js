@@ -66,7 +66,7 @@ const HINTS = {
   move: ['Taşıma: temel noktaya dokun.', 'Hedef noktaya dokun (ya da dX, dY yaz).'],
   copy: ['Kopyalama: temel noktaya dokun.', 'Hedef noktalara dokun (birden çok kopya). Bitince başka araca geç.'],
   rotate: ['Döndürme merkezine dokun.', 'Açıyı yazıp "Döndür"e bas.'],
-  mirror: ['Ayna ekseninin ilk noktası.', 'Ayna ekseninin ikinci noktası.'],
+  mirror: ['Ayna ekseninin ilk noktası.', 'Ayna⁠ ekseninin ikinci noktası.'],
   erase: ['Silinecek varlığa dokun (taramayı silmek için içine dokun).'],
   rdim: ['Ölçülecek daireye ya da yaya dokun.', 'Ölçü yazısının yerine dokun (Ø çap / R yarıçap aşağıdan değişir).'],
   adim: ['Açının birinci çizgisine dokun.', 'İkinci çizgiye dokun.', 'Ölçünün yerine dokun: hangi açı bölgesine dokunursan o açı ölçülür (ör. 60° ya da 120°).'],

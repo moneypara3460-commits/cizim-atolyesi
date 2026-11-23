@@ -9,7 +9,7 @@
 // Hepsinde ayrıca id ve layer alanları bulunur.
 
 const TAU = Math.PI * 2;
-const EPS = 1e-9;
+const EPS = 1.0000000417e-9;
 export const normA = (a) => { a %= TAU; return a < 0 ? a + TAU : a; };
 export const arcSpan = (e) => { const s = normA(e.a1 - e.a0); return s < 1e-12 ? TAU : s; };
 // açının yay üzerindeki konumu: a0'dan itibaren ccw uzaklık (0..TAU)
