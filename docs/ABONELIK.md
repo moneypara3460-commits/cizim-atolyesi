@@ -13,7 +13,7 @@ kullanıcısı aynı Google hesabıyla giriş yaptığında aboneliği orada da 
 | Hesabım sayfası | `hesap/` | Google ile giriş, deneme/abonelik durumu, paketler, satın alma, geri yükleme. |
 | Erişim hesabı | `hesap/access.js` | Deneme + abonelikten hangi bölümün ne zamana kadar açık olduğu. İnternetsiz 7 gün. |
 | Ödeme | `hesap/billing.js` | Google Play Faturalandırma (Digital Goods API) — yalnız Play'deki uygulamada çalışır. |
-| Veritabanı | Supabase `CIZIM-ATOLYESI` | `profiles` (14 günlük deneme sunucuda başlar), `subscriptions`. Kullanıcı yalnız kendi kaydını okur, yazamaz. |
+| Veritabanı | Supabase `CIZIM-ATOLYESI` | `profiles` (7 günlük deneme sunucuda başlar; 23.11.2026'ya kadar 14 gündü), `subscriptions`. Kullanıcı yalnız kendi kaydını okur, yazamaz. |
 | Doğrulama | `supabase/functions/play-verify` | Satın alma jetonunu Google'a sorar, aboneliği yazar, onaylar. |
 | Bildirimler | `supabase/functions/play-rtdn` | Google'ın yenileme/iptal/iade bildirimlerini işler. |
 
@@ -38,7 +38,7 @@ Paketler ve ürün kimlikleri (Play Console'da birebir bu adlarla açılır):
    Android paketi (AAB) ayrı bir iş olarak yapılacak.
 3. **Abonelik ürünleri** — Play Console → Para kazanma → Abonelikler: yukarıdaki 8 ürünü aç; her birinde tek temel plan
    (aylık ürüne 1 ay, yıllık ürüne 1 yıl), "geriye dönük uyumlu" işaretli, fiyat KDV dahil. Ücretsiz deneme teklifi **ekleme**
-   (14 günlük deneme uygulamanın kendisinde).
+   (7 günlük deneme uygulamanın kendisinde).
 4. **Servis hesabı** — Google Cloud'da servis hesabı aç, JSON anahtar indir. Play Console → Kullanıcılar ve izinler → bu hesabı davet et
    (finansal verileri görüntüleme + siparişleri ve abonelikleri yönetme). Supabase gizli ayarları: `GOOGLE_SERVICE_ACCOUNT` (JSON'un tamamı),
    `PLAY_PACKAGE` (paket adı).

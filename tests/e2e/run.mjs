@@ -47,7 +47,14 @@ const selChips = (page) => page.locator('#chips .chip.on').count();
 async function setK(page, k, v) { const i = page.locator(`#tabbody [data-k="${k}"]`).first(); await i.fill(String(v)); await page.waitForTimeout(250); }
 async function waitText(page, sel, re, timeout = 60000) { await page.waitForFunction(([s, r]) => { const el = document.querySelector(s); return el && new RegExp(r).test(el.innerText); }, [sel, re.source], { timeout }); }
 async function download(page, fn) { const [d] = await Promise.all([page.waitForEvent('download', { timeout: 60000 }), fn()]); const p = await d.path(); return { name: d.suggestedFilename(), text: fs.readFileSync(p, 'utf8'), size: fs.statSync(p).size }; }
-async function choose(page, fn, files) { const [fc] = await Promise.all([page.waitForEvent('filechooser', { timeout: 15000 }), fn()]); await fc.setFiles(files); }
+// dosya seçici: yoğun CI makinesinde ilk basış bazen pencere açtırmıyor (tarayıcı kullanıcı etkileşimini geç sayıyor);
+// pencere gelmezse düğmeye bir kez daha basılır. İkinci denemede de gelmezse test yine başarısız olur.
+async function choose(page, fn, files) {
+  let fc;
+  try { [fc] = await Promise.all([page.waitForEvent('filechooser', { timeout: 15000 }), fn()]); }
+  catch (e) { if (!/filechooser/.test(String(e && e.message))) throw e; [fc] = await Promise.all([page.waitForEvent('filechooser', { timeout: 20000 }), fn()]); }
+  await fc.setFiles(files);
+}
 async function shot(page, name) { const p = path.join(SHOTS, name.replace(/[^\w-]+/g, '_') + '.png'); try { await page.screenshot({ path: p }); } catch (e) { /* */ } return p; }
 const canvasBox = (page) => page.locator('#view canvas').boundingBox();
 async function close(a) { try { await a.ctx.close(); } catch (e) { /* */ } }
