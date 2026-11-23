@@ -6,6 +6,13 @@
 //     Supabase oturumu com.cizimatolyesi.app://giris adresiyle uygulamaya geri döner.
 (function () {
   'use strict';
+  // (kopru.js yalnız Android paketinde bulunur; web sitesinde bu kod hiç çalışmaz)
+  // 0) Klasör adresleri: uygulamanın yerel sunucusu "yeni/", "hesap/" gibi klasör adreslerinde o klasörün index.html'ini
+  //    değil, ana sayfayı verir; göreli stil/kod yolları da bozulur (tasarımsız açılış ekranı). Doğru sayfaya yönlendir.
+  if (/\/$/.test(location.pathname) && location.pathname !== '/') {
+    location.replace(location.pathname + 'index.html' + location.search + location.hash);
+    return;
+  }
   var C = window.Capacitor;
   if (!C || !C.isNativePlatform || !C.isNativePlatform()) return;
   var P = C.Plugins || {};
