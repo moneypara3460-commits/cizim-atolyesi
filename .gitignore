@@ -6,3 +6,7 @@ dist/
 reports/
 .e2e-libs/
 .build-tools/
+mobil/www/
+mobil/android/
+mobil/node_modules/
+cikti/

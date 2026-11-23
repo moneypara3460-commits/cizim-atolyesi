@@ -1,0 +1,100 @@
+# Çizim Atölyesi — Android paketi (Capacitor). Ayrıntı: docs/ANDROID.md
+# Çıktılar (iş bitince "Artifacts" bölümünde):
+#   cizim-atolyesi-aab : Google Play'e yüklenecek imzalı paket (.aab)
+#   cizim-atolyesi-apk : telefona doğrudan kurup denemek için imzalı .apk
+# İmza anahtarı GitHub sırlarından gelir: ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_SIFRE (anahtar adı: cizim).
+# Sırlar yoksa yalnız deneme (debug) APK'sı üretilir.
+name: Android
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "mobil/**"
+      - ".github/workflows/android.yml"
+      - "hesap/**"
+      - "tools/build.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  paket:
+    name: Android paketi (AAB + APK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      KS_SIFRE: ${{ secrets.ANDROID_KEYSTORE_SIFRE }}
+      SURUM_KODU: ${{ github.run_number }}
+      SURUM_ADI: 1.0.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Java 21 (sunucuda hazır)
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+          "$JAVA_HOME_21_X64/bin/java" -version
+      - name: Yayın derlemesi (küçültme + karıştırma)
+        run: |
+          mkdir -p .build-tools && cd .build-tools
+          echo '{"name":"build-tools","private":true}' > package.json
+          npm install --no-audit --no-fund esbuild@0.28.2 javascript-obfuscator@4.1.1
+          cd .. && node tools/build.mjs --obfuscate
+      - name: Uygulama dosyaları + köprü
+        run: node mobil/hazirla.mjs web
+      - name: Capacitor ve Android projesi
+        working-directory: mobil
+        run: |
+          npm install --no-audit --no-fund
+          npx cap add android
+          node hazirla.mjs android
+          npx cap sync android
+      - name: İmzalı AAB + APK
+        if: env.KS_B64 != ''
+        working-directory: mobil/android
+        run: |
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          chmod +x gradlew
+          ./gradlew --no-daemon bundleRelease assembleRelease \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/upload.jks" \
+            -Pandroid.injected.signing.store.password="$KS_SIFRE" \
+            -Pandroid.injected.signing.key.alias=cizim \
+            -Pandroid.injected.signing.key.password="$KS_SIFRE"
+          rm -f "$RUNNER_TEMP/upload.jks"
+          mkdir -p ../../cikti
+          cp app/build/outputs/bundle/release/*.aab "../../cikti/cizim-atolyesi-$SURUM_ADI.aab"
+          cp app/build/outputs/apk/release/*.apk "../../cikti/cizim-atolyesi-$SURUM_ADI.apk"
+      - name: Deneme APK (imza anahtarı ayarlı değil)
+        if: env.KS_B64 == ''
+        working-directory: mobil/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+          mkdir -p ../../cikti
+          cp app/build/outputs/apk/debug/*.apk "../../cikti/cizim-atolyesi-$SURUM_ADI-deneme.apk"
+      - name: Paket kontrolü
+        run: |
+          ls -la cikti
+          for f in cikti/*; do test -s "$f" || { echo "boş çıktı: $f"; exit 1; }; done
+      - name: AAB yükle
+        if: env.KS_B64 != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cizim-atolyesi-aab
+          path: cikti/*.aab
+          retention-days: 30
+      - name: APK yükle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cizim-atolyesi-apk
+          path: cikti/*.apk
+          retention-days: 30

@@ -1,0 +1,13 @@
+{
+  "appId": "com.cizimatolyesi.app",
+  "appName": "Çizim Atölyesi",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

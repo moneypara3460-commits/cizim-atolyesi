@@ -23,7 +23,7 @@ const args = new Set(process.argv.slice(2));
 const OBF = args.has('--obfuscate'), WITH_TESTS = args.has('--with-tests');
 
 // Yayına girmeyenler: geliştirme/test/sunucu dosyaları ve kullanılmayan ilk sürüm kalıntıları (kaynakta durur, silinmez)
-const SKIP_DIRS = new Set(['.git', '.github', 'node_modules', 'dist', 'docs', 'tools', 'supabase', 'reports', '.e2e-libs', '.build-tools', 'tests']);
+const SKIP_DIRS = new Set(['.git', '.github', 'node_modules', 'dist', 'docs', 'tools', 'supabase', 'reports', '.e2e-libs', '.build-tools', 'tests', 'mobil', 'cikti']);
 const SKIP_FILES = new Set(['App.js', 'viewerHtml.js', 'package.json', 'package-lock.json', '.gitignore', 'README.md', 'SECURITY.md', 'TESTLER.md']);
 
 // Karıştırma düzeyi (CI ölçümü: hesap dosyalarında metin dizisi şifreleme CAM testini ~5 kat yavaşlattı, PDF ikili
