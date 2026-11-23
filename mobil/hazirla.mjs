@@ -45,7 +45,10 @@ function web() {
     const s = fs.readFileSync(f, 'utf8');
     if (!/<head>/i.test(s)) continue;
     // Uygulamanın kendi kodundan ÖNCE çalışmalı (indirme ve girişi yakalar); CSP script-src 'self' buna izin verir
-    fs.writeFileSync(f, s.replace(/<head>/i, '<head>\n<script src="/kopru.js"></script>'));
+    let t = s.replace(/<head>/i, '<head>\n<script src="/kopru.js"></script>');
+    // Makine (yeni arayüz) üst çubuğu güvenli alanı hesaba katmıyor: uygulamada içerik durum çubuğunun altına girmesin
+    if (path.relative(WWW, f) === path.join('yeni', 'index.html')) t = t.replace(', viewport-fit=cover', '');
+    fs.writeFileSync(f, t);
     n++;
   }
   console.log(`www hazır: ${n} sayfaya köprü eklendi`);

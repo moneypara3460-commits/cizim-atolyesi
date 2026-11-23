@@ -70,7 +70,9 @@
 
   // ---------- 2) Google ile giriş ----------
   function girisAc(geriDon) {
-    try { localStorage.setItem(HEDEF, geriDon || '/hesap/index.html'); } catch (e) { /* yok */ }
+    var g = new URLSearchParams(location.search).get('geri');
+    var hedef = g && /^\/[^/]/.test(g) ? g : (geriDon || '/hesap/index.html');
+    try { localStorage.setItem(HEDEF, hedef); } catch (e) { /* yok */ }
     var url = SUPABASE + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(DONUS);
     return P.Browser.open({ url: url, presentationStyle: 'popover' });
   }
@@ -98,8 +100,40 @@
     return true;
   }
   window.__mobil = { girisAc: girisAc };
+
+  // ---------- 3) Giriş zorunlu ----------
+  // Uygulamada her bölüm Google ile girişten sonra açılır (web sitesi açık kalır). Hesap ve tanıtım sayfaları serbest.
+  var yol = location.pathname;
+  var serbest = /^\/(hesap|tanitim)\//.test(yol);
+  var oturum = null;
+  try { oturum = JSON.parse(localStorage.getItem(OTURUM)); } catch (e) { /* yok */ }
+  var girisVar = !!(oturum && oturum.refresh_token);
+  var bekleyenDonus = false;
+  if (!serbest && !girisVar) {
+    // Uygulama giriş dönüş bağlantısıyla soğuk açıldıysa önce onu işle (oturumu yazıp yönlendirir)
+    bekleyenDonus = true;
+    var yonlendir = function () {
+      location.replace('/hesap/index.html?giris=1&geri=' + encodeURIComponent(yol + location.search + location.hash));
+    };
+    if (P.App && P.App.getLaunchUrl) {
+      P.App.getLaunchUrl().then(function (r) { if (!(r && r.url && donusuIsle(r.url))) yonlendir(); }).catch(yonlendir);
+    } else yonlendir();
+  }
+
+  // Hesap sayfası (uygulamada): abonelik henüz Google Play'e bağlı değil, paketler gizli; açılış ekranında "Hesabım" görünür
+  var stil = document.createElement('style');
+  stil.textContent = '#plans{display:none!important}';
+  if (/^\/hesap\//.test(yol)) document.documentElement.appendChild(stil);
+  document.addEventListener('DOMContentLoaded', function () {
+    var l = document.getElementById('hesap-link');
+    if (l) l.hidden = false;
+    if (/^\/hesap\//.test(yol) && new URLSearchParams(location.search).get('giris') && !girisVar) {
+      var m = document.getElementById('msg');
+      if (m) { m.textContent = 'Çizim Atölyesi\'ni kullanmak için Google hesabınla giriş yap.'; m.hidden = false; }
+    }
+  });
   if (P.App) {
     P.App.addListener('appUrlOpen', function (e) { donusuIsle(e && e.url); });
-    if (P.App.getLaunchUrl) P.App.getLaunchUrl().then(function (r) { if (r && r.url) donusuIsle(r.url); }).catch(function () { /* yok */ });
+    if (P.App.getLaunchUrl && !bekleyenDonus) P.App.getLaunchUrl().then(function (r) { if (r && r.url) donusuIsle(r.url); }).catch(function () { /* yok */ });
   }
 })();
