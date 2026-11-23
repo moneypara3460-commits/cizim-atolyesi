@@ -1,0 +1,46 @@
+# Geçici tanı: APK'yı Android öykünücüsünde açar, ekran görüntüsü ve WebView günlüğünü iş günlüğüne yazar.
+name: Android tanı
+on:
+  pull_request:
+    paths: [".github/workflows/android-tani.yml"]
+permissions:
+  contents: read
+jobs:
+  oykunucu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 22 }
+      - name: Debug APK üret
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+          export JAVA_HOME=$JAVA_HOME_21_X64
+          mkdir -p .build-tools && cd .build-tools && echo '{"private":true}' > package.json
+          npm install --no-audit --no-fund esbuild@0.28.2 javascript-obfuscator@4.1.1 && cd ..
+          node tools/build.mjs --obfuscate && node mobil/hazirla.mjs web
+          cd mobil && npm install --no-audit --no-fund && npx cap add android && node hazirla.mjs android
+          sed -i 's/"webContentsDebuggingEnabled": false/"webContentsDebuggingEnabled": true/' capacitor.config.json
+          npx cap sync android && cd android && chmod +x gradlew && ./gradlew --no-daemon assembleDebug
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Öykünücüde aç
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r mobil/android/app/build/outputs/apk/debug/app-debug.apk
+            adb logcat -c
+            adb shell am start -n com.cizimatolyesi.app/.MainActivity
+            sleep 25
+            adb exec-out screencap -p > ekran.png
+            adb logcat -d | grep -iE "chromium|Capacitor|console|CSP|Refused|MIME" | tail -80
+            python3 -c "from PIL import Image" 2>/dev/null || pip install --quiet pillow
+            python3 -c "from PIL import Image;im=Image.open('ekran.png').convert('L');im=im.resize((im.width//4,im.height//4));im.save('k.png',optimize=True)"
+            echo "EKRAN_BASLA"; base64 -w0 k.png; echo; echo "EKRAN_BITIS"
