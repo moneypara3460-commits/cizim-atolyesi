@@ -57,6 +57,7 @@ async function refresh() {
 
 function renderState() {
   const box = $('state'); box.textContent = '';
+  $('manage').hidden = !(acc && acc.subs.length);   // abonelik yoksa yönetilecek bir şey de yok
   if (!acc) { box.append(el('p', 'note warn', 'Durum alınamadı. İnternet bağlantını kontrol edip sayfayı yenile.')); return; }
   if (acc.subs.length) {
     box.append(el('p', null, 'Aboneliklerin:'));

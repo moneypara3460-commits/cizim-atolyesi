@@ -1,0 +1,50 @@
+:root { --ink:#0a1120; --sheet:#0f172a; --rule:#162238; --rule2:#22314f; --text:#e6ecf5; --muted:#9aa8bc;
+  --cyan:#38bdf8; --org:#fb923c; --mak:#f0a43a; --tex:#ec8fa6; --ayk:#d39a5b;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--ink); color: var(--text); font-family: var(--font); -webkit-tap-highlight-color: transparent; }
+.g { position: relative; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; gap: 22px;
+  padding: calc(env(safe-area-inset-top) + 36px) 22px calc(env(safe-area-inset-bottom) + 24px); overflow: hidden; }
+.izgara { position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-image: linear-gradient(var(--rule2) 1px, transparent 1px), linear-gradient(90deg, var(--rule2) 1px, transparent 1px),
+    linear-gradient(var(--rule) 1px, transparent 1px), linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+  background-size: 160px 160px, 160px 160px, 32px 32px, 32px 32px;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 22%, #000 0%, rgba(0,0,0,.55) 45%, transparent 85%);
+          mask-image: radial-gradient(ellipse at 50% 22%, #000 0%, rgba(0,0,0,.55) 45%, transparent 85%); }
+.g > *:not(.izgara) { position: relative; z-index: 1; }
+.ust { text-align: center; margin-top: 4vh; }
+.logo { width: 112px; height: 112px; filter: drop-shadow(0 10px 30px rgba(56,189,248,.18)); }
+.logo .zemin { fill: #0d1628; stroke: #24324f; stroke-width: 1.5; }
+.logo .gonye { fill: none; stroke: var(--cyan); stroke-width: 7; stroke-linejoin: round; stroke-dasharray: 260; stroke-dashoffset: 260; animation: ciz 1.1s .15s ease-out forwards; }
+.logo .yay { fill: none; stroke: var(--org); stroke-width: 6; stroke-linecap: round; stroke-dasharray: 110; stroke-dashoffset: 110; animation: ciz .9s .9s ease-out forwards; }
+.logo .harf { font: 700 30px var(--font); fill: var(--text); opacity: 0; animation: belir .5s 1.5s forwards; }
+@keyframes ciz { to { stroke-dashoffset: 0; } }
+@keyframes belir { to { opacity: 1; } }
+h1 { margin: 18px 0 6px; font-size: 32px; letter-spacing: -.02em; font-weight: 750; }
+.alt { margin: 0; color: var(--muted); font-size: 15.5px; }
+.kapilar { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+.kapilar li { display: grid; grid-template-columns: 14px 1fr; column-gap: 12px; align-items: baseline; padding: 14px 16px;
+  background: rgba(15,23,42,.82); border: 1px solid #1e2a44; border-radius: 16px; backdrop-filter: blur(4px);
+  opacity: 0; transform: translateY(8px); animation: gel .5s ease-out forwards; }
+.kapilar li:nth-child(1) { animation-delay: 1.7s; } .kapilar li:nth-child(2) { animation-delay: 1.85s; } .kapilar li:nth-child(3) { animation-delay: 2s; }
+@keyframes gel { to { opacity: 1; transform: none; } }
+.kapilar .nokta { width: 10px; height: 10px; border-radius: 3px; grid-row: span 2; align-self: center; }
+.kapilar b { font-size: 16px; } .kapilar small { grid-column: 2; color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+.mak .nokta { background: var(--mak); } .tex .nokta { background: var(--tex); } .ayk .nokta { background: var(--ayk); }
+.alt-blok { margin-top: auto; display: grid; gap: 14px; }
+.hediye { text-align: center; font-size: 14px; color: #fde7c7; background: rgba(251,146,60,.10); border: 1px solid rgba(251,146,60,.35);
+  border-radius: 12px; padding: 10px 12px; }
+.ana { appearance: none; border: 0; width: 100%; min-height: 58px; border-radius: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px; font: 650 18px var(--font); color: #0a1120;
+  background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 55%, #0ea5e9 100%);
+  box-shadow: 0 10px 30px rgba(14,165,233,.35), inset 0 1px 0 rgba(255,255,255,.45); transition: transform .12s, filter .12s; }
+.ana:active { transform: scale(.98); filter: brightness(.95); }
+.ana:disabled { opacity: .7; }
+.ana-ok { font-size: 20px; transition: transform .2s; } .ana:hover .ana-ok { transform: translateX(3px); }
+.durum { margin: 0; text-align: center; color: var(--muted); font-size: 14px; }
+.durum.hata { color: #fca5a5; }
+.yasal { margin: 0; text-align: center; color: #7c8aa3; font-size: 12.5px; line-height: 1.5; }
+.yasal a { color: #a5b4fc; }
+@media (min-height: 760px) { .g { gap: 28px; } }
+@media (prefers-reduced-motion: reduce) {
+  .logo .gonye, .logo .yay { animation: none; stroke-dashoffset: 0; } .logo .harf, .kapilar li { animation: none; opacity: 1; transform: none; } }

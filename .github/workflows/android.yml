@@ -84,6 +84,12 @@ jobs:
       - name: Paket kontrolü
         run: |
           ls -la cikti
+          a=$(ls cikti/*.apk | head -1)
+          echo "--- APK içindeki uygulama dosyaları (örnek) ---"
+          unzip -l "$a" | grep -E "assets/public/(index.html|kopru.js|acilis/|yeni/ui.css|app.js)" || true
+          echo "toplam assets/public dosyası: $(unzip -l "$a" | grep -c 'assets/public/')"
+          unzip -p "$a" assets/public/index.html | head -12
+          unzip -l "$a" | grep -E "assets/(capacitor|native-bridge)" || true
           for f in cikti/*; do test -s "$f" || { echo "boş çıktı: $f"; exit 1; }; done
       - name: AAB yükle
         if: env.KS_B64 != ''

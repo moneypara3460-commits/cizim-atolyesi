@@ -6,6 +6,13 @@
 //     Supabase oturumu com.cizimatolyesi.app://giris adresiyle uygulamaya geri döner.
 (function () {
   'use strict';
+  // (kopru.js yalnız Android paketinde bulunur; web sitesinde bu kod hiç çalışmaz)
+  // 0) Klasör adresleri: uygulamanın yerel sunucusu "yeni/", "hesap/" gibi klasör adreslerinde o klasörün index.html'ini
+  //    değil, ana sayfayı verir; göreli stil/kod yolları da bozulur (tasarımsız açılış ekranı). Doğru sayfaya yönlendir.
+  if (/\/$/.test(location.pathname) && location.pathname !== '/') {
+    location.replace(location.pathname + 'index.html' + location.search + location.hash);
+    return;
+  }
   var C = window.Capacitor;
   if (!C || !C.isNativePlatform || !C.isNativePlatform()) return;
   var P = C.Plugins || {};
@@ -62,8 +69,19 @@
   };
 
   // ---------- 2) Google ile giriş ----------
+  // Girişten sonra gidilecek adres: yalnız uygulamanın kendi sayfaları (başka siteye ya da javascript: adresine yönlenmez)
+  var UYGULAMA_SAYFALARI = ['/', '/index.html', '/yeni/index.html', '/klasik.html', '/tekstil.html', '/ayakkabi.html', '/hesap/index.html'];
+  function guvenliHedef(h) {
+    try {
+      var u = new URL(String(h || ''), location.origin);
+      var i = UYGULAMA_SAYFALARI.indexOf(u.pathname);
+      if (u.origin === location.origin && i >= 0) return UYGULAMA_SAYFALARI[i];
+    } catch (e) { /* geçersiz adres */ }
+    return '/';
+  }
   function girisAc(geriDon) {
-    try { localStorage.setItem(HEDEF, geriDon || '/hesap/index.html'); } catch (e) { /* yok */ }
+    var hedef = guvenliHedef(new URLSearchParams(location.search).get('geri') || geriDon);
+    try { localStorage.setItem(HEDEF, hedef); } catch (e) { /* yok */ }
     var url = SUPABASE + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(DONUS);
     return P.Browser.open({ url: url, presentationStyle: 'popover' });
   }
@@ -74,9 +92,9 @@
     var i = url.indexOf('#');
     var h = new URLSearchParams(i >= 0 ? url.slice(i + 1) : (url.split('?')[1] || ''));
     try { P.Browser.close(); } catch (e) { /* zaten kapalı */ }
-    var hedef = '/hesap/index.html';
-    try { hedef = localStorage.getItem(HEDEF) || hedef; localStorage.removeItem(HEDEF); } catch (e) { /* yok */ }
-    if (!/^\/[^/]/.test(hedef)) hedef = '/hesap/index.html';   // yalnız uygulama içi adres
+    var kayitli = null;
+    try { kayitli = localStorage.getItem(HEDEF); localStorage.removeItem(HEDEF); } catch (e) { /* yok */ }
+    var hedef = guvenliHedef(kayitli);
     if (h.get('access_token')) {
       var s = {
         access_token: h.get('access_token'),
@@ -91,8 +109,36 @@
     return true;
   }
   window.__mobil = { girisAc: girisAc };
+
+  // ---------- 3) Giriş zorunlu ----------
+  // Uygulamada her bölüm Google ile girişten sonra açılır (web sitesi açık kalır). Hesap ve tanıtım sayfaları serbest.
+  var yol = location.pathname;
+  var serbest = /^\/(hesap|tanitim)\//.test(yol) || yol === '/giris.html';
+  var oturum = null;
+  try { oturum = JSON.parse(localStorage.getItem(OTURUM)); } catch (e) { /* yok */ }
+  var girisVar = !!(oturum && oturum.refresh_token);
+  var bekleyenDonus = false;
+  if (!serbest && !girisVar) {
+    // Uygulama giriş dönüş bağlantısıyla soğuk açıldıysa önce onu işle (oturumu yazıp yönlendirir)
+    bekleyenDonus = true;
+    var yonlendir = function () {
+      location.replace('/giris.html?geri=' + encodeURIComponent(yol + location.search + location.hash));
+    };
+    if (P.App && P.App.getLaunchUrl) {
+      P.App.getLaunchUrl().then(function (r) { if (!(r && r.url && donusuIsle(r.url))) yonlendir(); }).catch(yonlendir);
+    } else yonlendir();
+  }
+
+  // Hesap sayfası (uygulamada): abonelik henüz Google Play'e bağlı değil, paketler gizli; açılış ekranında "Hesabım" görünür
+  var stil = document.createElement('style');
+  stil.textContent = '#plans{display:none!important}';
+  if (/^\/hesap\//.test(yol)) document.documentElement.appendChild(stil);
+  document.addEventListener('DOMContentLoaded', function () {
+    var l = document.getElementById('hesap-link');
+    if (l) l.hidden = false;
+  });
   if (P.App) {
     P.App.addListener('appUrlOpen', function (e) { donusuIsle(e && e.url); });
-    if (P.App.getLaunchUrl) P.App.getLaunchUrl().then(function (r) { if (r && r.url) donusuIsle(r.url); }).catch(function () { /* yok */ });
+    if (P.App.getLaunchUrl && !bekleyenDonus) P.App.getLaunchUrl().then(function (r) { if (r && r.url) donusuIsle(r.url); }).catch(function () { /* yok */ });
   }
 })();

@@ -40,12 +40,16 @@ function web() {
   kopyala(dist, WWW);
   for (const d of ['tests', 'supabase', 'reports']) fs.rmSync(path.join(WWW, d), { recursive: true, force: true });
   fs.copyFileSync(path.join(MOBIL, 'kopru.js'), path.join(WWW, 'kopru.js'));
+  kopyala(path.join(MOBIL, 'sayfalar'), WWW);   // yalnız uygulamada olan sayfalar (giriş ekranı)
   let n = 0;
   for (const f of htmller(WWW)) {
     const s = fs.readFileSync(f, 'utf8');
     if (!/<head>/i.test(s)) continue;
     // Uygulamanın kendi kodundan ÖNCE çalışmalı (indirme ve girişi yakalar); CSP script-src 'self' buna izin verir
-    fs.writeFileSync(f, s.replace(/<head>/i, '<head>\n<script src="/kopru.js"></script>'));
+    let t = s.replace(/<head>/i, '<head>\n<script src="/kopru.js"></script>');
+    // Makine (yeni arayüz) üst çubuğu güvenli alanı hesaba katmıyor: uygulamada içerik durum çubuğunun altına girmesin
+    if (path.relative(WWW, f) === path.join('yeni', 'index.html')) t = t.replace(', viewport-fit=cover', '');
+    fs.writeFileSync(f, t);
     n++;
   }
   console.log(`www hazır: ${n} sayfaya köprü eklendi`);
