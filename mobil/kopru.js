@@ -104,7 +104,7 @@
   // ---------- 3) Giriş zorunlu ----------
   // Uygulamada her bölüm Google ile girişten sonra açılır (web sitesi açık kalır). Hesap ve tanıtım sayfaları serbest.
   var yol = location.pathname;
-  var serbest = /^\/(hesap|tanitim)\//.test(yol);
+  var serbest = /^\/(hesap|tanitim)\//.test(yol) || yol === '/giris.html';
   var oturum = null;
   try { oturum = JSON.parse(localStorage.getItem(OTURUM)); } catch (e) { /* yok */ }
   var girisVar = !!(oturum && oturum.refresh_token);
@@ -113,7 +113,7 @@
     // Uygulama giriş dönüş bağlantısıyla soğuk açıldıysa önce onu işle (oturumu yazıp yönlendirir)
     bekleyenDonus = true;
     var yonlendir = function () {
-      location.replace('/hesap/index.html?giris=1&geri=' + encodeURIComponent(yol + location.search + location.hash));
+      location.replace('/giris.html?geri=' + encodeURIComponent(yol + location.search + location.hash));
     };
     if (P.App && P.App.getLaunchUrl) {
       P.App.getLaunchUrl().then(function (r) { if (!(r && r.url && donusuIsle(r.url))) yonlendir(); }).catch(yonlendir);
@@ -127,10 +127,6 @@
   document.addEventListener('DOMContentLoaded', function () {
     var l = document.getElementById('hesap-link');
     if (l) l.hidden = false;
-    if (/^\/hesap\//.test(yol) && new URLSearchParams(location.search).get('giris') && !girisVar) {
-      var m = document.getElementById('msg');
-      if (m) { m.textContent = 'Çizim Atölyesi\'ni kullanmak için Google hesabınla giriş yap.'; m.hidden = false; }
-    }
   });
   if (P.App) {
     P.App.addListener('appUrlOpen', function (e) { donusuIsle(e && e.url); });

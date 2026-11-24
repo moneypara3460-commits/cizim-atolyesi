@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a1120">
+<title>Çizim Atölyesi — Giriş</title>
+<link rel="stylesheet" href="/giris.css">
+</head>
+<body>
+<main class="g">
+  <div class="izgara" aria-hidden="true"></div>
+
+  <section class="ust">
+    <svg class="logo" viewBox="0 0 120 120" aria-hidden="true">
+      <rect x="2" y="2" width="116" height="116" rx="28" class="zemin"/>
+      <path d="M26 94 L26 26 L94 94 Z" class="gonye"/>
+      <path d="M26 30 A64 64 0 0 1 90 94" class="yay"/>
+      <text x="34" y="87" class="harf">Ç</text>
+    </svg>
+    <h1>Çizim Atölyesi</h1>
+    <p class="alt">Telefonundaki teknik çizim ve kalıp atölyesi</p>
+  </section>
+
+  <ul class="kapilar" aria-label="Bölümler">
+    <li class="mak"><span class="nokta"></span><b>Makine</b><small>Parça, montaj, teknik resim, CNC</small></li>
+    <li class="tex"><span class="nokta"></span><b>Tekstil / Triko</b><small>Kalıp, beden serisi, kesim planı</small></li>
+    <li class="ayk"><span class="nokta"></span><b>Ayakkabı</b><small>Stampa, saya parçaları, ölçekli çıktı</small></li>
+  </ul>
+
+  <section class="alt-blok">
+    <div class="hediye"><span>🎁</span> İlk girişte <b>7 gün tüm bölümler ücretsiz</b> · kart bilgisi istenmez</div>
+    <button id="google" type="button" class="ana">
+      <span class="ana-yazi">Google ile devam et</span>
+      <span class="ana-ok" aria-hidden="true">→</span>
+    </button>
+    <p id="durum" class="durum" role="status" hidden></p>
+    <p class="yasal">Devam ederek <a href="/tanitim/gizlilik.html">Gizlilik Politikası</a>'nı kabul etmiş olursun. Hesabını istediğin zaman uygulama içinden silebilirsin.</p>
+  </section>
+</main>
+<script src="/giris.js"></script>
+</body>
+</html>

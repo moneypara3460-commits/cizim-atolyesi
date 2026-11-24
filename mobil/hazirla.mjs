@@ -40,6 +40,7 @@ function web() {
   kopyala(dist, WWW);
   for (const d of ['tests', 'supabase', 'reports']) fs.rmSync(path.join(WWW, d), { recursive: true, force: true });
   fs.copyFileSync(path.join(MOBIL, 'kopru.js'), path.join(WWW, 'kopru.js'));
+  kopyala(path.join(MOBIL, 'sayfalar'), WWW);   // yalnız uygulamada olan sayfalar (giriş ekranı)
   let n = 0;
   for (const f of htmller(WWW)) {
     const s = fs.readFileSync(f, 'utf8');
