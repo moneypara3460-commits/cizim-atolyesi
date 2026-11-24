@@ -69,9 +69,18 @@
   };
 
   // ---------- 2) Google ile giriş ----------
+  // Girişten sonra gidilecek adres: yalnız uygulamanın kendi sayfaları (başka siteye ya da javascript: adresine yönlenmez)
+  var UYGULAMA_SAYFALARI = ['/', '/index.html', '/yeni/index.html', '/klasik.html', '/tekstil.html', '/ayakkabi.html', '/hesap/index.html'];
+  function guvenliHedef(h) {
+    try {
+      var u = new URL(String(h || ''), location.origin);
+      var i = UYGULAMA_SAYFALARI.indexOf(u.pathname);
+      if (u.origin === location.origin && i >= 0) return UYGULAMA_SAYFALARI[i];
+    } catch (e) { /* geçersiz adres */ }
+    return '/';
+  }
   function girisAc(geriDon) {
-    var g = new URLSearchParams(location.search).get('geri');
-    var hedef = g && /^\/[^/]/.test(g) ? g : (geriDon || '/hesap/index.html');
+    var hedef = guvenliHedef(new URLSearchParams(location.search).get('geri') || geriDon);
     try { localStorage.setItem(HEDEF, hedef); } catch (e) { /* yok */ }
     var url = SUPABASE + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(DONUS);
     return P.Browser.open({ url: url, presentationStyle: 'popover' });
@@ -83,9 +92,9 @@
     var i = url.indexOf('#');
     var h = new URLSearchParams(i >= 0 ? url.slice(i + 1) : (url.split('?')[1] || ''));
     try { P.Browser.close(); } catch (e) { /* zaten kapalı */ }
-    var hedef = '/hesap/index.html';
-    try { hedef = localStorage.getItem(HEDEF) || hedef; localStorage.removeItem(HEDEF); } catch (e) { /* yok */ }
-    if (!/^\/[^/]/.test(hedef)) hedef = '/hesap/index.html';   // yalnız uygulama içi adres
+    var kayitli = null;
+    try { kayitli = localStorage.getItem(HEDEF); localStorage.removeItem(HEDEF); } catch (e) { /* yok */ }
+    var hedef = guvenliHedef(kayitli);
     if (h.get('access_token')) {
       var s = {
         access_token: h.get('access_token'),
