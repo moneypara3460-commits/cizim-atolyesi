@@ -2,11 +2,12 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
+<meta name="theme-color" content="#0a1120">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://anqfdlahimxdjovecsyk.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>Hesabım · Çizim Atölyesi</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="./hesap.css?v=20261114b">
+<link rel="stylesheet" href="./hesap.css?v=20261124a">
 </head>
 <body>
 <header id="top">
@@ -29,7 +30,7 @@
     <div class="row">
       <a id="back" class="btn primary" hidden>Bölüme dön</a>
       <button id="restore" class="btn" type="button" hidden>Satın alımları geri yükle</button>
-      <a class="btn" href="https://play.google.com/store/account/subscriptions" target="_blank" rel="noopener">Aboneliği Google Play'de yönet</a>
+      <a id="manage" class="btn" href="https://play.google.com/store/account/subscriptions" target="_blank" rel="noopener" hidden>Aboneliği Google Play'de yönet</a>
       <button id="logout" class="btn ghost" type="button">Çıkış yap</button>
     </div>
     <details class="danger">
@@ -56,6 +57,6 @@
   </section>
 </main>
 <div id="toast" hidden></div>
-<script type="module" src="./hesap.js?v=20261124a"></script>
+<script type="module" src="./hesap.js?v=20261124b"></script>
 </body>
 </html>
