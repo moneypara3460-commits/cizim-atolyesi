@@ -3,6 +3,7 @@
 //   ?geri=<adres>   : erişim varsa "Bölüme dön" bu adrese gider (yalnız aynı site)
 import * as S from './session.js';
 import * as B from './billing.js';
+import { PAYWALL, ODEME_DENEYENLER } from './config.js';
 import { PLANS, SECTION_NAME, ALL_PRODUCTS, productId, productInfo } from './plans.js';
 
 const $ = (id) => document.getElementById(id);
@@ -133,6 +134,18 @@ async function restore(silent) {
   } catch (e) { if (!silent) toast('Geri yükleme yapılamadı: ' + e.message); }
 }
 
+// Android uygulamasında paketler mobil/kopru.js'in 'odeme-gizle' stiliyle gizlidir. Kilit (PAYWALL) açıksa herkese,
+// kapalıyken yalnız ödeme denemesine izinli hesaplara (config.js ODEME_DENEYENLER, e-postanın SHA-256 özeti) gösterilir.
+async function odemeGorunurlugu(email) {
+  const gizle = document.getElementById('odeme-gizle');
+  if (!gizle) return;
+  if (PAYWALL) { gizle.remove(); return; }
+  if (!email || !(window.crypto && crypto.subtle)) return;
+  const ozet = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(email).trim().toLowerCase()));
+  const h = Array.from(new Uint8Array(ozet), (b) => b.toString(16).padStart(2, '0')).join('');
+  if (ODEME_DENEYENLER.includes(h)) gizle.remove();
+}
+
 async function init() {
   const h = S.takeSessionFromHash();
   if (h && h.error) message('Giriş yapılamadı: ' + h.error);
@@ -145,7 +158,7 @@ async function init() {
   }
   $('status').hidden = false;
   $('restore').hidden = !billing;
-  try { const u = await S.getUser(); $('who').textContent = u.email ? 'Giriş: ' + u.email : ''; } catch (e) {
+  try { const u = await S.getUser(); $('who').textContent = u.email ? 'Giriş: ' + u.email : ''; await odemeGorunurlugu(u.email); } catch (e) {
     if (e.code === 'auth') { S.logout(); location.replace(location.pathname + location.search); return; }
   }
   await refresh();

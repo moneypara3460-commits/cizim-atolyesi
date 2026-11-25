@@ -103,6 +103,9 @@ ${kayitlar}
   const kod = Number(process.env.SURUM_KODU || 1), ad = process.env.SURUM_ADI || '1.0.0';
   let g = fs.readFileSync(gradle, 'utf8');
   g = g.replace(/versionCode\s+\d+/, `versionCode ${kod}`).replace(/versionName\s+"[^"]*"/, `versionName "${ad}"`);
+  // Google Play abonelikleri (mobil/yerel/Odeme.java): Play Billing Library 8 (Google Play 2026 kuralı: en az 8. sürüm)
+  if (!/^dependencies\s*\{/m.test(g)) throw new Error('build.gradle: dependencies bloğu yok');
+  g = g.replace(/^dependencies\s*\{/m, 'dependencies {\n    implementation "com.android.billingclient:billing:8.3.0"');
   fs.writeFileSync(gradle, g);
 
   // Simgeler (mobil/ikon → res) ve açılış ekranı rengi (Capacitor logosu yerine düz uygulama rengi)
