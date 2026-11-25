@@ -2,7 +2,7 @@
 // Arayüz (ui.js) bu sınıfı kullanır; durum değişince 'change', her karede 'frame' olayı yayar.
 import { HandEngine, boxFromCorners, validBox, LM, GESTURE_LABEL } from './gestures.js?v=20261120e';
 import { SyntheticPointer } from './pointer.js?v=20261120e';
-import { Camera, cameraSupported, cameraErrorText } from './camera.js?v=20261120e';
+import { Camera, cameraSupported, cameraErrorText } from './camera.js?v=20261125a';
 import { MediaPipeTracker } from './tracker.js?v=20261120e';
 
 const KEY = 'cizim:hand';

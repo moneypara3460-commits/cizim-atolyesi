@@ -1696,7 +1696,7 @@ await (async () => { if (only.length && !only.some((o) => 'W-Alan'.toLowerCase()
     // 5) Tekstil → tekstil sayfası; makineye / eski arayüze bağlantı yok; Ana ekran düğmesi
     await page.locator('.door.tekstil').click(); await page.waitForURL(/tekstil\.html/); await page.waitForSelector('[data-a="create"]');
     expect(await page.evaluate(() => localStorage.getItem('cizim:workspace')) === 'tekstil', 'tekstil kaydedildi');
-    expect(!(await crossLinks(/yeni\/|klasik|index\.html|\?ws=/)).length, 'tekstilde makineye / eski arayüze bağlantı yok: ' + await crossLinks(/yeni|klasik|index|\?ws=/));
+    expect(!(await crossLinks(/yeni\/|klasik|(?<!kilavuz\/)index\.html|\?ws=/)).length, 'tekstilde makineye / eski arayüze bağlantı yok: ' + await crossLinks(/yeni\/|klasik|(?<!kilavuz\/)index\.html|\?ws=/));   // komut kılavuzu (kilavuz/) bölüm değil, serbest
     // 6) yeniden açılınca tekstile gider; "Başka bölüm seç" yönlendirmeyi durdurur
     await page.goto(url); await page.waitForURL(/tekstil\.html/, { timeout: 8000 }); await page.waitForSelector('[data-a="create"]');
     await page.goto(url); await page.locator('#other').click();
