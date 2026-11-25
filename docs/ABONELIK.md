@@ -59,3 +59,18 @@ Paketler ve ürün kimlikleri (Play Console'da birebir bu adlarla açılır):
   sunucudadır ve sahtelenemez. Yapay zekâ özellikleri sunucuda olduğu için kilit atlatılsa da hesap sınırına tabidir.
 - Satın alma doğrulanamazsa (internet kesilmesi vb.) Google onaylanmamış aboneliği 3 gün içinde iade eder. Uygulama her
   açılışta Play'deki aboneliği sessizce yeniden doğrular; kullanıcı "Satın alımları geri yükle" ile de tetikleyebilir.
+
+## Android uygulaması (Capacitor) — 25.11.2026
+
+TWA yerine Capacitor kullanıldığı için Digital Goods API yok. Ödeme yerel eklentiyle yapılır:
+
+- `mobil/yerel/Odeme.java`: Play Billing Library 8.3.0 (`urunler`, `satinAl`, `satinAlimlar`). Paket değişikliğinde eski jetonla
+  `WITH_TIME_PRORATION`. Onaylama (acknowledge) uygulamada yapılmaz, sunucuda (`play-verify`).
+- `hesap/billing.js` önce `window.__mobil.odeme`'yi (mobil/kopru.js) kullanır, yoksa Digital Goods API'yi.
+- Kilit (`PAYWALL`) kapalıyken uygulamada paketler yalnız `hesap/config.js` `ODEME_DENEYENLER` hesaplarına görünür
+  (e-postanın küçük harfli SHA-256 özeti). Bu hesap Play Console → Ayarlar → **Lisans testi** listesinde olmalı: satın alma
+  gerçek para çekmez.
+- Ürünler: `tools/play-urunler.mjs` (Actions → **Play ürünleri** → Run). 8 ürün, her birinde `temel` adlı tek temel plan,
+  yalnız Türkiye, KDV dahil TRY. Var olan ürüne dokunmaz.
+- Sunucu sırları (Supabase → Edge Functions → Secrets): `GOOGLE_SERVICE_ACCOUNT` (servis hesabı JSON), `PLAY_PACKAGE`
+  (`com.cizimatolyesi.app`). Servis hesabı: `play-yukleme@cizim-atolyesi.iam.gserviceaccount.com`.

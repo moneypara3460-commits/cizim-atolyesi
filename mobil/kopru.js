@@ -156,7 +156,10 @@
     }
     return true;
   }
-  window.__mobil = { girisAc: girisAc };
+  // Google Play abonelikleri: hesap/billing.js bunu kullanır (mobil/yerel/Odeme.java)
+  var odeme = null;
+  try { odeme = C.registerPlugin ? C.registerPlugin('Odeme') : P.Odeme; } catch (e) { odeme = P.Odeme || null; }
+  window.__mobil = { girisAc: girisAc, odeme: odeme };
 
   // ---------- 3) Giriş zorunlu ----------
   // Uygulamada her bölüm Google ile girişten sonra açılır (web sitesi açık kalır). Hesap ve tanıtım sayfaları serbest.
@@ -177,8 +180,10 @@
     } else yonlendir();
   }
 
-  // Hesap sayfası (uygulamada): abonelik henüz Google Play'e bağlı değil, paketler gizli; açılış ekranında "Hesabım" görünür
+  // Hesap sayfası (uygulamada): kilit (PAYWALL) açılana kadar paketler gizli; açılış ekranında "Hesabım" görünür
+  // (hesap/hesap.js bu stili yalnız ödeme denemesine izinli hesapta kaldırır: hesap/config.js ODEME_DENEYENLER)
   var stil = document.createElement('style');
+  stil.id = 'odeme-gizle';
   stil.textContent = '#plans{display:none!important}';
   if (/^\/hesap\//.test(yol)) document.documentElement.appendChild(stil);
   document.addEventListener('DOMContentLoaded', function () {
