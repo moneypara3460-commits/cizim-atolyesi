@@ -210,9 +210,10 @@ const CMDS = [
     ['mil', 'Mil ve burç', 'Eş merkezli montaj'], ['sac', 'Sac U kanal', 'Sac metal açınımı'], ['masa', 'Masa iskeleti', 'Konstrüksiyon, kaynak'],
     ['dirsek', 'Boru dirseği', 'Süpürme']].map(([k, t, s]) => C('Örnekler', t + ' örneğini aç', s, 'örnek ' + t, { ex: k }, 'folder')),
   C('Uygulama', 'Projeler', 'Kaydet, aç, yeni proje', 'proje kaydet aç yeni dosya', { act: 'projects' }, 'folder'),
+  C('Uygulama', 'Komut kılavuzu', 'Bütün komutlar, sesli komutlar ve tuşlar açıklamalarıyla', 'kılavuz kullanma kılavuzu komut komutlar nasıl yardım sesli anlatım', { href: '../kilavuz/index.html' }, 'help'),
   C('Uygulama', 'Rehber ve örnekler', '', 'rehber yardım örnek nasıl', { act: 'guide' }, 'help'),
   C('Uygulama', 'Sesli komut', '', 'ses mikrofon konuş', { act: 'mic' }, 'mic'),
-  C('Uygulama', 'Ana ekran', 'Makine / Tekstil seçimi', 'ana ekran tekstil moda makine bölüm değiştir', { href: '../?sec=1' }, 'home'),
+  C('Uygulama', 'Ana ekran', 'Makine / Tekstil / Ayakkabı seçimi', 'ana ekran tekstil moda makine ayakkabı bölüm değiştir', { href: '../?sec=1' }, 'home'),
 ];
 const DEFAULT = ['Kutu ekle', 'Silindir ekle', 'Kroki çiz', 'Yuvarlak delik aç', 'Mühendislik analizi (FEA)', 'CNC freze', 'CNC torna', 'Teknik resim', 'Flanş örneğini aç', 'Projeler'];
 

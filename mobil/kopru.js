@@ -68,9 +68,45 @@
     return tikla.call(this);
   };
 
+  // ---------- 1b) Sesli komut ----------
+  // WebView'da tarayıcının ses tanıması (SpeechRecognition) yok. Aynı arayüzle telefonun kendi ses tanıma ekranını
+  // açan yerel eklenti (mobil/yerel/SesTanima.java) kullanılır; uygulama kodu (app.js) değişmeden çalışır.
+  var sesEklenti = null;
+  try { sesEklenti = C.registerPlugin ? C.registerPlugin('SesTanima') : P.SesTanima; } catch (e) { sesEklenti = P.SesTanima || null; }
+  if (sesEklenti) {
+    var SES_HATA = { SES_YOK: 'bu telefonda ses tanıma yok (Google uygulamasını güncelle)', BOS: 'ses anlaşılamadı, tekrar dene' };
+    var SesTanima = function () {
+      this.lang = 'tr-TR'; this.interimResults = false; this.maxAlternatives = 1; this.continuous = false;
+      this.onresult = null; this.onerror = null; this.onend = null; this._bitti = false;
+    };
+    SesTanima.prototype._son = function () {
+      if (this._bitti) return;
+      this._bitti = true;
+      if (typeof this.onend === 'function') this.onend({});
+    };
+    SesTanima.prototype.start = function () {
+      var s = this;
+      sesEklenti.dinle({ dil: s.lang || 'tr-TR', ipucu: 'Komutunu söyle' }).then(function (r) {
+        var metin = String((r && r.metin) || '').trim();
+        if (!s._bitti && metin && typeof s.onresult === 'function') {
+          s.onresult({ resultIndex: 0, results: [[{ transcript: metin, confidence: 1 }]] });
+        }
+      }, function (e) {
+        var kod = e && e.code;
+        if (!s._bitti && kod !== 'IPTAL' && typeof s.onerror === 'function') {
+          s.onerror({ error: SES_HATA[kod] || ((e && e.message) || 'bilinmeyen hata') });
+        }
+      }).then(function () { s._son(); });
+    };
+    SesTanima.prototype.stop = function () { this._son(); };
+    SesTanima.prototype.abort = function () { this._son(); };
+    window.SpeechRecognition = SesTanima;
+    window.webkitSpeechRecognition = SesTanima;
+  }
+
   // ---------- 2) Google ile giriş ----------
   // Girişten sonra gidilecek adres: yalnız uygulamanın kendi sayfaları (başka siteye ya da javascript: adresine yönlenmez)
-  var UYGULAMA_SAYFALARI = ['/', '/index.html', '/yeni/index.html', '/klasik.html', '/tekstil.html', '/ayakkabi.html', '/hesap/index.html'];
+  var UYGULAMA_SAYFALARI = ['/', '/index.html', '/yeni/index.html', '/klasik.html', '/tekstil.html', '/ayakkabi.html', '/hesap/index.html', '/kilavuz/index.html'];
   function guvenliHedef(h) {
     try {
       var u = new URL(String(h || ''), location.origin);

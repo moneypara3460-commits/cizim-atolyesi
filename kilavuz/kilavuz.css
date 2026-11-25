@@ -1,0 +1,31 @@
+/* Komut kılavuzu — uygulamanın koyu teması */
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 112px; }
+body { margin: 0; background: #0b1220; color: #e2e8f0; font: 15px/1.55 system-ui, -apple-system, Roboto, "Segoe UI", sans-serif;
+  padding-bottom: env(safe-area-inset-bottom); }
+#ust { position: sticky; top: 0; z-index: 2; display: flex; gap: 8px; align-items: center; padding: 10px 12px;
+  background: #0f172a; border-bottom: 1px solid #1e293b; }
+#geri { flex: none; font: 600 14px/1 inherit; font-family: inherit; color: #fff; background: #1e293b; border: 1px solid #334155;
+  border-radius: 9px; padding: 10px 12px; cursor: pointer; }
+#ara { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: #fff; background: #1e293b; border: 1px solid #475569;
+  border-radius: 9px; padding: 9px 11px; }
+#bolumler { position: sticky; top: 59px; z-index: 1; display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px;
+  background: #0b1220; border-bottom: 1px solid #1e293b; scrollbar-width: none; }
+#bolumler::-webkit-scrollbar { display: none; }
+#bolumler a { flex: none; font-size: 13px; color: #cbd5e1; text-decoration: none; background: #111a2e; border: 1px solid #263248;
+  border-radius: 999px; padding: 5px 11px; white-space: nowrap; }
+#icerik { max-width: 860px; margin: 0 auto; padding: 4px 14px 40px; }
+h1 { font-size: 24px; margin: 18px 0 6px; color: #fff; }
+h2 { font-size: 18px; margin: 26px 0 8px; color: #f5b84a; border-bottom: 1px solid #1e293b; padding-bottom: 6px; }
+h3 { font-size: 15px; margin: 18px 0 6px; color: #93c5fd; }
+p, li { color: #cbd5e1; }
+b { color: #fff; }
+code { font: 600 13px ui-monospace, Menlo, Consolas, monospace; background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 1px 6px; color: #fde68a; }
+.tb { overflow-x: auto; margin: 8px 0 14px; border: 1px solid #1e293b; border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { text-align: left; background: #111a2e; color: #94a3b8; font-weight: 600; font-size: 12.5px; padding: 8px 10px; }
+td { padding: 8px 10px; border-top: 1px solid #1e293b; vertical-align: top; }
+td:first-child { font-weight: 600; color: #fff; white-space: nowrap; }
+#yok { margin-top: 24px; color: #94a3b8; }
+[hidden] { display: none !important; }

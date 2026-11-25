@@ -2,6 +2,7 @@
 
 Uygulamanın bütün klavye kısayolları ve yazılı komutları (tuşlar sabittir). Uygulamada **?** ya da **F1** (yazı alanı dışında) bu listeyi açar;
 Makine bölümünde Ctrl+K paletine **KISAYOLLAR** yazmak da açar.
+Uygulamadaki **Komut kılavuzu** sayfası (`kilavuz/`) bu dosyadan ve `docs/KILAVUZ-GIRIS.md`den üretilir: bir komutu değiştirince `node tools/kilavuz.mjs` çalıştır (testler güncelliği denetler).
 3B komut sisteminin iç yapısı: [COMMAND-SYSTEM.md](COMMAND-SYSTEM.md).
 
 ## 1. 2B çizim (AutoCAD tarzı)

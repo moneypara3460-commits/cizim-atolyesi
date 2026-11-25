@@ -73,6 +73,27 @@ function android() {
             </intent-filter>`;
   fs.writeFileSync(man, s.slice(0, i) + ek + s.slice(i + '</intent-filter>'.length));
 
+  // Sesli komut: yerel ses tanıma eklentisi (WebView'da SpeechRecognition yok). Ses tanıma ekranını açabilmek için
+  // Android 11+ paket görünürlüğü bildirimi; mikrofonu ses tanıma uygulaması kullanır, bizim izin istememiz gerekmez.
+  const ms = fs.readFileSync(man, 'utf8');
+  if (!ms.includes('</application>')) throw new Error('AndroidManifest: </application> yok');
+  fs.writeFileSync(man, ms.replace('</application>',
+    '</application>\n    <queries>\n        <intent>\n            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />\n        </intent>\n    </queries>'));
+  const pkt = path.join(AND, 'app/src/main/java/com/cizimatolyesi/app');
+  fs.copyFileSync(path.join(MOBIL, 'yerel/SesTanima.java'), path.join(pkt, 'SesTanima.java'));
+  const ma = path.join(pkt, 'MainActivity.java');
+  const mk = fs.readFileSync(ma, 'utf8');
+  const kalip = /public class MainActivity extends BridgeActivity\s*\{\s*\}/;
+  if (!kalip.test(mk)) throw new Error('MainActivity beklenen biçimde değil');
+  fs.writeFileSync(ma, mk.replace('import com.getcapacitor.BridgeActivity;', 'import android.os.Bundle;\nimport com.getcapacitor.BridgeActivity;')
+    .replace(kalip, `public class MainActivity extends BridgeActivity {
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(SesTanima.class);   // yerel eklentiler super.onCreate'ten önce kaydedilir
+        super.onCreate(savedInstanceState);
+    }
+}`));
+
   // Sürüm: versionCode = GitHub çalıştırma numarası (her paket bir öncekinden büyük olmalı)
   const gradle = path.join(AND, 'app/build.gradle');
   const kod = Number(process.env.SURUM_KODU || 1), ad = process.env.SURUM_ADI || '1.0.0';
