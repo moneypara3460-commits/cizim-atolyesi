@@ -70,7 +70,9 @@ export function uret() {
   const govde = kisayol.replace(/^# .*\n[\s\S]*?(?=\n## )/, '## Bütün komutlar ve tuşlar\n\nBölümlere göre bütün yazılı komutlar ve klavye tuşları. Tuşlar sabittir, herkes için aynıdır.\n')
     .replace(/\nEski sürümde kaydedilmiş[^\n]*\n?/, '\n');
   const icerik = mdHtml(giris) + '\n' + mdHtml(govde);
-  const bolumler = [...icerik.matchAll(/<h2 id="([^"]+)">(.*?)<\/h2>/g)].map((m) => `<a href="#${m[1]}">${m[2].replace(/<[^>]+>/g, '')}</a>`).join('');
+  // Bölüm kısayolları: HTML'den değil, markdown başlıklarının düz metninden (biçim işaretleri atılır, metin kaçışlanır)
+  const bolumler = [...(giris + '\n' + govde).matchAll(/^## +(.+)$/gm)]
+    .map((m) => { const t = m[1].trim(); return `<a href="#${kimlik(t)}">${kac(t.replace(/[*`]/g, ''))}</a>`; }).join('');
   return `<!DOCTYPE html>
 <!-- ÜRETİLMİŞ DOSYA: elle değiştirme. Kaynak docs/KILAVUZ-GIRIS.md + docs/KISAYOLLAR.md → node tools/kilavuz.mjs -->
 <html lang="tr">
