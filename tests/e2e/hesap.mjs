@@ -138,9 +138,8 @@ await R.test('Play Store içinde: mağaza fiyatı görünür, Atölye satın al�
   expect(state.verified.some((v) => v.productId === 'atolye_aylik' && v.purchaseToken === 'jeton-atolye_aylik'), 'sunucu doğrulaması: ' + JSON.stringify(state.verified));
   expect((await p.textContent('#state')).includes('Atölye · 3 bölüm · Aylık'), await p.textContent('#state'));
   expect(await p.locator('#msg').isHidden(), 'tekstil artık açık');
-  // yıllık sekmesi
-  await p.click('.period button[data-period="yillik"]');
-  expect((await p.textContent('.card.best .price')).includes('/ yıl'), 'yıllık fiyat');
+  // yalnız aylık paket var (Play TR üst sınırı 40.800 TL): dönem seçimi görünmez
+  expect(await p.locator('.period').isHidden(), 'dönem sekmesi gizli');
   // geri yükleme: telefonda süren satın alma sunucuya yeniden bildirilir
   state.verified.length = 0;
   await p.evaluate(() => { window.__owned = [{ itemId: 'tek_makine_aylik', purchaseToken: 'eski-jeton' }, { itemId: 'yabanci_urun', purchaseToken: 'x' }]; });

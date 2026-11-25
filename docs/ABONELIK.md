@@ -21,10 +21,10 @@ Paketler ve ürün kimlikleri (Play Console'da birebir bu adlarla açılır):
 
 | Ürün kimliği | Paket | Fiyat (KDV dahil) |
 |---|---|---|
-| `tek_makine_aylik` / `tek_makine_yillik` | Tek Bölüm · Makine | 4.788 TL / 47.880 TL |
-| `tek_tekstil_aylik` / `tek_tekstil_yillik` | Tek Bölüm · Tekstil | 4.788 TL / 47.880 TL |
-| `tek_ayakkabi_aylik` / `tek_ayakkabi_yillik` | Tek Bölüm · Ayakkabı | 4.788 TL / 47.880 TL |
-| `atolye_aylik` / `atolye_yillik` | Atölye · 3 bölüm | 9.588 TL / 95.880 TL |
+| `tek_makine_aylik` | Tek Bölüm · Makine | 4.788 TL |
+| `tek_tekstil_aylik` | Tek Bölüm · Tekstil | 4.788 TL |
+| `tek_ayakkabi_aylik` | Tek Bölüm · Ayakkabı | 4.788 TL |
+| `atolye_aylik` | Atölye · 3 bölüm | 9.588 TL |
 
 İşletme (5 kişi) paketi ekip yönetimi gerektirdiği için sonraki aşamada eklenecek.
 
@@ -70,7 +70,8 @@ TWA yerine Capacitor kullanıldığı için Digital Goods API yok. Ödeme yerel 
 - Kilit (`PAYWALL`) kapalıyken uygulamada paketler yalnız `hesap/config.js` `ODEME_DENEYENLER` hesaplarına görünür
   (e-postanın küçük harfli SHA-256 özeti). Bu hesap Play Console → Ayarlar → **Lisans testi** listesinde olmalı: satın alma
   gerçek para çekmez.
-- Ürünler: `tools/play-urunler.mjs` (Actions → **Play ürünleri** → Run). 8 ürün, her birinde `temel` adlı tek temel plan,
+- Ürünler: `tools/play-urunler.mjs` (Actions → **Play ürünleri** → Run). Yalnız aylık 4 ürün (Play'de TR üst sınırı
+  40.800 TL olduğu için yıllık paket şimdilik yok; 26.11.2026 kararı), her birinde `temel` adlı tek temel plan,
   yalnız Türkiye, KDV dahil TRY. Var olan ürüne dokunmaz.
 - Sunucu sırları (Supabase → Edge Functions → Secrets): `GOOGLE_SERVICE_ACCOUNT` (servis hesabı JSON), `PLAY_PACKAGE`
   (`com.cizimatolyesi.app`). Servis hesabı: `play-yukleme@cizim-atolyesi.iam.gserviceaccount.com`.

@@ -50,11 +50,11 @@ test('vazgeçme AbortError olur (hesap sayfası sessiz geçer); diğer kodlar T�
 
 const URETICI = new URL('../tools/play-urunler.mjs', import.meta.url);
 const kaynak = fs.existsSync(URETICI);
-(kaynak ? test : test.skip)('Play ürün tanımları: 8 ürün, kimlik, süre ve KDV dahil TL fiyat hesap/plans.js ile aynı', async () => {
+(kaynak ? test : test.skip)('Play ürün tanımları: 4 aylık ürün, kimlik, süre ve KDV dahil TL fiyat hesap/plans.js ile aynı', async () => {
   const { urunTanimi } = await import(URETICI.href);
   const { PLANS, PERIODS, productId } = await import('../hesap/plans.js');
   const hepsi = PLANS.flatMap((p) => Object.keys(PERIODS).map((d) => [p, d, urunTanimi(p, d)]));
-  assert.equal(hepsi.length, 8);
+  assert.equal(hepsi.length, 4);
   for (const [p, d, u] of hepsi) {
     assert.equal(u.productId, productId(p.id, d));
     const bp = u.basePlans[0];

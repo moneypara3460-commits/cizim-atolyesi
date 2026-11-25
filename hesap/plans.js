@@ -5,12 +5,14 @@ export const SECTIONS = ['makine', 'tekstil', 'ayakkabi'];
 export const SECTION_NAME = { makine: 'Makine ve Mühendislik', tekstil: 'Tekstil ve Moda', ayakkabi: 'Ayakkabı Modelhanesi' };
 
 export const PLANS = [
-  { id: 'tek_makine', plan: 'tek', name: 'Tek Bölüm · Makine', sections: ['makine'], aylik: '4.788 TL', yillik: '47.880 TL' },
-  { id: 'tek_tekstil', plan: 'tek', name: 'Tek Bölüm · Tekstil', sections: ['tekstil'], aylik: '4.788 TL', yillik: '47.880 TL' },
-  { id: 'tek_ayakkabi', plan: 'tek', name: 'Tek Bölüm · Ayakkabı', sections: ['ayakkabi'], aylik: '4.788 TL', yillik: '47.880 TL' },
-  { id: 'atolye', plan: 'atolye', name: 'Atölye · 3 bölüm', sections: ['makine', 'tekstil', 'ayakkabi'], aylik: '9.588 TL', yillik: '95.880 TL', best: true },
+  { id: 'tek_makine', plan: 'tek', name: 'Tek Bölüm · Makine', sections: ['makine'], aylik: '4.788 TL' },
+  { id: 'tek_tekstil', plan: 'tek', name: 'Tek Bölüm · Tekstil', sections: ['tekstil'], aylik: '4.788 TL' },
+  { id: 'tek_ayakkabi', plan: 'tek', name: 'Tek Bölüm · Ayakkabı', sections: ['ayakkabi'], aylik: '4.788 TL' },
+  { id: 'atolye', plan: 'atolye', name: 'Atölye · 3 bölüm', sections: ['makine', 'tekstil', 'ayakkabi'], aylik: '9.588 TL', best: true },
 ];
-export const PERIODS = { aylik: 'Aylık', yillik: 'Yıllık (2 ay bedava)' };
+// Yalnız aylık. Google Play Türkiye'de bir abonelik en fazla 40.800 TL olabildiği için yıllık paket şimdilik yok
+// (eklemek için buraya dönem, PLANS'a fiyat, hesap/index.html'e sekme ve tools/play-urunler.mjs ile ürün).
+export const PERIODS = { aylik: 'Aylık' };
 
 export const productId = (planId, period) => `${planId}_${period}`;
 export const ALL_PRODUCTS = PLANS.flatMap((p) => Object.keys(PERIODS).map((per) => productId(p.id, per)));
