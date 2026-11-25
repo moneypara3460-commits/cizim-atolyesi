@@ -80,7 +80,10 @@ function android() {
   fs.writeFileSync(man, ms.replace('</application>',
     '</application>\n    <queries>\n        <intent>\n            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />\n        </intent>\n    </queries>'));
   const pkt = path.join(AND, 'app/src/main/java/com/cizimatolyesi/app');
-  fs.copyFileSync(path.join(MOBIL, 'yerel/SesTanima.java'), path.join(pkt, 'SesTanima.java'));
+  // Yerel eklentiler: mobil/yerel/*.java (sesli komut, yazdırma) — her biri kopyalanır ve MainActivity'de kaydedilir
+  const eklentiler = fs.readdirSync(path.join(MOBIL, 'yerel')).filter((f) => f.endsWith('.java')).sort();
+  for (const f of eklentiler) fs.copyFileSync(path.join(MOBIL, 'yerel', f), path.join(pkt, f));
+  const kayitlar = eklentiler.map((f) => `        registerPlugin(${f.replace(/\.java$/, '')}.class);`).join('\n');
   const ma = path.join(pkt, 'MainActivity.java');
   const mk = fs.readFileSync(ma, 'utf8');
   const kalip = /public class MainActivity extends BridgeActivity\s*\{\s*\}/;
@@ -89,7 +92,8 @@ function android() {
     .replace(kalip, `public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        registerPlugin(SesTanima.class);   // yerel eklentiler super.onCreate'ten önce kaydedilir
+        // yerel eklentiler super.onCreate'ten önce kaydedilir
+${kayitlar}
         super.onCreate(savedInstanceState);
     }
 }`));

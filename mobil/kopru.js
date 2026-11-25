@@ -104,6 +104,18 @@
     window.webkitSpeechRecognition = SesTanima;
   }
 
+  // ---------- 1c) Yazdır / PDF ----------
+  // WebView window.print() desteklemez; Android'in yazdırma ekranı açılır (yazıcı ya da "PDF olarak kaydet").
+  var yazici = null;
+  try { yazici = C.registerPlugin ? C.registerPlugin('Yazici') : P.Yazici; } catch (e) { yazici = P.Yazici || null; }
+  if (yazici) {
+    window.print = function () {
+      yazici.yazdir({ ad: document.title || 'Çizim Atölyesi' }).catch(function (e) {
+        bildir('Yazdırma açılamadı: ' + ((e && e.message) || e));
+      });
+    };
+  }
+
   // ---------- 2) Google ile giriş ----------
   // Girişten sonra gidilecek adres: yalnız uygulamanın kendi sayfaları (başka siteye ya da javascript: adresine yönlenmez)
   var UYGULAMA_SAYFALARI = ['/', '/index.html', '/yeni/index.html', '/klasik.html', '/tekstil.html', '/ayakkabi.html', '/hesap/index.html', '/kilavuz/index.html'];

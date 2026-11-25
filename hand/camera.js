@@ -10,7 +10,7 @@ export function cameraErrorText(err, win = window) {
   if (!win.isSecureContext) return 'Kamera yalnız güvenli bağlantıda (https) açılabilir.';
   if (!win.navigator || !win.navigator.mediaDevices || !win.navigator.mediaDevices.getUserMedia) return 'Bu tarayıcı kamerayı desteklemiyor. Güncel Chrome, Edge, Firefox ya da Safari kullanın.';
   const n = err && err.name;
-  if (n === 'NotAllowedError' || n === 'SecurityError') return 'Kamera izni verilmedi. Tarayıcının adres çubuğundaki kamera simgesinden izin verip yeniden deneyin.';
+  if (n === 'NotAllowedError' || n === 'SecurityError') return win.Capacitor ? 'Kamera izni verilmedi. Telefonun Ayarlar → Uygulamalar → Çizim Atölyesi → İzinler bölümünden kameraya izin verip yeniden deneyin.' : 'Kamera izni verilmedi. Tarayıcının adres çubuğundaki kamera simgesinden izin verip yeniden deneyin.';
   if (n === 'NotFoundError' || n === 'OverconstrainedError' || n === 'DevicesNotFoundError') return 'Bu cihazda kullanılabilir kamera bulunamadı.';
   if (n === 'NotReadableError' || n === 'AbortError' || n === 'TrackStartError') return 'Kamera açılamadı. Başka bir uygulama kamerayı kullanıyor olabilir; onu kapatıp yeniden deneyin.';
   return 'Kamera açılamadı' + (err && err.message ? ': ' + err.message : '.');

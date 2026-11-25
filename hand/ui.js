@@ -1,7 +1,7 @@
 // Parmakla kontrol — arayüz: düğme, kamera önizlemesi, ayar paneli, imleç.
 // Sayfaya tek <script type="module"> ile eklenir; uygulama koduna (app.js, kroki, 2B çizim, tekstil) dokunmaz.
 // Kamera yalnız kullanıcı düğmeye basınca açılır; sayfa açılışında hiçbir şey yüklenmez (MediaPipe dahil).
-import { HandControl } from './control.js?v=20261120e';
+import { HandControl } from './control.js?v=20261125a';
 import { CONNECTIONS, LM } from './gestures.js?v=20261120e';
 
 const V = '20261120e';
