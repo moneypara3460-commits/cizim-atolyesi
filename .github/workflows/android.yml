@@ -4,6 +4,8 @@
 #   cizim-atolyesi-apk : telefona doğrudan kurup denemek için imzalı .apk
 # İmza anahtarı GitHub sırlarından gelir: ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_SIFRE (anahtar adı: cizim).
 # Sırlar yoksa yalnız deneme (debug) APK'sı üretilir.
+# Ana dala her birleştirmede imzalı paket Google Play'in DAHİLİ TEST kanalına kendiliğinden yüklenir
+# (PLAY_SERVICE_JSON sırrı varsa; tools/play-yukle.mjs). Kapalı teste / üretime taşıma Play Console'dan elle yapılır.
 name: Android
 
 on:
@@ -104,3 +106,13 @@ jobs:
           name: cizim-atolyesi-apk
           path: cikti/*.apk
           retention-days: 30
+      - name: Google Play'e yükle (dahili test)
+        if: env.KS_B64 != '' && github.event_name != 'pull_request'
+        env:
+          PLAY_SERVICE_JSON: ${{ secrets.PLAY_SERVICE_JSON }}
+          COMMIT_MESAJI: ${{ github.event.head_commit.message }}
+        run: |
+          if [ -z "$PLAY_SERVICE_JSON" ]; then echo "PLAY_SERVICE_JSON yok: Play yüklemesi atlandı"; exit 0; fi
+          SURUM_NOTU="$(printf '%s' "$COMMIT_MESAJI" | head -1 | sed -E 's/ \(#[0-9]+\)$//')"
+          export SURUM_NOTU
+          node tools/play-yukle.mjs "cikti/cizim-atolyesi-$SURUM_ADI.aab" internal

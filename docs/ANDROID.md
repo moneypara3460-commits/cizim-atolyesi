@@ -36,3 +36,11 @@ Yalnız Android paketinde çalışır, web sitesinde yoktur.
 - Google Play Billing eklentisi ve satın alma akışı (`hesap/billing.js` Android tarafı)
 - Play Integrity ve sunucu imzalı erişim (ABONELIK.md madde 7)
 - Satın alma jetonunun hesaba eşlenmesi (obfuscatedAccountId)
+
+## Google Play'e otomatik yükleme
+
+Ana dala her birleştirmede `.github/workflows/android.yml` imzalı AAB'yi **dahili test** kanalına yükler
+(`tools/play-yukle.mjs`, Google Play Developer API; dış paket yok). Gerekli sır: `PLAY_SERVICE_JSON`
+(Google Cloud projesi cizim-atolyesi, servis hesabı `play-yukleme@cizim-atolyesi.iam.gserviceaccount.com`).
+Play Console'da bu hesabın izinleri: test kanallarına yayınlama, mağazadaki varlığı yönetme, finansal verileri görüntüleme,
+siparişleri ve abonelikleri yönetme. **Üretim izni yoktur:** kapalı teste ve üretime taşıma Play Console'dan elle yapılır.
