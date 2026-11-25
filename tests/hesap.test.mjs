@@ -59,9 +59,9 @@ t('6. İnternetsiz önbellek: süre içinde ve son kontrol 7 günden yeniyse aç
   assert.equal(cacheAllows(null, 'makine', NOW), false);
 });
 
-t('7. Ürün kimlikleri: 4 paket × 2 dönem = 8 ürün, ayrıştırma doğru', () => {
-  assert.equal(ALL_PRODUCTS.length, 8);
-  assert.equal(new Set(ALL_PRODUCTS).size, 8);
+t('7. Ürün kimlikleri: 4 paket × aylık = 4 ürün (yıllık kimlik de ayrıştırılır), ayrıştırma doğru', () => {
+  assert.equal(ALL_PRODUCTS.length, 4);
+  assert.equal(new Set(ALL_PRODUCTS).size, 4);
   assert.equal(productInfo('tek_makine_aylik').sections[0], 'makine');
   assert.equal(productInfo('atolye_yillik').period, 'yillik');
   for (const bad of ['', 'atolye', 'atolye_haftalik', 'isletme_aylik', 'tek_aylik', 'TEK_MAKINE_AYLIK']) assert.equal(productInfo(bad), null, bad);

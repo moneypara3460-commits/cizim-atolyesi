@@ -1,4 +1,4 @@
-// Google Play'de 8 abonelik ürününü açar / günceller (Google Play Developer API v3, monetization.subscriptions).
+// Google Play'de abonelik ürününü açar / günceller (Google Play Developer API v3, monetization.subscriptions).
 // Kaynak: hesap/plans.js (ürün kimlikleri ve fiyatlar). Her ürünün tek temel planı vardır ("temel"): aylık 1 ay, yıllık 1 yıl,
 // otomatik yenilenir, yalnız Türkiye'de satılır (fiyat KDV dahil TRY). Ücretsiz deneme teklifi EKLENMEZ
 // (7 günlük deneme uygulamanın kendi sunucusunda: profiles.trial_ends_at).
@@ -63,7 +63,7 @@ async function main() {
       console.log('  temel plan etkin:', u.productId);
     }
   }
-  console.log('tamam: 8 abonelik ürünü hazır');
+  console.log(`tamam: ${urunler.length} abonelik ürünü hazır`);
 }
 
 if (process.argv[1] && process.argv[1].endsWith('play-urunler.mjs')) {
