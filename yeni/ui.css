@@ -127,6 +127,8 @@ button.ui.search { width: 44px; height: 44px; }
 #floats { position: absolute; top: 6px; right: 8px; z-index: 5; display: flex; flex-direction: column; gap: 2px; padding: 3px;
           border: 1px solid var(--line); border-radius: 14px; background: rgba(17, 26, 44, .92); }
 #floats .ui svg { width: 20px; height: 20px; }
+/* örnek ipucu kartı sağdaki araç sütununun altına girmesin: kapatma düğmesi görünür kalır */
+#tipcard { right: 66px !important; }
 
 #dock { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 5; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px;
         padding: 5px; border: 1px solid var(--line); border-radius: 18px; background: rgba(17, 26, 44, .96);
@@ -250,6 +252,7 @@ button.ui.pal-it[aria-selected="true"] { background: var(--s3); }
 
   #floats { top: 12px; right: 12px; }
   #measure { top: 12px; left: 12px; right: 70px; }
+  #tipcard { right: 70px !important; }
   #toast { bottom: 16px; left: 16px; right: auto; max-width: 520px; }
 
   #panelwrap { grid-area: panel; position: static; height: auto; min-height: 0; transform: none; visibility: visible; border-radius: 0; border-top: 0;

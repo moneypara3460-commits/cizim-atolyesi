@@ -31,16 +31,38 @@ export function pieceDraw(pc) {
   // etiket: parçanın içinde, düz boy çizgisinin yanında
   const c = pc.grain ? C.add(C.mul(C.add(pc.grain[0], pc.grain[1]), 0.5), [8, 0]) : P.centroid(pc);
   // küçük parçada etiket tek satır (üst üste binmesin)
-  let small = false; try { const bb = P.bboxPts(P.seamPolygon(pc, 0.5)); small = bb.y1 - bb.y0 < 70; } catch (e) { /* */ }
+  let small = false, bb = null; try { bb = P.bboxPts(P.seamPolygon(pc, 0.5)); small = bb.y1 - bb.y0 < 70; } catch (e) { /* */ }
   const lab = pieceLabel(pc);
-  items.push({ k: 'label', p: small ? [P.centroid(pc)[0] - 30, P.centroid(pc)[1] + 2] : c, lines: small ? [lab.slice(0, 3).join(' · ')] : lab, ang: 0, size: small ? 4 : 6 });
-  if (pc.fold != null && pc.edges[pc.fold]) { const e = pc.edges[pc.fold], m = C.mul(C.add(e.segs[0].a, e.segs.at(-1).b), 0.5); items.push({ k: 'text', p: m, text: 'KUMAŞ KATI', size: 4, ang: Math.atan2(e.segs.at(-1).b[1] - e.segs[0].a[1], e.segs.at(-1).b[0] - e.segs[0].a[0]) }); }
+  // maxW / maxH: etiketin parça içinde kullanabileceği alan (mm). Ekranda yazı bu alana sığacak kadar küçülür.
+  const lp = small && bb ? [bb.x0 + 4, P.centroid(pc)[1] + 2] : c;
+  const lbl = { k: 'label', p: lp, lines: small ? [lab.slice(0, 3).join(' · ')] : lab, ang: 0, size: small ? 4 : 6 };
+  lbl.short = pc.name;
+  if (bb) { lbl.maxW = Math.max(1, bb.x1 - lp[0] - 3); lbl.maxH = Math.max(1, bb.y1 - bb.y0 - 6); }
+  items.push(lbl);
+  if (pc.fold != null && pc.edges[pc.fold]) { const e = pc.edges[pc.fold], a = e.segs[0].a, b = e.segs.at(-1).b, m = C.mul(C.add(a, b), 0.5); items.push({ k: 'text', p: m, text: 'KUMAŞ KATI', size: 4, ang: Math.atan2(b[1] - a[1], b[0] - a[0]), maxW: C.dist(a, b) * 0.9 }); }
   return items;
 }
 export function piecesBBox(pieces) {
   let b = null;
   for (const pc of pieces) { let q; try { q = P.bboxPts(P.cutPolygon(pc).pts); } catch (e) { continue; } b = b ? { x0: Math.min(b.x0, q.x0), y0: Math.min(b.y0, q.y0), x1: Math.max(b.x1, q.x1), y1: Math.max(b.y1, q.y1) } : q; }
   return b;
+}
+
+/* Ekran etiketi parçaya sığsın: yazı küçülür, yine sığmazsa satır azalır, en son yalnız parça adı kalır;
+   o da sığmıyorsa çizilmez (komşu parçanın yazısıyla üst üste binmesin). Dışa aktarımlar (SVG/PDF) gerçek ölçüde, bundan etkilenmez. */
+const FONT = (fs) => `${fs}px Helvetica, Arial, sans-serif`;
+export function fitLabel(ctx, it, k, { min = 6 } = {}) {
+  let fs = Math.max(9, Math.min(15, (it.size || 6) * k));
+  let lines = it.k === 'text' ? [it.text] : it.lines.slice();
+  ctx.font = FONT(fs);
+  const widest = (ls) => Math.max(0, ...ls.map((t) => ctx.measureText(t).width));
+  const availW = it.maxW ? it.maxW * k : Infinity;
+  let w = widest(lines);
+  if (w > availW) { fs = Math.max(min, fs * availW / w); ctx.font = FONT(fs); w = widest(lines); }
+  if (it.k === 'label' && it.maxH) { const n = Math.max(1, Math.floor(it.maxH * k / (fs * 1.2))); if (lines.length > n) { lines = lines.slice(0, n); w = widest(lines); } }
+  if (w > availW + 0.5 && it.k === 'label' && it.short) { lines = [it.short]; w = widest(lines); }
+  if (w > availW + 0.5) return null;
+  return { fs, lines };
 }
 
 /* ---------- tuval ---------- */
@@ -61,11 +83,14 @@ export function drawPiecesCanvas(ctx, pieces, { k, ox, oy, sel = null, selEdge =
       if (it.k === 'circle') { ctx.beginPath(); ctx.arc(...T(it.c), Math.max(2, it.r * k), 0, 7); ctx.stroke(); }
       if (it.k === 'label' || it.k === 'text') {
         ctx.setLineDash([]); ctx.fillStyle = on ? col.sel : col.ink;
-        const fs = Math.max(9, Math.min(15, (it.size || 6) * k)); ctx.font = `${fs}px Helvetica, Arial, sans-serif`;
-        ctx.save(); ctx.translate(...T(it.p)); ctx.rotate(it.ang || 0);
-        if (it.k === 'text') { ctx.textAlign = 'center'; ctx.fillText(it.text, 0, -3); }
-        else { ctx.textAlign = 'left'; it.lines.forEach((t, i) => ctx.fillText(t, 0, (i - it.lines.length / 2 + 1) * fs * 1.2)); }
-        ctx.restore();
+        const fit = fitLabel(ctx, it, k);
+        if (fit) {
+          const { fs, lines } = fit;
+          ctx.save(); ctx.translate(...T(it.p)); ctx.rotate(it.ang || 0);
+          if (it.k === 'text') { ctx.textAlign = 'center'; ctx.fillText(it.text, 0, -3); }
+          else { ctx.textAlign = 'left'; lines.forEach((t, i) => ctx.fillText(t, 0, (i - lines.length / 2 + 1) * fs * 1.2)); }
+          ctx.restore();
+        }
       }
     }
   }
