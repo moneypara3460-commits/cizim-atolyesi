@@ -34,10 +34,16 @@ export function pieceDraw(pc) {
   let small = false, bb = null; try { bb = P.bboxPts(P.seamPolygon(pc, 0.5)); small = bb.y1 - bb.y0 < 70; } catch (e) { /* */ }
   const lab = pieceLabel(pc);
   // maxW / maxH: etiketin parça içinde kullanabileceği alan (mm). Ekranda yazı bu alana sığacak kadar küçülür.
-  const lp = small && bb ? [bb.x0 + 4, P.centroid(pc)[1] + 2] : c;
+  // küçük parçada etiket düz boy okunun altına (ok ile alt kenarın ortası)
+  const cy = P.centroid(pc)[1];
+  const lp = small && bb ? [bb.x0 + 4, cy + (bb.y1 - cy) * 0.5] : c;
   const lbl = { k: 'label', p: lp, lines: small ? [lab.slice(0, 3).join(' · ')] : lab, ang: 0, size: small ? 4 : 6 };
   lbl.short = pc.name;
-  if (bb) { lbl.maxW = Math.max(1, bb.x1 - lp[0] - 3); lbl.maxH = Math.max(1, bb.y1 - bb.y0 - 6); }
+  if (bb) {
+    lbl.maxW = Math.max(1, bb.x1 - lp[0] - 3); lbl.maxH = Math.max(1, (small ? (bb.y1 - lp[1]) * 2 : bb.y1 - bb.y0) - 6);
+    // yedek konum: parçanın sol kenarından başla, bütün genişliği kullan (ok çizgisinin sağında yer yoksa)
+    if (!small) { lbl.p2 = [bb.x0 + 4, c[1]]; lbl.maxW2 = Math.max(1, bb.x1 - bb.x0 - 8); }
+  }
   items.push(lbl);
   if (pc.fold != null && pc.edges[pc.fold]) { const e = pc.edges[pc.fold], a = e.segs[0].a, b = e.segs.at(-1).b, m = C.mul(C.add(a, b), 0.5); items.push({ k: 'text', p: m, text: 'KUMAŞ KATI', size: 4, ang: Math.atan2(b[1] - a[1], b[0] - a[0]), maxW: C.dist(a, b) * 0.9 }); }
   return items;
@@ -51,18 +57,31 @@ export function piecesBBox(pieces) {
 /* Ekran etiketi parçaya sığsın: yazı küçülür, yine sığmazsa satır azalır, en son yalnız parça adı kalır;
    o da sığmıyorsa çizilmez (komşu parçanın yazısıyla üst üste binmesin). Dışa aktarımlar (SVG/PDF) gerçek ölçüde, bundan etkilenmez. */
 const FONT = (fs) => `${fs}px Helvetica, Arial, sans-serif`;
-export function fitLabel(ctx, it, k, { min = 6 } = {}) {
-  let fs = Math.max(9, Math.min(15, (it.size || 6) * k));
-  let lines = it.k === 'text' ? [it.text] : it.lines.slice();
-  ctx.font = FONT(fs);
-  const widest = (ls) => Math.max(0, ...ls.map((t) => ctx.measureText(t).width));
-  const availW = it.maxW ? it.maxW * k : Infinity;
-  let w = widest(lines);
-  if (w > availW) { fs = Math.max(min, fs * availW / w); ctx.font = FONT(fs); w = widest(lines); }
-  if (it.k === 'label' && it.maxH) { const n = Math.max(1, Math.floor(it.maxH * k / (fs * 1.2))); if (lines.length > n) { lines = lines.slice(0, n); w = widest(lines); } }
-  if (w > availW + 0.5 && it.k === 'label' && it.short) { lines = [it.short]; w = widest(lines); }
-  if (w > availW + 0.5) return null;
-  return { fs, lines };
+export function fitLabel(ctx, it, k, { min = 7 } = {}) {
+  const base = Math.max(9, Math.min(15, (it.size || 6) * k));
+  const all = it.k === 'text' ? [it.text] : it.lines.slice();
+  const widest = (ls, fs) => { ctx.font = FONT(fs); return Math.max(0, ...ls.map((t) => ctx.measureText(t).width)); };
+  // aday konumlar: önce düz boy okunun yanı, sonra parçanın tüm genişliği
+  const spots = [{ p: it.p, w: it.maxW ? it.maxW * k : Infinity }];
+  if (it.p2 && it.maxW2) spots.push({ p: it.p2, w: it.maxW2 * k });
+  const hMax = it.k === 'label' && it.maxH ? it.maxH * k : Infinity;
+  // önce satır sayısı korunur (yazı en çok "min" boyuna iner), sonra sondan satır düşülür, en son yalnız parça adı
+  // uzun satır parantezden ikiye bölünebilir: "Kes: 2 (çift: biri ters)" → "Kes: 2" + "(çift: biri ters)"
+  const wrap = (ls) => ls.flatMap((t) => { const i = t.indexOf(' ('); return i > 0 ? [t.slice(0, i), t.slice(i + 1)] : [t]; });
+  const sets = [];
+  for (let n = all.length; n >= 1; n--) { const ls = all.slice(0, n); sets.push(ls); if (ls.some((t) => t.includes(' ('))) sets.push(wrap(ls)); }
+  if (it.k === 'label' && it.short && !sets.some((l) => l.length === 1 && l[0] === it.short)) sets.push([it.short]);
+  for (const lines of sets) {
+    for (const sp of spots) {
+      let fs = base, w = widest(lines, fs);
+      if (w > sp.w) { fs = Math.max(min, base * sp.w / w); w = widest(lines, fs); }
+      if (w > sp.w + 0.5) continue;
+      if (lines.length * fs * 1.2 > Math.max(hMax, fs * 1.2) + 1e-9) continue;
+      ctx.font = FONT(fs);
+      return { fs, lines, p: sp.p, maxW: sp.w / k };
+    }
+  }
+  return null;
 }
 
 /* ---------- tuval ---------- */
@@ -86,7 +105,7 @@ export function drawPiecesCanvas(ctx, pieces, { k, ox, oy, sel = null, selEdge =
         const fit = fitLabel(ctx, it, k);
         if (fit) {
           const { fs, lines } = fit;
-          ctx.save(); ctx.translate(...T(it.p)); ctx.rotate(it.ang || 0);
+          ctx.save(); ctx.translate(...T(fit.p)); ctx.rotate(it.ang || 0);
           if (it.k === 'text') { ctx.textAlign = 'center'; ctx.fillText(it.text, 0, -3); }
           else { ctx.textAlign = 'left'; lines.forEach((t, i) => ctx.fillText(t, 0, (i - lines.length / 2 + 1) * fs * 1.2)); }
           ctx.restore();

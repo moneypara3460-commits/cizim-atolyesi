@@ -179,15 +179,19 @@ t('Ekran etiketi parçaya sığar: küçük parçada yazı küçülür, sığmaz
         const f = X.fitLabel(ctx, it, k); if (!f) continue;
         ctx.font = f.fs + 'px';
         const w = Math.max(...f.lines.map((s) => ctx.measureText(s).width));
-        assert.ok(w <= it.maxW * k + 0.5, `${pc.name} k=${k}: "${f.lines[0]}" ${w.toFixed(1)}px > ${(it.maxW * k).toFixed(1)}px`);
-        assert.ok(f.fs >= 6, 'yazı 6 px altına inmez');
+        assert.ok(w <= f.maxW * k + 0.5, `${pc.name} k=${k}: "${f.lines[0]}" ${w.toFixed(1)}px > ${(f.maxW * k).toFixed(1)}px`);
+        if (it.k === 'label') assert.ok(f.p[0] >= bb.x0 - 1e-9 && f.p[0] + f.maxW <= bb.x1 + 1e-9, `${pc.name}: yazı parçanın dışına taşıyor`);
+        assert.ok(f.fs >= 7, 'yazı 7 px altına inmez');
         if (it.k === 'label') assert.ok(f.lines.length * f.fs * 1.2 <= Math.max(it.maxH * k, f.fs * 1.2) + 1e-9, `${pc.name}: satırlar parçanın boyunu aşıyor`);
       }
     }
   }
-  // büyük ölçekte büyük parçanın tüm satırları görünür
+  // büyük ölçekte büyük parçanın tüm satırları görünür; telefondaki küçük ölçekte (k≈0,4) ön bedende ad dışında en az bir satır daha kalır
   const on = X.pieceDraw(r.pieces.find((p) => p.name === 'Ön beden')).find((x) => x.k === 'label');
   assert.equal(X.fitLabel(ctx, on, 1.5).lines.length, on.lines.length);
+  assert.ok(X.fitLabel(ctx, on, 0.4).lines.length >= 2, 'ön bedende yalnız ad kaldı');
+  // her parçanın en azından adı telefonda görünür
+  for (const pc of r.pieces) assert.ok(X.fitLabel(ctx, X.pieceDraw(pc).find((x) => x.k === 'label'), 0.4), `${pc.name}: etiket hiç çizilmiyor`);
   // hiç yer yoksa çizilmez
   assert.equal(X.fitLabel(ctx, { k: 'text', text: 'KUMAŞ KATI', size: 4, maxW: 5 }, 0.3), null);
 });
