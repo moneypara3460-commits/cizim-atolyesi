@@ -165,6 +165,33 @@ t('14. Projede kalıp: yalnız dokuma ürününe bağlanır; doğrulama dikiş e
   void r;
 });
 
+t('Ekran etiketi parçaya sığar: küçük parçada yazı küçülür, sığmazsa yalnız ad kalır ya da hiç çizilmez; KUMAŞ KATI kenara sığar', () => {
+  // sahte tuval: her harf yazı boyunun 0,55'i genişlikte
+  const ctx = { font: '', measureText(t) { return { width: t.length * 0.55 * parseFloat(this.font) }; } };
+  const r = B.buildSet('gomlek', B.defaultParams('gomlek'), { size: 'M' });
+  for (const k of [0.25, 0.4, 0.8, 1.5]) {
+    for (const pc of r.pieces) {
+      const its = X.pieceDraw(pc), bb = P.bboxPts(P.seamPolygon(pc, 0.5));
+      const lb = its.find((x) => x.k === 'label');
+      assert.ok(lb.maxW > 0 && lb.maxH > 0, `${pc.name}: etikette sığma alanı yok`);
+      assert.ok(lb.p[0] >= bb.x0 - 1e-9 && lb.p[0] <= bb.x1, `${pc.name}: etiket parçanın dışında başlıyor`);
+      for (const it of its.filter((x) => x.k === 'label' || x.k === 'text')) {
+        const f = X.fitLabel(ctx, it, k); if (!f) continue;
+        ctx.font = f.fs + 'px';
+        const w = Math.max(...f.lines.map((s) => ctx.measureText(s).width));
+        assert.ok(w <= it.maxW * k + 0.5, `${pc.name} k=${k}: "${f.lines[0]}" ${w.toFixed(1)}px > ${(it.maxW * k).toFixed(1)}px`);
+        assert.ok(f.fs >= 6, 'yazı 6 px altına inmez');
+        if (it.k === 'label') assert.ok(f.lines.length * f.fs * 1.2 <= Math.max(it.maxH * k, f.fs * 1.2) + 1e-9, `${pc.name}: satırlar parçanın boyunu aşıyor`);
+      }
+    }
+  }
+  // büyük ölçekte büyük parçanın tüm satırları görünür
+  const on = X.pieceDraw(r.pieces.find((p) => p.name === 'Ön beden')).find((x) => x.k === 'label');
+  assert.equal(X.fitLabel(ctx, on, 1.5).lines.length, on.lines.length);
+  // hiç yer yoksa çizilmez
+  assert.equal(X.fitLabel(ctx, { k: 'text', text: 'KUMAŞ KATI', size: 4, maxW: 5 }, 0.3), null);
+});
+
 for (const [name, fn] of tests) {
   try { await fn(); console.log('ok   ', name); }
   catch (e) { fail++; console.log('FAIL ', name, '\n     ', String(e.message).split('\n')[0]); }
