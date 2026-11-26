@@ -128,11 +128,30 @@
     } catch (e) { /* geçersiz adres */ }
     return '/';
   }
+  // PKCE: dönüş adresine oturum anahtarı değil, tek kullanımlık bir kod gelir. Kod, yalnız bu uygulamanın sakladığı gizli
+  // doğrulayıcıyla anahtara çevrilebilir; aynı dönüş adresini sahiplenen başka bir uygulama kodu yakalasa da işe yaramaz.
+  var DOGRULAYICI = 'cizim:pkce';
+  function b64url(bytes) {
+    var t = ''; for (var i = 0; i < bytes.length; i++) t += String.fromCharCode(bytes[i]);
+    return btoa(t).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
   function girisAc(geriDon) {
     var hedef = guvenliHedef(new URLSearchParams(location.search).get('geri') || geriDon);
     try { localStorage.setItem(HEDEF, hedef); } catch (e) { /* yok */ }
-    var url = SUPABASE + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(DONUS);
-    return P.Browser.open({ url: url, presentationStyle: 'popover' });
+    var rastgele = new Uint8Array(32);
+    crypto.getRandomValues(rastgele);
+    var dogrulayici = b64url(rastgele);
+    try { localStorage.setItem(DOGRULAYICI, dogrulayici); } catch (e) { /* yok */ }
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(dogrulayici)).then(function (oz) {
+      var url = SUPABASE + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(DONUS) +
+        '&code_challenge=' + b64url(new Uint8Array(oz)) + '&code_challenge_method=s256';
+      return P.Browser.open({ url: url, presentationStyle: 'popover' });
+    });
+  }
+  function oturumYaz(j, hedef) {
+    var s = { access_token: j.access_token, refresh_token: j.refresh_token, expires_at: Number(j.expires_at) || Math.floor(Date.now() / 1000) + Number(j.expires_in || 3600) };
+    try { localStorage.setItem(OTURUM, JSON.stringify(s)); } catch (e) { /* yok */ }
+    location.replace(hedef);
   }
   function donusuIsle(url) {
     if (!url || url.indexOf(DONUS) !== 0) return false;
@@ -144,14 +163,23 @@
     var kayitli = null;
     try { kayitli = localStorage.getItem(HEDEF); localStorage.removeItem(HEDEF); } catch (e) { /* yok */ }
     var hedef = guvenliHedef(kayitli);
-    if (h.get('access_token')) {
-      var s = {
-        access_token: h.get('access_token'),
-        refresh_token: h.get('refresh_token'),
-        expires_at: Number(h.get('expires_at')) || Math.floor(Date.now() / 1000) + Number(h.get('expires_in') || 3600),
-      };
-      try { localStorage.setItem(OTURUM, JSON.stringify(s)); } catch (e) { /* yok */ }
-      location.replace(hedef);
+    var kod = new URLSearchParams(url.split('#')[0].split('?')[1] || '').get('code');
+    if (kod) {
+      var dogrulayici = null;
+      try { dogrulayici = localStorage.getItem(DOGRULAYICI); localStorage.removeItem(DOGRULAYICI); } catch (e) { /* yok */ }
+      if (!dogrulayici) { bildir('Giriş tamamlanamadı: giriş bu cihazda başlatılmadı, tekrar dene.'); return true; }
+      fetch(SUPABASE + '/auth/v1/token?grant_type=pkce', {
+        method: 'POST',
+        headers: { apikey: ANAHTAR, 'content-type': 'application/json' },
+        body: JSON.stringify({ auth_code: kod, code_verifier: dogrulayici }),
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (!r.ok || !j.access_token) throw new Error(j.error_description || j.msg || j.error || ('sunucu ' + r.status));
+          oturumYaz(j, hedef);
+        });
+      }).catch(function (e) { bildir('Giriş tamamlanamadı: ' + e.message); });
+    } else if (h.get('access_token')) {
+      oturumYaz({ access_token: h.get('access_token'), refresh_token: h.get('refresh_token'), expires_at: h.get('expires_at'), expires_in: h.get('expires_in') }, hedef);
     } else {
       bildir('Giriş tamamlanamadı: ' + (h.get('error_description') || h.get('error') || 'bilinmeyen hata'));
     }
@@ -180,7 +208,7 @@
   // Google Play abonelikleri: hesap/billing.js bunu kullanır (mobil/yerel/Odeme.java)
   var odeme = null;
   try { odeme = C.registerPlugin ? C.registerPlugin('Odeme') : P.Odeme; } catch (e) { odeme = P.Odeme || null; }
-  window.__mobil = { girisAc: girisAc, sifreyleGir: sifreyleGir, odeme: odeme };
+  window.__mobil = { girisAc: girisAc, sifreyleGir: sifreyleGir, donusuIsle: donusuIsle, odeme: odeme };
 
   // ---------- 3) Giriş zorunlu ----------
   // Uygulamada her bölüm Google ile girişten sonra açılır (web sitesi açık kalır). Hesap ve tanıtım sayfaları serbest.
