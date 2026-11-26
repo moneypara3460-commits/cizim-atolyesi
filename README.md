@@ -2,8 +2,11 @@
 
 Telefonda çalışan basit bir 3D çizim (mini CAD) uygulaması. Parçaları ölçüyle oluşturur, birleştirir, oyuk açar, 3D yazıcı için STL olarak indirirsin.
 
-**Güncel sürüm web sürümüdür** (`index.html`): https://moneypara3460-commits.github.io/cizim-atolyesi/
-(GitHub → Settings → Pages → Deploy from branch → `main` / root ile yayınlanır.)
+Uygulama Google Play'deki Android sürümüyle kullanılır (`mobil/`, `docs/ANDROID.md`).
+Web sitesinde yalnız tanıtım, gizlilik politikası, hesap silme ve hesap sayfası yayınlanır:
+https://moneypara3460-commits.github.io/cizim-atolyesi/tanitim/
+(`.github/workflows/site.yml`; GitHub → Settings → Pages → Source: **GitHub Actions**.)
+Geliştirirken uygulama yerelde `index.html` ile açılır.
 
 ## Özellikler
 
