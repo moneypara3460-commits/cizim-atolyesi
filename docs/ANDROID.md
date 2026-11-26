@@ -44,3 +44,18 @@ Ana dala her birleştirmede `.github/workflows/android.yml` imzalı AAB'yi **dah
 (Google Cloud projesi cizim-atolyesi, servis hesabı `play-yukleme@cizim-atolyesi.iam.gserviceaccount.com`).
 Play Console'da bu hesabın izinleri: test kanallarına yayınlama, mağazadaki varlığı yönetme, finansal verileri görüntüleme,
 siparişleri ve abonelikleri yönetme. **Üretim izni yoktur:** kapalı teste ve üretime taşıma Play Console'dan elle yapılır.
+
+## Davetli hesapla giriş (GEÇİCİ — Google Play incelemesi) — 26.11.2026
+
+Uygulamada giriş yalnız Google iledir. Google Play incelemecisi inceleme Gmail'iyle girerken Google'ın yeni cihaz onayına
+takıldığı için, kapalı test / inceleme süresince **tek bir davetli hesaba** e-posta + şifre girişi açıldı.
+
+- Giriş ekranı (`mobil/sayfalar/giris.*`): küçük "Davetli hesapla giriş" bölümü → `mobil/kopru.js` `sifreyleGir`.
+- Sunucu: `supabase/migrations/20261126180000_davetli_eposta_girisi.sql` e-posta ile **yeni hesap açılmasını reddeder**;
+  izinli tek adres `cizimatolyesi.inceleme+play@gmail.com`. Hesap Supabase panelinde elle açılır (Auto confirm).
+- Supabase → Authentication → Providers → **Email** açık olmalı (yalnız bu hesap için).
+- Play Console → Uygulama içeriği → Uygulama erişimi: bu e-posta ve şifre (şifre depoya/sohbete yazılmaz).
+
+**Kaldırma (inceleme / üretime çıkış bitince):** Email sağlayıcısını kapat; davetli hesabı sil; giriş ekranındaki
+"Davetli hesapla giriş" bölümünü, `sifreyleGir`'i, `tests/mobil-davetli-giris.test.mjs`'i ve tetiği kaldır
+(yeni bir migration ile `drop trigger eposta_kaydi_yalniz_davetli on auth.users`).

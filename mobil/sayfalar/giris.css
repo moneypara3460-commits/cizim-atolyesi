@@ -43,6 +43,17 @@ h1 { margin: 18px 0 6px; font-size: 32px; letter-spacing: -.02em; font-weight: 7
 .ana-ok { font-size: 20px; transition: transform .2s; } .ana:hover .ana-ok { transform: translateX(3px); }
 .durum { margin: 0; text-align: center; color: var(--muted); font-size: 14px; }
 .durum.hata { color: #fca5a5; }
+.davetli { text-align: center; }
+.davetli summary { cursor: pointer; color: var(--muted); font-size: 13.5px; list-style: none; padding: 4px; }
+.davetli summary::-webkit-details-marker { display: none; }
+.davetli-ic { display: grid; gap: 10px; margin-top: 10px; text-align: left; }
+.davetli-ic input { width: 100%; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--rule2);
+  background: rgba(15,23,42,.9); color: var(--text); font: 16px var(--font); }
+.davetli-ic input:focus { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.ikinci { appearance: none; min-height: 48px; border-radius: 12px; border: 1px solid var(--cyan); background: transparent;
+  color: var(--cyan); font: 600 16px var(--font); cursor: pointer; }
+.ikinci:disabled { opacity: .6; }
+.davetli-ic small { color: #7c8aa3; font-size: 12.5px; text-align: center; }
 .yasal { margin: 0; text-align: center; color: #7c8aa3; font-size: 12.5px; line-height: 1.5; }
 .yasal a { color: #a5b4fc; }
 @media (min-height: 760px) { .g { gap: 28px; } }
