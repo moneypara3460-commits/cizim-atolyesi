@@ -1,7 +1,7 @@
 // Çalıştır: node tests/vt-hesap-silme.test.mjs
 // Veritabanı testi: supabase/migrations dosyalarının hepsi geçici, yerel bir PostgreSQL'e sırayla uygulanır
 // (Supabase'in auth / cron / net şemaları küçük taklitlerle). Sonra hesap silme sayaç aktarımı (güvenlik denetimi M1, L6)
-// ve yapay zekâ sınırı senaryoları sınanır. Canlı veritabanına dokunmaz.
+// ve yapay zekâ sınırı senaryoları ile davetli e-posta girişi kuralı sınanır. Canlı veritabanına dokunmaz.
 // PostgreSQL kurulu değilse test atlanır (GitHub'ın ubuntu-latest makinesinde kuruludur).
 import fs from 'node:fs';
 import os from 'node:os';
@@ -37,7 +37,7 @@ must(psql('create database t'), 'create database');
 must(psql(`
   create role anon; create role authenticated; create role service_role;
   create schema auth; create schema cron; create schema net;
-  create table auth.users (id uuid primary key default gen_random_uuid(), email text, created_at timestamptz not null default now());
+  create table auth.users (id uuid primary key default gen_random_uuid(), email text, raw_app_meta_data jsonb not null default '{}', created_at timestamptz not null default now());
   create function auth.uid() returns uuid language sql as 'select null::uuid';
   create table cron.job (jobid bigint, jobname text);
   create function cron.schedule(a text, b text, c text) returns bigint language sql as 'select 1::bigint';
@@ -115,6 +115,21 @@ t('yetkiler: yalnız sunucu rolü çağırabilir; SECURITY DEFINER ve boş searc
     esit(q(`select has_function_privilege('${rol}', 'public.ai_take_user(uuid,text,integer,integer,integer,integer)', 'execute')`), beklenen, rol + ' ai_take_user');
   }
   esit(q(`select prosecdef::text || ' ' || array_to_string(proconfig, ',') from pg_proc where proname = 'hesap_sayac_devret'`), 'true search_path=""', 'tanım');
+});
+
+// Davetli e-posta girişi (20261126180000): e-posta ile yeni hesap yalnız inceleme adresine açılır; Google kaydı etkilenmez
+const yeni = (email, provider) => psql(`insert into auth.users (email, raw_app_meta_data) values ('${email}', '{"provider":"${provider}","providers":["${provider}"]}')`, 't');
+t('e-posta ile kayıt: yabancı adres reddedilir (büyük harfle de)', () => {
+  for (const e of ['saldirgan@ornek.com', 'CIZIMATOLYESI.INCELEME@GMAIL.COM', 'cizimatolyesi.inceleme+baska@gmail.com']) {
+    const r = yeni(e, 'email');
+    if (r.status === 0 || !/kayıt kapalı/.test(r.stderr)) throw new Error(e + ' kabul edildi');
+  }
+  esit(q(`select count(*) from auth.users where raw_app_meta_data->>'provider' = 'email'`), 0, 'eklenen e-posta hesabı');
+});
+t('e-posta ile kayıt: yalnız davetli inceleme adresi; Google kaydı serbest', () => {
+  if (yeni('CizimAtolyesi.Inceleme+Play@gmail.com', 'email').status !== 0) throw new Error('davetli adres reddedildi');
+  if (yeni('herhangi@gmail.com', 'google').status !== 0) throw new Error('Google kaydı reddedildi');
+  esit(q(`select count(*) from public.profiles p join auth.users u on u.id = p.id where u.email in ('CizimAtolyesi.Inceleme+Play@gmail.com', 'herhangi@gmail.com')`), 2, 'profil (deneme) açıldı');
 });
 
 if (!process.exitCode) console.log('Hepsi geçti (' + n + ')');

@@ -17,6 +17,7 @@
   if (!C || !C.isNativePlatform || !C.isNativePlatform()) return;
   var P = C.Plugins || {};
   var SUPABASE = 'https://anqfdlahimxdjovecsyk.supabase.co';   // herkese açık adres (hesap/config.js ile aynı)
+  var ANAHTAR = 'sb_publishable_urzQtn-1lE1-obSXF_ivQg_wZbQMRDr';   // herkese açık anahtar (hesap/config.js ile aynı)
   var DONUS = 'com.cizimatolyesi.app://giris';
   var OTURUM = 'cizim:oturum', HEDEF = 'cizim:giris-sonrasi';
 
@@ -156,10 +157,30 @@
     }
     return true;
   }
+  // Davetli hesapla giriş (e-posta + şifre). GEÇİCİ: yalnız Google Play inceleme hesabı için (Google girişi incelemecide
+  // iki adımlı onaya takılıyor). Yeni e-posta hesabı açılamaz: sunucu reddeder (supabase/migrations/20261126180000_davetli_eposta_girisi.sql).
+  function sifreyleGir(eposta, sifre, geriDon) {
+    return fetch(SUPABASE + '/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      headers: { apikey: ANAHTAR, 'content-type': 'application/json' },
+      body: JSON.stringify({ email: String(eposta || '').trim(), password: String(sifre || '') }),
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok || !j.access_token) {
+          var e = new Error(r.status === 400 || r.status === 401 ? 'E-posta ya da şifre yanlış.' : r.status === 429 ? 'Çok fazla deneme yapıldı, biraz bekle.' : 'Giriş yapılamadı (' + r.status + ').');
+          throw e;
+        }
+        var s = { access_token: j.access_token, refresh_token: j.refresh_token, expires_at: j.expires_at || Math.floor(Date.now() / 1000) + (j.expires_in || 3600) };
+        try { localStorage.setItem(OTURUM, JSON.stringify(s)); } catch (x) { /* yok */ }
+        location.replace(guvenliHedef(geriDon));
+        return true;
+      });
+    });
+  }
   // Google Play abonelikleri: hesap/billing.js bunu kullanır (mobil/yerel/Odeme.java)
   var odeme = null;
   try { odeme = C.registerPlugin ? C.registerPlugin('Odeme') : P.Odeme; } catch (e) { odeme = P.Odeme || null; }
-  window.__mobil = { girisAc: girisAc, odeme: odeme };
+  window.__mobil = { girisAc: girisAc, sifreyleGir: sifreyleGir, odeme: odeme };
 
   // ---------- 3) Giriş zorunlu ----------
   // Uygulamada her bölüm Google ile girişten sonra açılır (web sitesi açık kalır). Hesap ve tanıtım sayfaları serbest.
