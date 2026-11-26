@@ -5,7 +5,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const KOD = fs.readFileSync(new URL('../mobil/kopru.js', import.meta.url), 'utf8');
+// Yayın derlemesinde (dist) mobil/ klasörü yoktur (Android paketi kaynak ağaçtan hazırlanır): orada test atlanır.
+const YOL = new URL('../mobil/kopru.js', import.meta.url);
+if (!fs.existsSync(YOL)) { console.log('atlandı: mobil/ bu ağaçta yok'); process.exit(0); }
+const KOD = fs.readFileSync(YOL, 'utf8');
 function ortam(cevap) {
   const depo = new Map(), istekler = [], gidilen = [];
   const elemanlar = [];
