@@ -27,7 +27,7 @@ Uygulama Capacitor ile Android'e paketlenir. Bilgisayar gerekmez: paketi GitHub 
 Yalnız Android paketinde çalışır, web sitesinde yoktur.
 
 - **Dosya kaydetme:** WebView `<a download>` ile dosya indiremez. Dosya geçici klasöre yazılır, Android paylaşım ekranı açılır.
-- **Google ile giriş:** Google, uygulama içi WebView'da girişe izin vermez. Giriş sistem tarayıcısında açılır, oturum `com.cizimatolyesi.app://giris` ile uygulamaya döner.
+- **Google ile giriş:** Google, uygulama içi WebView'da girişe izin vermez. Giriş sistem tarayıcısında açılır, `com.cizimatolyesi.app://giris` adresine tek kullanımlık bir kod döner (PKCE). Kod, uygulamanın cihazda sakladığı doğrulayıcıyla `/auth/v1/token?grant_type=pkce` üzerinden oturuma çevrilir; aynı adresi sahiplenen başka bir uygulama kodu yakalasa da kullanamaz (`tests/mobil-pkce.test.mjs`).
 
 **Supabase ayarı (bir kez):** Authentication → URL Configuration → Redirect URLs listesine `com.cizimatolyesi.app://giris` eklenmeli. Eklenmezse giriş tarayıcıda kalır, uygulamaya dönmez.
 
