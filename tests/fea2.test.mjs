@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import * as F from '../fea.js';
 import * as X from '../fea2.js';
 import * as C3 from '../cam.js';
+import { runFEM } from '../fem-run.js';
 
 let fail = 0;
 const tests = [], table = [];
@@ -193,6 +194,51 @@ t('12) mevcut CAD/CAM çekirdekleri etkilenmedi: fea.js eski çağrı biçimi, c
 t('analiz kayıtları: desteklenmeyenler açıkça işaretli', () => {
   assert.equal(X.ANALYSES.nonlinear.supported, false); assert.equal(X.ANALYSES.contact.supported, false);
   for (const k of ['static', 'modal', 'thermal', 'thermalT', 'buckling']) { const a = X.ANALYSES[k]; assert.ok(a.supported && a.physics && a.method && a.outputs); }
+});
+
+// z ekseni boyunca boydan boya delik (ters yönlü silindir yüzeyi = boşluk)
+function holeTris(cx, cy, r, z0, z1, n = 96) {
+  const tr = [];
+  for (let i = 0; i < n; i++) {
+    const a0 = i / n * 2 * Math.PI, a1 = (i + 1) / n * 2 * Math.PI, P = (a, z) => [cx + r * Math.cos(a), cy + r * Math.sin(a), z];
+    for (const q of [[...P(a0, z0), ...P(a1, z0), ...P(a1, z1)], [...P(a0, z0), ...P(a1, z1), ...P(a0, z1)], [cx, cy, z0, ...P(a1, z0), ...P(a0, z0)], [cx, cy, z1, ...P(a0, z1), ...P(a1, z1)]]) tr.push(q[0], q[1], q[2], q[6], q[7], q[8], q[3], q[4], q[5]);
+  }
+  return tr;
+}
+const plateWithHole = (L, W, t, d, cx = L / 2, cy = W / 2) => [{ id: 1, name: 'levha', tris: Float32Array.from([...boxTris([0, 0, 0], [L, W, t]), ...holeTris(cx, cy, d / 2, 0, t)]), mat: 0 }];
+
+t('13) gerilme yığılması: delikli levha çekme (Heywood Kt), yerel inceltme kaba ağ hatasını giderir', () => {
+  // W = 100, d = 20, t = 10 mm; brüt 100 MPa. Heywood: Kt,net = 2 + (1 − d/W)³ = 2,512 → σmax = 314 MPa (düzlem gerilme).
+  // 3B levhada (t/d = 0,5) orta düzlemde birkaç % daha yüksektir. İnceltme öncesi orta ağ ≈ %27 düşük kalıyordu.
+  const W = 100, L = 300, t = 10, d = 20, ref = (2 + (1 - d / W) ** 3) * 100 * W / (W - d);
+  const r = runFEM(F, X, { type: 'static', items: plateWithHole(L, W, t, d), mats: [steel], target: X.DENSITY.orta[0], setup: { supports: [{ face: '-x' }], loads: [{ type: 'pressure', sel: { face: '+x' }, p: -100 }] } });
+  assert.ok(!r.error, r.text);
+  const q = r.res.refine.find((x) => x.refined);
+  assert.ok(q, 'delik çevresi inceltildi');
+  assert.ok(q.global < 0.85 * ref, 'kaba ağ düşük: ' + q.global);
+  assert.ok(Math.hypot(q.at[0] - L / 2, q.at[1] - W / 2) < d / 2 + 2, 'tepe delik kenarında');
+  assert.equal(q.singular, false, 'delik keskin köşe sayılmaz');
+  within(r.res.vEx, ref, 0.12, 'Delikli levha çekme, gerilme yığılması (Kt)');
+});
+
+t('14) gerilme yığılması: iki eksenli çekmede delik (Kirsch, Kt = 2)', () => {
+  const S = 160, t = 10, d = 20;
+  const r = runFEM(F, X, { type: 'static', items: plateWithHole(S, S, t, d), mats: [steel], target: X.DENSITY.orta[0],
+    setup: { supports: [{ face: '-x' }], loads: [{ type: 'pressure', sel: { face: '+x' }, p: -100 }, { type: 'pressure', sel: { face: '+y' }, p: -100 }, { type: 'pressure', sel: { face: '-y' }, p: -100 }] } });
+  assert.ok(!r.error, r.text);
+  assert.ok(r.res.refine.some((x) => x.refined), 'inceltildi');
+  within(r.res.vEx, 200, 0.10, 'İki eksenli çekme, delik (Kt = 2)');
+});
+
+t('15) keskin iç köşe: inceltmede gerilme büyümeye devam eder → tekil köşe uyarısı, kaba değerden büyük', () => {
+  const items = [{ id: 1, name: 'L', tris: Float32Array.from([...boxTris([0, 0, 0], [100, 20, 20]), ...boxTris([0, 20, 0], [20, 100, 20])]), mat: 0 }];
+  const r = runFEM(F, X, { type: 'static', items, mats: [steel], target: 9000, setup: { supports: [{ face: '+x' }], loads: [{ type: 'force', sel: { face: '+y' }, F: 1000, dir: [1, 0, 0] }] } });
+  assert.ok(!r.error, r.text);
+  const q = r.res.refine.find((x) => x.singular);
+  assert.ok(q, 'köşe tekil işaretlendi');
+  assert.ok(Math.hypot(q.at[0] - 20, q.at[1] - 20) < 4, 'iç köşede: ' + q.at);
+  assert.ok(q.refined > 1.5 * q.global);
+  assert.ok(r.res.warn.some((w) => /Keskin köşe/.test(w.t)));
 });
 
 for (const [name, fn] of tests) {

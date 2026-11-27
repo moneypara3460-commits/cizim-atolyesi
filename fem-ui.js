@@ -2,9 +2,9 @@
 // Hesap fea.js / fea2.js'tedir (işçide). Kurulum ve sonuç özetleri projeyle kaydedilir; sonuç alanları bellekte tutulur.
 // api: { parts() → [{ id, name, matId }], items() → [{ id, name, tris }], geoHash(), getFem(), setFem(o), draw(spec), enter(), leave(),
 //        render(), toast(m), name(), saveText(text, name) }
-import * as X from './fea2.js?v=20261112u';
+import * as X from './fea2.js?v=20261127f';
 
-const V = '20261112u';
+const V = '20261127f';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 3) => (v == null || !isFinite(v) ? '—' : Math.abs(v) >= 1e5 || (Math.abs(v) < 1e-3 && v !== 0) ? v.toExponential(d - 1).replace('.', ',') : (+v.toPrecision(d + 1)).toLocaleString('tr-TR', { maximumFractionDigits: 6 }));
 const FACES = [['-y', 'Alt yüz (−Y)'], ['+y', 'Üst yüz (+Y)'], ['-x', 'Sol yüz (−X)'], ['+x', 'Sağ yüz (+X)'], ['-z', 'Arka yüz (−Z)'], ['+z', 'Ön yüz (+Z)']];
@@ -14,6 +14,7 @@ const VALIDATION = [   // tests/fea2.test.mjs ve tests/fea.test.mjs ölçümleri
   ['Çekme çubuğu σ = F/A', '%0,000'], ['Çekme çubuğu uzaması FL/EA', '%0,37'], ['Ankastre kiriş sehimi FL³/3EI', '%0,01'], ['Kiriş eğilme gerilmesi M·c/I', '%0,00'],
   ['Uç momenti sehimi ML²/2EI', '%0,47'], ['Modal 1. frekans (ankastre kiriş)', '%0,09'], ['Modal 2. eğilme frekansı', '%1,06'], ['Isı iletimi (doğrusal, kAΔT/L)', '< %0,001'],
   ['İç ısı üretimi QL²/8k', '< %0,001'], ['Taşınım ucu sıcaklığı', '< %0,001'], ['Zamana bağlı levha soğuması (Fourier)', '%0,81'], ['Euler burkulma yükü π²EI/4L²', '%0,11'],
+  ['Delikli levha çekme, gerilme yığılması (yerel inceltmeyle)', '%10,5 (güvenli tarafta, yüksek)'], ['İki eksenli çekmede delik, Kt = 2', '%2,0'],
 ];
 function defaults() {
   return { type: 'static', units: 'mm', density: 'orta', mats: {}, custom: [], mech: { supports: [], loads: [], gravity: false, modes: 4, bmodes: 3 }, therm: { fixed: [], flux: [], conv: [], Q: 0, T0: 20, dur: 60, dt: 1 }, results: [] };
@@ -107,7 +108,7 @@ export function createFemUI(api) {
   // sonuç özeti (projeye kaydedilir; birimler iç birimdir: mm, N, MPa, °C, W)
   function summarize(type, r, mats, setup, id) {
     const R = r.res, sm = {};
-    if (type === 'static') Object.assign(sm, { maxU: R.maxU, vmax: R.vmax, vEx: R.vEx, p995: R.p995, fos: R.fosEx, fosAll: R.fosAll, reaction: R.reaction, eqErr: R.eqErr });
+    if (type === 'static') Object.assign(sm, { maxU: R.maxU, vmax: R.vmax, vEx: R.vEx, p995: R.p995, fos: R.fosEx, fosAll: R.fosAll, refine: R.refine || [], reaction: R.reaction, eqErr: R.eqErr });
     if (type === 'modal') Object.assign(sm, { f: R.modes.map((m) => m.f), massKg: R.massKg });
     if (type === 'thermal') Object.assign(sm, { tmin: R.tmin, tmax: R.tmax, heat: R.heat });
     if (type === 'thermalT') Object.assign(sm, { tmin: R.tmin, tmax: R.tmax, tEnd: R.frames[R.frames.length - 1].t, frames: R.frames.length });
@@ -269,6 +270,7 @@ export function createFemUI(api) {
     if (rec.type === 'static') {
       h += lbl(`En büyük yer değiştirme: <b>${nf(disp('L', sm.maxU))} ${un('L')}</b> · en büyük von Mises: <b>${nf(disp('S', sm.vmax))} ${un('S')}</b> (mesnet / yük komşuluğu hariç ${nf(disp('S', sm.vEx))}) · %99,5: ${nf(disp('S', sm.p995))} ${un('S')}`) +
         lbl(sm.fos != null ? `Emniyet katsayısı (akma / von Mises, komşuluk hariç): <b>${nf(sm.fos, 3)}</b> · tüm elemanlarda en küçük: ${nf(sm.fosAll, 3)}. Yalnız doğrusal-elastik bölgede ve malzeme değerleri doğruysa geçerlidir.` : 'Emniyet katsayısı hesaplanmadı (akma dayanımı eksik).') +
+        (sm.refine || []).map((q) => lbl(q.refined ? `🔬 Yerel inceltme (${q.at.map((v) => nf(disp('L', v))).join(' / ')} ${un('L')}): kaba ağ ${nf(disp('S', q.global))} → ince ağ (${nf(disp('L', q.h), 3)} ${un('L')}) <b>${nf(disp('S', q.refined))} ${un('S')}</b>${q.singular ? ' · keskin köşe, artmaya devam ediyor' : ''}` : `🔬 Yerel inceltme yapılamadı (${q.at.map((v) => nf(disp('L', v))).join(' / ')} ${un('L')}): mesnet ya da yük çok yakın. Bu bölgedeki değer düşük çıkmış olabilir.`, 'font-size:12.5px;color:#94a3b8')).join('') +
         lbl(`Mesnet tepkisi: ${sm.reaction.map((v) => nf(disp('F', v))).join(' / ')} ${un('F')} (X / Y / Z) · denge hatası %${nf(sm.eqErr * 100, 2)}`, 'font-size:12.5px;color:#94a3b8');
     } else if (rec.type === 'modal') h += lbl('Doğal frekanslar: ' + sm.f.map((f, i) => `${i + 1}. <b>${nf(f, 4)} Hz</b>`).join(' · ') + ` · model kütlesi ${nf(sm.massKg)} kg`);
     else if (rec.type === 'thermal') h += lbl(`Sıcaklık: ${nf(disp('T', sm.tmin))} … <b>${nf(disp('T', sm.tmax))} ${un('T')}</b> · giren ısı ${nf(sm.heat.inflow)} W · enerji dengesi hatası %${nf(sm.heat.balanceErr * 100, 3)}`);
@@ -302,7 +304,7 @@ export function createFemUI(api) {
     L.push('', 'SONUÇLAR (iç birimler): ' + JSON.stringify(sm, (k, v) => (typeof v === 'number' ? +v.toPrecision(6) : v)));
     L.push('', 'UYARILAR:'); for (const w of rec.warn) L.push('  - ' + w.t); if (!rec.warn.length) L.push('  yok');
     L.push('', 'DOĞRULAMA (analitik referans problemleri, tests/fea2.test.mjs, bu sürümde ölçülen bağıl hata):'); for (const [n, e] of VALIDATION) L.push('  ' + n + ': ' + e);
-    L.push('', 'VARSAYIMLAR VE SINIRLAR:', '  - Doğrusal analiz: akmayı aşan bölgelerde sonuç geçersiz; doğrusal olmayan analiz ve temas yok.', '  - Voksel ağ: eğri yüzeyler basamaklı; yüzey gerilmeleri ve keskin köşe / mesnet / nokta yük çevresi yaklaşık (tekil olabilir).', '  - Malzeme değerleri "tipik" ise belirli parti için doğrulanmamıştır.', '  - Bu rapor mühendislik onayı yerine geçmez; kritik parçalar yetkin mühendis tarafından doğrulanmalıdır.');
+    L.push('', 'VARSAYIMLAR VE SINIRLAR:', '  - Doğrusal analiz: akmayı aşan bölgelerde sonuç geçersiz; doğrusal olmayan analiz ve temas yok.', '  - Voksel ağ: eğri yüzeyler basamaklı. En çok zorlanan iki bölge (mesnet / yük komşuluğu dışında) yerel olarak 16 kat ince ağla yeniden çözülür; delik ve çentikte gerilme yığılması yaklaşık ±%10 doğrulukla bulunur. Keskin köşe, mesnet ve nokta yük çevresi tekil olabilir.', '  - Malzeme değerleri "tipik" ise belirli parti için doğrulanmamıştır.', '  - Bu rapor mühendislik onayı yerine geçmez; kritik parçalar yetkin mühendis tarafından doğrulanmalıdır.');
     return L.join('\n');
   }
 

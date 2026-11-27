@@ -1,7 +1,7 @@
 // 📐 Analiz işçisi: ağ ve çözüm ekranı dondurmasın.
-import * as F from './fea.js?v=20261112u';
-import * as X from './fea2.js?v=20261112u';
-import { runFEM, convStudy } from './fem-run.js?v=20261112u';
+import * as F from './fea.js?v=20261127f';
+import * as X from './fea2.js?v=20261127f';
+import { runFEM, convStudy } from './fem-run.js?v=20261127f';
 
 self.onmessage = (e) => {
   const { id, op, a } = e.data || {};

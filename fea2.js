@@ -3,17 +3,17 @@
 // İç birimler (her yerde): uzunluk mm, kuvvet N, gerilme MPa (N/mm²), moment N·mm, sıcaklık °C, güç W, zaman s,
 // yoğunluk g/cm³ (fea.js ile aynı), ısı iletkenliği W/(mm·K), ısı akısı W/mm², taşınım katsayısı W/(mm²·K), özgül ısı J/(kg·K).
 // Saf JS, DOM yok: Worker'da ve Node testlerinde (tests/fea2.test.mjs) aynen çalışır.
-import * as F from './fea.js?v=20261112u';
+import * as F from './fea.js?v=20261127f';
 import { MATERIALS } from './logic.js?v=20261120f';
 
-const { matGroups, matvec, pcg, buildMG, floating, invert, jacobiEig, dNat } = F._internal;
+const { matGroups, matvec, pcg, buildMG, floating, invert, jacobiEig, dNat, stresses } = F._internal;
 
 /* ================= analiz türleri: yöntem ve varsayım kayıtları (genişletilebilir) ================= */
 export const ANALYSES = {
   static: {
     name: 'Yapısal statik', supported: true,
     physics: 'Doğrusal elastisite: K u = f. Küçük yer değiştirme ve şekil değiştirme, izotrop doğrusal-elastik malzeme (Hooke), statik yük.',
-    method: 'Sonlu elemanlar: düzenli küp (voksel) ağ, 8 düğümlü altı yüzlü eleman, düğüm başına 3 serbestlik (ux, uy, uz), Wilson–Taylor uyumsuz modlar (eğilmede kilitlenme yok), 2×2×2 Gauss. Rijitlik matrisi saklanmaz; eşlenik gradyan + geometrik çok katmanlı (multigrid) ön koşullayıcı. Gerilme: eleman merkezinde σ = D ε; von Mises.',
+    method: 'Sonlu elemanlar: düzenli küp (voksel) ağ, 8 düğümlü altı yüzlü eleman, düğüm başına 3 serbestlik (ux, uy, uz), Wilson–Taylor uyumsuz modlar (eğilmede kilitlenme yok), 2×2×2 Gauss. Rijitlik matrisi saklanmaz; eşlenik gradyan + geometrik çok katmanlı (multigrid) ön koşullayıcı. Gerilme: eleman merkezinde σ = D ε; von Mises. Yerel inceltme: mesnet / yük komşuluğu dışındaki en çok zorlanan iki bölge, kesik yüzeylerine kaba çözümün yer değiştirmesi verilerek h/4 ve h/16 ağla yeniden çözülür (alt model); tepe değeri basamaklı yüzeyin sahte tepelerinden arındırmak için iki yarıçaplı küre ortalamasından sıfır yarıçapa uzatılır.',
     outputs: 'Yer değiştirme (mm), von Mises gerilmesi (MPa), gerilme bileşenleri, emniyet katsayısı (akma / von Mises), mesnet tepkileri.',
   },
   modal: {
@@ -228,6 +228,125 @@ export function stressSummary(fe, r, mats) {
   if (hasSy && fosMin != null && fosMin < 1) warn.push({ sev: 'crit', t: 'Gerilme akma dayanımını aşıyor: doğrusal-elastik varsayım bu bölgede geçersiz (plastik şekil değişimi). Gerçek davranış için doğrusal olmayan analiz gerekir (desteklenmiyor).' });
   if (!hasSy) warn.push({ sev: 'warn', t: 'Akma dayanımı eksik malzeme var: emniyet katsayısı hesaplanmadı.' });
   return { vmax, eMax, vEx, eEx, p995, fos, fosAll: fosMin, warn };
+}
+
+/* ================= yerel ağ inceltme (alt model) ================= */
+// Voksel ağda delik / çentik / köşe çevresindeki gerilme yığılması eleman merkezinde ve basamaklı yüzeyde düşük çıkar
+// (orta ağda delikli levhada ≈ %25-30). Düzeltme: en çok zorlanan bölgeler, çevresi kesilip 4 kat ince ağla iki kez
+// (h/4, sonra h/16) yeniden çözülür (alt model, "submodeling"). Kesik yüzeylerde yer değiştirme bir üst modelden
+// (üç doğrusal aradeğerleme) verilir; gerçek yüzeyler serbest kalır, öz ağırlık ve ısıl yük alt modelde de uygulanır.
+// İnce ağda bile basamaklı yüzeyin köşeleri sahte tepe yapar: değer, tepe çevresinde iki yarıçaplı (3 ve 6 eleman)
+// küre ortalamasından yarıçap sıfıra doğrusal uzatılarak alınır (σ ≈ 2·σ₃ − σ₆).
+// Doğrulama (tests/fea2.test.mjs): delikli levha çekme (Kt ≈ 2,5 net) ve iki eksenli çekme (Kt = 2) ±%10 içinde.
+const ijkOf = (g, c) => [c % g.nx, Math.floor(c / g.nx) % g.ny, Math.floor(c / (g.nx * g.ny))];
+// P: { grid, fe, u, root, bc: Set(düğüm) }; e0: P'deki merkez eleman
+export function subModel(items, P, e0, mats, setup, opt = {}) {
+  const R = opt.R || 4, m = opt.m || 4, { grid, fe } = P, { nx, ny, nz, h, origin } = grid, N = [nx, ny, nz];
+  const ci = ijkOf(grid, fe.elCell[e0]), mn = P.root ? 0 : 1;   // alt modelin alt modeli üst modelin kesik yüzeyine değmez
+  let lo, hi;
+  for (let RR = R; ; RR--) {
+    if (RR < 2) return { error: 'bc' };   // mesnet / yük noktası çok yakın: inceltme yapılmaz
+    lo = ci.map((v, k) => Math.max(mn, Math.min(v - RR, N[k] - mn - 2 * RR - 1)));
+    hi = lo.map((v, k) => Math.min(N[k] - mn, v + 2 * RR + 1));
+    let bad = false;
+    for (const n of P.bc) {
+      let inside = true;
+      for (let k = 0; k < 3; k++) { const L = Math.round((fe.xyz[n * 3 + k] - origin[k]) / h); if (L < lo[k] || L > hi[k]) { inside = false; break; } }
+      if (inside) { bad = true; break; }
+    }
+    if (!bad) break;
+  }
+  const hs = h / m, bmin = lo.map((v, k) => origin[k] + v * h), bmax = hi.map((v, k) => origin[k] + v * h);
+  const g2 = F.voxelize(items, { h: hs, box: { min: bmin, max: bmax } }), fs = F.buildFE(g2);
+  if (!fs.ne) return { error: 'empty' };
+  const NX = nx + 1, NY = ny + 1, gid = new Int32Array(NX * NY * (nz + 1)).fill(-1);
+  for (let n = 0; n < fe.nn; n++) gid[Math.round((fe.xyz[n * 3] - origin[0]) / h) + NX * (Math.round((fe.xyz[n * 3 + 1] - origin[1]) / h) + NY * Math.round((fe.xyz[n * 3 + 2] - origin[2]) / h))] = n;
+  const U = P.u, out = [0, 0, 0];
+  const interp = (p) => {   // üst modelde noktayı içeren dolu hücreden üç doğrusal aradeğerleme; yoksa null (serbest bırakılır)
+    const q = p.map((v, k) => (v - origin[k]) / h), base = q.map((v) => Math.floor(v + 1e-9));
+    for (let c = 0; c < 8; c++) {
+      const b = [base[0] - (c & 1), base[1] - ((c >> 1) & 1), base[2] - ((c >> 2) & 1)];
+      if (b.some((v, k) => v < 0 || v >= N[k]) || grid.mat[b[0] + nx * (b[1] + ny * b[2])] < 0) continue;
+      const t = q.map((v, k) => v - b[k]); if (t.some((v) => v < -1e-6 || v > 1 + 1e-6)) continue;
+      out.fill(0); let ok = true;
+      for (let a = 0; a < 8 && ok; a++) {
+        const o = [a & 1, (a >> 1) & 1, (a >> 2) & 1], w = (o[0] ? t[0] : 1 - t[0]) * (o[1] ? t[1] : 1 - t[1]) * (o[2] ? t[2] : 1 - t[2]);
+        const n = gid[(b[0] + o[0]) + NX * ((b[1] + o[1]) + NY * (b[2] + o[2]))];
+        if (n < 0) ok = false; else for (let k = 0; k < 3; k++) out[k] += w * U[n * 3 + k];
+      }
+      if (ok) return out;
+    }
+    return null;
+  };
+  const cut = (k, side) => !P.root || (side < 0 ? lo[k] > 0 : hi[k] < N[k]);   // kökte model sınırındaki yüz kesik değildir
+  const nd = fs.nn * 3, fixed = new Uint8Array(nd), fixedNode = new Uint8Array(fs.nn), up = new Float64Array(nd), bc = new Set();
+  for (let n = 0; n < fs.nn; n++) {
+    let c = false;
+    for (let k = 0; k < 3 && !c; k++) { const v = fs.xyz[n * 3 + k]; c = (cut(k, -1) && Math.abs(v - bmin[k]) < hs * 1e-3) || (cut(k, 1) && Math.abs(v - bmax[k]) < hs * 1e-3); }
+    if (!c) continue;
+    const u = interp([fs.xyz[n * 3], fs.xyz[n * 3 + 1], fs.xyz[n * 3 + 2]]); if (!u) continue;
+    fixedNode[n] = 1; bc.add(n); for (let k = 0; k < 3; k++) { fixed[n * 3 + k] = 1; up[n * 3 + k] = u[k]; }
+  }
+  if (!bc.size) return { error: 'nocut' };
+  if (floating(fs, fixedNode).count) return { error: 'floating' };
+  const G = matGroups(fs, mats), f = new Float64Array(nd), dT = setup.dT || 0;
+  if (setup.gravity) for (let e = 0; e < fs.ne; e++) { const w = G[fs.elMat[e]].rho * 1e-6 * 9.81 * fs.h ** 3; for (let a = 0; a < 8; a++) f[fs.elN[e * 8 + a] * 3 + 1] -= w / 8; }
+  if (dT) for (let e = 0; e < fs.ne; e++) { const g = G[fs.elMat[e]], sc = g.E * g.alpha * dT * fs.h * fs.h; for (let i = 0; i < 24; i++) f[fs.elN[e * 8 + (i / 3 | 0)] * 3 + (i % 3)] += g.el.gth[i] * sc; }
+  // verilen yer değiştirme: K (x + up) = f → K x = f − K up, x kesik düğümlerde 0
+  const Ku = new Float64Array(nd); matvec(fs, G, up, Ku); for (let i = 0; i < nd; i++) f[i] -= Ku[i];
+  const x = new Float64Array(nd);
+  let mg = null; if (fs.ne > 800) { try { mg = buildMG(fs, G, fixed); } catch (e) { mg = null; } }
+  let st = pcg(fs, G, f, fixed, x, { mg });
+  if (mg && !st.converged) { x.fill(0); st = pcg(fs, G, f, fixed, x, {}); }
+  if (!st.converged) return { error: 'noconv' };
+  for (let i = 0; i < nd; i++) x[i] += up[i];
+  const S = stresses(fs, G, x, dT);
+  // değerlendirme: kesik yüzeylerden en az m hücre (bir üst eleman) içeride
+  const N2 = [g2.nx, g2.ny, g2.nz], inner = (ii) => { for (let k = 0; k < 3; k++) if ((cut(k, -1) && ii[k] < m) || (cut(k, 1) && ii[k] >= N2[k] - m)) return false; return true; };
+  const cellE = new Int32Array(g2.mat.length).fill(-1); for (let e = 0; e < fs.ne; e++) cellE[fs.elCell[e]] = e;
+  let vmax = 0; for (let e = 0; e < fs.ne; e++) if (S.vm[e] > vmax && inner(ijkOf(g2, fs.elCell[e]))) vmax = S.vm[e];
+  const ball = (c) => {
+    let best = 0, be = -1; const cr = Math.ceil(c);
+    for (let e = 0; e < fs.ne; e++) {
+      if (S.vm[e] < 0.5 * vmax) continue;
+      const ii = ijkOf(g2, fs.elCell[e]); if (!inner(ii)) continue;
+      let s = 0, n = 0;
+      for (let a = -cr; a <= cr; a++) for (let b = -cr; b <= cr; b++) for (let d = -cr; d <= cr; d++) {
+        if (a * a + b * b + d * d > c * c) continue;
+        const I = ii[0] + a, J = ii[1] + b, K = ii[2] + d; if (I < 0 || J < 0 || K < 0 || I >= N2[0] || J >= N2[1] || K >= N2[2]) continue;
+        const q = cellE[I + N2[0] * (J + N2[1] * K)]; if (q >= 0) { s += S.vm[q]; n++; }
+      }
+      if (n && s / n > best) { best = s / n; be = e; }
+    }
+    return [best, be];
+  };
+  const [b3, e3] = ball(3), [b6] = ball(6);
+  const at = [0, 0, 0]; if (e3 >= 0) for (let a = 0; a < 8; a++) for (let k = 0; k < 3; k++) at[k] += fs.xyz[fs.elN[e3 * 8 + a] * 3 + k] / 8;
+  return { grid: g2, fe: fs, u: x, root: false, bc, peak: Math.max(b3, 2 * b3 - b6), e3, at, mat: e3 >= 0 ? fs.elMat[e3] : 0, ne: fs.ne };
+}
+// en çok zorlanan (mesnet / yük komşuluğu dışındaki) bölgeleri iki kademe inceltir
+export function refineHotspots(items, grid, fe, r, mats, setup, opt = {}) {
+  const bc = new Set([...r.supN, ...r.loadN]), vm = Float32Array.from(r.vm);
+  // mesnet / yük komşuluğu (tekil olabilir, alt model kurulamaz) bölge aramasına girmez
+  for (let e = 0; e < fe.ne; e++) for (let a = 0; a < 8; a++) if (bc.has(fe.elN[e * 8 + a])) { vm[e] = 0; break; }
+  let regs = F.criticalRegions(fe, grid, mats, vm, { bcNodes: [...bc], max: 6, frac: 0.5 }).filter((g) => !g.nearBC);
+  if (regs.length) regs = regs.filter((g) => g.util >= 0.6 * regs[0].util).slice(0, opt.max || 2);
+  const out = [];
+  for (const [i, g] of regs.entries()) {
+    if (opt.onProgress) opt.onProgress(i, regs.length);
+    let P = { grid, fe, u: r.uFull, root: true, bc }, e = g.elem;
+    const lv = [];
+    for (let l = 0; l < 2; l++) {
+      let q; try { q = subModel(items, P, e, mats, setup, { R: 4, m: 4 }); } catch (err) { q = { error: 'hata' }; }
+      if (q.error || !(q.peak > 0)) break;
+      lv.push(q); P = q; e = q.e3;
+    }
+    if (lv.length < 2) { out.push({ at: g.at, global: g.vm, mat: g.mat, refined: null }); continue; }
+    const [a, b] = lv;
+    // keskin (yarıçapsız) köşede gerilme ağ inceldikçe sınırsız büyür (r^-0,46): 4 kat inceltmede ≈ 1,9 kat
+    out.push({ at: b.at, global: g.vm, mat: b.mat, refined: b.peak, h: b.fe.h, ratio: b.peak / a.peak, singular: b.peak / a.peak > 1.35 });
+  }
+  return out;
 }
 
 /* ================= termal (kararlı / geçici) ================= */
