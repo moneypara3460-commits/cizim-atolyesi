@@ -46,6 +46,12 @@ t('hatalı programlar kırmızı: G0 ile malzemeye, tablaya inme, kısa takım, 
   red('G0 Z-2.\nG1 X0. F500\nG2 X20. Y30. I5. J0.\n', /merkeze eşit uzak değil/);
 });
 
+t('G0 kırık yol: X-Y ile birlikte inen hızlı hareket en kötü yoldan (önce Z) denenir', () => {
+  // X−10 Z25'ten X50 Z−1'e tek G0: doğru çizgi stoğa sonda girer, ama önce Z inerse takım stoğun kenarına yandan çarpar
+  const r = GC.checkProgram(HEAD + 'G0 X50. Z-1.\n' + TAIL, STOCK, TT);
+  assert.ok(r.lines.some((l) => l.lvl === 2 && l.line === 9 && /G0/.test(l.why)), JSON.stringify(r.lines.slice(0, 3)));
+});
+
 t('okunamayan satırlar: makro, Siemens döngüsü, döner eksen → eksik kontrol (temiz sayılmaz); ondalıksız sayı uyarısı', () => {
   for (const [body, re] of [['#100=5.\n', /Makro/], ['CYCLE81(10,0,2,-5)\n', /Siemens/], ['G0 A90.\n', /Döner eksen/], ['G68 X0 Y0 R45.\n', /G68/]]) {
     const r = GC.checkProgram(HEAD + body + TAIL, STOCK, TT);

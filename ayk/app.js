@@ -60,6 +60,7 @@ function syncMaterials(p) {
   p.materials = [...used].map((id) => S.lib.find((m) => m.id === id) || keep.get(id)).filter(Boolean).map((m) => M.makeMaterial(m));
 }
 function dirty() {
+  if (S.nk) S.nk.out = null;   // parça değişince eski kesim yerleşimi geçersiz
   if (!S.p) return;
   syncMaterials(S.p);
   clearTimeout(saveT); $('saved').textContent = 'kaydediliyor…';
@@ -92,6 +93,7 @@ async function openProject(id, page = 'stampa') {
   await flush();
   const p = await store.get(id); if (!p) { toast('Proje bulunamadı'); return; }
   S.p = p; S.hist = []; S.fut = []; S.pieceSel = p.pieces[0]?.id || null; S.exp.pieces = null;
+  Object.assign(S.nk, { from: null, to: null, system: null, dL: null, dG: null, pairs: {}, out: null });   // numara / kesim: başka projeden kalmasın
   try { localStorage.setItem(LKEY, id); } catch (e) { /* */ }
   if (S.editor) { S.editor.destroy(); S.editor = null; }
   go(page);

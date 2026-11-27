@@ -108,8 +108,12 @@ export function parseProgram(text) {
     if (pos[2] === null && z === null) { issue(ln, 'warn', 'İlk harekette Z bilinmiyor: Z güvenli yükseklikte sayıldı'); }
     const from = [pos[0], pos[1], pos[2] == null || !isFinite(pos[2]) ? Infinity : pos[2]], to = [x, y, z == null ? from[2] : z];
     if (mode === 0) {
-      // G0'da eksenler aynı anda hareket eder: Z yukarıdan iniyorsa önce X-Y (güvenli yükseklikte) sonra Z — en olası durum
+      // G0'da eksenler doğrusal gitmez (Fanuc tipi: her eksen kendi hızıyla, yol kırık). En kötü yol denenir:
+      // iniyorsa önce Z iner sonra X-Y gider; çıkıyorsa önce X-Y gider sonra Z çıkar.
+      const xy = Math.hypot(to[0] - (from[0] ?? to[0]), to[1] - (from[1] ?? to[1])) > 1e-6;
       if (!isFinite(from[2])) { push({ k: 'r', x: to[0], y: to[1], z: Infinity, line: ln }); push({ k: 'r', x: to[0], y: to[1], z: to[2], line: ln }); }
+      else if (xy && to[2] < from[2] - 1e-6) { push({ k: 'r', x: from[0], y: from[1], z: to[2], line: ln }); push({ k: 'r', x: to[0], y: to[1], z: to[2], line: ln }); }
+      else if (xy && to[2] > from[2] + 1e-6) { push({ k: 'r', x: to[0], y: to[1], z: from[2], line: ln }); push({ k: 'r', x: to[0], y: to[1], z: to[2], line: ln }); }
       else push({ k: 'r', x: to[0], y: to[1], z: to[2], line: ln });
     } else {
       if (tool == null) issue(ln, 'crit', 'Takım seçilmeden (T.. M6) kesme hareketi');
