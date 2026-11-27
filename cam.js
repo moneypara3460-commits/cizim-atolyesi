@@ -617,6 +617,7 @@ export const POSTS = {
   fanuc: { name: 'Fanuc (ve uyumlu: Haas, Mitsubishi, Syntec)', ext: 'nc' },
   mach3: { name: 'Mach3 / Mach4 / LinuxCNC', ext: 'tap' },
   grbl: { name: 'GRBL (hobi CNC, router)', ext: 'gcode' },
+  heidenhain: { name: 'Heidenhain TNC (Klartext, .h)', ext: 'h' },
 };
 const TR = { 'ç': 'C', 'Ç': 'C', 'ğ': 'G', 'Ğ': 'G', 'ı': 'I', 'İ': 'I', 'ö': 'O', 'Ö': 'O', 'ş': 'S', 'Ş': 'S', 'ü': 'U', 'Ü': 'U', 'Ø': 'D', '×': 'X', '°': ' DER' };
 export const ascii = (s) => String(s).replace(/[çÇğĞıİöÖşŞüÜØ×°]/g, (c) => TR[c]).replace(/[()]/g, '').replace(/[^\x20-\x7e]/g, '').toUpperCase();
@@ -632,6 +633,7 @@ export function dryRunShift(R, clear = 5) {
   return Math.max(c, R.P.stock.zTop - zMin + c);
 }
 export function gcode(R, job, postKey, opt = {}) {
+  if (postKey === 'heidenhain') return klartext(R, job, opt);
   const post = postKey, Z0 = R.P.zero, L = [], fanuc = post === 'fanuc', grbl = post === 'grbl';
   const dry = opt.dryRun ? dryRunShift(R, opt.dryRun.clear) : 0;
   const X = (x) => fmt(x - Z0[0]), Y = (y) => fmt(y - Z0[1]), Zf = (z) => fmt(z + dry - Z0[2]);
@@ -711,6 +713,82 @@ export function gcode(R, job, postKey, opt = {}) {
   }
   if (!grbl) { out('M9'); out('M5'); out(fanuc ? 'G91 G28 Z0.0' : 'G53 G0 Z0.0'); out('G90'); out('M30'); out('%'); }
   else { out('M5'); out('G0 X0.0 Y0.0'); out('M2'); }
+  return L.join('\n') + '\n';
+}
+// Heidenhain TNC Klartext (iTNC 530 / TNC 620 / 640; TNC 426/430 ile uyumlu komutlar): satır numaralı bloklar,
+// BLK FORM ham parça, TOOL CALL n Z S (takım boyu telafisi TOOL CALL ile kendiliğinden), L doğrular (R0 = yarıçap telafisi yok,
+// FMAX hızlı), delme CYCL DEF 200 (Q200 güvenlik mesafesi, Q201 derinlik yüzeyden artımsal, Q202 kademe, Q203 yüzey, Q204
+// ikinci güvenlik mesafesi) + L ... M99 çağrı. Geri çekme M140 MB MAX (takım ekseninde son sınıra). Açıklama ";".
+// Program adı BEGIN / END PGM'de aynı ve dosya adıyla aynı olmalı (kumanda böyle ister). Seçenekler gcode() ile aynı.
+// Heidenhain program adı: dosya adıyla aynı olmalı (büyük harf, rakam, alt çizgi)
+export const pgmName = (s) => (ascii(s || 'CIZIM').replace(/[^A-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'CIZIM').slice(0, 24);
+export function klartext(R, job, opt = {}) {
+  const Z0 = R.P.zero, L = [], st = R.P.stock;
+  const dry = opt.dryRun ? dryRunShift(R, opt.dryRun.clear) : 0;
+  const hn = (v) => { const s = fmt(v); return (s.startsWith('-') ? s : '+' + s).replace(/\.0$/, ''); };
+  const X = (x) => hn(x - Z0[0]), Y = (y) => hn(y - Z0[1]), Zf = (z) => hn(z + dry - Z0[2]);
+  const name = pgmName(opt.pgm || job.name);
+  let n = 0, cur = null;
+  const out = (s) => { if (opt.trace) opt.trace.push(cur); L.push(n++ + ' ' + s); };
+  const c = (t) => out('; ' + ascii(t).slice(0, 70));
+  const slowF = (oi, mi, f) => { const r = opt.slow && opt.slow.map.ops[oi] && opt.slow.map.ops[oi][mi]; return r && r.slow ? Math.max(1, f * (opt.slow.f || 0.5)) : f; };
+  const firstSeg = R.ops.map((op) => { const a = op.moves.findIndex((m) => m.k === 'f' || m.k === 'p' || m.k === 'd'); if (a < 0) return [0, -1]; let b = op.moves.findIndex((m, i) => i > a && m.k === 'r'); if (b < 0) b = op.moves.length; return [a, b - 1]; });
+  const passF = (oi, mi, f) => (opt.firstPass > 0 && mi >= firstSeg[oi][0] && mi <= firstSeg[oi][1] ? Math.max(1, f * opt.firstPass) : f);
+  out('BEGIN PGM ' + name + ' MM');
+  c('CIZIM ATOLYESI CAM - ' + (opt.date || ''));
+  c('SIFIR: ' + (job.zero === 'center' ? 'STOK UST YUZ ORTASI' : job.zero === 'bottom' ? 'STOK ALT ON SOL KOSE' : 'STOK UST YUZ ON SOL KOSE'));
+  if (opt.valuable) c('DEGERLI PARCA MODU: ILK GECISLER %' + Math.round((opt.firstPass || 1) * 100) + ' ILERLEME, RISKLI SATIRLAR YAVAS');
+  if (dry) { c('KURU CALISTIRMA - HAVADA DENEME - KESIM YAPMAZ'); c('TUM Z DEGERLERI ' + fmt(dry) + ' MM YUKARI KAYDIRILDI'); c('EN YUKSEK Z: ' + fmt(R.safe + dry - Z0[2]) + ' - Z STROGUNU KONTROL ET'); c('SOGUTMA KAPALI'); }
+  for (const op of R.ops) c('T' + op.tool.n + ' ' + TOOLN(op.tool) + ' - ' + op.name);
+  out('BLK FORM 0.1 Z X' + X(st.x0) + ' Y' + Y(st.y0) + ' Z' + Zf(st.zBot - dry));
+  out('BLK FORM 0.2 X' + X(st.x1) + ' Y' + Y(st.y1) + ' Z' + Zf(st.zTop - dry));
+  const safe = R.safe;
+  for (const [oi, op] of R.ops.entries()) {
+    const t = op.tool;
+    cur = null;
+    c(op.name + ' - T' + t.n + ' ' + TOOLN(t));
+    if (oi > 0) { out('M9'); out('M5'); }
+    out('M140 MB MAX');
+    out('TOOL CALL ' + t.n + ' Z S' + Math.round(t.rpm));
+    const m0 = op.moves.find((m) => m.k !== 'd') || op.moves[0];
+    out('L X' + X(m0.x) + ' Y' + Y(m0.y) + ' R0 FMAX M3');
+    cur = ['tc', oi];
+    out('L Z' + Zf(safe) + ' R0 FMAX' + (opt.coolant !== false && !dry ? ' M8' : ''));
+    cur = null;
+    let lx = m0.x, ly = m0.y, lz = safe, lf = null, cyc = null;
+    for (const [mi, mm] of op.moves.entries()) {
+      cur = [oi, mi];
+      const m = mm.k === 'r' ? mm : { ...mm, f: Math.min(slowF(oi, mi, mm.f), passF(oi, mi, mm.f)) };
+      if (m.k === 'd') {
+        // CYCL DEF 200: yüzey = R düzlemi − 2 mm, derinlik yüzeyden (negatif); Q204 = Q200 → çevrim R düzleminde biter (G99 gibi)
+        const surf = m.r - 2, depth = m.z - surf, pk = m.q > 0 ? m.q : -depth, key = [surf, depth, pk, Math.round(m.f)].map((v) => v.toFixed(4)).join();
+        if (cyc !== key) {
+          out('CYCL DEF 200 DRILLING');
+          out('  Q200=+2 ;SET-UP CLEARANCE'); out('  Q201=' + hn(depth) + ' ;DEPTH'); out('  Q206=' + Math.round(m.f) + ' ;FEED RATE FOR PLNGNG');
+          out('  Q202=' + hn(pk) + ' ;PLUNGING DEPTH'); out('  Q210=+0 ;DWELL TIME AT TOP'); out('  Q203=' + Zf(surf) + ' ;SURFACE COORDINATE');
+          out('  Q204=+2 ;2ND SET-UP CLEARANCE'); out('  Q211=+0 ;DWELL TIME AT DEPTH');
+          cyc = key;
+        }
+        out('L X' + X(m.x) + ' Y' + Y(m.y) + ' R0 FMAX M99');
+        lx = m.x; ly = m.y; lz = m.r;
+        continue;
+      }
+      const w = [];
+      if (Math.abs(m.x - lx) > 5e-4) w.push('X' + X(m.x));
+      if (Math.abs(m.y - ly) > 5e-4) w.push('Y' + Y(m.y));
+      if (Math.abs(m.z - lz) > 5e-4) w.push('Z' + Zf(m.z));
+      if (!w.length) continue;
+      if (m.k === 'r') { out('L ' + w.join(' ') + ' R0 FMAX'); lf = null; }   // FMAX yalnız o blokta geçerli; sonraki F yeniden yazılır
+      else { const f = Math.round(m.f); out('L ' + w.join(' ') + ' R0' + (f !== lf ? ' F' + f : '')); lf = f; }
+      lx = m.x; ly = m.y; lz = m.z;
+    }
+    cur = null;
+    if (Math.abs(lz - safe) > 5e-4) out('L Z' + Zf(safe) + ' R0 FMAX');
+  }
+  out('M9'); out('M5');
+  out('M140 MB MAX');
+  out('M30');
+  out('END PGM ' + name + ' MM');
   return L.join('\n') + '\n';
 }
 export const TOOLN = (t) => 'D' + fmt(t.d) + ' ' + (t.type === 'ball' ? 'KURESEL' : t.type === 'drill' ? 'MATKAP' : 'PARMAK FREZE');

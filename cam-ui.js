@@ -1,8 +1,8 @@
 // CNC sekmesi: takımlar, işlemler, takım yolu hesabı, malzeme kaldırma simülasyonu, G-kodu ve iş kartı.
 // api: { model() → { tris, holes, matId, name }, draw(spec), clear(), enter(), leave(), render(), toast(m), name(), saveBlob(b, n), snapshot(), date() }
-import * as C from './cam.js?v=20261127v';
+import * as C from './cam.js?v=20261127x';
 import { pdfFromJpegs } from './cutopt.js?v=20261112u';
-import * as GC from './gcheck.js?v=20261127w';
+import * as GC from './gcheck.js?v=20261127x';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 1) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));
@@ -296,10 +296,12 @@ export function createCamUI(api) {
   function download(dry) {
     if (!S.code) return;
     if (!dry && blockReason()) { api.toast(blockReason()); api.render(); return; }
-    const name = String(api.name() || 'parca').replace(/[^\w\-]+/g, '_').slice(0, 40) || 'parca';
-    const code = dry ? genCode({ dryRun: { clear: dryClear() }, program: 1002, slow: null, firstPass: 0 }).code : S.code;
-    api.saveBlob(new Blob([code.replace(/\n/g, cfg.post === 'grbl' ? '\n' : '\r\n')], { type: 'text/plain' }), name + (dry ? '_KURU' : '') + '.' + C.POSTS[cfg.post].ext);
-    api.toast(dry ? 'Kuru çalıştırma programı indirildi (O1002): takım stoğun ' + dryClear() + ' mm üstünden geçer' : 'G-kodu indirildi: USB belleğe kopyalayıp makineye tak');
+    const hh = cfg.post === 'heidenhain';
+    // Heidenhain: dosya adı program adıyla (BEGIN PGM) birebir aynı olmalı
+    const name = hh ? C.pgmName(api.name() || 'parca').slice(0, 19) + (dry ? '_KURU' : '') : (String(api.name() || 'parca').replace(/[^\w\-]+/g, '_').slice(0, 40) || 'parca') + (dry ? '_KURU' : '');
+    const code = dry ? genCode({ dryRun: { clear: dryClear() }, program: 1002, slow: null, firstPass: 0, pgm: name }).code : hh ? genCode({ pgm: name }).code : S.code;
+    api.saveBlob(new Blob([code.replace(/\n/g, cfg.post === 'grbl' ? '\n' : '\r\n')], { type: 'text/plain' }), name + '.' + C.POSTS[cfg.post].ext);
+    api.toast(dry ? 'Kuru çalıştırma programı indirildi (' + (hh ? name : 'O1002') + '): takım stoğun ' + dryClear() + ' mm üstünden geçer' : 'G-kodu indirildi: USB belleğe kopyalayıp makineye tak');
   }
   async function pdf() {
     if (!S.R) return;

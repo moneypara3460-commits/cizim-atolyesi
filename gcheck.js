@@ -5,7 +5,7 @@
 // Okunmayan her şey (makro değişkenleri, IF / GOTO, G68 dönme, G18 / G19 yayları, Siemens döngüleri, Heidenhain, Mazatrol)
 // satır numarasıyla bildirilir; böyle programda sonuç "eksik kontrol" diye işaretlenir, temiz sayılmaz.
 // Saf JS, DOM yok: Node testlerinde (tests/gcheck.test.mjs) aynen çalışır.
-import { riskMap } from './cam.js?v=20261127v';
+import { riskMap } from './cam.js?v=20261127x';
 
 const NUM = /^[+-]?(\d+\.?\d*|\.\d+)$/;
 // takım satırındaki açıklamadan çap tahmini: "D8", "DIA 8", "Ø8", "8MM", "8. FLAT"
