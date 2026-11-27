@@ -2,23 +2,29 @@
 // takım yolu (2B X-Z ve 3B), malzeme kaldırma simülasyonu, G-kodu, hata / güvenlik uyarıları, OCCT doğrulaması.
 // Hesap: lathe.js (saf). Simülasyon ve G-kodu aynı hareket listesini kullanır.
 // api: { THREE, group, hideModel(on), fit(box), render(), toast(m), saveBlob(b, n), name(), parts() → parça listesi, occt(op, args) }
-import * as L from './lathe.js?v=20261127k';
+import * as L from './lathe.js?v=20261127m';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 2) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));
 const fsec = (s) => (s < 60 ? Math.round(s) + ' sn' : Math.floor(s / 60) + ' dk ' + Math.round(s % 60) + ' sn');
 const KEY = 'cizim:lathe';
 const clone = (o) => JSON.parse(JSON.stringify(o));
+// Güvenli Kesim — değerli parça modu: güvenli mesafe en az 5 mm, kuru çalıştırma payı en az 10 mm, ilk geçişler ve riskli satırlar %50
+const VAL = { safe: 5, dry: 10, f: 0.5 };
+const CHECKS = [['zero', 'Z sıfırını parçanın ön yüzünden aldım (G54), ekranda kontrol ettim'], ['tool', 'Her takımın X / Z ofsetini, uç yarıçapını ve sanal uç numarasını girdim'], ['clamp', 'Parça aynada sağlam sıkılı, aynadan çıkış boyu programdakiyle aynı'], ['dry', 'Kuru çalıştırma programını havada çalıştırdım, sorun görmedim']];
 const OPC = [0x38bdf8, 0x22c55e, 0xf59e0b, 0xa78bfa, 0xf472b6, 0x2dd4bf, 0xfb7185, 0xfacc15, 0x60a5fa, 0x4ade80, 0xc084fc];
 
 function load() { try { const o = JSON.parse(localStorage.getItem(KEY) || 'null'); if (o && o.stock && o.ops && o.tools) return { ...L.exampleJob(), ...o }; } catch (e) { /* */ } return { ...L.exampleJob(), res: 0.1, lineNumbers: false }; }
 
 export function createLatheUI(api) {
   let job = load();
-  const S = { on: false, busy: null, R: null, issues: null, ev: null, time: null, code: null, cons: null, view: 'path', play: null, playing: false, speed: 4, occt: null, showScope: false, codeAll: false, err: null };
+  const S = { on: false, busy: null, R: null, issues: null, ev: null, time: null, code: null, cons: null, view: 'path', play: null, playing: false, speed: 4, occt: null, showScope: false, codeAll: false, err: null, risk: null, trace: null, checks: {} };
   const T = api.THREE;
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(job)); } catch (e) { /* */ } };
-  const invalidate = () => { stopPlay(); S.R = null; S.issues = null; S.ev = null; S.code = null; S.cons = null; S.play = null; S.occt = null; S.final = null; drawStatic(); };
+  const invalidate = () => { stopPlay(); S.R = null; S.issues = null; S.ev = null; S.code = null; S.cons = null; S.play = null; S.occt = null; S.final = null; S.risk = null; S.trace = null; S.checks = {}; drawStatic(); };
+  const planJob = () => (job.valuable ? { ...job, safe: Math.max(job.safe ?? 2, VAL.safe) } : job);
+  const dryClear = () => Math.max(job.dryClear || 10, job.valuable ? VAL.dry : 1);
+  const blockReason = () => { if (!job.valuable || !S.R) return ''; const miss = CHECKS.filter(([k]) => !S.checks[k]); return miss.length ? 'Değerli parça modu: indirmeden önce kesim öncesi kontrol listesini işaretle (' + miss.length + ' eksik).' : ''; };
   const changed = () => { save(); invalidate(); };
   const M = () => L.LATHE_MACHINES[job.mk] || L.LATHE_MACHINES.fanuc2x;
   const hasErr = () => !!(S.issues && S.issues.some((x) => x.level === 'hata'));
@@ -28,7 +34,7 @@ export function createLatheUI(api) {
     stopPlay(); S.err = null; S.busy = 'Takım yolları hesaplanıyor…'; api.render();
     await new Promise((r) => setTimeout(r, 20));
     try {
-      const R = L.planLathe(job);
+      const R = L.planLathe(planJob());
       if (!R.ok) { S.R = null; S.issues = R.issues; S.busy = null; drawStatic(); api.render(); return; }
       const sim = L.createSim(R, { res: job.res || 0.1 });
       // simülasyon dilimler hâlinde: sayfa donmaz
@@ -37,7 +43,7 @@ export function createLatheUI(api) {
       const issues = [...R.issues, ...sim.events.map((e) => ({ level: e.level, where: `${(e.op ?? 0) + 1}. ${L.OP_NAMES_L[job.ops[e.op]?.type] || ''} (hareket ${e.move + 1})`, msg: e.msg }))];
       if (ev.gougeArea > 0) issues.push({ level: 'hata', where: 'Simülasyon', msg: `Parça profiline girildi (fazla kesim): kesit ${nf(ev.gougeArea)} mm², Z ${nf(ev.gougeZ[1])} … ${nf(ev.gougeZ[0])}` });
       if (ev.residualArea > 0) issues.push({ level: 'uyarı', where: 'Simülasyon', msg: `Hedef profil dışında malzeme kaldı: kesit ${nf(ev.residualArea)} mm², Z ${nf(ev.residualZ[1])} … ${nf(ev.residualZ[0])}` });
-      S.R = R; S.final = sim; S.ev = ev; S.issues = issues; S.time = L.cycleTime(R);
+      S.R = R; S.final = sim; S.ev = ev; S.issues = issues; S.time = L.cycleTime(R); S.risk = L.latheRisk(R, sim);
       recode();
       S.view = 'path'; S.play = null;
     } catch (e) { S.R = null; S.err = 'Hesaplanamadı: ' + e.message; }
@@ -46,8 +52,8 @@ export function createLatheUI(api) {
   function recode() {
     if (!S.R) return;
     try {
-      const g = L.postLathe(S.R, { date: new Date().toLocaleDateString('tr-TR'), lineNumbers: !!job.lineNumbers });
-      S.code = g.text;
+      const trace = [], g = L.postLathe(S.R, { date: new Date().toLocaleDateString('tr-TR'), lineNumbers: !!job.lineNumbers, trace, slow: (job.slowRisk || job.valuable) && S.risk ? { risk: S.risk, f: VAL.f } : null, ...(job.valuable ? { valuable: true, firstPass: VAL.f } : {}) });
+      S.code = g.text; S.trace = trace;
       const b = L.parseLatheGcode(g.text, { radius: job.xMode === 'radius', homeR: M().xMax / 2, homeZ: M().zMax });
       const ctl = job.ops.some((o) => o.on !== false && o.comp === 'control' && (o.type === 'finish' || o.type === 'profile'));
       S.cons = ctl ? { skipped: true } : L.compareMoves(S.R.moves, b.moves, false);
@@ -279,14 +285,37 @@ export function createLatheUI(api) {
       h += card(`<div id="lz-ro" style="font-size:13.5px">${readoutText()}</div>`);
     }
     h += note('Kesikli kırmızı: hızlı hareket (G00). Renkli çizgiler: operasyonlar. Simülasyon eksenel simetrik kesitte hesaplanır ve 3B\'de döndürülerek gösterilir; diş bölgesi helis olarak değil, işlenmiş bölge olarak işaretlenir.');
+    // Güvenli Kesim
+    h += '<div class="lbl h">🛡 Güvenli Kesim</div>';
+    h += btn((job.valuable ? '☑' : '☐') + ' 💎 Değerli parça modu', 'lz-val', !!job.valuable, 'flex:1 0 100%;font-weight:700');
+    if (job.valuable) h += note('<b>Değerli parça modu açık:</b> güvenli mesafe en az ' + VAL.safe + ' mm, kuru çalıştırma payı en az ' + VAL.dry + ' mm; her operasyonun ilk kesme geçişi ve bütün riskli (sarı) satırlar %50 ilerlemeyle; hata varken ve kesim öncesi kontrol listesi işaretlenmeden G-kodu indirilmez. Program daha uzun sürer.');
+    const lines = S.code ? S.code.split('\n') : [], lv = lines.map((_, i) => { const mi = S.trace && S.trace[i]; return mi == null || !S.risk ? 0 : (S.risk.moves[mi] || { lvl: 0 }).lvl; });
+    const whyOf = (i) => { const mi = S.trace && S.trace[i]; return mi == null || !S.risk ? '' : (S.risk.moves[mi] || {}).why || ''; };
+    if (S.code) {
+      const nR = lv.filter((v) => v === 2).length, nY = lv.filter((v) => v === 1).length;
+      h += card(row('Kırmızı (hata, düzeltilmeden kesme)', nR + ' satır', nR ? '#ef4444' : '#22c55e') + row('Sarı (dikkat)', nY + ' satır', nY ? '#eab308' : '#22c55e') + row('Yeşil', lv.filter((v) => v === 0).length.toLocaleString('tr-TR') + ' satır', '#22c55e'));
+      const bad = []; lv.forEach((v, i) => { if (v) bad.push(i); }); bad.sort((a2, b2) => lv[b2] - lv[a2] || a2 - b2);
+      if (bad.length) h += `<div id="lz-risk" style="flex:1 0 100%;max-height:200px;overflow:auto;font-size:12.5px;line-height:1.4">${bad.slice(0, 40).map((i) => `<div style="border-left:4px solid ${lv[i] === 2 ? '#ef4444' : '#eab308'};padding:3px 8px;margin:3px 0;background:#0b1220;border-radius:6px"><code>${i + 1}: ${esc(lines[i].slice(0, 60))}</code><br>${esc(whyOf(i))}</div>`).join('')}${bad.length > 40 ? `<div style="color:#94a3b8">… ${bad.length - 40} satır daha</div>` : ''}</div>`;
+      h += job.valuable ? note('Değerli parça modunda riskli satırlarda ilerleme her zaman %50.') : btn((job.slowRisk ? '☑' : '☐') + ' Riskli (sarı) kesme satırlarında ilerlemeyi %50 düşür', 'lz-slow', !!job.slowRisk, 'flex:1 0 100%');
+      h += note('Her hareket, o ana kadar işlenmiş ham üzerinde denenir: hızlı harekette (G00) malzemeye çarpma, tutucu / bara çarpması ve ayna çenesine girme kırmızı; malzemeye güvenli mesafeden yakın biten hızlı hareket ve takım değişiminden sonraki ilk yaklaşma (ofset hatası en çok burada çıkar) sarı. Taret, punta ve kapak bu haritada yoktur; onlar için kuru çalıştırmayı kullan.' + (nR ? ' <b style="color:#f87171">Kırmızı satır varken programı kesimde kullanma.</b>' : ''));
+    }
     // G-kodu
     h += '<div class="lbl h">G-kodu</div>';
     if (S.code) {
-      const lines = S.code.split('\n'), er = hasErr();
+      const er = hasErr(), COL = ['transparent', 'rgba(234,179,8,.18)', 'rgba(239,68,68,.28)'], show = S.codeAll ? lines.length : Math.min(70, lines.length);
       if (er) h += `<div style="flex:1 0 100%;background:#3b0d0d;border-radius:10px;padding:8px 10px;font-size:13.5px">⛔ Hata var: G-kodu indirme kapalı. Aşağıdaki metin yalnız önizlemedir, üretimde kullanma.</div>`;
-      h += `<pre id="lz-code" style="flex:1 0 100%;max-height:${S.codeAll ? 520 : 240}px;overflow:auto;background:#0b1220;border:1px solid #1e293b;border-radius:10px;padding:8px;font-size:11.5px;line-height:1.35;margin:0">${esc((S.codeAll ? lines : lines.slice(0, 70)).join('\n'))}${!S.codeAll && lines.length > 70 ? '\n… (' + (lines.length - 70) + ' satır daha)' : ''}</pre>`;
+      h += `<pre id="lz-code" style="flex:1 0 100%;max-height:${S.codeAll ? 520 : 240}px;overflow:auto;background:#0b1220;border:1px solid #1e293b;border-radius:10px;padding:8px;font-size:11.5px;line-height:1.35;margin:0">${lines.slice(0, show).map((l, i) => (lv[i] ? `<span style="background:${COL[lv[i]]}">${esc(l)}</span>` : esc(l))).join('\n')}${!S.codeAll && lines.length > 70 ? '\n… (' + (lines.length - 70) + ' satır daha)' : ''}</pre>`;
       h += btn(S.codeAll ? 'Kısalt' : 'Tamamını göster (' + lines.length + ' satır)', 'lz-call', false, 'flex:1 1 45%') + btn((job.lineNumbers ? '☑' : '☐') + ' Satır numarası (N)', 'lz-ln', !!job.lineNumbers, 'flex:1 1 45%');
-      h += btn('⬇ G-kodu (.nc)', 'lz-dl-nc', false, 'flex:1 1 45%;font-weight:700') + btn('⬇ G-kodu (.txt)', 'lz-dl-txt', false, 'flex:1 1 45%');
+      if (job.valuable) {
+        h += '<div class="lbl h">Kesim öncesi kontrol (değerli parça)</div>';
+        h += CHECKS.map(([k, t]) => btn((S.checks[k] ? '☑ ' : '☐ ') + t, 'lz-chk-' + k, !!S.checks[k], 'flex:1 0 100%;text-align:left;font-size:13.5px')).join('');
+      }
+      const blocked = blockReason();
+      if (blocked) h += `<div style="flex:1 0 100%;background:#3b0d0d;border:1px solid #7f1d1d;border-radius:10px;padding:8px 10px;font-size:13.5px">⛔ ${esc(blocked)}</div>`;
+      h += btn('⬇ G-kodu (.nc)', 'lz-dl-nc', false, 'flex:1 1 45%;font-weight:700' + (blocked ? ';opacity:.45' : '')) + btn('⬇ G-kodu (.txt)', 'lz-dl-txt', false, 'flex:1 1 45%' + (blocked ? ';opacity:.45' : ''));
+      const dd = L.latheDryShift(S.R, dryClear());
+      h += btn('🌬 Kuru çalıştırma programı (havada)', 'lz-dry', false, 'flex:1 1 60%') + num('Kuru çalıştırma payı (mm)', 'dryClear', dryClear(), '1 1 35%');
+      h += note('<b>Kuru çalıştırma:</b> aynı program, bütün Z değerleri ' + nf(dd.dz, 1) + ' mm ileri (aynadan uzağa) kaydırılmış hâli. Takım ham ön yüzünün en az ' + nf(dryClear(), 0) + ' mm önünden geçer, hiçbir yere değmez; soğutma kapalı. Önce bunu çalıştırıp X hareketlerini, takım değişimlerini ve sırayı havada izle, sonra asıl programı yükle.' + (dd.over > 0 ? ' <b style="color:#f87171">Dikkat: kaydırılmış program makinenin Z stroğunu ' + nf(dd.over, 1) + ' mm aşıyor; payı küçült.</b>' : ''));
       if (S.cons) h += note(S.cons.skipped ? 'Kumanda telafisi (G41/G42) seçili operasyon var: G-kodu parça konturunu programlar, simülasyon kumandanın uygulayacağı ofseti hesaplar (bire bir geri okuma karşılaştırması yapılmaz).' : S.cons.ok ? `<span id="lz-cons">✅ G-kodu geri okundu: ${S.cons.count[1]} hareket simülasyonla aynı, en büyük sapma ${nf(S.cons.maxErr, 4)} mm.</span>` : `<span id="lz-cons" style="color:#f87171">⛔ G-kodu simülasyon yoluyla uyuşmuyor (${S.cons.count.join(' / ')} hareket, sapma ${nf(S.cons.maxErr, 3)} mm)</span>`);
     }
     h += btn('🧱 OCCT ile geometrik doğrulama', 'lz-occt', false, 'flex:1 0 100%');
@@ -343,10 +372,24 @@ export function createLatheUI(api) {
     if (a === 'lz-rew') { stopPlay(); startSim(0); api.render(); return true; }
     if (a === 'lz-opn' || a === 'lz-opp') { if (!S.play) return true; stopPlay(); const i = S.play.sim.st.i, ops = S.R.ops; let to; if (a === 'lz-opn') { const nx = ops.find((o) => o.i0 > i - 1 && o.i0 >= i); to = nx ? nx.i0 + 3 : S.R.moves.length; if (to <= i) { const k = ops.findIndex((o) => o.i0 + 3 > i); to = k >= 0 ? ops[k].i1 : S.R.moves.length; } } else { const pv = [...ops].reverse().find((o) => o.i0 + 3 < i); to = pv ? pv.i0 + 3 : 0; } startSim(Math.max(0, Math.min(S.R.moves.length, to))); readout(); api.render(); return true; }
     if (a === 'lz-call') { S.codeAll = !S.codeAll; api.render(); return true; }
+    if (a === 'lz-val') { job.valuable = !job.valuable; changed(); api.render(); api.toast(job.valuable ? 'Değerli parça modu açık: takım yollarını yeniden hesapla' : 'Değerli parça modu kapalı'); return true; }
+    if (a === 'lz-slow') { job.slowRisk = !job.slowRisk; save(); recode(); api.render(); return true; }
+    if ((m = a.match(/^lz-chk-(\w+)$/))) { S.checks[m[1]] = !S.checks[m[1]]; api.render(); return true; }
+    if (a === 'lz-dry') {
+      if (!S.R) return true;
+      if (hasErr()) { api.toast('Önce hataları düzelt'); return true; }
+      const d = L.latheDryShift(S.R, dryClear());
+      const txt2 = L.postLathe(S.R, { date: new Date().toLocaleDateString('tr-TR'), lineNumbers: !!job.lineNumbers, dryRun: { clear: dryClear() }, program: 1002 }).text;
+      const name = (String(api.name() || 'torna').replace(/[^\w\-]+/g, '_').slice(0, 40) || 'torna') + '_torna_KURU';
+      api.saveBlob(new Blob([txt2.replace(/\n/g, '\r\n')], { type: 'text/plain' }), name + '.nc');
+      api.toast('Kuru çalıştırma programı indirildi (O1002): Z ' + nf(d.dz, 1) + ' mm ileri kaydırıldı' + (d.over > 0 ? ' — Z stroğu aşılıyor!' : ''));
+      return true;
+    }
     if (a === 'lz-ln') { job.lineNumbers = !job.lineNumbers; save(); recode(); api.render(); return true; }
     if (a === 'lz-dl-nc' || a === 'lz-dl-txt') {
       if (!S.code) return true;
       if (hasErr()) { api.toast('G-kodu engellendi: önce hataları düzelt'); return true; }
+      if (blockReason()) { api.toast(blockReason()); api.render(); return true; }
       const name = String(api.name() || 'torna').replace(/[^\w\-]+/g, '_').slice(0, 40) || 'torna';
       api.saveBlob(new Blob([S.code.replace(/\n/g, '\r\n')], { type: 'text/plain' }), name + '_torna.' + (a === 'lz-dl-nc' ? 'nc' : 'txt')); api.toast('G-kodu indirildi (makinede doğrulanmamış program)'); return true;
     }
@@ -371,6 +414,7 @@ export function createLatheUI(api) {
     const p = k.split('.');
     if (k === 'mk' || k === 'mat' || k === 'xMode') job[k] = v;
     else if (k === 'res') job.res = n;
+    else if (k === 'dryClear') { if (Number.isFinite(n) && n >= 1) { job.dryClear = n; save(); } api.render(); return; }
     else if (k === 'partLen' || k === 'safe' || k === 'retract') { if (Number.isFinite(n)) job[k] = n; }
     else if (p[0] === 'stock' || p[0] === 'chuck') { if (Number.isFinite(n)) job[p[0]][p[1]] = n; }
     else if (p[0] === 'od' || p[0] === 'id') { const q = job[p[0]][+p[1]]; if (!q) return; if (p[2] === 'cw') q.cw = v === '1'; else if (!Number.isFinite(n)) return; else if (p[2] === 'd') q.r = n / 2; else if (p[2] === 'R') { q.R = Math.max(0, n); if (!q.R) { delete q.R; delete q.cw; } } else q.z = n; }

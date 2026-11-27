@@ -1409,6 +1409,28 @@ await T('CNC torna: örnek kademeli mil (9 operasyon), hatasız denetim, 3B sim�
   await act(page, 'c5-mode-3'); expect(await page.locator('#tabbody [data-act="cn-go"]').count() === 1 && !(await page.locator('#tabbody [data-act="lz-go"]').count()), 'freze moduna dönüldü');
 }, { view: PHONE });
 
+await T('CNC torna Güvenli Kesim: risk haritası (ilk yaklaşmalar sarı), kuru çalıştırma programı (Z ileri, soğutma kapalı), değerli parça modu: ilk geçiş %50, kontrol listesi işaretlenmeden indirme yok', 'H-TornaGuvenli', async ({ page }) => {
+  await tab(page, 'cam'); await act(page, 'lz-on');
+  await page.waitForSelector('#tabbody [data-act="lz-go"]'); await act(page, 'lz-ex');
+  await act(page, 'lz-go'); await page.waitForSelector('#lz-sum', { timeout: 120000 });
+  let b = await body(page);
+  expect(/🛡 Güvenli Kesim/.test(b) && /Kırmızı \(hata, düzeltilmeden kesme\)\s*0 satır/.test(b) && /Sarı \(dikkat\)\s*9 satır/.test(b), 'risk haritası: ' + b.slice(b.indexOf('Güvenli Kesim'), b.indexOf('Güvenli Kesim') + 300));
+  expect(/ofsetini/.test(await page.locator('#lz-risk').innerText()), 'sarı satır sebebi');
+  const dry = await download(page, () => act(page, 'lz-dry'));
+  expect(/_torna_KURU\.nc$/.test(dry.name) && /KURU CALISTIRMA/.test(dry.text) && !/M08/.test(dry.text) && /O1002/.test(dry.text), 'kuru çalıştırma: ' + dry.name);
+  // değerli parça modu
+  await act(page, 'lz-val'); await act(page, 'lz-go'); await page.waitForSelector('#lz-sum', { timeout: 120000 });
+  b = await body(page);
+  expect(/Değerli parça modu açık/.test(b) && /kontrol listesini işaretle \(4 eksik\)/.test(b), 'değerli parça engeli');
+  expect(/DEGERLI PARCA MODU/.test(await page.locator('#lz-code').innerText()), 'G-kodu başlığı');
+  await act(page, 'lz-dl-nc'); await page.waitForTimeout(300);
+  for (const k of ['zero', 'tool', 'clamp', 'dry']) await act(page, 'lz-chk-' + k);
+  expect(!/kontrol listesini işaretle/.test(await body(page)), 'liste tamam');
+  const dl = await download(page, () => act(page, 'lz-dl-nc'));
+  expect(/DEGERLI PARCA MODU/.test(dl.text) && /\r\nM30\r\n/.test(dl.text), 'değerli parça G-kodu indirildi');
+  await act(page, 'lz-val');
+}, { view: PHONE });
+
 /* ---------- I. 4 / 5 eksen ---------- */
 await T('4 eksen: divizör indeksli işlem, çarpışma kontrolü, simülasyon, G-kodu (Fanuc 4. eksen)', 'I-4/5', async ({ page }) => {
   await tab(page, 'dims'); await setK(page, 'w', 60); await setK(page, 'h', 20); await setK(page, 'l', 20);

@@ -37,7 +37,7 @@ import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingVa
 import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261112u';
 import { createCamUI } from './cam-ui.js?v=20261127d';
 import { createCam5UI } from './cam5-ui.js?v=20261127k';
-import { createLatheUI } from './lathe-ui.js?v=20261127k';
+import { createLatheUI } from './lathe-ui.js?v=20261127m';
 import { machinePose } from './kin.js?v=20261112u';
 import { createOcctUI } from './occt-ui.js?v=20261119d';
 import * as DLK from './delik.js?v=20261120b';
