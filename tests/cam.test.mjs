@@ -130,6 +130,40 @@ t('kuru çalıştırma: her Z stok üstünün en az 5 mm yukarısında, X-Y yolu
   // asıl program etkilenmedi
   assert.equal(C.gcode(R, job, 'fanuc'), C.gcode(R, job, 'fanuc', {}));
 });
+t('risk haritası: düzgün programda kırmızı yok; G0 ile malzemeye giriş ve kısa takım kırmızı', () => {
+  const job = { tris: POCKET, tools: TOOLS, stock: { side: 2, top: 1, bottom: 5 }, res: 0.5, holes: [{ x: 7, z: 20, d: 5, top: 20, bottom: -1 }], ops: [{ type: 'face', on: true, tool: 1 }, { type: 'rough', on: true, tool: 1 }, { type: 'walls', on: true, tool: 1 }, { type: 'drill', on: true, tool: 3 }] };
+  const R = C.plan(job), M = C.riskMap(R);
+  assert.equal(M.count.red, 0, 'üretilen programda kırmızı satır olmamalı');
+  assert.ok(M.count.yellow > 0 && M.ops.flat().some((r) => r.lvl === 1 && /dik dalma/.test(r.why) && r.slow), 'dik dalmalar sarı');
+  assert.equal(M.ops.length, R.ops.length); M.ops.forEach((o, i) => assert.equal(o.length, R.ops[i].moves.length));
+  // yapay hata: kaba boşaltmanın ilk kesme hareketinden önce stoğun ortasına G0 ile 5 mm derine in
+  const bad = { ...R, ops: R.ops.map((o) => ({ ...o, moves: [...o.moves] })) }, mv = bad.ops[1].moves, k = mv.findIndex((m) => m.k === 'f');
+  mv.splice(k, 0, { k: 'r', x: 30, y: -20, z: R.P.stock.zTop - 5 });
+  const MB = C.riskMap(bad);
+  assert.ok(MB.ops[1][k].lvl === 2 && /G0/.test(MB.ops[1][k].why), MB.ops[1][k].why);
+  // kesme boyu 10 mm, basamak 15 mm → kırmızı
+  const J2 = { tris: dome(), tools: [{ ...TOOLS[0], flute: 10 }], stock: { side: 2, top: 1, bottom: 5 }, res: 0.5, holes: [], ops: [{ type: 'rough', on: true, tool: 1, stepdown: 15 }] };
+  const M2 = C.riskMap(C.plan(J2));
+  assert.ok(M2.count.red > 0 && M2.ops.flat().some((r) => /kesme boyunu/.test(r.why)));
+  // 3B ince işleme kaba boşaltmadan kalan basamaklara G0 ile inmez
+  const J3 = { tris: dome(), tools: TOOLS, stock: { side: 2, top: 1, bottom: 5 }, res: 0.5, holes: [], ops: [{ type: 'face', on: true, tool: 1 }, { type: 'rough', on: true, tool: 1 }, { type: 'finish', on: true, tool: 2, stepover: 0.6 }] };
+  assert.equal(C.riskMap(C.plan(J3)).count.red, 0);
+});
+t('risk haritası G-koduna: her satırın kaynağı izlenir; isteğe bağlı yavaşlatma yalnız riskli satırlarda ilerlemeyi yarıya indirir', () => {
+  const job = { tris: POCKET, tools: TOOLS, stock: { side: 2, top: 1, bottom: 5 }, res: 0.5, holes: [], ops: [{ type: 'rough', on: true, tool: 1 }] };
+  const R = C.plan(job), M = C.riskMap(R), tr = [];
+  const A = C.gcode(R, job, 'fanuc', { trace: tr }), lines = A.trimEnd().split('\n');
+  assert.equal(tr.length, lines.length);
+  assert.ok(tr.some((x) => x && x[0] === 'tc') && /G43/.test(lines[tr.findIndex((x) => x && x[0] === 'tc')]));
+  assert.equal(A, C.gcode(R, job, 'fanuc'), 'iz almak programı değiştirmez');
+  const tr2 = [], B = C.gcode(R, job, 'fanuc', { trace: tr2, slow: { map: M, f: 0.5 } }).trimEnd().split('\n');
+  const plunge = TOOLS[0].plunge;
+  let slowed = 0;
+  B.forEach((l, i) => { const x = tr2[i]; if (!x || x[0] === 'tc') return; const r = M.ops[x[0]][x[1]], m = R.ops[x[0]].moves[x[1]], f = l.match(/F(\d+)/);
+    if (f && r.slow) { assert.equal(+f[1], Math.round(m.f * 0.5), l); slowed++; }
+    if (f && !r.slow) assert.equal(+f[1], Math.round(m.f), l); });
+  assert.ok(slowed > 0 && B.some((l) => l.includes('F' + plunge / 2)));
+});
 t('alttan girinti (üstten görünmeyen) uyarısı', () => {
   // köprü: iki ayak + üst plaka (altı boş)
   const tr = Float32Array.from([...boxTris([0, 0, 0], [10, 20, 30]), ...boxTris([40, 0, 0], [50, 20, 30]), ...boxTris([0, 20, 0], [50, 30, 30])]);
