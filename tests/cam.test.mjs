@@ -209,6 +209,17 @@ t('Heidenhain Klartext: blok numaraları, BEGIN / END adı, BLK FORM, TOOL CALL,
   assert.ok(dq203 + dq201 >= 5 - 1e-9, 'kuru: delik ucu stok üstünde');
   assert.ok(!D.some((l) => / M8$/.test(l)));
 });
+t('Mazak EIA / ISO: Fanuc programıyla aynı, yalnız başlıkta EIA/ISO notu; satır numarası ve kuru çalıştırma çalışır', () => {
+  const job = { tris: POCKET, tools: TOOLS, stock: { side: 2, top: 1, bottom: 5 }, res: 0.5, holes: [{ x: 7, z: 20, d: 5, top: 20, bottom: -1 }], ops: [{ type: 'face', on: true, tool: 1 }, { type: 'drill', on: true, tool: 3 }], name: 'Kapak', zero: 'corner' };
+  const R = C.plan(job);
+  const F = C.gcode(R, job, 'fanuc').split('\n'), M = C.gcode(R, job, 'mazak').split('\n');
+  assert.equal(M.length, F.length + 1);
+  assert.ok(M.some((l) => /^\(MAZAK EIA\/ISO PROGRAMI - MAZATROL DEGIL/.test(l)));
+  assert.deepEqual(M.filter((l) => !/MAZAK/.test(l)), F);
+  assert.ok(/\nN10 /.test(C.gcode(R, job, 'mazak', { lineNumbers: true })));
+  assert.ok(C.gcode(R, job, 'mazak', { dryRun: { clear: 5 } }).includes('KURU CALISTIRMA'));
+  assert.equal(C.POSTS.mazak.ext, 'eia');
+});
 t('alttan girinti (üstten görünmeyen) uyarısı', () => {
   // köprü: iki ayak + üst plaka (altı boş)
   const tr = Float32Array.from([...boxTris([0, 0, 0], [10, 20, 30]), ...boxTris([40, 0, 0], [50, 20, 30]), ...boxTris([0, 20, 0], [50, 30, 30])]);

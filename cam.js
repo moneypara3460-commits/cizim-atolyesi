@@ -618,6 +618,8 @@ export const POSTS = {
   mach3: { name: 'Mach3 / Mach4 / LinuxCNC', ext: 'tap' },
   grbl: { name: 'GRBL (hobi CNC, router)', ext: 'gcode' },
   heidenhain: { name: 'Heidenhain TNC (Klartext, .h)', ext: 'h' },
+  // Mazak EIA / ISO modu (Mazatrol Matrix, SmoothG / SmoothX, Nexus): Fanuc lehçesi; Mazatrol diyalog programı değildir
+  mazak: { name: 'Mazak (EIA / ISO modu)', ext: 'eia' },
 };
 const TR = { 'ç': 'C', 'Ç': 'C', 'ğ': 'G', 'Ğ': 'G', 'ı': 'I', 'İ': 'I', 'ö': 'O', 'Ö': 'O', 'ş': 'S', 'Ş': 'S', 'ü': 'U', 'Ü': 'U', 'Ø': 'D', '×': 'X', '°': ' DER' };
 export const ascii = (s) => String(s).replace(/[çÇğĞıİöÖşŞüÜØ×°]/g, (c) => TR[c]).replace(/[()]/g, '').replace(/[^\x20-\x7e]/g, '').toUpperCase();
@@ -634,7 +636,7 @@ export function dryRunShift(R, clear = 5) {
 }
 export function gcode(R, job, postKey, opt = {}) {
   if (postKey === 'heidenhain') return klartext(R, job, opt);
-  const post = postKey, Z0 = R.P.zero, L = [], fanuc = post === 'fanuc', grbl = post === 'grbl';
+  const post = postKey, Z0 = R.P.zero, L = [], mazak = post === 'mazak', fanuc = post === 'fanuc' || mazak, grbl = post === 'grbl';
   const dry = opt.dryRun ? dryRunShift(R, opt.dryRun.clear) : 0;
   const X = (x) => fmt(x - Z0[0]), Y = (y) => fmt(y - Z0[1]), Zf = (z) => fmt(z + dry - Z0[2]);
   const c = (t) => '(' + ascii(t).slice(0, 70) + ')';
@@ -650,6 +652,7 @@ export function gcode(R, job, postKey, opt = {}) {
   if (fanuc) out('O' + String(opt.program || 1001).padStart(4, '0') + ' ' + c(job.name || 'CIZIM ATOLYESI'));
   else out(c(job.name || 'CIZIM ATOLYESI'));
   out(c('CIZIM ATOLYESI CAM - ' + (opt.date || '')));
+  if (mazak) out(c('MAZAK EIA/ISO PROGRAMI - MAZATROL DEGIL. KUMANDADA EIA/ISO OLARAK AC'));
   out(c('STOK X' + fmt(st.x1 - st.x0) + ' Y' + fmt(st.y1 - st.y0) + ' Z' + fmt(st.zTop - st.zBot)));
   out(c('SIFIR: ' + (job.zero === 'center' ? 'STOK UST YUZ ORTASI' : job.zero === 'bottom' ? 'STOK ALT ON SOL KOSE' : 'STOK UST YUZ ON SOL KOSE')));
   if (opt.valuable) out(c('DEGERLI PARCA MODU: ILK GECISLER %' + Math.round((opt.firstPass || 1) * 100) + ' ILERLEME, RISKLI SATIRLAR YAVAS, GUVENLI Z ' + fmt(R.safe - R.P.stock.zTop) + ' MM'));

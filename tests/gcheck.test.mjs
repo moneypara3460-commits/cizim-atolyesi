@@ -66,7 +66,7 @@ t('uygulamanın kendi ürettiği program okununca kendi risk haritasıyla aynı 
   const TOOLS = [{ id: 1, n: 1, type: 'flat', d: 8, flutes: 3, flute: 40, rpm: 8000, feed: 1200, plunge: 300 }, { id: 3, n: 3, type: 'drill', d: 5, flutes: 2, flute: 50, rpm: 3000, feed: 200, plunge: 150 }];
   const job = { tris: POCKET, tools: TOOLS, stock: { side: 2, top: 1, bottom: 5 }, res: 0.5, holes: [{ x: 7, z: 20, d: 5, top: 20, bottom: -1 }], ops: [{ type: 'face', on: true, tool: 1 }, { type: 'rough', on: true, tool: 1 }, { type: 'walls', on: true, tool: 1 }, { type: 'drill', on: true, tool: 3 }], zero: 'corner' };
   const R = C.plan(job), st = R.P.stock, z0 = R.P.zero;
-  for (const post of ['fanuc', 'mach3', 'grbl']) {
+  for (const post of ['fanuc', 'mach3', 'grbl', 'mazak']) {
     const g = C.gcode(R, job, post), stock = { x0: st.x0 - z0[0], x1: st.x1 - z0[0], y0: st.y0 - z0[1], y1: st.y1 - z0[1], zTop: st.zTop - z0[2], zBot: st.zBot - z0[2] };
     const r = GC.checkProgram(g, stock, { 1: { d: 8, type: 'flat', flute: 40 }, 3: { d: 5, type: 'drill', flute: 50 } }, { res: 0.5 });
     assert.ok(r.complete, post + ' eksiksiz okunmalı'); assert.equal(r.red, 0, post + ': ' + JSON.stringify(r.lines.filter((l) => l.lvl === 2).slice(0, 3)));

@@ -1,8 +1,8 @@
 // CNC sekmesi: takımlar, işlemler, takım yolu hesabı, malzeme kaldırma simülasyonu, G-kodu ve iş kartı.
 // api: { model() → { tris, holes, matId, name }, draw(spec), clear(), enter(), leave(), render(), toast(m), name(), saveBlob(b, n), snapshot(), date() }
-import * as C from './cam.js?v=20261127x';
+import * as C from './cam.js?v=20261127y';
 import { pdfFromJpegs } from './cutopt.js?v=20261112u';
-import * as GC from './gcheck.js?v=20261127x';
+import * as GC from './gcheck.js?v=20261127y';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 1) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));
@@ -42,7 +42,7 @@ export function createCamUI(api) {
   const fillCut = (t, force) => { if (force || !(t.rpm > 0) || !(t.feed > 0)) { const s = C.suggestCut(mk(), t, cfg.machine.maxRpm); t.rpm = s.rpm; t.feed = s.feed; t.plunge = s.plunge; } };
   const invalidate = () => { S.R = null; S.code = null; S.sim = null; S.simPlay = false; S.res = null; S.risk = null; S.trace = null; S.checks = {}; api.clear(); };
   // G-kodu: risk haritası izi her zaman alınır; "riskli satırlarda yavaşla" açıksa ilerleme yarıya iner
-  const genCode = (extra = {}) => { const trace = []; const code = C.gcode(S.R, { ...S.job, zero: cfg.zero }, cfg.post, { date: api.date(), lineNumbers: cfg.post === 'fanuc' && cfg.lineNumbers, trace, slow: (cfg.slowRisk || cfg.valuable) && S.risk ? { map: S.risk, f: 0.5 } : null, ...(cfg.valuable ? { valuable: true, firstPass: VAL.f } : {}), ...extra }); return { code, trace }; };
+  const genCode = (extra = {}) => { const trace = []; const code = C.gcode(S.R, { ...S.job, zero: cfg.zero }, cfg.post, { date: api.date(), lineNumbers: (cfg.post === 'fanuc' || cfg.post === 'mazak') && cfg.lineNumbers, trace, slow: (cfg.slowRisk || cfg.valuable) && S.risk ? { map: S.risk, f: 0.5 } : null, ...(cfg.valuable ? { valuable: true, firstPass: VAL.f } : {}), ...extra }); return { code, trace }; };
   const dryClear = () => (cfg.valuable ? Math.max(cfg.dryClear || 5, VAL.dry) : cfg.dryClear || 5);
   // indirmeye engel: değerli parça modunda kırmızı satır ya da işaretlenmemiş kontrol
   const blockReason = () => {
