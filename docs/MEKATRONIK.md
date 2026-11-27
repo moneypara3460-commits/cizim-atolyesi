@@ -83,5 +83,12 @@ Hesap `meka/kam.js`, görünüm `meka/kam-ui.js`, test `tests/meka-kam.test.mjs`
   isteğe bağlı kol kütlesi / yay ile temas kuvveti N = F0 + k·s + m·a (+ m·g): negatifse kol diskten kalkar, gereken ön yük önerilir; mil torku.
 - **Çıktılar:** DXF (profil, mil deliği, temel daire, 0° çizgisi), dış kontur G-kodu (Fanuc / ISO; takım yarıçapı ofseti, tırmanma, kademeli derinlik;
   içbükey kısma sığmayan takım reddedilir), teknik resim + rapor PDF, açı – strok CSV.
-- **Bilinen sınırlar:** yalnız dış profilli disk ve öteleme yapan kol; salınan (kollu) izleyici, kanallı (oluklu) kam ve silindirik kam yok.
-  Sürtünme, makara ataleti, kol esnekliği ve titreşim yok sayılır. G-kodunda mil deliği ve kama kanalı yok (ayrı işlenir).
+- **Kanallı (oluklu) disk:** makara oluğun içinde; iki yanak, dış çap (dış et payı ile). Yay gerekmez, zıplama yok; temas kuvveti işaret
+  değiştirince yanak geçişi (vuruntu) uyarısı. Dış yanak, makara merkezi yolunun içbükey eğriliği < makara yarıçapı ise alttan kesilir (hata).
+  Kanal G-kodu: merkezden kesen parmak freze, her kademede merkez yolunda rampayla iniş (dik dalma yok), takım makaradan küçükse yanaklara
+  doğru ötelenmiş ek turlar (tur başı en çok 0,8·D); freze kanal genişliğinden büyükse ya da yanak alttan kesiliyorsa kod üretilmez.
+- **Sallanan kol:** kol mili uzaklığı C, kol boyu L; plan değerleri kol açısıdır (°). ψ₀ kosinüs teoreminden; makara yönü kola dik.
+  Dinamik makara noktasındaki yay boyu (L·Δψ) üzerinden eşdeğer doğrusal izleyiciyle. Kol mili diskin dışında değilse (C < disk yarıçapı + 10 mm) hata.
+- **Şablonlar:** "Poşet kaynak çenesi" (dış profilli, düz giden kol), "Kesme bıçağı kolu" (kanallı, sallanan kol). Değerler temsilîdir.
+- **Bilinen sınırlar:** silindirik (tambur) kam ve konjuge (çift diskli) kam yok. Sürtünme, makara ataleti, kol esnekliği ve titreşim yok sayılır;
+  sallanan kolda kütle makara noktasına indirgenmiş girilir. G-kodunda mil deliği, kama kanalı ve kanallı diskin dış çapı yok (ayrı işlenir).

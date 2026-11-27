@@ -1,6 +1,6 @@
 // Çalıştır: node tests/meka-kam.test.mjs — Eksantrik (kam) tasarımı. Beklenen değerler kapalı formüllerle (Norton, bölüm 8).
 import assert from 'node:assert/strict';
-import { law, YASALAR, kamHesap, kamSanitize, bolumler, hareket, kamDXF, kamCSV, kamGcode, kamRapor, KAM_ORNEK, KAM_DEFAULTS } from '../meka/kam.js';
+import { law, YASALAR, kamHesap, kamSanitize, bolumler, hareket, kamDXF, kamCSV, kamGcode, kamRapor, KAM_ORNEK, KAM_ORNEK2, KAM_DEFAULTS } from '../meka/kam.js';
 import { checkProgram } from '../gcheck.js';
 
 let fail = 0;
@@ -89,9 +89,68 @@ t('Çıktılar: DXF profil + delik, CSV, rapor; G-kodu güvenli kesim kontrolün
   const conc = kamHesap({ plan: [[0, 0], [60, 30], [120, 30], [180, 0], [360, 0]], Rb: 40, Dr: 20 });
   if (isFinite(conc.rhoConc)) assert.ok(kamGcode(conc, { takim: 2 * (conc.rhoConc + 10) + 2 }).hata);
 });
+t('Sallanan kol: bekleme bölgesinde basınç açısı kapalı formülle (makara yönü kola dik), kosinüs teoremi |B| = Rp', () => {
+  const g = { ...KAM_DEFAULTS, izleyici: 'salinim', C: 110, L: 90, plan: [[0, 0], [90, 0], [180, 20], [270, 20], [360, 0]] }, r = kamHesap(g), Rp = g.Rb + g.Dr / 2;
+  assert.ok(!r.hata, r.hata);
+  near(Math.hypot(r.rows[0].bx, r.rows[0].by), Rp, 1e-9);
+  near(Math.hypot(r.rows[0].bx - g.C, r.rows[0].by), g.L, 1e-9);
+  r.rows.forEach((q, i) => {
+    if (!(q.deg > 2 && q.deg < 88) && !(q.deg > 182 && q.deg < 268)) return;   // bekleme: makara yolu daire
+    const psi = r.psi0 + q.s * Math.PI / 180, B = [q.bx, q.by], Bh = B.map((v) => v / Math.hypot(...B)), dir = [Math.sin(psi), Math.cos(psi)];
+    near(q.phi, Math.acos(Math.abs(Bh[0] * dir[0] + Bh[1] * dir[1])) * 180 / Math.PI, 1e-3, 'φ ' + q.deg);
+    near(Math.hypot(...r.pitch[i]), Math.hypot(...B), 1e-9);
+  });
+  // kol açısı plan değerini izler: ψ − ψ0 = s
+  r.rows.forEach((q) => near(Math.atan2(q.by, -(q.bx - g.C)) - r.psi0, q.s * Math.PI / 180, 1e-9));
+  assert.ok(kamHesap({ ...g, C: 300 }).hata);   // makara temel daireye ulaşamaz
+});
+t('Sallanan kol çok uzunsa düz giden kola yaklaşır (basınç açısı, hız, ivme)', () => {
+  const Lk = 20000, base = { ...KAM_DEFAULTS, n: 60 }, Rp = base.Rb + base.Dr / 2;
+  const tr = kamHesap(base), deg = (mm) => mm / Lk * 180 / Math.PI;
+  const os = kamHesap({ ...base, izleyici: 'salinim', L: Lk, C: Math.sqrt(Lk * Lk - Rp * Rp), yon: 'cw', plan: base.plan.map(([a, s]) => [a, deg(s)]) });
+  const tc = kamHesap({ ...base, yon: 'cw' });
+  assert.ok(!os.hata, os.hata);
+  near(os.phiMax, tc.phiMax, 0.3); near(os.vMax, tc.vMax, tc.vMax * 0.005); near(os.aMax, tc.aMax, tc.aMax * 0.005);
+  assert.ok(tr.phiMax > 0);
+});
+t('Kanallı kam: iki yanak makara merkezi yolundan tam Rr uzakta; yay yokken zıplama yok, yanak geçişi bildirilir', () => {
+  const g = { ...KAM_ORNEK(), kamTur: 'kanal', k: 0, F0: 0, dikey: false, kanalDerin: 10, kenar: 10 }, r = kamHesap(g);
+  assert.ok(!r.hata && r.uygun, r.hata || JSON.stringify(r.kontroller.filter((c) => !c.ok)));
+  r.pitch.forEach((p, i) => { near(Math.hypot(r.prof[i][0] - p[0], r.prof[i][1] - p[1]), g.Dr / 2, 1e-9); near(Math.hypot(r.prof2[i][0] - p[0], r.prof2[i][1] - p[1]), g.Dr / 2, 1e-9); });
+  assert.ok(!r.kontroller.some((c) => /KALKAR/.test(c.metin)) && r.gecis >= 2 && r.kontroller.some((c) => /öbür yanağına geçer/.test(c.metin)));
+  near(r.Rdis, Math.max(...r.prof2.map((q) => Math.hypot(...q))) + 10, 1e-9);
+  const dxf = kamDXF(r); assert.equal((dxf.match(/\r\nVERTEX\r\n/g) || []).length, 2 * r.prof.length); assert.ok(/\r\nDIS\r\n/.test(dxf));
+  assert.equal(kamCSV(r).split('\r\n')[0].split(';').length, 9);
+  // dış yanak alttan kesme: keskin içbükey dönüş + büyük makara
+  const bad = kamHesap({ ...g, plan: [[0, 0], [40, 30], [80, 0], [360, 0]], Rb: 40, Dr: 40, delik: 10 });
+  assert.ok(!bad.uygun && bad.kontroller.some((c) => !c.ok && /dış yanağı .* alttan kesilir/.test(c.metin)), JSON.stringify(bad.kontroller.map((c) => c.metin)));
+  assert.ok(kamGcode(bad).hata);
+  assert.ok(kamHesap({ ...g, kanalDerin: 20 }).hata);   // disk kalınlığından derin
+});
+t('Kanal G-kodu: rampayla iner, takım yanaklara değmez ama son turda yanakları bitirir, kesim kontrolünden kırmızısız geçer', () => {
+  const g = { ...KAM_ORNEK(), kamTur: 'kanal', kanalDerin: 8, kademe: 3 }, r = kamHesap(g), G = kamGcode(r, { takim: 12 });
+  assert.ok(!G.hata, G.hata); assert.equal(G.tur, 5);   // 10 mm yanak payı, tur başı en çok 0,8·D → merkez + 2×2 tur
+  assert.ok(!/G1 Z-/.test(G.kod), 'dik dalma yok (Z yalnız rampada X Y ile birlikte)');
+  const R = G.stok / 2, c = checkProgram(G.kod, { x0: -R, x1: R, y0: -R, y1: R, zTop: 0, zBot: -g.kalinlik }, { 1: { d: 12, type: 'flat', flute: 30 } }, { res: 0.5 });
+  assert.ok(c.complete); assert.equal(c.red, 0, JSON.stringify(c.lines.filter((l) => l.lvl === 2).slice(0, 3)));
+  const tp = [...G.kod.matchAll(/X(-?[\d.]+) Y(-?[\d.]+)/g)].map((m) => [+m[1], +m[2]]);
+  let minFl = Infinity;
+  for (const p of tp.filter((_, i) => i % 7 === 0)) { let a = Infinity, b = Infinity; for (let i = 0; i < r.prof.length; i += 2) { a = Math.min(a, Math.hypot(p[0] - r.prof[i][0], p[1] - r.prof[i][1])); b = Math.min(b, Math.hypot(p[0] - r.prof2[i][0], p[1] - r.prof2[i][1])); } minFl = Math.min(minFl, a, b); }
+  assert.ok(minFl > 6 - 0.05 && minFl < 6 + 0.2, 'yanağa uzaklık ' + minFl);
+  const zs = [...G.kod.matchAll(/Z(-[\d.]+)/g)].map((m) => +m[1]); near(Math.min(...zs), -8, 1e-9);
+  assert.ok(kamGcode(r, { takim: 40 }).hata);   // kanaldan geniş takım
+  const G1 = kamGcode(r, { takim: g.Dr }); assert.equal(G1.tur, 1);   // takım = makara: tek tur
+});
+t('Sallanan kol: kol mili diske çarpıyorsa hata; "Kesme bıçağı kolu" şablonu uygun ve kanal G-kodu üretilir', () => {
+  const r = kamHesap(KAM_ORNEK2());
+  assert.ok(r.uygun && r.sal && r.kanal, JSON.stringify(r.kontroller.filter((c) => !c.ok)));
+  assert.ok(r.A[0] >= r.Rdis + 10 && !kamGcode(r).hata);
+  const bad = kamHesap({ ...KAM_ORNEK2(), C: 130, L: 100 });
+  assert.ok(!bad.uygun && bad.kontroller.some((c) => !c.ok && /Kol mili diske çarpar/.test(c.metin)));
+});
 t('Kayıt temizleme: bozuk değerler varsayılana döner', () => {
-  const g = kamSanitize({ Rb: 'x', yasa: 'yok', yon: 'sağ', plan: 'a' });
-  assert.equal(g.Rb, KAM_DEFAULTS.Rb); assert.equal(g.yasa, 'mods'); assert.equal(g.yon, 'ccw'); assert.deepEqual(g.plan, KAM_DEFAULTS.plan);
+  const g = kamSanitize({ Rb: 'x', yasa: 'yok', yon: 'sağ', plan: 'a', kamTur: 'x', izleyici: 1 });
+  assert.equal(g.Rb, KAM_DEFAULTS.Rb); assert.equal(g.yasa, 'mods'); assert.equal(g.yon, 'ccw'); assert.deepEqual(g.plan, KAM_DEFAULTS.plan); assert.equal(g.kamTur, 'disk'); assert.equal(g.izleyici, 'oteleme');
 });
 
 console.log(fail ? `\n${fail} test BAŞARISIZ` : '\nTüm testler geçti');
