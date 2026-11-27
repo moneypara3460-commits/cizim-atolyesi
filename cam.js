@@ -640,6 +640,9 @@ export function gcode(R, job, postKey, opt = {}) {
   // opt.slow: { map: riskMap(R), f: 0,5 } — "slow" işaretli kesme / dalma hareketlerinde ilerleme f katına iner
   let nline = 0, cur = null; const out = (s) => { if (opt.trace) opt.trace.push(cur); if (opt.lineNumbers && fanuc && s && !s.startsWith('%') && !s.startsWith('(') && !s.startsWith('O')) { nline += 10; L.push('N' + nline + ' ' + s); } else L.push(s); };
   const slowF = (oi, mi, f) => { const r = opt.slow && opt.slow.map.ops[oi] && opt.slow.map.ops[oi][mi]; return r && r.slow ? Math.max(1, f * (opt.slow.f || 0.5)) : f; };
+  // opt.firstPass: katsayı (ör. 0,5) — her işlemin ilk kesme geçişi (ilk kesmeden ilk hızlı harekete kadar) bu katla yavaş
+  const firstSeg = R.ops.map((op) => { const a = op.moves.findIndex((m) => m.k === 'f' || m.k === 'p' || m.k === 'd'); if (a < 0) return [0, -1]; let b = op.moves.findIndex((m, i) => i > a && m.k === 'r'); if (b < 0) b = op.moves.length; return [a, b - 1]; });
+  const passF = (oi, mi, f) => (opt.firstPass > 0 && mi >= firstSeg[oi][0] && mi <= firstSeg[oi][1] ? Math.max(1, f * opt.firstPass) : f);
   const st = R.P.stock;
   if (!grbl) out('%');
   if (fanuc) out('O' + String(opt.program || 1001).padStart(4, '0') + ' ' + c(job.name || 'CIZIM ATOLYESI'));
@@ -647,6 +650,7 @@ export function gcode(R, job, postKey, opt = {}) {
   out(c('CIZIM ATOLYESI CAM - ' + (opt.date || '')));
   out(c('STOK X' + fmt(st.x1 - st.x0) + ' Y' + fmt(st.y1 - st.y0) + ' Z' + fmt(st.zTop - st.zBot)));
   out(c('SIFIR: ' + (job.zero === 'center' ? 'STOK UST YUZ ORTASI' : job.zero === 'bottom' ? 'STOK ALT ON SOL KOSE' : 'STOK UST YUZ ON SOL KOSE')));
+  if (opt.valuable) out(c('DEGERLI PARCA MODU: ILK GECISLER %' + Math.round((opt.firstPass || 1) * 100) + ' ILERLEME, RISKLI SATIRLAR YAVAS, GUVENLI Z ' + fmt(R.safe - R.P.stock.zTop) + ' MM'));
   if (dry) {
     out(c('KURU CALISTIRMA - HAVADA DENEME PROGRAMI - KESIM YAPMAZ'));
     out(c('TUM Z DEGERLERI ' + fmt(dry) + ' MM YUKARI KAYDIRILDI'));
@@ -676,7 +680,7 @@ export function gcode(R, job, postKey, opt = {}) {
     let inCycle = false;
     for (const [mi, m0_] of op.moves.entries()) {
       cur = [oi, mi];
-      const m = m0_.k === 'r' ? m0_ : { ...m0_, f: slowF(oi, mi, m0_.f) };
+      const m = m0_.k === 'r' ? m0_ : { ...m0_, f: Math.min(slowF(oi, mi, m0_.f), passF(oi, mi, m0_.f)) };
       if (m.k === 'd') {
         if (grbl || opt.expandCycles) {
           out('G0 X' + X(m.x) + ' Y' + Y(m.y)); out('G0 Z' + Zf(m.r));

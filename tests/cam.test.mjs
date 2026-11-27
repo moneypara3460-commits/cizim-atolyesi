@@ -164,6 +164,24 @@ t('risk haritası G-koduna: her satırın kaynağı izlenir; isteğe bağlı yav
     if (f && !r.slow) assert.equal(+f[1], Math.round(m.f), l); });
   assert.ok(slowed > 0 && B.some((l) => l.includes('F' + plunge / 2)));
 });
+t('değerli parça: her işlemin yalnız ilk kesme geçişi yavaş, başlık yazılı; riskli satır yavaşlatmasıyla birlikte en yavaşı geçerli', () => {
+  const job = { tris: POCKET, tools: TOOLS, stock: { side: 2, top: 1, bottom: 5 }, res: 0.5, holes: [], safe: 15, ops: [{ type: 'face', on: true, tool: 1 }, { type: 'rough', on: true, tool: 1 }] };
+  const R = C.plan(job), M = C.riskMap(R), tr = [];
+  assert.equal(R.safe, R.P.stock.zTop + 15);
+  const G = C.gcode(R, job, 'fanuc', { trace: tr, valuable: true, firstPass: 0.5, slow: { map: M, f: 0.5 } }).trimEnd().split('\n');
+  assert.ok(G.some((l) => /DEGERLI PARCA MODU: ILK GECISLER %50/.test(l)));
+  R.ops.forEach((op, oi) => {
+    const a = op.moves.findIndex((m) => m.k !== 'r'); let b = op.moves.findIndex((m, i) => i > a && m.k === 'r'); if (b < 0) b = op.moves.length;
+    let inFirst = 0, after = 0;
+    G.forEach((l, i) => { const x = tr[i]; if (!x || x[0] !== oi) return; const f = l.match(/F(\d+)/); if (!f) return; const m = op.moves[x[1]], r = M.ops[oi][x[1]];
+      const want = Math.round(x[1] >= a && x[1] < b || r.slow ? m.f * 0.5 : m.f);
+      assert.equal(+f[1], want, l); if (x[1] < b) inFirst++; else after++; });
+    assert.ok(inFirst > 0, op.name + ' ilk geçiş');
+    if (op.moves.length > b + 2) assert.ok(after > 0, op.name + ' sonrası normal');
+  });
+  // değerli parça seçeneği olmadan program aynı kalır
+  assert.equal(C.gcode(R, job, 'fanuc'), C.gcode(R, job, 'fanuc', { firstPass: 0 }));
+});
 t('alttan girinti (üstten görünmeyen) uyarısı', () => {
   // köprü: iki ayak + üst plaka (altı boş)
   const tr = Float32Array.from([...boxTris([0, 0, 0], [10, 20, 30]), ...boxTris([40, 0, 0], [50, 20, 30]), ...boxTris([0, 20, 0], [50, 30, 30])]);
