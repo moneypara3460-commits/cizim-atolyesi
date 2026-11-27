@@ -89,6 +89,17 @@ Hesap `meka/kam.js`, görünüm `meka/kam-ui.js`, test `tests/meka-kam.test.mjs`
   doğru ötelenmiş ek turlar (tur başı en çok 0,8·D); freze kanal genişliğinden büyükse ya da yanak alttan kesiliyorsa kod üretilmez.
 - **Sallanan kol:** kol mili uzaklığı C, kol boyu L; plan değerleri kol açısıdır (°). ψ₀ kosinüs teoreminden; makara yönü kola dik.
   Dinamik makara noktasındaki yay boyu (L·Δψ) üzerinden eşdeğer doğrusal izleyiciyle. Kol mili diskin dışında değilse (C < disk yarıçapı + 10 mm) hata.
-- **Şablonlar:** "Poşet kaynak çenesi" (dış profilli, düz giden kol), "Kesme bıçağı kolu" (kanallı, sallanan kol). Değerler temsilîdir.
-- **Bilinen sınırlar:** silindirik (tambur) kam ve konjuge (çift diskli) kam yok. Sürtünme, makara ataleti, kol esnekliği ve titreşim yok sayılır;
-  sallanan kolda kütle makara noktasına indirgenmiş girilir. G-kodunda mil deliği, kama kanalı ve kanallı diskin dış çapı yok (ayrı işlenir).
+- **Çift disk (konjuge):** aynı milde iki disk, kolda iki makara: 1. disk iter, 2. disk geri getirir; yay gerekmez. Düz giden kolda
+  makaralar arası sabit (0 = otomatik 2d + strok), 2. diskte basınç açısı tanφ₂ = |s′|/(Dk − d − s); sallanan kolda ikinci kol birinciye aynalı
+  (kollar arası 2ψ₀). İki diskin ayrı basınç açısı ve alttan kesme denetimi, diskler arası yük geçişi (vuruntu) uyarısı; DXF'te iki disk yan yana,
+  her disk için ayrı G-kodu (O2001 / O2003).
+- **Tambur (silindirik) kam:** kanal silindir yüzeyinde, kol silindir ekseni boyunca gider. Basınç açısı ve yanak eğriliği açınımda, kanal dibinde
+  (en kötü durum): tanφ = |s′|/Ri, ρ = (1 + y′²)^1,5/|y″|. DXF dış yüzey açınımıdır (silindire sarıp işaretlemek için). 4. eksen G-kodu (O2004):
+  silindir ekseni X, dönme A, A sürekli artar, rampayla iniş; freze çapı makara çapına eşit olmalı (radyal eksenli makaranın kanalı tek geçişte
+  doğru çıkar), değilse kod üretilmez.
+- **Kama kanalı:** DIN 6885-1 paralel kama göbek kanalı (genişlik b, derinlik t2, mil çapı 6–130 mm), 0° çizgisi yönünde; DXF, ekran ve PDF'te.
+- **Şablonlar:** "Poşet kaynak çenesi" (dış profilli, düz giden kol), "Kesme bıçağı kolu" (kanallı, sallanan kol), "Hızlı transfer itici"
+  (çift disk), "Dolum başlığı iniş" (tambur). Değerler temsilîdir.
+- **Bilinen sınırlar:** sallanan kollu tambur kam, kanal yanağı konik makara ve çok turlu (sarmal) kam yok. Sürtünme, makara ataleti, kol
+  esnekliği ve titreşim yok sayılır; sallanan kolda kütle makara noktasına indirgenmiş girilir. G-kodunda mil deliği, kama kanalı ve kanallı
+  diskin dış çapı yok (ayrı işlenir). Tambur G-kodunda A ile birlikte harekette ilerlemenin (F) kumandaya göre yorumu kontrol edilmeli.

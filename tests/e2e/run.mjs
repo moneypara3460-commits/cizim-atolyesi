@@ -886,7 +886,7 @@ await T('Mekatronik eksantrik (kam): poşet çenesi şablonu uygun; disk çizimi
   await act(page, 'mk-qornek');
   b = await body(page);
   expect(/✓ Uygun/.test(b) && /kol diskten kalkmaz/.test(b) && /30° sınırının altında/.test(b), 'şablon uygun: ' + b.slice(0, 400));
-  expect((await page.locator('#tabbody svg path').count()) === 1 && (await page.locator('#tabbody svg polyline').count()) === 4, 'disk ve grafikler');
+  expect((await page.locator('#tabbody svg path').count()) === 2 && (await page.locator('#tabbody svg polyline').count()) === 4, 'disk (profil + mil deliği) ve grafikler');
   // açı kaydırıcı: 160°'de kol 30 mm
   await set('aci', 160);
   expect(/Disk açısı: 160° · kol 30,0 mm/.test(await body(page)), 'açı');
@@ -933,6 +933,31 @@ await T('Mekatronik eksantrik 2: kanallı disk + sallanan kol şablonu uygun; ti
   // düz giden kola ve dış profilli diske dön
   await set('izleyici', 'oteleme'); await set('kamTur', 'disk');
   expect((await page.locator('#tabbody [data-mkq="e"]').count()) === 1 && (await page.locator('#tabbody [data-mkq="kanalDerin"]').count()) === 0 && /Kol konumu/.test(await body(page)), 'tip değişimi');
+});
+
+await T('Mekatronik eksantrik 3: çift disk (iki disk, iki G-kodu, kama kanalı) ve tambur (açınım, 4. eksen G-kodu, freze = makara denetimi); PDF', 'M-Eksantrik3', async ({ page }) => {
+  await tab(page, 'meka');
+  await act(page, 'mk-v-kam');
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mkq="${k}"]`); const tg = await i.evaluate((e) => e.tagName); if (tg === 'SELECT') await i.selectOption(String(v)); else await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(120); };
+  await act(page, 'mk-qornek3');
+  let b = await body(page);
+  expect(/✓ Uygun/.test(b) && /2\. disk: en büyük basınç açısı/.test(b) && /Çift diskte kol diskten kalkmaz/.test(b) && /DIN 6885 \(8 mm genişlik/.test(b), 'çift disk: ' + b.slice(0, 400));
+  const n1 = await download(page, () => act(page, 'mk-qnc')), n2 = await download(page, () => act(page, 'mk-qnc2'));
+  expect(/O2001/.test(n1.text) && /O2003/.test(n2.text) && /_disk1\.nc$/.test(n1.name) && /_disk2\.nc$/.test(n2.name), 'iki G-kodu');
+  const dxf = await download(page, () => act(page, 'mk-qdxf'));
+  expect((dxf.text.match(/\r\nPOLYLINE\r\n8\r\nDELIK/g) || []).length === 2, 'iki diskte kama kanallı delik');
+  const pdf = await download(page, () => act(page, 'mk-qpdf'));
+  expect(/^%PDF/.test(pdf.text), 'çift disk PDF');
+  await act(page, 'mk-qornek4');
+  b = await body(page);
+  expect(/✓ Uygun/.test(b) && /açınım/.test(b) && /kanal dibinde/.test(b) && (await page.locator('#tabbody [data-mkq="izleyici"]').count()) === 0, 'tambur: ' + b.slice(0, 300));
+  const nc = await download(page, () => act(page, 'mk-qnc'));
+  expect(/O2004/.test(nc.text) && / A\d/.test(nc.text), 'tambur G-kodu');
+  await set('takim', 20); await act(page, 'mk-qnc');
+  await page.waitForTimeout(300);
+  expect(/makara çapına eşit olmalı/.test(await page.evaluate(() => document.body.innerText)), 'freze ≠ makara uyarısı');
+  const pdf2 = await download(page, () => act(page, 'mk-qpdf'));
+  expect(/^%PDF/.test(pdf2.text), 'tambur PDF');
 });
 
 await T('Mekatronik 8. aşama izlenebilirlik: gereksinimler benzetim ve kart sonucundan değerlendirilir; revizyon dört göz ile onaylanır; yenileme sonrası parmak izi aynı, değişiklik algılanır; matris CSV, PDF; STEP AP242 (gerçek OCCT, geri okuma)', 'M-Izlenebilirlik', async ({ page }) => {

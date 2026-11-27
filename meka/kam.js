@@ -44,7 +44,7 @@ export const KAM_DEFAULTS = {
   plan: [[0, 0], [90, 0], [180, 40], [270, 40], [360, 0]],
   yasa: 'mods', Rb: 50, Dr: 30, e: 0, yon: 'ccw', delik: 20, kalinlik: 15, n: 60,
   m: 0, k: 0, F0: 0, dikey: true,
-  kamTur: 'disk', izleyici: 'oteleme', C: 120, L: 100, kanalDerin: 10, kenar: 10,
+  kamTur: 'disk', izleyici: 'oteleme', C: 120, L: 100, kanalDerin: 10, kenar: 10, Dk: 0, kama: false, Dc: 120,
   // G-kodu
   takim: 10, devir: 6000, ilerleme: 600, kademe: 3, guvenli: 10,
 };
@@ -53,6 +53,10 @@ export const KAM_ORNEK = () => ({ ...KAM_DEFAULTS, plan: [[0, 0], [100, 0], [160
 
 // "Kesme bıçağı kolu" şablonu (temsilî): kanallı disk, sallanan kol; 100–180° 15° kalk, 200–290° geri
 export const KAM_ORNEK2 = () => ({ ...KAM_DEFAULTS, plan: [[0, 0], [100, 0], [180, 15], [200, 15], [290, 0], [360, 0]], yasa: 'sikloid', kamTur: 'kanal', izleyici: 'salinim', Rb: 60, Dr: 26, C: 150, L: 120, delik: 25, kalinlik: 20, kanalDerin: 10, kenar: 10, n: 80, m: 1.5, k: 0, F0: 0, dikey: false, takim: 12 });
+// "Hızlı transfer itici" şablonu (temsilî): çift disk, düz giden kol, yüksek devir — yay yok, kol diskten kalkmaz
+export const KAM_ORNEK3 = () => ({ ...KAM_DEFAULTS, plan: [[0, 0], [60, 0], [150, 40], [210, 40], [300, 0], [360, 0]], yasa: 'p4567', kamTur: 'konjuge', izleyici: 'oteleme', Rb: 66, Dr: 30, Dk: 0, delik: 30, kama: true, kalinlik: 18, n: 150, m: 4, k: 0, F0: 0, dikey: false });
+// "Dolum başlığı iniş" şablonu (temsilî): tambur kam, başlık 50 mm iner, dolum süresince bekler, kalkar
+export const KAM_ORNEK4 = () => ({ ...KAM_DEFAULTS, plan: [[0, 0], [100, 50], [220, 50], [320, 0], [360, 0]], yasa: 'mods', kamTur: 'tambur', izleyici: 'oteleme', Dc: 210, Dr: 24, kanalDerin: 14, kenar: 12, delik: 35, kama: true, n: 40, m: 3, k: 0, F0: 0, dikey: true, takim: 24, devir: 2500, ilerleme: 300, kademe: 2 });
 const tf = (v, d) => v.toFixed(d).replace('.', ',');
 const num = (v, d) => (Number.isFinite(+v) ? +v : d);
 export function kamSanitize(o) {
@@ -61,7 +65,8 @@ export function kamSanitize(o) {
   out.plan = Array.isArray(x.plan) && x.plan.length >= 2 ? x.plan.slice(0, 40).map((p) => [num(p && p[0], 0), num(p && p[1], 0)]) : D.plan.map((p) => p.slice());
   if (!YASALAR[out.yasa]) out.yasa = 'mods';
   if (out.yon !== 'cw') out.yon = 'ccw';
-  if (out.kamTur !== 'kanal') out.kamTur = 'disk';
+  if (!['disk', 'kanal', 'konjuge', 'tambur'].includes(out.kamTur)) out.kamTur = 'disk';
+  if (out.kamTur === 'tambur') out.izleyici = 'oteleme';
   if (out.izleyici !== 'salinim') out.izleyici = 'oteleme';
   return out;
 }
@@ -93,12 +98,14 @@ export function hareket(seg, yasa, th) {
 export function kamHesap(g0, opt = {}) {
   const g = kamSanitize(g0), { seg, err } = bolumler(g.plan);
   if (err.length) return { hata: err.join(' · '), g };
-  const Rr = g.Dr / 2, Rp = g.Rb + Rr, sal = g.izleyici === 'salinim', kanal = g.kamTur === 'kanal', e = sal ? 0 : g.e;
+  if (g.kamTur === 'tambur') return tamburHesap(g, seg, opt);
+  const Rr = g.Dr / 2, Rp = g.Rb + Rr, sal = g.izleyici === 'salinim', kanal = g.kamTur === 'kanal', konj = g.kamTur === 'konjuge', kapali = kanal || konj, e = sal ? 0 : g.e;
   if (!(g.Rb > 0 && Rr > 0)) return { hata: 'Temel daire ve makara ölçüsü sıfırdan büyük olmalı', g };
   if (!sal && Math.abs(e) >= Rp) return { hata: 'Kaçıklık birincil daire yarıçapından (Rb + makara yarıçapı) küçük olmalı', g };
   if (g.delik > 0 && g.delik / 2 >= g.Rb - (kanal ? Rr + 3 : 3)) return { hata: kanal ? 'Mil deliği kanala çok yakın (delik yarıçapı + 3 mm < temel daire − makara yarıçapı olmalı)' : 'Mil deliği temel daireye çok yakın (delik yarıçapı + 3 mm < temel daire olmalı)', g };
   if (kanal && !(g.kanalDerin > 0 && g.kanalDerin < g.kalinlik)) return { hata: 'Kanal derinliği sıfırdan büyük ve disk kalınlığından küçük olmalı', g };
   const smax = Math.max(...g.plan.map((p) => p[1]));
+  const N = opt.N || 1440, dth = 2 * PI / N, hd = 1e-5, w = 2 * PI * g.n / 60;
   let psi0 = 0;
   if (sal) {
     if (!(g.C > 0 && g.L > 0)) return { hata: 'Kol mili uzaklığı ve kol boyu girilmeli', g };
@@ -114,20 +121,48 @@ export function kamHesap(g0, opt = {}) {
   const DF = (s) => (sal ? [Math.sin(psi0 + s * PI / 180), Math.cos(psi0 + s * PI / 180)] : [0, 1]);
   const rot = (a, v) => { const c = Math.cos(a), sn = Math.sin(a); return [c * v[0] - sn * v[1], sn * v[0] + c * v[1]]; };
   const P = (th) => rot(sg * th, BF(hareket(seg, g.yasa, th)[0]));
-  const N = opt.N || 1440, dth = 2 * PI / N, hd = 1e-5, w = 2 * PI * g.n / 60;
+  // çift disk (konjuge): ikinci makara aynı kola bağlı, öbür yönden basar. Düz giden kolda makaralar arası Dk sabit
+  // (B₂ = [e, d + s − Dk]); sallanan kolda ikinci kol birinciye x eksenine göre ayna (ψ₂ = ψ − 2ψ₀ → B₂ = A + L·(−cos(s − ψ₀), sin(s − ψ₀))).
+  let Dk = 0, BF2 = null, DF2 = null;
+  if (konj) {
+    const bosluk = Rr + (g.delik > 0 ? g.delik / 2 : 0) + 5;
+    if (sal) {
+      if (smax * PI / 180 >= psi0 - 0.05) return { hata: `Çift diskte kol açısı başlangıç açısından (${tf(psi0 * 180 / PI, 1)}°) epey küçük olmalı: salınımı küçült ya da mil uzaklığı / kol boyunu değiştir`, g };
+      BF2 = (s) => [g.C - g.L * Math.cos(s * PI / 180 - psi0), g.L * Math.sin(s * PI / 180 - psi0)];
+      DF2 = (s) => [Math.sin(s * PI / 180 - psi0), Math.cos(s * PI / 180 - psi0)];
+      if (Math.hypot(...BF2(smax)) < bosluk) return { hata: '2. makara disk merkezine çok yakın geliyor: salınımı küçült ya da temel daireyi büyüt', g };
+    } else {
+      Dk = g.Dk > 0 ? g.Dk : 2 * d + smax;
+      BF2 = (s) => [e, d + s - Dk]; DF2 = () => [0, 1];
+      if (Math.hypot(e, d + smax - Dk) < bosluk || d + smax - Dk > 0) return { hata: `2. makara disk merkezine çok yakın geliyor: makaralar arası en az ${Math.ceil(d + smax + bosluk)} mm olmalı (0 = otomatik)`, g };
+    }
+  }
+  const P2 = konj ? (th) => rot(sg * th, BF2(hareket(seg, g.yasa, th)[0])) : null;
+  // bir makara merkezi yolunun θ'daki geometrisi: nokta, dış normal, eğrilik (+ dışbükey), basınç açısı
+  const geo = (Pf, th, dirF) => {
+    const p = Pf(th), pa = Pf(th - hd), pb = Pf(th + hd);
+    const d1 = [(pb[0] - pa[0]) / (2 * hd), (pb[1] - pa[1]) / (2 * hd)], d2 = [(pb[0] - 2 * p[0] + pa[0]) / (hd * hd), (pb[1] - 2 * p[1] + pa[1]) / (hd * hd)];
+    const L = Math.hypot(d1[0], d1[1]);
+    let n = [d1[1] / L, -d1[0] / L]; if (n[0] * p[0] + n[1] * p[1] < 0) n = [-n[0], -n[1]];
+    const cross = d1[0] * d2[1] - d1[1] * d2[0];   // eğri sg yönünde dolaşır: o yönde sola dönüş = dışbükey
+    const rho = (sg * cross > 0 ? 1 : -1) * L ** 3 / Math.max(Math.abs(cross), 1e-30);
+    const dir = rot(sg * th, dirF);
+    return { p, n, rho, phi: Math.acos(Math.min(1, Math.abs(n[0] * dir[0] + n[1] * dir[1]))) * 180 / PI };
+  };
+  const ik = konj ? { pitch: [], prof: [], nrm: [], phiMax: 0, phiAt: 0, rhoMin: Infinity, rhoAt: 0, rhoConc: Infinity } : null;
   const rows = [], prof = [], prof2 = [], pitch = [], nrm = [];
   let phiMax = 0, phiAt = 0, rhoMin = Infinity, rhoAt = 0, rhoConc = Infinity, concAt = 0, vMax = 0, aMax = 0, aMin = 0, jMax = 0, Nmin = Infinity, NminAt = 0, Nmax = 0, Tmax = 0, F0req = -Infinity, gecis = 0, prevSign = 0;
   for (let i = 0; i < N; i++) {
     const th = i * dth, [s, s1, s2, s3] = hareket(seg, g.yasa, th);
-    const p = P(th), pa = P(th - hd), pb = P(th + hd);
-    const d1 = [(pb[0] - pa[0]) / (2 * hd), (pb[1] - pa[1]) / (2 * hd)], d2 = [(pb[0] - 2 * p[0] + pa[0]) / (hd * hd), (pb[1] - 2 * p[1] + pa[1]) / (hd * hd)];
-    const L = Math.hypot(d1[0], d1[1]);
-    let n = [d1[1] / L, -d1[0] / L]; if (n[0] * p[0] + n[1] * p[1] < 0) n = [-n[0], -n[1]];   // dışa bakan normal
-    // eğri kam ekseninde sg yönünde dolaşır (sg = +1: saat yönünün tersi): o yönde sola dönüş = dışbükey
-    const cross = d1[0] * d2[1] - d1[1] * d2[0];
-    const rho = (sg * cross > 0 ? 1 : -1) * L ** 3 / Math.max(Math.abs(cross), 1e-30);   // + dışbükey, − içbükey
-    const dir = rot(sg * th, DF(s));   // makara hareket yönü (kam ekseninde)
-    const phi = Math.acos(Math.min(1, Math.abs(n[0] * dir[0] + n[1] * dir[1]))) * 180 / PI;
+    const { p, n, rho, phi } = geo(P, th, DF(s));
+    let phi2 = null;
+    if (konj) {
+      const q = geo(P2, th, DF2(s));
+      ik.pitch.push(q.p); ik.nrm.push(q.n); ik.prof.push([q.p[0] - Rr * q.n[0], q.p[1] - Rr * q.n[1]]); phi2 = q.phi;
+      if (q.phi > ik.phiMax) { ik.phiMax = q.phi; ik.phiAt = th * 180 / PI; }
+      if (q.rho > 0 && q.rho < ik.rhoMin) { ik.rhoMin = q.rho; ik.rhoAt = th * 180 / PI; }
+      if (q.rho < 0 && -q.rho < ik.rhoConc) ik.rhoConc = -q.rho;
+    }
     pitch.push(p); nrm.push(n); prof.push([p[0] - Rr * n[0], p[1] - Rr * n[1]]);
     if (kanal) prof2.push([p[0] + Rr * n[0], p[1] + Rr * n[1]]);
     const v = s1 * kf * w / 1000, a = s2 * kf * w * w / 1000, j = s3 * kf * w ** 3 / 1000;   // makara yolunda m/s, m/s², m/s³
@@ -149,60 +184,144 @@ export function kamHesap(g0, opt = {}) {
     if (rho < 0 && -rho < rhoConc) { rhoConc = -rho; concAt = th; }
     vMax = Math.max(vMax, Math.abs(v)); aMax = Math.max(aMax, a); aMin = Math.min(aMin, a); jMax = Math.max(jMax, Math.abs(j));
     const bf = BF(s);
-    rows.push({ deg: th * 180 / PI, s, v, a, j, phi, rho, N: Nc, T, bx: bf[0], by: bf[1] });
+    const b2 = konj ? BF2(s) : null;
+    rows.push({ deg: th * 180 / PI, s, v, a, j, phi, phi2, rho, N: Nc, T, bx: bf[0], by: bf[1], b2x: b2 && b2[0], b2y: b2 && b2[1] });
   }
   const K_ = [], ok = (b, duzey, metin) => K_.push({ ok: b, duzey, metin });
   ok(phiMax <= 30, phiMax > 45 ? 'hata' : 'uyari', `En büyük basınç açısı ${tf(phiMax, 1)}° (${tf((phiAt * 180 / PI), 0)}°'de)` + (phiMax <= 30 ? ' — 30° sınırının altında.' : ': kol bu noktada çok dik itiliyor, kızakta sıkışabilir. Temel daireyi büyüt ya da itme açısını genişlet (30° altı önerilir).'));
   const yanak = kanal ? 'kanalın iç yanağı' : 'disk';
   ok(rhoMin >= Rr, 'hata', isFinite(rhoMin) ? `Dışbükey kısımda en küçük eğrilik yarıçapı (makara merkezi yolu) ${tf(rhoMin, 1)} mm` + (rhoMin >= Rr ? '' : `: makara yarıçapından (${Rr} mm) küçük — ${yanak} burada sivrileşir, profil alttan kesilir (makara gerçek yolu izleyemez). Temel daireyi büyüt ya da makarayı küçült.`) : 'Dışbükey bölüm yok');
   if (rhoMin >= Rr) ok(rhoMin >= 2 * Rr, 'uyari', rhoMin >= 2 * Rr ? `Eğrilik yeterli (makara yarıçapının ${tf((rhoMin / Rr), 1)} katı).` : `Disk ${tf((rhoAt * 180 / PI), 0)}° civarında dar (eğrilik makara yarıçapının yalnız ${tf((rhoMin / Rr), 1)} katı; 2–3 katı önerilir): temas gerilmesi yüksek, aşınma artar.`);
+  if (konj) {
+    ok(ik.phiMax <= 30, ik.phiMax > 45 ? 'hata' : 'uyari', `2. disk: en büyük basınç açısı ${tf(ik.phiMax, 1)}° (${tf(ik.phiAt, 0)}°'de)` + (ik.phiMax <= 30 ? ' — 30° sınırının altında.' : ': geri getiren makara bu noktada çok dik itiliyor. Temel daireyi büyüt ya da geri dönüş açısını genişlet.'));
+    ok(ik.rhoMin >= Rr, 'hata', `2. disk: dışbükey kısımda en küçük eğrilik yarıçapı ${isFinite(ik.rhoMin) ? tf(ik.rhoMin, 1) + ' mm' : '—'}` + (ik.rhoMin >= Rr ? (ik.rhoMin >= 2 * Rr ? ' — yeterli.' : ` — dar (makara yarıçapının ${tf(ik.rhoMin / Rr, 1)} katı; 2–3 katı önerilir).`) : `: makara yarıçapından küçük — 2. disk ${tf(ik.rhoAt, 0)}° civarında sivrileşir, alttan kesilir.`));
+  }
   if (kanal) {
     ok(!isFinite(rhoConc) || rhoConc >= Rr, 'hata', !isFinite(rhoConc) ? 'Kanalın dış yanağında içbükey bölüm yok.' : rhoConc >= Rr ? `Kanalın dış yanağı uygun (içbükey kısımda eğrilik ${tf(rhoConc, 1)} mm ≥ makara yarıçapı).` : `Kanalın dış yanağı ${tf(concAt * 180 / PI, 0)}° civarında alttan kesilir: makara merkezi yolunun içbükey eğriliği (${tf(rhoConc, 1)} mm) makara yarıçapından (${Rr} mm) küçük. Makarayı küçült ya da hareket açısını genişlet.`);
   }
-  if (kanal && Nmin !== Infinity) {
-    ok(true, gecis ? 'uyari' : 'bilgi', gecis ? `Kanallı diskte kol diskten kalkmaz; ama makara çevrimde ${gecis} kez kanalın öbür yanağına geçer (temas kuvveti yön değiştirir, en büyük ${tf(Nmax, 1)} N). Makara ile kanal arasındaki boşluğu küçük tut (H7 / g6 gibi), yoksa geçişte vuruntu yapar.` : `Makara hep aynı yanağa basar (en büyük temas kuvveti ${tf(Nmax, 1)} N).`);
-  } else if (kanal) ok(true, 'bilgi', 'Kanallı diskte kol diskten kalkamaz, yay gerekmez. Kütle girilirse yanak geçişleri ve mil torku hesaplanır.');
+  if (kapali && Nmin !== Infinity) {
+    ok(true, gecis ? 'uyari' : 'bilgi', gecis ? (konj ? `Çift diskte kol diskten kalkmaz; ama yük çevrimde ${gecis} kez öbür diske geçer (en büyük temas kuvveti ${tf(Nmax, 1)} N). İki diski ve makaraları boşluksuz ayarla (hafif ön yük), yoksa geçişte vuruntu yapar.` : `Kanallı diskte kol diskten kalkmaz; ama makara çevrimde ${gecis} kez kanalın öbür yanağına geçer (temas kuvveti yön değiştirir, en büyük ${tf(Nmax, 1)} N). Makara ile kanal arasındaki boşluğu küçük tut (H7 / g6 gibi), yoksa geçişte vuruntu yapar.`) : `Makara hep aynı ${konj ? 'diske' : 'yanağa'} basar (en büyük temas kuvveti ${tf(Nmax, 1)} N).`);
+  } else if (kapali) ok(true, 'bilgi', (konj ? 'Çift diskte' : 'Kanallı diskte') + ' kol diskten kalkamaz, yay gerekmez. Kütle girilirse ' + (konj ? 'diskler arası yük geçişleri' : 'yanak geçişleri') + ' ve mil torku hesaplanır.');
   else if (Nmin !== Infinity) {
     ok(Nmin > 0, 'hata', Nmin > 0 ? `Temas kuvveti her yerde pozitif (en düşük ${tf(Nmin, 1)} N): kol diskten kalkmaz.` : `Kol ${tf((NminAt * 180 / PI), 0)}°'de diskten KALKAR (temas kuvveti ${tf(Nmin, 1)} N). Yay ön yükünü en az ${Math.ceil(F0req + 10)} N yap, yayı sertleştir ya da hareketi yumuşat / devri düşür.`);
   } else ok(true, 'bilgi', 'Kol kütlesi ve yay değerleri girilmedi: zıplama (diskten kalkma) ve mil torku hesaplanmadı.');
-  const Rdis = kanal ? Math.max(...prof2.map((q) => Math.hypot(q[0], q[1]))) + g.kenar : Math.max(...prof.map((q) => Math.hypot(q[0], q[1])));
+  const Rdis = kanal ? Math.max(...prof2.map((q) => Math.hypot(q[0], q[1]))) + g.kenar : Math.max(...prof.concat(konj ? ik.prof : []).map((q) => Math.hypot(q[0], q[1])));
   if (sal) ok(g.C >= Rdis + 10, 'hata', g.C >= Rdis + 10 ? `Kol mili diskin dışında (disk yarıçapı ${tf(Rdis, 1)} mm, mil ${g.C} mm uzakta).` : `Kol mili diske çarpar: mil disk merkezinden ${g.C} mm uzakta, disk yarıçapı ${tf(Rdis, 1)} mm. Mil uzaklığı en az ${Math.ceil(Rdis + 10)} mm olmalı (kol boyunu da buna göre artır).`);
-  const r = { g, seg, rows, prof, prof2, pitch, nrm, Rp, Rr, d, w, sal, kanal, psi0, kf, A: sal ? [g.C, 0] : null, phiMax, phiAt: phiAt * 180 / PI, rhoMin, rhoConc, vMax, aMax, aMin, jMax, Nmin: Nmin === Infinity ? null : Nmin, Nmax, gecis, Tmax: Nmin === Infinity ? null : Tmax, F0req: F0req === -Infinity ? null : F0req, kontroller: K_ };
+  const r = { g, seg, rows, prof, prof2, pitch, nrm, Rp, Rr, d, w, sal, kanal, konj, kapali, ik, Dk, psi0, kf, A: sal ? [g.C, 0] : null, phiMax, phiAt: phiAt * 180 / PI, rhoMin, rhoConc, vMax, aMax, aMin, jMax, Nmin: Nmin === Infinity ? null : Nmin, Nmax, gecis, Tmax: Nmin === Infinity ? null : Tmax, F0req: F0req === -Infinity ? null : F0req, kontroller: K_ };
   r.uygun = K_.every((c) => c.ok || c.duzey !== 'hata');
   r.smax = smax;
   r.Rdis = Rdis;
   return r;
 }
 
+// DIN 6885-1 paralel kama, göbek kanalı: [mil çapı üstü, mil çapı dahil, kama genişliği b, göbek kanal derinliği t2] (mm)
+export const KAMA = [[6, 8, 2, 1], [8, 10, 3, 1.4], [10, 12, 4, 1.8], [12, 17, 5, 2.3], [17, 22, 6, 2.8], [22, 30, 8, 3.3], [30, 38, 10, 3.3], [38, 44, 12, 3.3], [44, 50, 14, 3.8], [50, 58, 16, 4.3], [58, 65, 18, 4.4], [65, 75, 20, 4.9], [75, 85, 22, 5.4], [85, 95, 25, 5.4], [95, 110, 28, 6.4], [110, 130, 32, 7.4]];
+export function kamaOlcu(dm) { const k = KAMA.find(([a, b]) => dm > a && dm <= b); return k ? { b: k[2], t2: k[3] } : null; }
+// mil deliği çevresi (kapalı çokgen); kama varsa u yönünde (birim vektör) göbek kanalı: dip merkezden R + t2 uzakta
+export function delikPts(dm, u = [0, 1], kama = false, n = 96) {
+  const R = dm / 2, k = kama ? kamaOlcu(dm) : null, a0 = Math.atan2(u[1], u[0]), pts = [];
+  if (!k) { for (let i = 0; i < n; i++) { const a = a0 + i / n * 2 * PI; pts.push([R * Math.cos(a), R * Math.sin(a)]); } return pts; }
+  const be = Math.asin(k.b / 2 / R), v = [-u[1], u[0]], h = R + k.t2;
+  for (let i = 0; i <= n; i++) { const a = a0 + be + i / n * (2 * PI - 2 * be); pts.push([R * Math.cos(a), R * Math.sin(a)]); }
+  pts.push([h * u[0] - k.b / 2 * v[0], h * u[1] - k.b / 2 * v[1]], [h * u[0] + k.b / 2 * v[0], h * u[1] + k.b / 2 * v[1]]);
+  return pts;
+}
+
+// Silindirik (tambur) kam: dış çapı Dc olan silindirin yüzeyinde kanal; makara ekseni radyal, kol silindir ekseni boyunca gider.
+// Açınım (silindir yüzeyi düz serilmiş) r yarıçapında: x = r·θ, y = x0 + s(θ). Basınç açısı r'de tanφ = |s′| / r — en
+// büyüğü kanal dibinde (Ri = Dc/2 − derinlik). Yanak eğriliği açınımda ρ = (1 + y′²)^1,5 / |y″| (y′ = s′/r, y″ = s″/r²); en
+// küçüğü yine dipte; ρ < Rr yanak alttan kesilir. Kanal, çapı makara çapına eşit parmak frezeyle tek geçişte açılır (4. eksen).
+function tamburHesap(g, seg, opt = {}) {
+  const Rr = g.Dr / 2, Ro = g.Dc / 2, Ri = Ro - g.kanalDerin, smax = Math.max(...g.plan.map((p) => p[1]));
+  if (!(Ro > 0 && Rr > 0)) return { hata: 'Silindir çapı ve makara ölçüsü sıfırdan büyük olmalı', g };
+  if (!(g.kanalDerin > 0)) return { hata: 'Kanal derinliği girilmeli', g };
+  if (Ri < (g.delik > 0 ? g.delik / 2 : 0) + 5) return { hata: `Kanal mil deliğine çok yakın: kanal dibi yarıçapı (${tf(Ri, 1)} mm) mil deliği yarıçapı + 5 mm'den büyük olmalı`, g };
+  const N = opt.N || 1440, w = 2 * PI * g.n / 60, x0 = g.kenar + Rr, Lc = smax + g.Dr + 2 * g.kenar;
+  const rows = [], center = [];
+  let phiMax = 0, phiAt = 0, rhoMin = Infinity, rhoAt = 0, vMax = 0, aMax = 0, aMin = 0, jMax = 0, Nmin = Infinity, Nmax = 0, Tmax = 0, gecis = 0, prevSign = 0, has = false;
+  for (let i = 0; i < N; i++) {
+    const th = i * 2 * PI / N, [s, s1, s2, s3] = hareket(seg, g.yasa, th);
+    const phi = Math.atan(Math.abs(s1) / Ri) * 180 / PI, y1 = s1 / Ri, y2 = s2 / (Ri * Ri), rho = Math.abs(y2) < 1e-12 ? Infinity : (1 + y1 * y1) ** 1.5 / Math.abs(y2);
+    const v = s1 * w / 1000, a = s2 * w * w / 1000, j = s3 * w ** 3 / 1000;
+    let Nc = null, T = null;
+    if (g.m > 0 || g.k > 0 || g.F0 > 0) {
+      has = true; Nc = g.F0 + g.k * s + g.m * a + (g.dikey ? g.m * 9.81 : 0); T = Nc * s1 / 1000;
+      Nmin = Math.min(Nmin, Nc); Nmax = Math.max(Nmax, Math.abs(Nc)); if (Math.abs(T) > Math.abs(Tmax)) Tmax = T;
+      const sgn = Math.abs(Nc) < 1e-9 ? 0 : Math.sign(Nc); if (sgn && prevSign && sgn !== prevSign) gecis++; if (sgn) prevSign = sgn;
+    }
+    if (phi > phiMax) { phiMax = phi; phiAt = th * 180 / PI; }
+    if (rho < rhoMin) { rhoMin = rho; rhoAt = th * 180 / PI; }
+    vMax = Math.max(vMax, Math.abs(v)); aMax = Math.max(aMax, a); aMin = Math.min(aMin, a); jMax = Math.max(jMax, Math.abs(j));
+    rows.push({ deg: th * 180 / PI, s, v, a, j, phi, rho, N: Nc, T });
+    center.push([Ro * th, x0 + s]);
+  }
+  // açınımda yanaklar (dış yüzeyde, normal yönde Rr ötede)
+  const fl1 = [], fl2 = [];
+  for (let i = 0; i < N; i++) {
+    const a = center[(i - 1 + N) % N], b = center[(i + 1) % N], dx = b[0] - a[0] + (i === 0 ? 2 * PI * Ro : i === N - 1 ? 2 * PI * Ro : 0), dy = b[1] - a[1], L = Math.hypot(dx, dy), nx = -dy / L, ny = dx / L, c = center[i];
+    fl1.push([c[0] + Rr * nx, c[1] + Rr * ny]); fl2.push([c[0] - Rr * nx, c[1] - Rr * ny]);
+  }
+  const K_ = [], ok = (b, duzey, metin) => K_.push({ ok: b, duzey, metin });
+  ok(phiMax <= 30, phiMax > 45 ? 'hata' : 'uyari', `En büyük basınç açısı (kanal dibinde) ${tf(phiMax, 1)}° (${tf(phiAt, 0)}°'de)` + (phiMax <= 30 ? ' — 30° sınırının altında.' : ': kol bu noktada çok dik itiliyor, sıkışabilir. Silindir çapını büyüt ya da hareket açısını genişlet (30° altı önerilir).'));
+  ok(rhoMin >= Rr, 'hata', `Kanal yanağında (dipte) en küçük eğrilik yarıçapı ${isFinite(rhoMin) ? tf(rhoMin, 1) + ' mm' : '— (düz)'}` + (rhoMin >= Rr ? '' : `: makara yarıçapından (${Rr} mm) küçük — yanak ${tf(rhoAt, 0)}° civarında alttan kesilir. Silindir çapını büyüt ya da makarayı küçült.`));
+  if (rhoMin >= Rr && isFinite(rhoMin)) ok(rhoMin >= 2 * Rr, 'uyari', rhoMin >= 2 * Rr ? `Eğrilik yeterli (makara yarıçapının ${tf(rhoMin / Rr, 1)} katı).` : `Kanal ${tf(rhoAt, 0)}° civarında dar dönüyor (eğrilik makara yarıçapının ${tf(rhoMin / Rr, 1)} katı; 2–3 katı önerilir).`);
+  ok(g.kanalDerin >= 0.5 * g.Dr, 'uyari', g.kanalDerin >= 0.5 * g.Dr ? `Kanal derinliği yeterli (makara çapının ${tf(g.kanalDerin / g.Dr, 2)} katı).` : 'Kanal sığ: makara boyunun çoğu kanalda olmalı (derinlik en az makara çapının yarısı önerilir).');
+  if (has) ok(true, gecis ? 'uyari' : 'bilgi', gecis ? `Tambur kamda kol kanaldan kurtulamaz; ama makara çevrimde ${gecis} kez kanalın öbür yanağına geçer (en büyük temas kuvveti ${tf(Nmax, 1)} N). Makara ile kanal arasındaki boşluğu küçük tut.` : `Makara hep aynı yanağa basar (en büyük temas kuvveti ${tf(Nmax, 1)} N).`);
+  else ok(true, 'bilgi', 'Tambur kamda kol kanaldan kurtulamaz, yay gerekmez. Kütle girilirse yanak geçişleri ve mil torku hesaplanır.');
+  const r = { g, seg, rows, tambur: true, kapali: true, Rr, Ro, Ri, x0, Lc, center, fl1, fl2, w, smax, phiMax, phiAt, rhoMin, vMax, aMax, aMin, jMax, Nmin: has ? Nmin : null, Nmax, gecis, Tmax: has ? Tmax : null, kontroller: K_, Rdis: Ro, kf: 1 };
+  r.uygun = K_.every((c) => c.ok || c.duzey !== 'hata');
+  return r;
+}
+
 /* ---------- çıktılar ---------- */
 const f4 = (v) => (Math.round(v * 1e4) / 1e4).toString();
 export function kamDXF(r, ad = 'EKSANTRIK') {
-  const o = [], w = (c, v) => o.push(String(c), String(v));
+  const o = [], w = (c, v) => o.push(String(c), String(v)), nm = ad.replace(/[^\x20-\x7e]/g, '?');
   w(0, 'SECTION'); w(2, 'HEADER'); w(9, '$ACADVER'); w(1, 'AC1009'); w(9, '$INSUNITS'); w(70, 4); w(0, 'ENDSEC');
   w(0, 'SECTION'); w(2, 'TABLES'); w(0, 'TABLE'); w(2, 'LAYER'); w(70, 5);
   for (const [n, c] of [['0', 7], ['PROFIL', 1], ['DELIK', 3], ['DIS', 5], ['YARDIMCI', 8]]) { w(0, 'LAYER'); w(2, n); w(70, 0); w(62, c); w(6, 'CONTINUOUS'); }
   w(0, 'ENDTAB'); w(0, 'ENDSEC'); w(0, 'SECTION'); w(2, 'ENTITIES');
-  const poly = (layer, pts) => { w(0, 'POLYLINE'); w(8, layer); w(66, 1); w(10, 0); w(20, 0); w(30, 0); w(70, 1); for (const p of pts) { w(0, 'VERTEX'); w(8, layer); w(10, f4(p[0])); w(20, f4(p[1])); w(30, 0); } w(0, 'SEQEND'); w(8, layer); };
-  poly('PROFIL', r.prof);
-  if (r.kanal) { poly('PROFIL', r.prof2); w(0, 'CIRCLE'); w(8, 'DIS'); w(10, 0); w(20, 0); w(30, 0); w(40, f4(r.Rdis)); }
-  if (r.sal) { w(0, 'CIRCLE'); w(8, 'YARDIMCI'); w(10, f4(r.A[0])); w(20, 0); w(30, 0); w(40, 3); w(0, 'LINE'); w(8, 'YARDIMCI'); w(10, f4(r.A[0])); w(20, 0); w(30, 0); w(11, f4(r.rows[0].bx)); w(21, f4(r.rows[0].by)); w(31, 0); }
-  if (r.g.delik > 0) { w(0, 'CIRCLE'); w(8, 'DELIK'); w(10, 0); w(20, 0); w(30, 0); w(40, f4(r.g.delik / 2)); }
-  w(0, 'CIRCLE'); w(8, 'YARDIMCI'); w(10, 0); w(20, 0); w(30, 0); w(40, f4(r.g.Rb));
-  { const b = [r.rows[0].bx, r.rows[0].by], L = Math.hypot(b[0], b[1]); w(0, 'LINE'); w(8, 'YARDIMCI'); w(10, 0); w(20, 0); w(30, 0); w(11, f4(b[0] / L * r.g.Rb)); w(21, f4(b[1] / L * r.g.Rb)); w(31, 0); }   // 0° referans çizgisi (makara bu yönde)
-  w(0, 'TEXT'); w(8, 'YARDIMCI'); w(10, 2); w(20, f4(r.g.Rb * 0.5)); w(30, 0); w(40, 3); w(1, ad.replace(/[^\x20-\x7e]/g, '?') + ' 0 DERECE');
+  const poly = (layer, pts, dx = 0, kapali = true) => { w(0, 'POLYLINE'); w(8, layer); w(66, 1); w(10, 0); w(20, 0); w(30, 0); w(70, kapali ? 1 : 0); for (const p of pts) { w(0, 'VERTEX'); w(8, layer); w(10, f4(p[0] + dx)); w(20, f4(p[1])); w(30, 0); } w(0, 'SEQEND'); w(8, layer); };
+  const circle = (layer, x, y, R) => { w(0, 'CIRCLE'); w(8, layer); w(10, f4(x)); w(20, f4(y)); w(30, 0); w(40, f4(R)); };
+  const line = (layer, x1, y1, x2, y2) => { w(0, 'LINE'); w(8, layer); w(10, f4(x1)); w(20, f4(y1)); w(30, 0); w(11, f4(x2)); w(21, f4(y2)); w(31, 0); };
+  const text = (x, y, hgt, t) => { w(0, 'TEXT'); w(8, 'YARDIMCI'); w(10, f4(x)); w(20, f4(y)); w(30, 0); w(40, hgt); w(1, t); };
+  if (r.tambur) {
+    // dış yüzey açınımı (silindire sarılıp markalanır): x = Ro·θ, y = silindir ekseni boyunca
+    const W = 2 * PI * r.Ro;
+    poly('DIS', [[0, 0], [W, 0], [W, r.Lc], [0, r.Lc]]);
+    poly('PROFIL', r.fl1.concat([[r.fl1[0][0] + W, r.fl1[0][1]]]), 0, false); poly('PROFIL', r.fl2.concat([[r.fl2[0][0] + W, r.fl2[0][1]]]), 0, false);
+    poly('YARDIMCI', r.center.concat([[W, r.center[0][1]]]), 0, false);
+    text(2, r.Lc + 4, 3, `${nm} TAMBUR ACINIMI - DIS CAP ${r.g.Dc} - SOL ALIN Y=0 - 0 DERECE X=0`);
+  } else {
+    const b0 = Math.hypot(r.rows[0].bx, r.rows[0].by), u = [r.rows[0].bx / b0, r.rows[0].by / b0];
+    const disk = (prof, dx, etiket) => {
+      poly('PROFIL', prof, dx);
+      if (r.g.delik > 0) { if (r.g.kama && kamaOlcu(r.g.delik)) poly('DELIK', delikPts(r.g.delik, u, true), dx); else circle('DELIK', dx, 0, r.g.delik / 2); }
+      line('YARDIMCI', dx, 0, dx + u[0] * r.g.Rb, u[1] * r.g.Rb);   // 0° referans çizgisi (makara bu yönde)
+      text(dx + 2, r.g.Rb * 0.3, 3, `${nm} ${etiket}0 DERECE`);
+    };
+    disk(r.prof, 0, r.konj ? 'DISK 1 ' : '');
+    circle('YARDIMCI', 0, 0, r.g.Rb);
+    if (r.kanal) { poly('PROFIL', r.prof2); circle('DIS', 0, 0, r.Rdis); }
+    if (r.konj) disk(r.ik.prof, 2 * r.Rdis + 30, 'DISK 2 ');
+    if (r.sal) { circle('YARDIMCI', r.A[0], 0, 3); line('YARDIMCI', r.A[0], 0, r.rows[0].bx, r.rows[0].by); }
+  }
   w(0, 'ENDSEC'); w(0, 'EOF');
   return o.join('\r\n') + '\r\n';
 }
 export function kamCSV(r, adim = 1) {
-  const L = [['aci_derece', r.sal ? 'kol_acisi_derece' : 'strok_mm', 'hiz_m_s', 'ivme_m_s2', 'basinc_acisi_derece', r.kanal ? 'ic_yanak_x_mm' : 'profil_x_mm', r.kanal ? 'ic_yanak_y_mm' : 'profil_y_mm', ...(r.kanal ? ['dis_yanak_x_mm', 'dis_yanak_y_mm'] : [])].join(';')], st = Math.max(1, Math.round(adim * r.rows.length / 360));
-  for (let i = 0; i < r.rows.length; i += st) { const q = r.rows[i], p = r.prof[i]; L.push([q.deg, q.s, q.v, q.a, q.phi, p[0], p[1], ...(r.kanal ? r.prof2[i] : [])].map((v) => (Math.round(v * 1000) / 1000).toString().replace('.', ',')).join(';')); }
+  const L = [['aci_derece', r.sal ? 'kol_acisi_derece' : 'strok_mm', 'hiz_m_s', 'ivme_m_s2', 'basinc_acisi_derece', ...(r.tambur ? ['acinim_x_mm', 'kanal_merkezi_eksenel_mm'] : [r.kanal ? 'ic_yanak_x_mm' : r.konj ? 'disk1_x_mm' : 'profil_x_mm', r.kanal ? 'ic_yanak_y_mm' : r.konj ? 'disk1_y_mm' : 'profil_y_mm']), ...(r.kanal ? ['dis_yanak_x_mm', 'dis_yanak_y_mm'] : r.konj ? ['disk2_x_mm', 'disk2_y_mm'] : [])].join(';')], st = Math.max(1, Math.round(adim * r.rows.length / 360));
+  for (let i = 0; i < r.rows.length; i += st) { const q = r.rows[i], p = r.tambur ? r.center[i] : r.prof[i]; L.push([q.deg, q.s, q.v, q.a, q.phi, p[0], p[1], ...(r.kanal ? r.prof2[i] : r.konj ? r.ik.prof[i] : [])].map((v) => (Math.round(v * 1000) / 1000).toString().replace('.', ',')).join(';')); }
   return '﻿' + L.join('\r\n') + '\r\n';
 }
 // Dış kontur frezeleme (Fanuc / ISO): takım merkezi profilin takım yarıçapı kadar dışında, tırmanma için saat yönünde,
 // kademeli derinlik (disk kalınlığı + 0,5 mm), dışarıdan radyal giriş / çıkış. Mil deliği bu programa girmez (delme / raybalama).
 // Sıfır: disk merkezi, Z0 disk üst yüzü. İçbükey bölgede takım yarıçapı profil eğriliğinden büyükse oyma olur: hata döner.
 export function kamGcode(r, o = {}) {
+  if (r.tambur) return tamburGcode(r, o);
   if (r.kanal) return kanalGcode(r, o);
+  const d2 = r.konj && o.disk === 2;
+  if (d2) r = { ...r, pitch: r.ik.pitch, prof: r.ik.prof, rhoConc: r.ik.rhoConc };
   const g = r.g, rt = (o.takim ?? g.takim) / 2, F = Math.round(o.ilerleme ?? g.ilerleme), S = Math.round(o.devir ?? g.devir), kd = Math.max(0.2, o.kademe ?? g.kademe), safe = o.guvenli ?? g.guvenli;
   if (!(rt > 0)) return { hata: 'Takım çapı girilmeli' };
   const concCam = isFinite(r.rhoConc) ? r.rhoConc + r.Rr : Infinity;   // içbükey profil yarıçapı
@@ -222,8 +341,8 @@ export function kamGcode(r, o = {}) {
   const X = (v) => v.toFixed(3), L = [];
   const Zend = -(g.kalinlik + 0.5), levels = [];
   for (let z = -kd; z > Zend + 1e-9; z -= kd) levels.push(z); levels.push(Zend);
-  L.push('%', 'O2001 (EKSANTRIK DIS PROFIL)', '(CIZIM ATOLYESI - EKSANTRIK KAM)', '(SIFIR: DISK MERKEZI, Z0 DISK UST YUZU)', `(DISK KALINLIGI ${g.kalinlik} MM - TAKIM D${(rt * 2).toFixed(1)} PARMAK FREZE)`,
-    '(MIL DELIGI BU PROGRAMDA YOK: AYRI DELINIR / RAYBALANIR)', '(ILK CALISTIRMA: KUMANDA SIMULASYONU, TEK BLOK VE DUSUK ILERLEME)', 'G21 G17 G40 G49 G80 G90', 'T1 M6', `S${S} M3`, `G0 G54 X${X(lead[0])} Y${X(lead[1])}`, `G43 Z${safe.toFixed(1)} H1`, 'M8');
+  L.push('%', d2 ? 'O2003 (EKSANTRIK 2. DISK)' : r.konj ? 'O2001 (EKSANTRIK 1. DISK)' : 'O2001 (EKSANTRIK DIS PROFIL)', r.konj ? '(CIZIM ATOLYESI - CIFT DISKLI EKSANTRIK - KAMA KANALI AYNI ACIDA)' : '(CIZIM ATOLYESI - EKSANTRIK KAM)', '(SIFIR: DISK MERKEZI, Z0 DISK UST YUZU)', `(DISK KALINLIGI ${g.kalinlik} MM - TAKIM D${(rt * 2).toFixed(1)} PARMAK FREZE)`,
+    '(MIL DELIGI VE KAMA KANALI BU PROGRAMDA YOK: AYRI ISLENIR)', '(ILK CALISTIRMA: KUMANDA SIMULASYONU, TEK BLOK VE DUSUK ILERLEME)', 'G21 G17 G40 G49 G80 G90', 'T1 M6', `S${S} M3`, `G0 G54 X${X(lead[0])} Y${X(lead[1])}`, `G43 Z${safe.toFixed(1)} H1`, 'M8');
   for (const z of levels) {
     L.push(`G0 Z${(Math.min(safe, 2)).toFixed(1)}`, `G1 Z${z.toFixed(3)} F${Math.round(F / 2)}`, `G1 X${X(p0[0])} Y${X(p0[1])} F${F}`);
     for (let i = 1; i < pts.length; i++) L.push(`X${X(pts[i][0])} Y${X(pts[i][1])}`);
@@ -276,19 +395,62 @@ function kanalGcode(r, o = {}) {
   L.push(`G0 Z${safe.toFixed(1)}`, 'M9', 'M5', 'G91 G28 Z0.', 'G90', 'M30', '%');
   return { kod: L.join('\n') + '\n', stok: r.Rdis * 2, z: Zend, tur: others.length + 1 };
 }
+// Tambur kanalı (4. eksen, Fanuc / ISO): silindir ekseni makinenin X'i, dönme A; takım ekseni silindir eksenini keser.
+// Freze çapı makara çapına eşit olmalı: radyal eksenli silindirik makaranın kanalı ancak böyle tek geçişte doğru çıkar.
+// Her derinlik kademesinde kanal boyunca rampayla iner (A ilerlerken); A sürekli artar (her kademe 360°).
+function tamburGcode(r, o = {}) {
+  const g = r.g, D = o.takim ?? g.takim, F = Math.round(o.ilerleme ?? g.ilerleme), S = Math.round(o.devir ?? g.devir), kd = Math.max(0.2, o.kademe ?? g.kademe), safe = o.guvenli ?? g.guvenli;
+  if (Math.abs(D - g.Dr) > 0.05) return { hata: `Tambur kanalında freze çapı makara çapına eşit olmalı (${g.Dr} mm): kanal yanakları ancak böyle tek geçişte doğru çıkar.` };
+  if (r.rhoMin < r.Rr) return { hata: 'Kanal yanağı alttan kesiliyor: önce tasarımı düzelt (kontrollere bak).' };
+  // seyrelt: açınımda (dış yüzeyde) 0,01 mm sapmaya, en çok 3° adım
+  const c = r.center, N = c.length, idx = [0];
+  for (let i = 1; i < N; i++) { const a = c[idx[idx.length - 1]], b = c[i], e = c[(i + 1) % N], ex = (i + 1 === N ? 2 * PI * r.Ro : 0); const dx = e[0] + ex - a[0], dy = e[1] - a[1], L = Math.hypot(dx, dy) || 1, dev = Math.abs((b[0] - a[0]) * dy - (b[1] - a[1]) * dx) / L; if (dev > 0.01 || i - idx[idx.length - 1] >= N / 120) idx.push(i); }
+  const X = (v) => v.toFixed(3), A = (v) => v.toFixed(3), L = [], Zend = -g.kanalDerin, levels = [];
+  for (let z = -kd; z > Zend + 1e-9; z -= kd) levels.push(z); levels.push(Zend);
+  const rampDeg = Math.max(15, 6 * D) / r.Ro * 180 / PI;
+  const at = (i) => [r.x0 + r.rows[i].s, r.rows[i].deg];
+  L.push('%', 'O2004 (TAMBUR EKSANTRIK KANALI)', '(CIZIM ATOLYESI - SILINDIRIK EKSANTRIK - 4. EKSEN)', '(SILINDIR EKSENI MAKINE X, DONME A; TAKIM EKSENI SILINDIR EKSENINI KESMELI)',
+    '(SIFIR: X0 SOL ALIN YUZU, Z0 SILINDIRIN UST YUZEYI, A0 = 0 DERECE ISARETI)', `(SILINDIR D${g.Dc} - BOY ${r.Lc.toFixed(1)} - KANAL GENISLIGI ${g.Dr} - DERINLIK ${g.kanalDerin})`, `(TAKIM D${D} MERKEZDEN KESEN PARMAK FREZE)`,
+    '(A EKSENI SUREKLI ARTAR: HER KADEME 360 DERECE. A ILE BIRLIKTE HAREKETTE F DEGERINI KUMANDAYA GORE KONTROL ET)', '(ILK CALISTIRMA: KUMANDA SIMULASYONU, TEK BLOK VE DUSUK ILERLEME)',
+    'G21 G17 G40 G49 G80 G90 G94', 'T1 M6', `S${S} M3`, `G0 G54 X${X(at(0)[0])} A0.`, `G43 Z${safe.toFixed(1)} H1`, 'M8', 'G0 Z1.0', `G1 Z0. F${Math.round(F / 3)}`);
+  let zp = 0, base = 0;
+  const pass = (z, rampa) => {
+    L.push(`F${Math.round(F / 2)}`); let tam = !rampa;
+    for (const i of idx.slice(1).concat([N])) {
+      const j = i % N, [x, dg] = at(j), aa = base + (i === N ? 360 : dg);
+      if (!tam && aa - base < rampDeg) { L.push(`G1 X${X(x)} A${A(aa)} Z${(zp - (zp - z) * (aa - base) / rampDeg).toFixed(3)}`); continue; }
+      if (!tam) { tam = true; L.push(`G1 X${X(x)} A${A(aa)} Z${z.toFixed(3)} F${F}`); continue; }
+      L.push(`X${X(x)} A${A(aa)}`);
+    }
+    base += 360;
+  };
+  for (const z of levels) { pass(z, true); zp = z; }
+  // son kademede rampa bölgesini düzle
+  for (const i of idx) { const [x, dg] = at(i); if (dg > rampDeg + 3) break; L.push(`X${X(x)} A${A(base + dg)}`); }
+  L.push(`G0 Z${safe.toFixed(1)}`, 'M9', 'M5', 'G91 G28 Z0.', 'G90', 'M30', '%');
+  return { kod: L.join('\n') + '\n', stok: g.Dc, boy: r.Lc, z: Zend, tur: 1 };
+}
 export function kamRapor(r, ad = '') {
   const g = r.g, L = ['ÇİZİM ATÖLYESİ — EKSANTRİK (KAM) TASARIM RAPORU', ad, ''];
   L.push('HAREKET PLANI');
-  const u = r.sal ? '°' : ' mm';
+  const u = r.sal ? '°' : ' mm', kmo = g.delik > 0 && g.kama ? kamaOlcu(g.delik) : null;
   for (const b of r.seg) L.push(`  ${b.a0}° – ${b.a1}°: ${b.tur === 'bekle' ? 'bekle' : b.tur === 'it' ? 'it' : 'geri gel'} (${b.s0} → ${b.s1}${u})`);
-  L.push('', 'GİRDİLER', `  Kam: ${r.kanal ? `kanallı (oluklu) disk, kanal derinliği ${g.kanalDerin} mm, dış et ${g.kenar} mm, dış çap Ø${(2 * r.Rdis).toFixed(1)} mm` : 'dış profilli disk'} · kol: ${r.sal ? `sallanan kol (mil uzaklığı ${g.C} mm, kol boyu ${g.L} mm, başlangıç açısı ${(r.psi0 * 180 / PI).toFixed(2)}°)` : 'düz giden (öteleme)'}`, `  Hareket eğrisi: ${YASALAR[g.yasa].ad}`, `  Temel daire yarıçapı Rb = ${g.Rb} mm · makara çapı ${g.Dr} mm ${r.sal ? '' : `· kaçıklık e = ${g.e} mm `}· dönüş ${g.yon === 'cw' ? 'saat yönü' : 'saat yönünün tersi'}`,
-    `  Mil deliği Ø${g.delik} mm · disk kalınlığı ${g.kalinlik} mm · devir ${g.n} çevrim/dk`, g.m || g.k || g.F0 ? `  Kol kütlesi ${g.m} kg${r.sal ? ' (makara noktasına indirgenmiş)' : ''} · yay sertliği ${g.k} N/mm · ön yük ${g.F0} N${r.sal ? ' (makara noktasında)' : ` · ${g.dikey ? 'kol düşey (ağırlık diske bastırır)' : 'kol yatay'}`}` : '  Kol kütlesi / yay girilmedi',
-    '', 'SONUÇLAR', `  En büyük basınç açısı ${r.phiMax.toFixed(2)}° (${r.phiAt.toFixed(0)}°'de)`, `  Dışbükey en küçük eğrilik yarıçapı (makara merkezi yolu) ${isFinite(r.rhoMin) ? r.rhoMin.toFixed(2) + ' mm' : '—'}`,
+  const kamAd = r.tambur ? `silindirik (tambur), dış çap Ø${g.Dc} mm, boy ${r.Lc.toFixed(1)} mm, kanal derinliği ${g.kanalDerin} mm`
+    : r.kanal ? `kanallı (oluklu) disk, kanal derinliği ${g.kanalDerin} mm, dış et ${g.kenar} mm, dış çap Ø${(2 * r.Rdis).toFixed(1)} mm`
+      : r.konj ? `çift disk (konjuge)${r.sal ? ', ikinci kol birinciye aynalı' : `, makaralar arası ${r.Dk.toFixed(2)} mm`}` : 'dış profilli disk';
+  L.push('', 'GİRDİLER', `  Kam: ${kamAd} · kol: ${r.sal ? `sallanan kol (mil uzaklığı ${g.C} mm, kol boyu ${g.L} mm, başlangıç açısı ${(r.psi0 * 180 / PI).toFixed(2)}°)` : r.tambur ? 'silindir ekseni boyunca giden' : 'düz giden (öteleme)'}`, `  Hareket eğrisi: ${YASALAR[g.yasa].ad}`,
+    r.tambur ? `  Makara çapı ${g.Dr} mm · kanal dibi yarıçapı ${r.Ri.toFixed(2)} mm` : `  Temel daire yarıçapı Rb = ${g.Rb} mm · makara çapı ${g.Dr} mm ${r.sal ? '' : `· kaçıklık e = ${g.e} mm `}· dönüş ${g.yon === 'cw' ? 'saat yönü' : 'saat yönünün tersi'}`,
+    `  Mil deliği Ø${g.delik} mm${kmo ? ` · kama kanalı DIN 6885-1: genişlik ${kmo.b} mm, göbek derinliği t2 ${kmo.t2} mm (0° yönünde)` : ''}${r.tambur ? '' : ` · disk kalınlığı ${g.kalinlik} mm`} · devir ${g.n} çevrim/dk`,
+    g.m || g.k || g.F0 ? `  Kol kütlesi ${g.m} kg${r.sal ? ' (makara noktasına indirgenmiş)' : ''} · yay sertliği ${g.k} N/mm · ön yük ${g.F0} N${r.sal ? ' (makara noktasında)' : ` · ${g.dikey ? 'kol düşey (ağırlık bastırır)' : 'kol yatay'}`}` : '  Kol kütlesi / yay girilmedi',
+    '', 'SONUÇLAR', `  En büyük basınç açısı${r.konj ? ' (1. disk)' : r.tambur ? ' (kanal dibinde)' : ''} ${r.phiMax.toFixed(2)}° (${r.phiAt.toFixed(0)}°'de)`);
+  if (r.konj) L.push(`  2. disk: en büyük basınç açısı ${r.ik.phiMax.toFixed(2)}° · dışbükey en küçük eğrilik ${isFinite(r.ik.rhoMin) ? r.ik.rhoMin.toFixed(2) + ' mm' : '—'}`);
+  L.push(`  En küçük eğrilik yarıçapı ${r.tambur ? '(kanal yanağı, dipte)' : '(dışbükey, makara merkezi yolu)'} ${isFinite(r.rhoMin) ? r.rhoMin.toFixed(2) + ' mm' : '—'}`,
     `  En yüksek hız (makara) ${r.vMax.toFixed(3)} m/s · ivme +${r.aMax.toFixed(2)} / ${r.aMin.toFixed(2)} m/s² · sarsıntı ${r.jMax.toFixed(1)} m/s³`);
-  if (r.Nmin != null) L.push(r.kanal ? `  En büyük temas kuvveti ${r.Nmax.toFixed(1)} N · yanak geçişi ${r.gecis} · en büyük mil torku ${Math.abs(r.Tmax).toFixed(2)} N·m (sürtünmesiz)` : `  En düşük temas kuvveti ${r.Nmin.toFixed(1)} N · en büyük mil torku ${Math.abs(r.Tmax).toFixed(2)} N·m (sürtünmesiz)`);
+  if (r.Nmin != null) L.push(r.kapali ? `  En büyük temas kuvveti ${r.Nmax.toFixed(1)} N · ${r.konj ? 'diskler arası geçiş' : 'yanak geçişi'} ${r.gecis} · en büyük mil torku ${Math.abs(r.Tmax).toFixed(2)} N·m (sürtünmesiz)` : `  En düşük temas kuvveti ${r.Nmin.toFixed(1)} N · en büyük mil torku ${Math.abs(r.Tmax).toFixed(2)} N·m (sürtünmesiz)`);
   L.push('', 'KONTROLLER', ...r.kontroller.map((c) => '  ' + (c.ok ? '✓ ' : c.duzey === 'hata' ? '✗ ' : '⚠ ') + c.metin),
     '', 'YÖNTEM', '  Modifiye sinüs, sikloid ve 4-5-6-7 polinom hareket eğrileri (Norton, Design of Machinery, bölüm 8). Basınç açısı ve eğrilik',
-    '  yarıçapı makara merkezi yolundan sayısal türevle (0,25° adım). Temas kuvveti N = F0 + k·s + m·a (+ m·g); sürtünme, makara ataleti,',
-    '  kol esnekliği ve titreşim yok sayılır. Ön tasarımdır: yüksek devirli makinede yetkin mühendis ve deneme ile doğrulanmalıdır.');
+    r.tambur ? '  yarıçapı silindir yüzeyinin açınımından (kanal dibinde, en kötü durum). Kama kanalı ölçüleri DIN 6885-1.' : '  yarıçapı makara merkezi yolundan sayısal türevle (0,25° adım). Kama kanalı ölçüleri DIN 6885-1.',
+    '  Temas kuvveti N = F0 + k·s + m·a (+ m·g); sürtünme, makara ataleti, kol esnekliği ve titreşim yok sayılır.',
+    '  Ön tasarımdır: yüksek devirli makinede yetkin mühendis ve deneme ile doğrulanmalıdır.');
   return L;
 }
