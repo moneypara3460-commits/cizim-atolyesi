@@ -2,9 +2,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { yerelCss, yerelSayfa } from '../tools/site-yazi-tipi.mjs';
+// tools/ derlenmiş pakete (dist/) girmez; orada bu testler atlanır
+const ARAC = new URL('../tools/site-yazi-tipi.mjs', import.meta.url);
+const kaynak = fs.existsSync(ARAC);
+const { yerelCss, yerelSayfa } = kaynak ? await import(ARAC.href) : {};
 
-test('CSS içindeki Google adresleri yerel dosya adlarına çevrilir; aynı dosya bir kez indirilir', () => {
+test('CSS içindeki Google adresleri yerel dosya adlarına çevrilir; aynı dosya bir kez indirilir', { skip: !kaynak && 'tools/ derlenmiş pakette yok' }, () => {
   const css = `@font-face { font-family: 'IBM Plex Sans'; src: url(https://fonts.gstatic.com/s/ibmplexsans/v19/a.woff2) format('woff2'); unicode-range: U+0100-024F; }
 @font-face { font-family: 'IBM Plex Sans'; src: url(https://fonts.gstatic.com/s/ibmplexsans/v19/b.woff2) format('woff2'); }
 @font-face { font-family: 'IBM Plex Sans'; src: url(https://fonts.gstatic.com/s/ibmplexsans/v19/a.woff2) format('woff2'); }`;
@@ -16,7 +19,7 @@ test('CSS içindeki Google adresleri yerel dosya adlarına çevrilir; aynı dosy
   assert.match(r.css, /unicode-range: U\+0100-024F/, 'Türkçe harf aralığı korunur');
 });
 
-test('gerçek tanıtım sayfasında Google bağlantıları yerel CSS ile değişir, başka bir şey değişmez', () => {
+test('gerçek tanıtım sayfasında Google bağlantıları yerel CSS ile değişir, başka bir şey değişmez', { skip: !kaynak && 'tools/ derlenmiş pakette yok' }, () => {
   const html = fs.readFileSync(new URL('../tanitim/index.html', import.meta.url), 'utf8');
   assert.match(html, /fonts\.googleapis\.com\/css2/, 'kaynak sayfa Google Fonts kullanıyor (yayında gömülür)');
   const yeni = yerelSayfa(html);
