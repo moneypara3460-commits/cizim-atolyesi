@@ -208,7 +208,69 @@
   // Google Play abonelikleri: hesap/billing.js bunu kullanır (mobil/yerel/Odeme.java)
   var odeme = null;
   try { odeme = C.registerPlugin ? C.registerPlugin('Odeme') : P.Odeme; } catch (e) { odeme = P.Odeme || null; }
-  window.__mobil = { girisAc: girisAc, sifreyleGir: sifreyleGir, donusuIsle: donusuIsle, odeme: odeme };
+  window.__mobil = { girisAc: girisAc, sifreyleGir: sifreyleGir, donusuIsle: donusuIsle, odeme: odeme, guncellemeBak: guncellemeBak };
+
+  // ---------- Uygulama içi güncelleme (mobil/yerel/Guncelleme.java) ----------
+  // Play'de yeni sürüm varsa: öncelik 4-5 → zorunlu (Play'in tam ekran güncellemesi; vazgeçilirse uygulama kullanılamaz),
+  // diğerleri → alttaki şeritte "Güncelle" (arka planda iner, bitince "Yeniden başlat"). "Sonra"ya basılırsa 24 saat sorulmaz.
+  var guncelleme = null;
+  try { guncelleme = C.registerPlugin ? C.registerPlugin('Guncelleme') : P.Guncelleme; } catch (e) { guncelleme = P.Guncelleme || null; }
+  var ERTELE = 'cizim:guncelleme-ertele', BAKILDI = 'cizim:guncelleme-bakildi';
+  function serit(metin, dugmeler) {
+    var eski = document.getElementById('cizim-guncelleme'); if (eski) eski.remove();
+    var d = document.createElement('div');
+    d.id = 'cizim-guncelleme';
+    d.setAttribute('role', 'status');
+    d.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:2147483646;background:#18233a;color:#e6ecf5;border:1px solid #2f4a75;padding:12px 14px;border-radius:12px;font:14px system-ui;display:flex;align-items:center;gap:10px;box-shadow:0 6px 24px rgba(0,0,0,.4)';
+    var t = document.createElement('span'); t.textContent = metin; t.style.cssText = 'flex:1'; d.appendChild(t);
+    dugmeler.forEach(function (b) {
+      var x = document.createElement('button'); x.type = 'button'; x.textContent = b[0];
+      x.style.cssText = b[2] ? 'background:#5aa9f0;color:#0b1120;border:0;border-radius:8px;padding:8px 12px;font:600 14px system-ui' : 'background:transparent;color:#9fb3cf;border:0;padding:8px 6px;font:14px system-ui';
+      x.addEventListener('click', b[1]); d.appendChild(x);
+    });
+    (document.body || document.documentElement).appendChild(d);
+    return d;
+  }
+  function seritKapat() { var d = document.getElementById('cizim-guncelleme'); if (d) d.remove(); }
+  function yenidenBaslat() {
+    serit('Güncelleme indirildi.', [['Yeniden başlat', function () { guncelleme.tamamla().catch(function (e) { bildir(e.message || String(e)); }); }, true]]);
+  }
+  function zorunlu() {
+    guncelleme.baslat({ tur: 'aninda' }).catch(function () { /* kullanıcı vazgeçti ya da açılamadı */ }).then(function () {
+      // Uygulama dönünce yeniden bakılır; güncellenmediyse kullanım engellenir
+      setTimeout(function () {
+        guncelleme.kontrol().then(function (r) {
+          if (!r || !r.var) return;
+          var d = serit('Bu sürüm artık kullanılamıyor. Devam etmek için uygulamayı güncelle.', [['Güncelle', zorunlu, true]]);
+          d.style.top = '0'; d.style.bottom = '0'; d.style.left = '0'; d.style.right = '0'; d.style.borderRadius = '0';
+          d.style.flexDirection = 'column'; d.style.justifyContent = 'center'; d.style.textAlign = 'center';
+        });
+      }, 800);
+    });
+  }
+  function guncellemeBak() {
+    if (!guncelleme || !guncelleme.kontrol) return;
+    try { if (sessionStorage.getItem(BAKILDI)) return; sessionStorage.setItem(BAKILDI, '1'); } catch (e) { /* yok */ }
+    if (guncelleme.addListener) guncelleme.addListener('durum', function (o) {
+      if (o && o.durum === 'indirildi') yenidenBaslat();
+      else if (o && o.durum === 'hata') { seritKapat(); bildir('Güncelleme indirilemedi, daha sonra tekrar denenecek.'); }
+    });
+    guncelleme.kontrol().then(function (r) {
+      if (!r) return;
+      if (r.indirildi) { yenidenBaslat(); return; }
+      if (!r.var) return;
+      if (Number(r.oncelik) >= 4 && r.aninda) { zorunlu(); return; }
+      var son = 0;
+      try { son = Number(localStorage.getItem(ERTELE)) || 0; } catch (e) { /* yok */ }
+      if (Date.now() - son < 24 * 3600 * 1000) return;
+      if (!r.esnek) return;
+      serit('Çizim Atölyesi\'nin yeni sürümü var.', [
+        ['Sonra', function () { try { localStorage.setItem(ERTELE, String(Date.now())); } catch (e) { /* yok */ } seritKapat(); }, false],
+        ['Güncelle', function () { serit('Güncelleme arka planda iniyor, çalışmaya devam edebilirsin.', []); setTimeout(seritKapat, 4000); guncelleme.baslat({ tur: 'esnek' }).catch(function (e) { seritKapat(); bildir(e.message || String(e)); }); }, true],
+      ]);
+    }).catch(function () { /* sessizce geç */ });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', guncellemeBak); else setTimeout(guncellemeBak, 0);
 
   // ---------- 3) Giriş zorunlu ----------
   // Uygulamada her bölüm Google ile girişten sonra açılır (web sitesi açık kalır). Hesap ve tanıtım sayfaları serbest.
