@@ -11,6 +11,7 @@ on:
       - 'tanitim/**'
       - 'hesap/**'
       - '.github/workflows/site.yml'
+      - 'tools/site-yazi-tipi.mjs'
   workflow_dispatch:
 
 permissions:
@@ -51,6 +52,8 @@ jobs:
           done
           touch _site/.nojekyll
           find _site -type f | sort
+      - name: Yazı tiplerini siteye göm (ziyaretçi Google'a bağlanmasın)
+        run: node tools/site-yazi-tipi.mjs _site/tanitim/index.html
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
