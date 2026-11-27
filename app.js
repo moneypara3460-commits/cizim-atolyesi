@@ -35,9 +35,9 @@ import { createAssemblyUI } from './assembly-ui.js?v=20261112u';
 import { createSimUI } from './sim-ui.js?v=20261112u';
 import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261112u';
 import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261112u';
-import { createCamUI } from './cam-ui.js?v=20261112u';
-import { createCam5UI } from './cam5-ui.js?v=20261112u';
-import { createLatheUI } from './lathe-ui.js?v=20261112u';
+import { createCamUI } from './cam-ui.js?v=20261127k';
+import { createCam5UI } from './cam5-ui.js?v=20261127k';
+import { createLatheUI } from './lathe-ui.js?v=20261127k';
 import { machinePose } from './kin.js?v=20261112u';
 import { createOcctUI } from './occt-ui.js?v=20261119d';
 import * as DLK from './delik.js?v=20261120b';
@@ -1329,7 +1329,7 @@ function renderPanel() {
   } else if (tab === 'cam') {
     // CNC torna ayrı bir çalışma modu (lathe-ui.js): açıkken 3 / 4 / 5 eksen panelleri gösterilmez
     body = (latheUI.on ? cam5UI.modeBar().replace(/ class="on"/g, '') : cam5UI.modeBar()) + latheUI.modeBtn() + (latheUI.on ? latheUI.html() : cam5UI.mode === '3' ? camUI.html() : cam5UI.html());
-    if (latheUI.on) hint = 'CNC torna (2 eksen): takım yolu, simülasyon ve G-kodu aynı hareket listesinden üretilir. Simülasyon fiziksel makine doğrulaması değildir; program hiçbir tezgâhta denenmedi. Kumandada simülasyon ve tek blok ile kontrol et.'; else
+    if (latheUI.on) hint = 'CNC torna (2 eksen): takım yolu, simülasyon ve G-kodu aynı hareket listesinden üretilir. İlk çalıştırmada kumandada simülasyon, tek blok ve düşük ilerlemeyle kontrol et.'; else
     if (cam5UI.mode !== '3') hint = '4 / 5 eksen: takım yolu, makine kinematiği, çarpışma kontrolü ve talaş simülasyonu aynı takım yolu verisinden hesaplanır. Simülasyon fiziksel makine doğrulaması değildir; G-kodu makinede doğrulanmamıştır.'; else
     hint = 'CNC: takım yolları modelin üstten görünen yüzeyinden hesaplanır (3 eksen). Kesme değerleri başlangıç değeridir; ilk parçada makinede düşük ilerlemeyle dene. Program çalıştırmadan önce kumandada simülasyonla kontrol et.';
   } else if (tab === 'fem') {

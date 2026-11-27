@@ -547,9 +547,20 @@ export const POSTS = {
 const TR = { 'ç': 'C', 'Ç': 'C', 'ğ': 'G', 'Ğ': 'G', 'ı': 'I', 'İ': 'I', 'ö': 'O', 'Ö': 'O', 'ş': 'S', 'Ş': 'S', 'ü': 'U', 'Ü': 'U', 'Ø': 'D', '×': 'X', '°': ' DER' };
 export const ascii = (s) => String(s).replace(/[çÇğĞıİöÖşŞüÜØ×°]/g, (c) => TR[c]).replace(/[()]/g, '').replace(/[^\x20-\x7e]/g, '').toUpperCase();
 export function fmt(v) { let s = (Math.round(v * 1000) / 1000).toFixed(3).replace(/0+$/, ''); if (s.endsWith('.')) s += '0'; if (s === '-0.0') s = '0.0'; return s; }
+// Kuru çalıştırma (havada deneme): bütün Z değerleri, programın en derin noktası stok üst yüzeyinin `clear` mm
+// üstünde kalacak kadar yukarı kaydırılır. Takım hiçbir yerde stoğa değmez; X-Y hareketleri, takım değişimleri,
+// sıra ve bağlama aparatına yaklaşma havada izlenir. Kaydırma miktarı ve en yüksek Z programın başına yazılır.
+export function dryRunShift(R, clear = 5) {
+  let zMin = Infinity;
+  for (const op of R.ops) for (const m of op.moves) if (m.z < zMin) zMin = m.z;
+  if (!isFinite(zMin)) zMin = R.P.stock.zTop;
+  const c = Math.max(1, +clear || 5);
+  return Math.max(c, R.P.stock.zTop - zMin + c);
+}
 export function gcode(R, job, postKey, opt = {}) {
   const post = postKey, Z0 = R.P.zero, L = [], fanuc = post === 'fanuc', grbl = post === 'grbl';
-  const X = (x) => fmt(x - Z0[0]), Y = (y) => fmt(y - Z0[1]), Zf = (z) => fmt(z - Z0[2]);
+  const dry = opt.dryRun ? dryRunShift(R, opt.dryRun.clear) : 0;
+  const X = (x) => fmt(x - Z0[0]), Y = (y) => fmt(y - Z0[1]), Zf = (z) => fmt(z + dry - Z0[2]);
   const c = (t) => '(' + ascii(t).slice(0, 70) + ')';
   let nline = 0; const out = (s) => { if (opt.lineNumbers && fanuc && s && !s.startsWith('%') && !s.startsWith('(') && !s.startsWith('O')) { nline += 10; L.push('N' + nline + ' ' + s); } else L.push(s); };
   const st = R.P.stock;
@@ -559,6 +570,13 @@ export function gcode(R, job, postKey, opt = {}) {
   out(c('CIZIM ATOLYESI CAM - ' + (opt.date || '')));
   out(c('STOK X' + fmt(st.x1 - st.x0) + ' Y' + fmt(st.y1 - st.y0) + ' Z' + fmt(st.zTop - st.zBot)));
   out(c('SIFIR: ' + (job.zero === 'center' ? 'STOK UST YUZ ORTASI' : job.zero === 'bottom' ? 'STOK ALT ON SOL KOSE' : 'STOK UST YUZ ON SOL KOSE')));
+  if (dry) {
+    out(c('KURU CALISTIRMA - HAVADA DENEME PROGRAMI - KESIM YAPMAZ'));
+    out(c('TUM Z DEGERLERI ' + fmt(dry) + ' MM YUKARI KAYDIRILDI'));
+    out(c('TAKIM STOK UST YUZUNUN EN AZ ' + fmt(Math.max(1, +opt.dryRun.clear || 5)) + ' MM USTUNDEN GECER'));
+    out(c('EN YUKSEK Z: ' + fmt(R.safe + dry - Z0[2]) + ' - MAKINE Z STROGUNU KONTROL ET'));
+    out(c('SOGUTMA KAPALI. BITINCE ASIL PROGRAMI YUKLE'));
+  }
   for (const op of R.ops) out(c('T' + op.tool.n + ' ' + TOOLN(op.tool) + ' - ' + op.name));
   out(grbl ? 'G21 G90 G94 G17' : 'G21 G17 G40 G49 G80 G90 G94');
   let lx = null, ly = null, lz = null, lf = null, lg = null, first = true;
@@ -573,7 +591,7 @@ export function gcode(R, job, postKey, opt = {}) {
     const m0 = op.moves.find((m) => m.k !== 'd') || op.moves[0];
     out('G0 X' + X(m0.x) + ' Y' + Y(m0.y)); lx = m0.x; ly = m0.y; lg = 0;
     out(grbl ? 'G0 Z' + Zf(safe) : 'G43 Z' + Zf(safe) + ' H' + t.n); lz = safe;
-    if (!grbl && opt.coolant !== false) out('M8');
+    if (!grbl && opt.coolant !== false && !dry) out('M8');
     first = false; lf = null;
     let inCycle = false;
     for (const m of op.moves) {

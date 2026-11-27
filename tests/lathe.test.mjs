@@ -182,7 +182,7 @@ t('14. G-kodu: güvenli başlangıç / bitiş, takım çağrısı, G50/G96/G97, 
   const allowed = new Set(['G00', 'G01', 'G02', 'G03', 'G18', 'G21', 'G28', 'G32', 'G40', 'G41', 'G42', 'G50', 'G54', 'G76', 'G96', 'G97', 'G99', 'M03', 'M04', 'M05', 'M08', 'M09', 'M30']);
   for (const c of codes) assert.ok(allowed.has(c), 'izinsiz kod ' + c);
   for (const c of ['G00', 'G01', 'G02', 'G03', 'G18', 'G21', 'G28', 'G40', 'G54', 'G76', 'G96', 'G97', 'G99', 'M03', 'M05', 'M08', 'M09', 'M30']) assert.ok(codes.has(c), 'eksik kod ' + c);
-  assert.ok(/^[\x20-\x7e\n]*$/.test(g), 'yalnız ASCII'); assert.match(g, /\(DOGRULANMAMIS PROGRAM/); assert.match(g, /\(SIFIR: PARCA ON YUZU MERKEZI/);
+  assert.ok(/^[\x20-\x7e\n]*$/.test(g), 'yalnız ASCII'); assert.match(g, /\(ILK CALISTIRMA: KUMANDADA SIMULASYON, TEK BLOK/); assert.match(g, /\(SIFIR: PARCA ON YUZU MERKEZI/);
   assert.equal((g.match(/^M08$/gm) || []).length, (g.match(/^M09$/gm) || []).length, 'M08 / M09 eşleşir');
   const nl = L.postLathe(R, { lineNumbers: true }).text; assert.match(nl, /^N10 G21 G18/m); assert.match(nl, /^N20 G28 U0\./m);
   assert.throws(() => L.postLathe(L.planLathe({ ...L.exampleJob(), units: 'inch' })), /İnç çıktı/);

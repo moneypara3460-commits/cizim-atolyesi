@@ -8,7 +8,7 @@
 // Bütün hareketler takımın REFERANS noktası (kumandada ofseti ölçülen sanal uç / köşe) için hesaplanır;
 // simülasyon ve G-kodu aynı hareket listesini kullanır.
 // İlk sürüm: C ekseni, Y ekseni, canlı takım, punta, karşı iş mili YOK (yetenek bayrakları false; arayüz açıkça yazar).
-import { matKeyFor, ascii, fmt } from './cam.js?v=20261112u';
+import { matKeyFor, ascii, fmt } from './cam.js?v=20261127k';
 
 const EPS = 1e-9, D2R = Math.PI / 180;
 const hyp = Math.hypot, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -781,7 +781,7 @@ export function postLathe(R, opt = {}) {
   out(c(`HAM D${fmt(job.stock.d)} L${fmt(job.stock.len)} ON FAZLA ${fmt(job.stock.face)} AYNADAN CIKIS ${fmt(job.stock.stickout)}`));
   out(c('SIFIR: PARCA ON YUZU MERKEZI Z0 X0 (G54)'));
   for (const t of used) out(c(`T${String(t.n).padStart(2, '0')}${String(t.off).padStart(2, '0')} ${TOOL_TYPES_L[t.type]} ${t.name || ''} R${fmt(t.rn || 0)} UC NO ${tipNumber(t)}`));
-  out(c('DOGRULANMAMIS PROGRAM: KUMANDADA SIMULASYON VE TEK BLOK ILE DENE'));
+  out(c('ILK CALISTIRMA: KUMANDADA SIMULASYON, TEK BLOK VE DUSUK ILERLEME ILE DENE'));
   out((job.units === 'inch' ? 'G20' : 'G21') + ' G18 G40 G54 G99 G97');
   const ftype = job.units === 'inch' ? 1 / 25.4 : 1; if (ftype !== 1) throw new Error('İnç çıktı için koordinat dönüşümü bu sürümde yok: mm (G21) kullan');
   let lastTool = null;
