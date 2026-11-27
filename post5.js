@@ -2,7 +2,7 @@
 // Her post'un yetenekleri açıkça tanımlıdır; desteklenmeyen işlem (ör. TCP'siz kontrolcüye eş zamanlı 5 eksen) ve
 // çarpışma / limit ihlali olan yol için G-kodu ÜRETİLMEZ (hata fırlatılır).
 // Hiçbir post belirli bir makinede doğrulanmamıştır: program başlığında yazar.
-import { fmt, ascii } from './cam.js?v=20261127k';
+import { fmt, ascii } from './cam.js?v=20261127r';
 import { norm, sub } from './kin.js?v=20261112u';
 
 export const POSTS5 = {

@@ -1,6 +1,6 @@
 // CNC sekmesi: takımlar, işlemler, takım yolu hesabı, malzeme kaldırma simülasyonu, G-kodu ve iş kartı.
 // api: { model() → { tris, holes, matId, name }, draw(spec), clear(), enter(), leave(), render(), toast(m), name(), saveBlob(b, n), snapshot(), date() }
-import * as C from './cam.js?v=20261127k';
+import * as C from './cam.js?v=20261127r';
 import { pdfFromJpegs } from './cutopt.js?v=20261112u';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -35,7 +35,11 @@ export function createCamUI(api) {
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) { /* */ } };
   const mk = () => cfg.mk || (S.model ? C.matKeyFor(S.model.matId) : 'celik');
   const fillCut = (t, force) => { if (force || !(t.rpm > 0) || !(t.feed > 0)) { const s = C.suggestCut(mk(), t, cfg.machine.maxRpm); t.rpm = s.rpm; t.feed = s.feed; t.plunge = s.plunge; } };
-  const invalidate = () => { S.R = null; S.code = null; S.sim = null; S.simPlay = false; S.res = null; api.clear(); };
+  const invalidate = () => { S.R = null; S.code = null; S.sim = null; S.simPlay = false; S.res = null; S.risk = null; S.trace = null; api.clear(); };
+  // G-kodu: risk haritası izi her zaman alınır; "riskli satırlarda yavaşla" açıksa ilerleme yarıya iner
+  const genCode = (extra = {}) => { const trace = []; const code = C.gcode(S.R, { ...S.job, zero: cfg.zero }, cfg.post, { date: api.date(), lineNumbers: cfg.post === 'fanuc' && cfg.lineNumbers, trace, slow: cfg.slowRisk && S.risk ? { map: S.risk, f: 0.5 } : null, ...extra }); return { code, trace }; };
+  const riskOf = (x) => (!x ? 0 : x[0] === 'tc' ? 1 : (S.risk.ops[x[0]][x[1]] || { lvl: 0 }).lvl);
+  const whyOf = (x) => (!x ? '' : x[0] === 'tc' ? 'Takım değişiminden sonra ilk Z inişi: takım boyu ofsetini (H' + S.R.ops[x[1]].tool.n + ') kontrol et' : (S.risk.ops[x[0]][x[1]] || {}).why || '');
 
   /* ---------- hesap ---------- */
   async function compute() {
@@ -60,7 +64,8 @@ export function createCamUI(api) {
     try {
       const t0 = performance.now();
       S.R = C.plan(job); S.job = job; S.ms = performance.now() - t0;
-      S.code = C.gcode(S.R, job, cfg.post, { date: api.date(), lineNumbers: cfg.post === 'fanuc' && cfg.lineNumbers });
+      S.risk = C.riskMap(S.R);
+      ({ code: S.code, trace: S.trace } = genCode());
       // tam simülasyon (kalan malzeme / dalma kontrolü)
       const SG = C.simGrid(S.R); C.simulate(S.R, SG, { op: 0, mv: 0 }); S.res = C.residual(S.R, SG, 0.1); S.finalSG = SG;
       S.sim = null; S.view = 'paths';
@@ -146,9 +151,19 @@ export function createCamUI(api) {
     h += `<div style="flex:1 0 100%;display:flex;gap:6px">${btn('Takım yolları', 'cn-v-paths', S.view === 'paths', 'flex:1')}${btn('İşlenmiş parça', 'cn-v-final', S.view === 'sim' && !S.sim, 'flex:1')}${btn(S.sim && S.simPlay ? '⏸ Durdur' : S.sim && !S.sim.done ? '▶ Devam' : '▶ Simülasyon', 'cn-sim', !!S.simPlay, 'flex:1')}</div>`;
     if (S.sim) h += `<label class="f" style="flex:1 0 100%"><span>Simülasyon hızı: ${S.speed} hareket / kare</span><input type="range" min="1" max="400" step="1" data-cs="speed" value="${S.speed}"></label>` + note(S.sim.done ? 'Simülasyon bitti: kırmızı = kalan malzeme, mor = modele dalma (olmamalı).' : 'İşlem ' + (Math.min(S.sim.st.op + 1, R.ops.length)) + ' / ' + R.ops.length + ': ' + esc((R.ops[S.sim.st.op] || R.ops[R.ops.length - 1]).name));
     else h += note(S.view === 'paths' ? 'Mavi / yeşil / turuncu: kesme hareketleri (işleme göre), kırmızı: hızlı hareket, mor: delme. Döndür / yakınlaştır.' : 'Bütün işlemlerden sonra stok: gri işlenmiş yüzey, kırmızı kalan malzeme.');
+    // risk haritası
+    const lines = S.code.split('\n'), lv = S.trace ? lines.map((_, i) => riskOf(S.trace[i])) : lines.map(() => 0);
+    const nR = lv.filter((v) => v === 2).length, nY = lv.filter((v) => v === 1).length;
+    h += '<div class="lbl h">Risk haritası</div>';
+    h += card(row('Kırmızı (hata, düzeltilmeden kesme)', nR + ' satır', nR ? '#ef4444' : '#22c55e') + row('Sarı (dikkat)', nY + ' satır', nY ? '#eab308' : '#22c55e') + row('Yeşil', lv.filter((v) => v === 0).length.toLocaleString('tr-TR') + ' satır', '#22c55e'));
+    const bad = []; lv.forEach((v, i) => { if (v) bad.push(i); }); bad.sort((a, b) => lv[b] - lv[a] || a - b);
+    if (bad.length) h += `<div style="flex:1 0 100%;max-height:200px;overflow:auto;font-size:12.5px;line-height:1.4">${bad.slice(0, 40).map((i) => `<div style="border-left:4px solid ${lv[i] === 2 ? '#ef4444' : '#eab308'};padding:3px 8px;margin:3px 0;background:#0b1220;border-radius:6px"><code>${i + 1}: ${esc(lines[i].slice(0, 60))}</code><br>${esc(whyOf(S.trace[i]))}</div>`).join('')}${bad.length > 40 ? `<div style="color:#94a3b8">… ${bad.length - 40} satır daha</div>` : ''}</div>`;
+    h += btn((cfg.slowRisk ? '☑' : '☐') + ' Riskli (sarı / kırmızı) kesme satırlarında ilerlemeyi %50 düşür', 'cn-slow', !!cfg.slowRisk, 'flex:1 0 100%');
+    h += note('Her hareket, o ana kadar işlenmiş stok üzerinde denenir: hızlı hareketin (G0) malzemeye girmesi, takımın kesme boyunu aşan derinlik, dik dalma ve tam genişlikte kanal kesimi işaretlenir. Mengene, pabuç, takım tutucu ve makine sınırları bu haritada yoktur; onlar için kuru çalıştırmayı kullan.' + (nR ? ' <b style="color:#f87171">Kırmızı satır varken programı kesimde kullanma: takımı, kesme derinliğini ya da işlemi değiştir.</b>' : ''));
     // G-kodu
     h += '<div class="lbl h">G-kodu</div>';
-    h += `<pre style="flex:1 0 100%;max-height:220px;overflow:auto;background:#0b1220;border:1px solid #1e293b;border-radius:10px;padding:8px;font-size:11.5px;line-height:1.35;margin:0">${esc(S.code.split('\n').slice(0, 60).join('\n'))}${S.code.split('\n').length > 60 ? '\n…' : ''}</pre>`;
+    const COL = ['transparent', 'rgba(234,179,8,.18)', 'rgba(239,68,68,.28)'];
+    h += `<pre style="flex:1 0 100%;max-height:220px;overflow:auto;background:#0b1220;border:1px solid #1e293b;border-radius:10px;padding:8px;font-size:11.5px;line-height:1.35;margin:0">${lines.slice(0, 60).map((l, i) => (lv[i] ? `<span style="background:${COL[lv[i]]}">${esc(l)}</span>` : esc(l))).join('\n')}${lines.length > 60 ? '\n…' : ''}</pre>`;
     h += btn((cfg.lineNumbers ? '☑' : '☐') + ' Satır numarası (N)', 'cn-ln', !!cfg.lineNumbers, 'flex:1 1 45%') + btn('⬇ G-kodunu indir (.' + C.POSTS[cfg.post].ext + ')', 'cn-dl', false, 'flex:1 1 50%;font-weight:700') + btn('🌬 Kuru çalıştırma programı (havada)', 'cn-dry', false, 'flex:1 0 100%') + btn('📄 İş kartı (PDF)', 'cn-pdf', false, 'flex:1 0 100%');
     h += note('<b>Kuru çalıştırma:</b> aynı program, bütün Z değerleri yukarı kaydırılmış hâli. Takım stoğun en az ' + nf(cfg.dryClear || 5) + ' mm üstünden geçer, hiçbir yere kesmez. Önce bunu çalıştırıp X-Y hareketlerini, takım değişimlerini ve mengeneye yaklaşmayı havada izle, sonra asıl programı yükle. Kaydırma miktarı programın başında yazar.');
     h += note('<b>USB belleğe aktarma:</b> Android\'de USB belleği OTG adaptörüyle tak, indirilen dosyayı Dosyalar uygulamasından USB\'ye kopyala. iPhone\'da Dosyalar uygulamasında "Paylaş → Dosyalara kaydet" ile USB sürücüyü seç. Makinede programı açmadan önce kumandada simülasyon / grafik kontrolü yap ve ilk çalıştırmada ilerleme hızını düşük tut (feed override).');
@@ -172,12 +187,13 @@ export function createCamUI(api) {
     if (a === 'cn-v-final') { S.view = 'sim'; S.sim = null; S.simPlay = false; draw(); api.render(); return true; }
     if (a === 'cn-sim') { if (!S.sim || S.sim.done) simStart(); else { S.simPlay = !S.simPlay; api.render(); } return true; }
     if (a === 'cn-ln') { cfg.lineNumbers = !cfg.lineNumbers; save(); recode(); api.render(); return true; }
+    if (a === 'cn-slow') { cfg.slowRisk = !cfg.slowRisk; save(); recode(); api.render(); return true; }
     if (a === 'cn-dl') { download(); return true; }
     if (a === 'cn-dry') { download(true); return true; }
     if (a === 'cn-pdf') { pdf(); return true; }
     return true;
   }
-  function recode() { if (S.R) { S.R.P.zero = zeroOf(S.R.P.stock); S.code = C.gcode(S.R, { ...S.job, zero: cfg.zero }, cfg.post, { date: api.date(), lineNumbers: cfg.post === 'fanuc' && cfg.lineNumbers }); S.job.zero = cfg.zero; } }
+  function recode() { if (S.R) { S.R.P.zero = zeroOf(S.R.P.stock); S.job.zero = cfg.zero; ({ code: S.code, trace: S.trace } = genCode()); } }
   const zeroOf = (s) => (cfg.zero === 'center' ? [(s.x0 + s.x1) / 2, (s.y0 + s.y1) / 2, s.zTop] : cfg.zero === 'bottom' ? [s.x0, s.y0, s.zBot] : [s.x0, s.y0, s.zTop]);
   function input(el, type) {
     const d = el.dataset, v = el.value, nv = parseFloat(String(v).replace(',', '.'));
@@ -191,7 +207,7 @@ export function createCamUI(api) {
   function download(dry) {
     if (!S.code) return;
     const name = String(api.name() || 'parca').replace(/[^\w\-]+/g, '_').slice(0, 40) || 'parca';
-    const code = dry ? C.gcode(S.R, { ...S.job, zero: cfg.zero }, cfg.post, { date: api.date(), lineNumbers: cfg.post === 'fanuc' && cfg.lineNumbers, dryRun: { clear: cfg.dryClear || 5 }, program: 1002 }) : S.code;
+    const code = dry ? genCode({ dryRun: { clear: cfg.dryClear || 5 }, program: 1002, slow: null }).code : S.code;
     api.saveBlob(new Blob([code.replace(/\n/g, cfg.post === 'grbl' ? '\n' : '\r\n')], { type: 'text/plain' }), name + (dry ? '_KURU' : '') + '.' + C.POSTS[cfg.post].ext);
     api.toast(dry ? 'Kuru çalıştırma programı indirildi (O1002): takım stoğun ' + (cfg.dryClear || 5) + ' mm üstünden geçer' : 'G-kodu indirildi: USB belleğe kopyalayıp makineye tak');
   }

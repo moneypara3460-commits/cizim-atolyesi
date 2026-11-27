@@ -313,6 +313,7 @@ function opWalls(P, op, tool, mv) {
   const zs = zLevels(P, stock.modelTop + 1e-3, floor, sd, H, 0, flats).filter((z) => z < stock.modelTop - 1e-3 || z === floor);
   flats.add(+floor.toFixed(4));
   const L = linker(P, mv, op.safe);
+  let zPrev = stock.zTop;   // hızlı iniş yalnız bir önceki seviyenin 1 mm üstüne: aradaki duvar payına G0 ile girilmez
   for (const z of zs) {
     const E = levelField(P, z, 0); if (!E) continue;
     let levels = [r];
@@ -326,11 +327,12 @@ function opWalls(P, op, tool, mv) {
     for (const c of cs) {
       const p0 = c.pts[0], [cx, cy, cz] = L.pos;
       if (cz <= z + 1e-6 && cx != null && clearLine(P, E, [cx, cy], p0, r)) L.feedTo(p0[0], p0[1], z, tool.feed);
-      else { L.retract(); L.rapidTo(p0[0], p0[1], op.safe); L.rapidTo(p0[0], p0[1], z + 1); L.plungeTo(p0[0], p0[1], z, tool.plunge); }
+      else { L.retract(); L.rapidTo(p0[0], p0[1], op.safe); L.rapidTo(p0[0], p0[1], Math.min(op.safe, Math.max(z + 1, zPrev + 1))); L.plungeTo(p0[0], p0[1], z, tool.plunge); }
       for (let k = 1; k < c.pts.length; k++) L.feedTo(c.pts[k][0], c.pts[k][1], z, tool.feed);
       if (c.closed) L.feedTo(p0[0], p0[1], z, tool.feed);
     }
     L.retract();
+    zPrev = z;
   }
   return { levels: zs.length, floors: flats.size };
 }
@@ -384,7 +386,7 @@ function opFinish3D(P, op, tool, mv, onProg) {
       const [x0, y0, z0] = pts[0], [cx, cy, cz] = L.pos;
       const safeLink = () => { const n = Math.ceil(Math.hypot(cx - x0, cy - y0) / (G.res * 0.5)) + 1; for (let k = 0; k <= n; k++) { const x = cx + (x0 - cx) * k / n, y = cy + (y0 - cy) * k / n, z = cz + (z0 - cz) * k / n; if (dropZ(P, fp, x, y, floor) > z + 0.003) return false; } return true; };
       if (cx != null && cz < op.safe && Math.hypot(cx - x0, cy - y0) <= so * 1.5 + 1e-6 && safeLink()) L.feedTo(x0, y0, z0, tool.feed);
-      else { L.retract(); L.rapidTo(x0, y0, op.safe); L.rapidTo(x0, y0, z0 + 1); L.plungeTo(x0, y0, z0, tool.plunge); }
+      else { L.retract(); L.rapidTo(x0, y0, op.safe); L.rapidTo(x0, y0, Math.min(op.safe, isFinite(op.leftAbove) ? z0 + op.leftAbove + 1 : Math.max(z0 + 1, stock.zTop + 1))); L.plungeTo(x0, y0, z0, tool.plunge); }
       for (let k = 1; k < pts.length; k++) L.feedTo(pts[k][0], pts[k][1], pts[k][2], tool.feed);
       run = [];
     };
@@ -434,11 +436,15 @@ export function plan(job, onProg) {
   const P = prepare(job), out = [], warn = [];
   const safe = P.stock.zTop + (job.safe ?? 5);
   const toolById = (id) => job.tools.find((t) => t.id === id);
+  // model yüzeyinin üstünde kalabilecek en kalın malzeme (yaklaşma yüksekliği için): kaba boşaltmadan önce bütün stok,
+  // sonra en fazla basamak yüksekliği + pay. 3B ince işleme hızlı inişi bunun 1 mm üstünde bitirir, kalanı dalma ilerlemesiyle.
+  let leftAbove = Infinity;
   for (const op0 of job.ops) {
     if (!op0.on) continue;
     const tool = toolById(op0.tool);
     if (!tool) { warn.push({ sev: 'crit', t: OP_NAMES[op0.type] + ': takım seçilmedi.' }); continue; }
-    const op = { ...op0, safe }, mv = [];
+    const op = { ...op0, safe, leftAbove }, mv = [];
+    if (op.type === 'rough') leftAbove = Math.min(leftAbove, (op.stepdown || tool.d * 0.4) + Math.max(op.allowZ ?? 0.2, op.allowR ?? 0.3));
     let info = {};
     const prog = (f) => onProg && onProg(op0.type, f);
     if (op.type === 'face') info = opFacing(P, op, tool, mv);
@@ -538,6 +544,74 @@ export function residual(R, SG, tol = 0.1) {
   return { leftPct: cells ? left / cells * 100 : 0, leftMax, gouge, gougeMax, mark };
 }
 
+/* ---------- risk haritası ---------- */
+// Her hareket, o ana kadarki malzeme durumu (simülasyon) üzerinde sınanır. 0 yeşil, 1 sarı (dikkat), 2 kırmızı (hata).
+//   kırmızı: hızlı hareket (G0) malzemeye giriyor · kesme derinliği takımın kesme boyunu aşıyor · düz frezeyle
+//            takım çapından derin dik dalma · delik derinliği matkabın kesme boyunu aşıyor
+//   sarı:    düz / küresel frezeyle malzemeye dik dalma (rampalı ya da helisel giriş önerilir) · tam genişlikte kanal
+//            kesimi · takım çapından derin yan kesim. "slow" işaretli satırlarda istenirse ilerleme düşürülür.
+// Sınır: yalnız stok ve takım ucu modellenir; mengene, pabuç, tutucu ve makine sınırları bu haritaya girmez.
+function aboveMax(SG, fp, x, y, z, front) {   // ayak izinde takım ucunun üstünde kalan en büyük malzeme; front: [dx,dy] ön yarı dolu oranı
+  const R = fp.R, R2 = R * R, S = SG.S;
+  const i0 = Math.max(0, Math.ceil((x - R - SG.ox) / SG.res - 0.5)), i1 = Math.min(SG.nx - 1, Math.floor((x + R - SG.ox) / SG.res - 0.5));
+  const j0 = Math.max(0, Math.ceil((y - R - SG.oy) / SG.res - 0.5)), j1 = Math.min(SG.ny - 1, Math.floor((y + R - SG.oy) / SG.res - 0.5));
+  let mx = -Infinity, nF = 0, nFull = 0;
+  for (let j = j0; j <= j1; j++) {
+    const dy = SG.oy + (j + 0.5) * SG.res - y;
+    for (let i = i0; i <= i1; i++) {
+      const dx = SG.ox + (i + 0.5) * SG.res - x, d2 = dx * dx + dy * dy;
+      if (d2 > R2) continue;
+      const v = fp.ball ? z + R - Math.sqrt(R2 - d2) : z, a = S[i + SG.nx * j] - v;
+      if (a > mx) mx = a;
+      if (front && dx * front[0] + dy * front[1] > 0.3 * R) { nF++; if (a > 0.01) nFull++; }
+    }
+  }
+  return { a: mx, eng: nF ? nFull / nF : 0 };
+}
+export function riskMap(R) {
+  const SG = simGrid(R), out = [], cnt = [0, 0, 0];
+  let prev = null;
+  for (const op of R.ops) {
+    const tool = op.tool, fp = simFoot(SG, tool), flute = tool.flute > 0 ? tool.flute : Infinity, risks = [];
+    for (const m of op.moves) {
+      const r = { lvl: 0, why: '', slow: false }, set = (lvl, why, slow) => { if (lvl > r.lvl) { r.lvl = lvl; r.why = why; } else if (lvl === r.lvl && !r.why) r.why = why; if (slow) r.slow = true; };
+      if (m.k === 'd') {
+        const top = aboveMax(SG, fp, m.x, m.y, m.r).a, depth = m.r - m.z;
+        if (top > 0.05) set(2, 'Delme başlangıç düzlemi (R) malzemenin içinde: matkap hızlı harekette çarpar');
+        const mat = aboveMax(SG, fp, m.x, m.y, m.z).a;   // delinen malzeme kalınlığı
+        if (mat > flute + 1e-6 || depth > flute + 1e-6) set(2, 'Delik derinliği (' + fmt(Math.min(depth, Math.max(mat, 0))) + ' mm) matkabın kesme boyunu (' + fmt(flute) + ' mm) aşıyor');
+        cutAt(SG, fp, m.x, m.y, m.z);
+        prev = [m.x, m.y, m.r];
+      } else if (prev) {
+        const [x0, y0, z0] = prev, Lxy = Math.hypot(m.x - x0, m.y - y0), n = Math.max(1, Math.ceil(Math.max(Lxy, Math.abs(m.z - z0)) / (SG.res * 0.5)));
+        const dir = Lxy > 1e-6 ? [(m.x - x0) / Lxy, (m.y - y0) / Lxy] : null;
+        let ap = -Infinity, eng = 0;
+        for (let s = 1; s <= n; s++) {
+          const x = x0 + (m.x - x0) * s / n, y = y0 + (m.y - y0) * s / n, z = z0 + (m.z - z0) * s / n, q = aboveMax(SG, fp, x, y, z, dir);
+          if (q.a > ap) ap = q.a;
+          if (q.eng > eng && q.a > 0.05) eng = q.eng;
+          if (m.k !== 'r') cutAt(SG, fp, x, y, z);
+        }
+        if (m.k === 'r') { if (ap > 0.05) set(2, 'Hızlı hareket (G0) malzemeye giriyor (' + fmt(ap) + ' mm): takım ve parça zarar görür'); }
+        else if (ap > 0.05) {
+          if (ap > flute + 1e-6) set(2, 'Kesme derinliği (' + fmt(ap) + ' mm) takımın kesme boyunu (' + fmt(flute) + ' mm) aşıyor: tutucu ya da şaft malzemeye sürter');
+          if (!dir && m.z < z0 && tool.type !== 'drill') {
+            if (tool.type === 'flat' && ap > tool.d + 1e-6) set(2, 'Düz frezeyle ' + fmt(ap) + ' mm dik dalma (takım çapından derin): rampalı ya da helisel giriş kullan', true);
+            else set(1, 'Malzemeye dik dalma (' + fmt(ap) + ' mm): rampalı ya da helisel giriş daha güvenli', true);
+          } else if (dir) {
+            if (eng > 0.9) set(1, 'Tam genişlikte kanal kesimi: talaş sıkışabilir', true);
+            if (ap > tool.d + 1e-6) set(1, 'Takım çapından derin yan kesim (' + fmt(ap) + ' mm)', true);
+          }
+        }
+        prev = [m.x, m.y, m.z];
+      } else prev = [m.x, m.y, m.z];
+      cnt[r.lvl]++; risks.push(r);
+    }
+    out.push(risks);
+  }
+  return { ops: out, count: { green: cnt[0], yellow: cnt[1], red: cnt[2] } };
+}
+
 /* ---------- G-kodu ---------- */
 export const POSTS = {
   fanuc: { name: 'Fanuc (ve uyumlu: Haas, Mitsubishi, Syntec)', ext: 'nc' },
@@ -562,7 +636,10 @@ export function gcode(R, job, postKey, opt = {}) {
   const dry = opt.dryRun ? dryRunShift(R, opt.dryRun.clear) : 0;
   const X = (x) => fmt(x - Z0[0]), Y = (y) => fmt(y - Z0[1]), Zf = (z) => fmt(z + dry - Z0[2]);
   const c = (t) => '(' + ascii(t).slice(0, 70) + ')';
-  let nline = 0; const out = (s) => { if (opt.lineNumbers && fanuc && s && !s.startsWith('%') && !s.startsWith('(') && !s.startsWith('O')) { nline += 10; L.push('N' + nline + ' ' + s); } else L.push(s); };
+  // opt.trace: her çıktı satırı için kaynağı ([işlem, hareket], ['tc', işlem] ya da null) — risk haritası satırları boyar
+  // opt.slow: { map: riskMap(R), f: 0,5 } — "slow" işaretli kesme / dalma hareketlerinde ilerleme f katına iner
+  let nline = 0, cur = null; const out = (s) => { if (opt.trace) opt.trace.push(cur); if (opt.lineNumbers && fanuc && s && !s.startsWith('%') && !s.startsWith('(') && !s.startsWith('O')) { nline += 10; L.push('N' + nline + ' ' + s); } else L.push(s); };
+  const slowF = (oi, mi, f) => { const r = opt.slow && opt.slow.map.ops[oi] && opt.slow.map.ops[oi][mi]; return r && r.slow ? Math.max(1, f * (opt.slow.f || 0.5)) : f; };
   const st = R.P.stock;
   if (!grbl) out('%');
   if (fanuc) out('O' + String(opt.program || 1001).padStart(4, '0') + ' ' + c(job.name || 'CIZIM ATOLYESI'));
@@ -581,8 +658,9 @@ export function gcode(R, job, postKey, opt = {}) {
   out(grbl ? 'G21 G90 G94 G17' : 'G21 G17 G40 G49 G80 G90 G94');
   let lx = null, ly = null, lz = null, lf = null, lg = null, first = true;
   const safe = R.safe;
-  for (const op of R.ops) {
+  for (const [oi, op] of R.ops.entries()) {
     const t = op.tool;
+    cur = null;
     out(c(op.name + ' - T' + t.n + ' ' + TOOLN(t)));
     if (grbl) { if (!first) { out('M5'); out(c('TAKIM DEGISTIR: T' + t.n + ' ' + TOOLN(t) + ' - BOY AYARI YAP')); out('M0'); } }
     else { if (!first) { out('M9'); out('M5'); out(fanuc ? 'G91 G28 Z0.0' : 'G53 G0 Z0.0'); out('G90'); } out('T' + t.n + ' M6'); }
@@ -590,11 +668,15 @@ export function gcode(R, job, postKey, opt = {}) {
     if (!grbl) out('G54');
     const m0 = op.moves.find((m) => m.k !== 'd') || op.moves[0];
     out('G0 X' + X(m0.x) + ' Y' + Y(m0.y)); lx = m0.x; ly = m0.y; lg = 0;
+    cur = ['tc', oi];
     out(grbl ? 'G0 Z' + Zf(safe) : 'G43 Z' + Zf(safe) + ' H' + t.n); lz = safe;
+    cur = null;
     if (!grbl && opt.coolant !== false && !dry) out('M8');
     first = false; lf = null;
     let inCycle = false;
-    for (const m of op.moves) {
+    for (const [mi, m0_] of op.moves.entries()) {
+      cur = [oi, mi];
+      const m = m0_.k === 'r' ? m0_ : { ...m0_, f: slowF(oi, mi, m0_.f) };
       if (m.k === 'd') {
         if (grbl || opt.expandCycles) {
           out('G0 X' + X(m.x) + ' Y' + Y(m.y)); out('G0 Z' + Zf(m.r));
@@ -619,6 +701,7 @@ export function gcode(R, job, postKey, opt = {}) {
       out(w.join(' ')); lg = g;
       lx = m.x; ly = m.y; lz = m.z;
     }
+    cur = null;
     if (inCycle) { out('G80'); inCycle = false; }
     out('G0 Z' + Zf(safe)); lz = safe; lg = 0;
   }
