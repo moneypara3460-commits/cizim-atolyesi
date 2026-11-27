@@ -70,3 +70,18 @@ Test projesi: paketleme makinesi — vidalı mil tahrikli dolum ünitesi + pnöm
 - **Parça listesi**: türe göre, model parçası ve hesap durumuyla; CSV (Excel, `;`) ve bütün hesaplarla PDF.
 - **Kütüphane**: kullanıcının girdiği bileşenler bu cihazda; aynı ürün kodu güncellenir.
 - Veri projeyle kaydedilir (proje kaydı ve otomatik kayıt); Mekatronik verisi olmayan eski projeler boş ağaçla açılır.
+
+## Eksantrik (kam) tasarımı
+
+Mekatronik bölümünde **⚙ Eksantrik (kam)** sekmesi. Dönen milden zamanlı itme hareketi (paketleme, dolum, montaj makineleri).
+Hesap `meka/kam.js`, görünüm `meka/kam-ui.js`, test `tests/meka-kam.test.mjs` ve tarayıcı senaryosu `M-Eksantrik`.
+
+- **Hareket planı:** açı – kol konumu satırları (0°'den 360°'ye); strok aynıysa bekle, artarsa it, azalırsa geri gel.
+- **Hareket eğrileri:** modifiye sinüs (Normal), sikloid (Yumuşak), 4-5-6-7 polinom (En yumuşak) — Norton, *Design of Machinery*, bölüm 8.
+- **Geometri:** dış profilli disk, öteleme yapan makaralı kol, kaçıklık ve iki dönüş yönü. Profil, makara merkezi yolunun makara yarıçapı kadar içe ötelenmişidir.
+- **Kontroller:** basınç açısı (30° üstü uyarı, 45° üstü hata), dışbükey eğrilik yarıçapı < makara yarıçapı → alttan kesme (hata), < 2 katı → dar (uyarı),
+  isteğe bağlı kol kütlesi / yay ile temas kuvveti N = F0 + k·s + m·a (+ m·g): negatifse kol diskten kalkar, gereken ön yük önerilir; mil torku.
+- **Çıktılar:** DXF (profil, mil deliği, temel daire, 0° çizgisi), dış kontur G-kodu (Fanuc / ISO; takım yarıçapı ofseti, tırmanma, kademeli derinlik;
+  içbükey kısma sığmayan takım reddedilir), teknik resim + rapor PDF, açı – strok CSV.
+- **Bilinen sınırlar:** yalnız dış profilli disk ve öteleme yapan kol; salınan (kollu) izleyici, kanallı (oluklu) kam ve silindirik kam yok.
+  Sürtünme, makara ataleti, kol esnekliği ve titreşim yok sayılır. G-kodunda mil deliği ve kama kanalı yok (ayrı işlenir).

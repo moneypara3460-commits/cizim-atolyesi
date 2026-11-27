@@ -877,6 +877,44 @@ await T('Mekatronik 7. aşama benzetim: örnek çevrim 3,817 s, çizelge ve hız
   expect(/3,817 s/.test(await body(page)), 'yenileme sonrası benzetim');
 });
 
+await T('Mekatronik eksantrik (kam): poşet çenesi şablonu uygun; disk çizimi ve grafikler; sivri disk alttan kesme hatası; zıplama uyarısı; DXF, G-kodu, PDF, CSV; yenilemede korunur', 'M-Eksantrik', async ({ page }) => {
+  await tab(page, 'meka');
+  await act(page, 'mk-v-kam');
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mkq="${k}"]`); const tg = await i.evaluate((e) => e.tagName); if (tg === 'SELECT') await i.selectOption(String(v)); else await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(120); };
+  let b = await body(page);
+  expect(/Eksantrik \(kam\) tasarımı/.test(b) && /Hareketi yaz, diskin şeklini uygulama çizsin/.test(b), 'açılış: ' + b.slice(0, 200));
+  await act(page, 'mk-qornek');
+  b = await body(page);
+  expect(/✓ Uygun/.test(b) && /kol diskten kalkmaz/.test(b) && /30° sınırının altında/.test(b), 'şablon uygun: ' + b.slice(0, 400));
+  expect((await page.locator('#tabbody svg path').count()) === 1 && (await page.locator('#tabbody svg polyline').count()) === 4, 'disk ve grafikler');
+  // açı kaydırıcı: 160°'de kol 30 mm
+  await set('aci', 160);
+  expect(/Disk açısı: 160° · kol 30,0 mm/.test(await body(page)), 'açı');
+  // sivri disk: temel daire küçük, makara büyük
+  await set('delik', 6); await set('Rb', 15); await set('Dr', 40);
+  b = await body(page);
+  expect(/Düzeltilmeli/.test(b) && /alttan kesilir/.test(b), 'alttan kesme: ' + b.slice(0, 300));
+  await set('Rb', 65); await set('delik', 25); await set('Dr', 32);
+  // zıplama: ön yük sıfır, yüksek devir
+  await set('F0', 0); await set('n', 200);
+  b = await body(page);
+  expect(/diskten KALKAR/.test(b), 'zıplama');
+  await set('F0', 60); await set('n', 60);
+  expect(/✓ Uygun/.test(await body(page)), 'geri alındı');
+  const dxf = await download(page, () => act(page, 'mk-qdxf'));
+  expect(/ENTITIES/.test(dxf.text) && /PROFIL/.test(dxf.text) && /eksantrik\.dxf$/.test(dxf.name), 'DXF');
+  const nc = await download(page, () => act(page, 'mk-qnc'));
+  expect(/^%\nO2001/.test(nc.text) && /TEK BLOK/.test(nc.text) && /M30/.test(nc.text) && /\.nc$/.test(nc.name), 'G-kodu: ' + nc.text.slice(0, 120));
+  const pdf = await download(page, () => act(page, 'mk-qpdf'));
+  expect(/^%PDF/.test(pdf.text), 'PDF');
+  const csv = await download(page, () => act(page, 'mk-qcsv'));
+  expect(/aci_derece;strok_mm/.test(csv.text), 'CSV');
+  await page.waitForTimeout(1500);
+  await page.reload(); await waitReady(page);
+  await tab(page, 'meka'); await act(page, 'mk-v-kam');
+  expect(/✓ Uygun/.test(await body(page)) && (await page.locator('#tabbody [data-mkq="p.4.1"]').inputValue()) === '0', 'yenileme sonrası');
+});
+
 await T('Mekatronik 8. aşama izlenebilirlik: gereksinimler benzetim ve kart sonucundan değerlendirilir; revizyon dört göz ile onaylanır; yenileme sonrası parmak izi aynı, değişiklik algılanır; matris CSV, PDF; STEP AP242 (gerçek OCCT, geri okuma)', 'M-Izlenebilirlik', async ({ page }) => {
   await act(page, 'add-box'); await page.waitForTimeout(400);
   await tab(page, 'meka');
