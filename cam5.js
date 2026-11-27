@@ -352,7 +352,7 @@ export function plan5(job) {
   const rn = (m.rot || []).map((r) => r.name);
   let simulMoves = 0;
   for (let i = 1; i < cl.length; i++) if (cl[i].k !== 'r' && ax[i] && ax[i - 1] && rn.some((n) => Math.abs(ax[i][n] - ax[i - 1][n]) > 1e-6)) simulMoves++;
-  return { S, cl, ax, passes: passes.map((p) => ({ name: p.name, n: p.cl.length, tool: p.tool, opType: p.opType, simul: p.simul })), ops: opsOut, warn, limitViolations: bad, simulMoves, machine: m };
+  return { S, cl, ax, passes: passes.map((p) => ({ name: p.name, n: p.cl.length, tool: p.tool, opType: p.opType, opIndex: p.opIndex, simul: p.simul })), ops: opsOut, warn, limitViolations: bad, simulMoves, machine: m };
 }
 
 // süre ve yol uzunluğu

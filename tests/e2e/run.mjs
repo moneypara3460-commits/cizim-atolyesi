@@ -1461,6 +1461,25 @@ await T('5 eksen: 3+2 ve eş zamanlı yüzey işleme, TCP G-kodu (Fanuc G43.4), 
   expect(/desteklenmiyor|uygun değil/.test(await body(page)), 'Mach3 5 eksen reddi');
 });
 
+await T('5 eksen Güvenli Kesim: risk haritası (ilk yaklaşma sarı), satırlar renkli önizleme, kuru çalıştırma programı (takım ekseni boyunca geri çekme), değerli parça kontrol listesi', 'I-4/5', async ({ page }) => {
+  await tab(page, 'dims'); await setK(page, 'w', 50); await setK(page, 'h', 15); await setK(page, 'l', 40); await setK(page, 'r', 5);
+  await tab(page, 'cam'); await act(page, 'c5-mode-5');
+  await act(page, 'c5-run'); await waitText(page, '#tabbody', /Çarpışma ve limit/, 180000);
+  let b = await body(page);
+  expect(/🛡 Güvenli Kesim/.test(b) && /Kırmızı \(hata\): 0 nokta/.test(b) && /Sarı \(dikkat\): [1-9]/.test(b), 'risk: ' + b.slice(b.indexOf('Güvenli Kesim'), b.indexOf('Güvenli Kesim') + 200));
+  expect(/boy ofsetini/.test(await page.locator('#c5-risk').innerText()), 'sarı sebep');
+  await act(page, 'c5-peek'); await page.waitForSelector('#c5-code', { timeout: 60000 });
+  expect(await page.locator('#c5-code span').count() >= 1, 'önizlemede renkli satır');
+  const dry = await download(page, () => act(page, 'c5-dry'), 120000);
+  expect(/_KURU\.nc$/.test(dry.name) && /KURU CALISTIRMA/.test(dry.text) && /GERI CEKILDI/.test(dry.text) && !/\nM8\n/.test(dry.text), 'kuru çalıştırma: ' + dry.name);
+  await act(page, 'c5-val'); await act(page, 'c5-run'); await waitText(page, '#tabbody', /Çarpışma ve limit/, 180000);
+  expect(/kontrol listesini işaretle \(4 eksik\)/.test(await body(page)), 'değerli parça engeli');
+  for (const k of ['zero', 'tool', 'clamp', 'dry']) await act(page, 'c5-chk-' + k);
+  const g = await download(page, () => act(page, 'c5-gcode'), 120000);
+  expect(/DEGERLI PARCA MODU/.test(g.text), 'değerli parça G-kodu');
+  await act(page, 'c5-val');
+});
+
 /* ---------- J. Mühendislik analizi ---------- */
 await T('Analiz: ankastre kiriş statik (FL³/3EI ±3%), ısı enerji dengesi, eski sonuç işareti', 'J-Analiz', async ({ page }) => {
   await tab(page, 'dims'); await setK(page, 'w', 200); await setK(page, 'h', 20); await setK(page, 'l', 20); await setK(page, 'r', 0);
