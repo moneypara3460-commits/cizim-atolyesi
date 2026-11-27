@@ -182,6 +182,33 @@ t('değerli parça: her işlemin yalnız ilk kesme geçişi yavaş, başlık yaz
   // değerli parça seçeneği olmadan program aynı kalır
   assert.equal(C.gcode(R, job, 'fanuc'), C.gcode(R, job, 'fanuc', { firstPass: 0 }));
 });
+t('Heidenhain Klartext: blok numaraları, BEGIN / END adı, BLK FORM, TOOL CALL, CYCL DEF 200; X-Y yolu Fanuc ile aynı; kuru çalıştırma', () => {
+  const job = { tris: POCKET, tools: TOOLS, stock: { side: 2, top: 1, bottom: 5 }, res: 0.5, holes: [{ x: 7, z: 20, d: 5, top: 20, bottom: -1 }, { x: 53, z: 20, d: 5, top: 20, bottom: 12 }], ops: [{ type: 'face', on: true, tool: 1 }, { type: 'rough', on: true, tool: 1 }, { type: 'drill', on: true, tool: 3 }], name: 'Kapak çıkıntısı', zero: 'corner' };
+  const R = C.plan(job), H = C.gcode(R, job, 'heidenhain', { date: '1' }).trimEnd().split('\n'), F = C.gcode(R, job, 'fanuc');
+  H.forEach((l, i) => assert.ok(l.startsWith(i + ' '), 'blok no: ' + l));
+  assert.equal(H[0], '0 BEGIN PGM KAPAK_CIKINTISI MM'); assert.equal(H[H.length - 1], H.length - 1 + ' END PGM KAPAK_CIKINTISI MM');
+  assert.equal(C.pgmName('Kapak çıkıntısı'), 'KAPAK_CIKINTISI');
+  assert.ok(H.some((l) => / BLK FORM 0\.1 Z X\+0 Y\+0 Z-26$/.test(l)) && H.some((l) => / BLK FORM 0\.2 X\+64 Y\+44 Z\+0$/.test(l)));
+  assert.ok(H.some((l) => / TOOL CALL 1 Z S8000$/.test(l)) && H.some((l) => / TOOL CALL 3 Z S3000$/.test(l)));
+  assert.ok(H.some((l) => /CYCL DEF 200 DRILLING/.test(l)) && H.filter((l) => / M99$/.test(l)).length === 2);
+  assert.ok(!/[^\x00-\x7f]/.test(H.join('\n')), 'ASCII');
+  for (const l of H) if (/^\d+ L /.test(l)) { assert.ok(/ R0( FMAX| F\d+)?( M\d+)?$/.test(l), l); for (const m of l.matchAll(/ [XYZ]([+-][\d.]+)/g)) assert.ok(!/\.$/.test(m[1]), l); }
+  // FMAX'tan sonraki ilk kesme bloğunda F yazılı (FMAX yalnız kendi bloğunda geçerli)
+  for (let i = 1; i < H.length; i++) if (/^\d+ L .* R0$/.test(H[i])) { let j = i - 1; while (j > 0 && !/^\d+ L /.test(H[j])) j--; assert.ok(!/FMAX/.test(H[j]), 'FMAX sonrası F yok: ' + H[i]); }
+  // derin delik: yüzey −1, derinlik −22 → uç Z−23 (Fanuc G83 Z ile aynı), kademe 5
+  const fz = +F.match(/G83 X[\d.]+ Y[\d.]+ Z(-[\d.]+)/)[1];
+  const q203 = +H.find((l) => /Q203=/.test(l)).match(/Q203=([+-][\d.]+)/)[1], q201 = +H.find((l) => /Q201=/.test(l)).match(/Q201=([+-][\d.]+)/)[1];
+  assert.ok(Math.abs(q203 + q201 - fz) < 1e-9, 'delik ucu ' + (q203 + q201) + ' ≠ ' + fz);
+  // X-Y yolu: ardışık konumlar Fanuc ile aynı
+  const path = (lines, re) => { const p = [0, 0], out = []; for (const l of lines) { if (!re.test(l)) continue; const x = l.match(/X([+-]?[\d.]+)/), y = l.match(/Y([+-]?[\d.]+)/); if (x) p[0] = +x[1]; if (y) p[1] = +y[1]; const k = p.join(); if (out[out.length - 1] !== k) out.push(k); } return out; };
+  assert.deepEqual(path(H, /^\d+ L /), path(F.split('\n'), /^(G[0-3] |G98 |[XYZ])/));
+  // kuru çalıştırma: bütün Z değerleri ve delme yüzeyi + güvenlik stok üstünün 5 mm yukarısında
+  const D = C.gcode(R, job, 'heidenhain', { dryRun: { clear: 5 } }).split('\n');
+  for (const l of D) { if (/BLK FORM|M140/.test(l)) continue; const z = l.match(/ Z([+-][\d.]+)/); if (z && / L /.test(l)) assert.ok(+z[1] >= 5 - 1e-9, l); }
+  const dq203 = +D.find((l) => /Q203=/.test(l)).match(/Q203=([+-][\d.]+)/)[1], dq201 = +D.find((l) => /Q201=/.test(l)).match(/Q201=([+-][\d.]+)/)[1];
+  assert.ok(dq203 + dq201 >= 5 - 1e-9, 'kuru: delik ucu stok üstünde');
+  assert.ok(!D.some((l) => / M8$/.test(l)));
+});
 t('alttan girinti (üstten görünmeyen) uyarısı', () => {
   // köprü: iki ayak + üst plaka (altı boş)
   const tr = Float32Array.from([...boxTris([0, 0, 0], [10, 20, 30]), ...boxTris([40, 0, 0], [50, 20, 30]), ...boxTris([0, 20, 0], [50, 30, 30])]);
