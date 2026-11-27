@@ -27,20 +27,23 @@ t('2. Her model tipi beklenen parçaları üretir; hiçbir parçada hata/uyarı 
   const want = {
     derby: ['Ön saya', 'Yan saya', 'Dil'], oxford: ['Ön saya', 'Yan saya', 'Dil'],
     loafer: ['Ön saya', 'Yan saya', 'Maske'], spor: ['Ön saya', 'Yan saya', 'Dil', 'Burun kapağı', 'Topuk takviyesi'],
+    bot: ['Ön saya', 'Yan saya', 'Dil'], makosen: ['Ön saya', 'Yan saya', 'Önlük'],
+    sandalet: ['Ön bant', 'Topuk kapağı', 'Bilek bandı'], topuklu: ['Saya (tek parça)'],
   };
+  const noCap = ['makosen', 'sandalet', 'topuklu'], noMatch = ['sandalet', 'topuklu'];
   for (const type of Object.keys(A.MODELS)) for (const cap of [false, true]) {
     const p = proj(), r = A.generate(p, { type, params: { cap } });
     const names = r.pieces.map((pc) => pc.name);
     const exp = want[type].filter((n) => n !== 'Burun kapağı');
-    if (cap) exp.splice(type === 'spor' ? 3 : exp.length, 0, 'Burun kapağı');
+    if (cap && !noCap.includes(type)) exp.splice(type === 'spor' ? 3 : exp.length, 0, 'Burun kapağı');
     assert.deepEqual(names.sort(), exp.slice().sort(), `${type} cap=${cap}`);
     for (const pc of r.pieces) {
       const iss = checkPiece(pc).filter((i) => i.msg !== 'Malzeme seçilmedi');
       assert.deepEqual(iss.map((i) => i.msg), [], `${type}/${pc.name}`);
-      assert.ok(cutLine(pc).pts.length > 10, `${type}/${pc.name} kesim çizgisi`);
+      assert.ok(cutLine(pc).pts.length > (pc.name === 'Bilek bandı' ? 3 : 10), `${type}/${pc.name} kesim çizgisi`);
     }
     p.pieces.push(...r.pieces); p.matches.push(...r.matches);
-    assert.ok(r.matches.length >= 1);
+    assert.ok(noMatch.includes(type) || r.matches.length >= 1);
     for (const c of checkAll(p)) assert.equal(c.ok, true, `${type} eşleşme: ${c.issues.map((i) => i.msg).join()}`);
   }
 });
@@ -68,6 +71,25 @@ t('4. Ters çekilmiş kalıpta parçalar da ters (görünümdeki kalıba oturur)
   // yönü elle zorlamak
   const r2 = A.generate(p, { type: 'derby', flipX: false, flipY: false });
   assert.equal(r2.frame.flipX, false);
+});
+
+t('2b. Yeni şablonlar: bot kalıp yüksekliğine kırpılır; sandalet bandı yerinde; topuklu tek parça topuktan buruna; makosen önlüğü ön sayanın üstünde', () => {
+  const p = proj(), L = p.last.views.yan.length;
+  const b1 = A.generate(proj(), { type: 'bot', params: { backH: 140 } });
+  assert.ok(b1.warn.some((w) => /indirildi/.test(w)), 'bot: kalıptan yüksek konç uyarısı');
+  assert.equal(A.generate(proj(), { type: 'bot' }).warn.length, 0, 'varsayılan ayarda uyarı yok');
+  assert.equal(byName(b1, 'Yan saya').marks.filter((m) => m.kind === 'delik').length, 7);
+  const sd = A.generate(proj(), { type: 'sandalet', params: { strapAt: 70, strapW: 20 } }), ob = box(netPolygon(byName(sd, 'Ön bant')));
+  assert.ok(Math.abs((ob.x0 + ob.x1) / 2 - 0.7 * L) < 4 && ob.x1 - ob.x0 > 18 && ob.x1 - ob.x0 < 30, 'ön bant %70, 20 mm: ' + JSON.stringify(ob));
+  assert.equal(byName(sd, 'Bilek bandı').marks.filter((m) => m.kind === 'delik').length, 5);
+  assert.ok(box(netPolygon(byName(sd, 'Topuk kapağı'))).x0 < 3, 'topuk kapağı topukta');
+  const tp = box(netPolygon(byName(A.generate(proj(), { type: 'topuklu' }), 'Saya (tek parça)')));
+  assert.ok(tp.x0 < 3 && Math.abs(tp.x1 - L) < 2, 'tek parça topuktan buruna');
+  const mk = A.generate(proj(), { type: 'makosen' }), on = box(netPolygon(byName(mk, 'Önlük'))), vs = box(netPolygon(byName(mk, 'Ön saya')));
+  assert.ok(on.x0 >= vs.x0 - 3 && on.x1 <= vs.x1 + 1, 'önlük ön sayanın üstünde');
+  for (const k of ['throat', 'qfront', 'cap']) assert.equal(A.paramShown('sandalet', k), false, 'sandalette ' + k + ' gizli');
+  assert.ok(A.paramShown('sandalet', 'strapAt') && !A.paramShown('derby', 'strapAt') && !A.paramShown('makosen', 'eyelets'));
+  assert.deepEqual(M.makeAuto({ type: 'topuklu' }).type, 'topuklu');
 });
 
 t('5. Ayarlar: arka yükseklik, delik sayısı, burun kapağı; sınır dışı değerler kırpılır', () => {
@@ -115,7 +137,7 @@ t('8. Yapay zekâ okuması → otomatik ayarlar: tip, delik, oranlar, arka yüks
   assert.equal(l.warnings.length, 2);
   // tanınmayan / bozuk yanıt
   const d = toAuto({ type: 'diger', view: 'side', confidence: 'medium' });
-  assert.equal(d.type, ''); assert.deepEqual(d.params, {}); assert.match(d.warnings[0], /hazır şablon yok/);
+  assert.equal(d.type, ''); assert.deepEqual(d.params, {}); assert.match(d.warnings[0], /tanıyamadı/);
   assert.equal(toAuto(null).type, '');
   // sonuç doğrudan parça üretiminde kullanılabilir
   const p = proj(); const g = A.generate(p, { type: r.type, params: r.params });

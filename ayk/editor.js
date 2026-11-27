@@ -2,7 +2,7 @@
 // Bağlam (ctx): 'stampa' (yardımcı çizgiler) ya da bir parçanın kimliği. Yalnız etkin bağlamdaki geometri düzenlenir.
 // Bütün değişiklikler api.begin() (geri al noktası) → değişiklik → api.changed() (otomatik kayıt) sırasıyla yapılır.
 import * as G from './geom.js?v=20261119c';
-import * as M from './model.js?v=20261119c';
+import * as M from './model.js?v=20261127a';
 import { pieceItems, sketchItems, lastItems, netPolygon, edgeFrame, markPoint, itemsBox, measure, fmt, checkPiece } from './build.js?v=20261119c';
 
 const { C } = G;

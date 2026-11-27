@@ -1,6 +1,6 @@
 // Model fotoğrafını yapay zekâyla okuma (sunucu: supabase/functions/ayk-model-oku). İnternet gerekir.
 // Sonuç otomatik parça ayarlarına çevrilir; usta isterse değiştirir.
-import { MODELS } from './auto.js?v=20261119c';
+import { MODELS } from './auto.js?v=20261127a';
 
 export const AI_URL = 'https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/ayk-model-oku';
 const KEY = 'sb_publishable_urzQtn-1lE1-obSXF_ivQg_wZbQMRDr';   // yayınlanabilir (herkese açık) anahtar
@@ -41,7 +41,7 @@ export function toAuto(res, L = 260) {
     if (ratio !== null) params.backH = Math.round(ratio * L);
   }
   const warnings = [];
-  if (!type) warnings.push('Bu model için hazır şablon yok (bot, sandalet, topuklu vb.): parçaları elle çiz ya da en yakın tipi seç.');
+  if (!type) warnings.push('Yapay zekâ bu modeli tanıyamadı: listeden tipi kendin seç (bot, makosen, sandalet ve topuklu şablonları da var) ya da parçaları elle çiz.');
   if (res?.view !== 'side') warnings.push('Fotoğraf yandan çekilmemiş görünüyor: çizgi konumları kaba tahmindir. Ayakkabıyı tam yandan çekmek daha iyi sonuç verir.');
   if (res?.confidence === 'low') warnings.push('Yapay zekâ emin değil: sonucu kontrol et.');
   const bits = [type ? MODELS[type].name : 'Tanınmayan model'];

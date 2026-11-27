@@ -4,7 +4,7 @@
 // usta değerleri değiştirip yeniden oluşturabilir ya da parçaları stampada düzeltebilir.
 // Parçalar yarım kalıptır: üst kenarı "orta çizgi" olan parçalar (ön saya, dil, burun) bu çizgiden simetrik açılır.
 import * as G from './geom.js?v=20261119c';
-import { makePiece, setEdgeProp, nextPieceNo } from './model.js?v=20261119c';
+import { makePiece, setEdgeProp, nextPieceNo } from './model.js?v=20261127a';
 import { makeMatch } from './match.js?v=20261119c';
 
 export const MODELS = {
@@ -12,6 +12,10 @@ export const MODELS = {
   oxford: { name: 'Oxford (kapalı bağcıklı)', lacing: true },
   loafer: { name: 'Loafer (bağcıksız, maskeli)', lacing: false },
   spor: { name: 'Spor ayakkabı', lacing: true },
+  bot: { name: 'Bot (bilek boyu, bağcıklı)', lacing: true },
+  makosen: { name: 'Makosen (önlüklü, bağcıksız)', lacing: false, hide: ['cap', 'capAt'] },
+  sandalet: { name: 'Sandalet (ön bant + topuk kapağı + bilek bandı)', lacing: false, hide: ['throat', 'qfront', 'cap', 'capAt'] },
+  topuklu: { name: 'Topuklu / stiletto (tek parça saya)', lacing: false, hide: ['qfront', 'cap', 'capAt'] },
 };
 // parametreler: oran olanlar kalıp boyunun oranı (% olarak gösterilir), mm olanlar mm
 export const PARAMS = {
@@ -22,19 +26,35 @@ export const PARAMS = {
   eyelets: { name: 'Bağcık deliği sayısı', unit: 'adet', min: 0, max: 10, lacing: true },
   cap: { name: 'Burun kapağı', unit: 'bool' },
   capAt: { name: 'Burun kapağı çizgisi', unit: '%', min: 70, max: 92 },
+  strapAt: { name: 'Ön bant ortası', unit: '%', min: 55, max: 85, only: ['sandalet'] },
+  strapW: { name: 'Ön bant genişliği', unit: 'mm', min: 10, max: 45, only: ['sandalet'] },
 };
+// arayüz: bu model tipinde bu ayar gösterilsin mi
+export function paramShown(type, k) {
+  const d = PARAMS[k], m = MODELS[type]; if (!d || !m) return false;
+  if (d.lacing && !m.lacing) return false;
+  if (d.only && !d.only.includes(type)) return false;
+  return !(m.hide || []).includes(k);
+}
 export function defaultParams(type, L = 260) {
   const r = (x) => Math.round(x);
+  const S = { strapAt: 72, strapW: 22 };
   switch (type) {
-    case 'oxford': return { backH: r(0.235 * L), throat: 62, facing: 43, qfront: 50, eyelets: 5, cap: false, capAt: 83 };
-    case 'loafer': return { backH: r(0.2 * L), throat: 60, facing: 60, qfront: 50, eyelets: 0, cap: false, capAt: 83 };
-    case 'spor': return { backH: r(0.27 * L), throat: 64, facing: 44, qfront: 55, eyelets: 6, cap: true, capAt: 82 };
-    default: return { backH: r(0.235 * L), throat: 60, facing: 42, qfront: 52, eyelets: 5, cap: false, capAt: 83 };
+    case 'oxford': return { backH: r(0.235 * L), throat: 62, facing: 43, qfront: 50, eyelets: 5, cap: false, capAt: 83, ...S };
+    case 'loafer': return { backH: r(0.2 * L), throat: 60, facing: 60, qfront: 50, eyelets: 0, cap: false, capAt: 83, ...S };
+    case 'spor': return { backH: r(0.27 * L), throat: 64, facing: 44, qfront: 55, eyelets: 6, cap: true, capAt: 82, ...S };
+    // bot: kalıbın arka yüksekliği el verdiğince yüksek (generate kalıba göre kırpar), çok delik, önde başlayan bağcık ağzı
+    case 'bot': return { backH: r(0.4 * L), throat: 58, facing: 32, qfront: 50, eyelets: 7, cap: false, capAt: 83, ...S };
+    case 'makosen': return { backH: r(0.2 * L), throat: 60, facing: 60, qfront: 48, eyelets: 0, cap: false, capAt: 83, ...S };
+    case 'sandalet': return { backH: r(0.19 * L), throat: 60, facing: 60, qfront: 50, eyelets: 0, cap: false, capAt: 83, ...S };
+    case 'topuklu': return { backH: r(0.2 * L), throat: 52, facing: 52, qfront: 50, eyelets: 0, cap: false, capAt: 83, ...S };
+    default: return { backH: r(0.235 * L), throat: 60, facing: 42, qfront: 52, eyelets: 5, cap: false, capAt: 83, ...S };
   }
 }
 export function cleanParams(type, p = {}, L = 260) {
   const d = defaultParams(type, L), out = {};
   for (const [k, def] of Object.entries(PARAMS)) {
+    if (MODELS[type] && !paramShown(type, k) && !def.lacing) { out[k] = d[k]; continue; }   // bu tipte kullanılmayan ayar: varsayılan
     if (def.unit === 'bool') { out[k] = typeof p[k] === 'boolean' ? p[k] : d[k]; continue; }
     const v = Number(p[k]);
     out[k] = Number.isFinite(v) ? Math.max(def.min, Math.min(def.max, v)) : d[k];
@@ -169,8 +189,12 @@ export function generate(project, { type = 'derby', flipX, flipY, params = {}, m
   const F = lastFrame(view, !!or.flipX, !!or.flipY);
   const { L, top, bot, left, toV } = F;
   if (L < 120 || L > 450) throw new Error('Kalıp boyu ' + Math.round(L) + ' mm: ayakkabı kalıbı için beklenmeyen ölçü. Fotoğrafı ve bilinen boyu kontrol et.');
-  const P = cleanParams(type, params, L), m = MODELS[type];
+  const P = cleanParams(type, params, L), m = MODELS[type], warn = [];
   const X = (pct) => (pct / 100) * L;
+  // arka yükseklik kalıbın topuk tarafındaki yüksekliğini aşamaz (bot konçu kalıbın üstüne çıkamaz)
+  { let yTop = Infinity; for (const q of F.poly) if (q[0] < 0.3 * L && q[1] < yTop) yTop = q[1];
+    const hMax = bot(0.04 * L) - yTop - 3;
+    if (P.backH > hMax) { if (params.backH != null) warn.push('Arka yükseklik kalıbın topuk yüksekliğine (' + Math.round(hMax) + ' mm) indirildi.'); P.backH = Math.max(PARAMS.backH.min, Math.floor(hMax)); } }
   const gap = type === 'oxford' ? 2 : type === 'spor' ? 8 : 6;   // bağcık ağzı yarı açıklığı
   const topPts = (x0, x1) => range(x0, x1).map((x) => [x, top(x)]);
   const solePts = (x0, x1) => range(x0, x1).map((x) => [x, bot(x)]);
@@ -195,7 +219,7 @@ export function generate(project, { type = 'derby', flipX, flipY, params = {}, m
   const Tg = m.lacing ? facingPts[facingPts.length - 1] : T;
   const Fg = m.lacing ? facingPts[0] : T;
   // üst ağız: B → ayak bileği çukuru → bağcık ağzı başı
-  const xA = 0.27 * L, A = [xA, bot(xA) - (P.backH - (type === 'spor' ? 4 : 9))];
+  const xA = 0.27 * L, A = [xA, Math.max(top(xA) + 2, bot(xA) - (P.backH - (type === 'spor' ? 4 : type === 'bot' ? 2 : 9)))];
   const topline = catmull([B, A, Fg]);
   // yan saya önü: dil başından tabana, öne doğru dolgun eğri
   const rev = (a) => a.slice().reverse();
@@ -211,11 +235,52 @@ export function generate(project, { type = 'derby', flipX, flipY, params = {}, m
   const toeTip = [L, (top(L - 0.3) + bot(L - 0.3)) / 2];
   const st = (on, rows = 1) => ({ on, dist: 1.5, rows, gap: 2.5 });
   const note = (x) => `Kalıptan otomatik (${m.name}). ${x}`;
+  const done = () => ({ pieces, matches, frame: { flipX: !!or.flipX, flipY: !!or.flipY, L }, params: P, type, warn });
+
+  // TOPUKLU: tek parça saya (ön saya + yan saya birlikte), alçak ve öne doğru inen ağız
+  if (type === 'topuklu') {
+    const xm = 0.45 * L, M1 = [0.25 * L, Math.max(top(0.25 * L) + 2, bot(0.25 * L) - (P.backH - 6))], M2 = [xm, Math.max(top(xm) + 3, bot(xm) - 0.11 * L)];
+    add({ name: 'Saya (tek parça)', code: 'SY-01', kind: 'Ön saya', notes: note('Ön kenar orta çizgidir: saya bu çizgiden simetrik açılır, arkada dikilir. Kalıp topuklu kalıp olmalıdır.') }, [
+      { pts: topPts(xT, L - 0.6).concat([toeTip]), kind: 'yok', name: 'Orta çizgi (simetri ekseni)' },
+      { pts: [toeTip].concat(solePts(L - 0.6, H0[0] + 1)).concat([H0]), kind: 'montaj', name: 'Kalıba çekme' },
+      { pts: backPts, kind: 'dikis', name: 'Arka dikiş' },
+      { pts: catmull([B, M1, M2, T]), kind: 'katlama', name: 'Ağız (katlanır)', stitch: st(true) },
+    ]);
+    return done();
+  }
+  // SANDALET: ön bant, topuk kapağı, bilek bandı (bantlar kalıp çizgisine oturur; bilek bandı düz şerit)
+  if (type === 'sandalet') {
+    const xs = X(P.strapAt), w = P.strapW, x1 = xs - w / 2, x2 = Math.min(L - 8, xs + w / 2);
+    add({ name: 'Ön bant', code: 'OB-01', kind: 'Ön saya', notes: note('Üst kenar orta çizgidir: bant bu çizgiden simetrik açılır, iki ucu tabana çekilir.') }, [
+      { pts: topPts(x1, x2), kind: 'yok', name: 'Orta çizgi (simetri ekseni)' },
+      { pts: [[x2, top(x2)], [x2 - 2, (top(x2) + bot(x2)) / 2], [x2, bot(x2)]], kind: 'kenar', name: 'Ön kenar' },
+      { pts: solePts(x2, x1), kind: 'montaj', name: 'Tabana çekme' },
+      { pts: [[x1, bot(x1)], [x1 + 2, (top(x1) + bot(x1)) / 2], [x1, top(x1)]], kind: 'kenar', name: 'Arka kenar' },
+    ]);
+    const xh = 0.3 * L, hc = Math.max(12, P.backH * 0.55), Cf = [xh, Math.max(top(xh) + 2, bot(xh) - hc)];
+    add({ name: 'Topuk kapağı', code: 'TK-01', kind: 'Arka saya', notes: note('İç ve dış yan için ayna olarak kesilir; bilek bandı topuk kapağının üst arkasından geçer.') }, [
+      { pts: [[xh, bot(xh)], Cf], kind: 'kenar', name: 'Ön kenar' },
+      { pts: catmull([Cf, [0.15 * L, (Cf[1] + B[1]) / 2 - 3], B]), kind: 'kenar', name: 'Üst kenar' },
+      { pts: backPts.slice().reverse(), kind: 'dikis', name: 'Arka dikiş' },
+      { pts: [H0].concat(solePts(H0[0] + 1, xh)), kind: 'montaj', name: 'Kalıba çekme' },
+    ]);
+    // bilek bandı: kalıbın üstünde ayrı şerit (boyu ayak bileği çevresinin yaklaşık yarısı + toka payı)
+    let yMin = Infinity; for (let i = 0; i <= 40; i++) yMin = Math.min(yMin, top(L * i / 40));
+    const SL = Math.round(0.6 * L), SW = 12, y0 = yMin - 20 - SW, xa = 0.05 * L;
+    const strap = add({ name: 'Bilek bandı', code: 'BB-01', kind: 'Diğer', notes: note('Düz şerit; bir ucu topuk kapağına dikilir, öbür ucunda toka delikleri. Boyunu ayağa göre ayarla.') }, [
+      { pts: [[xa, y0], [xa + SL, y0]], kind: 'kenar', name: 'Üst kenar' },
+      { pts: [[xa + SL, y0], [xa + SL, y0 + SW]], kind: 'kenar', name: 'Toka ucu' },
+      { pts: [[xa + SL, y0 + SW], [xa, y0 + SW]], kind: 'kenar', name: 'Alt kenar' },
+      { pts: [[xa, y0 + SW], [xa, y0]], kind: 'dikis', name: 'Topuk kapağına dikilen uç' },
+    ]);
+    for (let k = 0; k < 5; k++) strap.pc.marks.push({ id: mid(), kind: 'delik', p: toV([xa + SL - 15 - 8 * k, y0 + SW / 2]).map((v) => +v.toFixed(2)), d: 3.5, label: k ? '' : 'Toka deliği Ø3,5' });
+    return done();
+  }
 
   // ÖN SAYA (vamp): orta çizgi T → burun, taban burun → Q, yan saya çizgisi Q → Tg (+ Tg → T küçük dil ağzı)
   const vampTop = topPts(xT, L - 0.6).concat([toeTip]);
   const vampSole = [toeTip].concat(solePts(L - 0.6, xQ));
-  const overQ = type === 'oxford' || type === 'loafer';   // ön saya yan sayanın üstünde mi
+  const overQ = type === 'oxford' || type === 'loafer' || type === 'makosen';   // ön saya yan sayanın üstünde mi
   const vEdges = [
     { pts: vampTop, kind: 'yok', name: 'Orta çizgi (simetri ekseni)' },
     { pts: vampSole, kind: 'montaj', name: 'Kalıba çekme' },
@@ -300,5 +365,15 @@ export function generate(project, { type = 'derby', flipX, flipY, params = {}, m
       { pts: [lowB, tp[tp.length - 1]], kind: 'kenar', name: 'Ön kenar' },
     ]);
   }
-  return { pieces, matches, frame: { flipX: !!or.flipX, flipY: !!or.flipY, L }, params: P, type };
+  // ÖNLÜK (makosen): ön sayanın üstüne el dikişiyle oturan U biçimli parça
+  if (type === 'makosen') {
+    const xE = 0.92 * L, d = 0.12 * L, lowY = (x, f) => Math.min(bot(x) - 4, top(x) + f);
+    const lower = catmull([[xT, lowY(xT, d)], [(xT + xE) / 2, lowY((xT + xE) / 2, d)], [xE - 0.025 * L, lowY(xE - 0.025 * L, 0.55 * d)], [xE, top(xE)]]);
+    add({ name: 'Önlük', code: 'ON-01', kind: 'Burun parçası', notes: note('Ön sayanın üstüne el dikişiyle (makosen dikişi) dikilir; üst kenar orta çizgidir.') }, [
+      { pts: topPts(xT, xE), kind: 'yok', name: 'Orta çizgi (simetri ekseni)' },
+      { pts: rev(lower), kind: 'katlama', name: 'Önlük dikişi', stitch: st(true) },
+      { pts: [[xT, lowY(xT, d)], [xT, top(xT)]], kind: 'kenar', name: 'Arka kenar' },
+    ]);
+  }
+  return done();
 }

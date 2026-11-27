@@ -168,7 +168,7 @@ export function makeLast(o = {}) {
 }
 export const MAX_MODEL_PHOTOS = 6;
 // Kalıptan otomatik parça ayarları (hesap ayk/auto.js'de). pieceIds: bu ayarla oluşturulmuş parçalar (yeniden oluşturulunca değiştirilir)
-export const AUTO_TYPES = ['derby', 'oxford', 'loafer', 'spor'];
+export const AUTO_TYPES = ['derby', 'oxford', 'loafer', 'spor', 'bot', 'makosen', 'sandalet', 'topuklu'];
 export function makeAuto(a = {}) {
   const params = {};
   if (a && a.params && typeof a.params === 'object') for (const [k, v] of Object.entries(a.params).slice(0, 16)) if (/^[a-zA-Z]{1,12}$/.test(k) && (typeof v === 'boolean' || Number.isFinite(v))) params[k] = v;
