@@ -28,10 +28,24 @@ export function runFEM(F, X, a, prog = () => {}) {
     if (r.error) return { ...out, error: r.error, text: r.text };
     const sum = X.stressSummary(fe, r, a.mats);
     const warn = [...mesh.warn, ...sum.warn];
+    // delik / çentik / köşe çevresi: yerel ince ağla yeniden çözüm (yalnız statik; burkulma referans gerilmesi değişmez)
+    let refine = [];
+    if (a.type === 'static' && a.refine !== false) {
+      prog('Gerilme yığılmaları inceltiliyor', 0.85);
+      try { refine = X.refineHotspots(a.items, grid, fe, r, a.mats, s, { onProgress: (i, n) => prog('Yerel inceltme ' + (i + 1) + ' / ' + n, 0.85 + 0.12 * i / Math.max(1, n)) }); } catch (e) { refine = []; }
+      for (const q of refine) {
+        if (!(q.refined > sum.vEx)) continue;
+        sum.vEx = q.refined; if (q.refined > sum.vmax) sum.vmax = q.refined;
+        const sy = a.mats[q.mat] && a.mats[q.mat].sy;
+        if (sy > 0) { const f = sy / q.refined; if (sum.fos == null || f < sum.fos) sum.fos = f; if (sum.fosAll == null || f < sum.fosAll) sum.fosAll = f; }
+      }
+      for (const q of refine) if (q.singular) warn.push({ sev: 'warn', t: 'Keskin köşe (' + q.at.map((v) => v.toFixed(1)).join(', ') + ' mm): gerilme ağ inceldikçe büyümeye devam ediyor (' + q.refined.toFixed(0) + ' MPa ve üstü). Gerçek değer köşe yarıçapına bağlıdır; köşeye yarıçap (kavis) ver ya da bu değeri en az bu kadar kabul et.' });
+      if (sum.fosAll != null && sum.fosAll < 1 && !warn.some((w) => w.sev === 'crit' && /akma/.test(w.t))) warn.push({ sev: 'crit', t: 'İnceltilmiş ağda gerilme akma dayanımını aşıyor: doğrusal-elastik varsayım bu bölgede geçersiz (plastik şekil değişimi).' });
+    }
     if (r.equilibriumErr > 1e-3) warn.push({ sev: 'warn', t: 'Denge hatası %' + (r.equilibriumErr * 100).toFixed(2) + ' (mesnet tepkisi ≠ uygulanan yük): sonuçlara güvenme.' });
     if (r.fallback) warn.push({ sev: 'info', t: 'Çok katmanlı ön koşullayıcı yakınsamadı; basit yöntemle yeniden çözüldü.' });
     const fosE = new Float32Array(fe.ne); for (let e = 0; e < fe.ne; e++) { const sy = a.mats[fe.elMat[e]].sy; fosE[e] = sy > 0 && r.vm[e] > 0 ? Math.min(sy / r.vm[e], 100) : 100; }
-    const st = { u: r.u, vm: nodal(r.vm), fos: sum.fos != null ? nodal(fosE) : null, maxU: r.maxU, vmax: sum.vmax, vEx: sum.vEx, p995: sum.p995, fosEx: sum.fos, fosAll: sum.fosAll, reaction: r.reaction, applied: r.applied, eqErr: r.equilibriumErr, iters: r.iters, res: r.res, weightN: r.weightN };
+    const st = { u: r.u, vm: nodal(r.vm), fos: sum.fos != null ? nodal(fosE) : null, maxU: r.maxU, vmax: sum.vmax, vEx: sum.vEx, p995: sum.p995, fosEx: sum.fos, fosAll: sum.fosAll, refine: refine.map((q) => ({ at: q.at, global: q.global, refined: q.refined, h: q.h, singular: !!q.singular })), reaction: r.reaction, applied: r.applied, eqErr: r.equilibriumErr, iters: r.iters, res: r.res, weightN: r.weightN };
     out.marks = { sup: supNodes(s.supports), loads: markLoads(s.loads) };
     if (a.type === 'static') {
       out.res = { ...st, warn };

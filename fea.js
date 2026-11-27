@@ -117,6 +117,7 @@ export function voxelize(items, opts = {}) {
   if (!(vTot > 0)) throw new Error('Modelde hacimli katı yok');
   const size = mx.map((v, k) => v - mn[k]), maxCells = opts.maxCells || 2.5e6;
   const fitH = (h) => { while (Math.ceil(size[0] / h) * Math.ceil(size[1] / h) * Math.ceil(size[2] / h) > maxCells) h *= 1.1; return h; };
+  if (opts.box) { const b = opts.box; return voxAt(items, vols, b.min, b.max.map((v, k) => v - b.min[k]), opts.h); }   // yerel alt model: kutu içi, verilen h
   if (opts.h) return voxAt(items, vols, mn, size, fitH(opts.h));
   // eleman boyu: hedef sayıya yakın adaylar arasından geometriyi en az hatayla temsil eden (ölçülerle hizalı) seçilir.
   // İnce kesitte kalınlık yuvarlaması eğilme rijitliğini küple değiştirir; hizalama bu hatayı büyük ölçüde giderir.
