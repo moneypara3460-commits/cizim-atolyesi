@@ -2,7 +2,7 @@
 // Hesap ve doğrulama saf modüllerde (geom, model, build, match, export); burada yalnız gösterim ve düzenleme.
 // Makine ve Tekstil alanlarının uygulama koduna bağlı değildir (yalnız tekstilin saf eğri / PDF / ofset modüllerini okur).
 import * as G from './geom.js?v=20261119c';
-import * as M from './model.js?v=20261119c';
+import * as M from './model.js?v=20261127a';
 import { measure, checkPiece, fmt, netPolygon } from './build.js?v=20261119c';
 import * as X from './match.js?v=20261119c';
 import * as E from './export.js?v=20261119c';
@@ -10,8 +10,8 @@ import { openStore, idbBackend, memoryBackend } from './store.js?v=20261119c';
 import { createEditor } from './editor.js?v=20261119c';
 import { addSample } from './sample.js?v=20261119c';
 import * as LST from './last.js?v=20261119c';
-import * as AUTO from './auto.js?v=20261119c';
-import * as AI from './ai.js?v=20261119c';
+import * as AUTO from './auto.js?v=20261127a';
+import * as AI from './ai.js?v=20261127a';
 import * as AIP from './aiparts.js?v=20261119c';
 import * as L3 from './last3d.js?v=20261119c';
 import { run as l3run } from './last3d-worker.js?v=20261119c';
@@ -567,9 +567,9 @@ function autoCard(p) {
   return aiCard(p) + tplCard(p);
 }
 function tplCard(p) {
-  if (!p.last?.views?.yan) return `<div class="card autocard"><h3>Hazır şablonla parçalar (Derby, Oxford, Loafer, Spor)</h3><p class="small">Kalıbın yan görünüşü fotoğrafını "Proje Dosyaları → Kalıp ve model resmi"nden eklersen ön saya, yan saya, dil gibi parçalar kalıp ölçüsünde kendiliğinden çıkarılır.</p><div class="row"><button type="button" data-go="dosyalar">Kalıp fotoğrafı ekle</button></div></div>`;
+  if (!p.last?.views?.yan) return `<div class="card autocard"><h3>Hazır şablonla parçalar (Derby, Oxford, Loafer, Spor, Bot, Makosen, Sandalet, Topuklu)</h3><p class="small">Kalıbın yan görünüşü fotoğrafını "Proje Dosyaları → Kalıp ve model resmi"nden eklersen ön saya, yan saya, dil gibi parçalar kalıp ölçüsünde kendiliğinden çıkarılır.</p><div class="row"><button type="button" data-go="dosyalar">Kalıp fotoğrafı ekle</button></div></div>`;
   const a = p.modelRef.auto;
-  let h = `<div class="card autocard"><h3>Hazır şablonla parçalar (Derby, Oxford, Loafer, Spor)</h3><div class="grid"><label>Model tipi<select data-au="type">${opts({ '': 'Seç…', ...Object.fromEntries(Object.entries(AUTO.MODELS).map(([k, v]) => [k, v.name])) }, a.type)}</select></label></div>`;
+  let h = `<div class="card autocard"><h3>Hazır şablonla parçalar (Derby, Oxford, Loafer, Spor, Bot, Makosen, Sandalet, Topuklu)</h3><div class="grid"><label>Model tipi<select data-au="type">${opts({ '': 'Seç…', ...Object.fromEntries(Object.entries(AUTO.MODELS).map(([k, v]) => [k, v.name])) }, a.type)}</select></label></div>`;
   if (p.modelRef.photos.length) h += `<div class="row"><button type="button" data-act="airead" data-mode="p"${S.aiBusy ? ' disabled' : ''}>${S.aiBusy ? 'Okunuyor…' : '🤖 Model resminden oku ve parçaları oluştur'}</button></div>${aiNoteHtml()}`;
   else h += `<p class="small">Model resmi eklersen (Proje Dosyaları) yapay zekâ model tipini ve çizgi konumlarını resimden tahmin edebilir.</p>`;
   if (!a.type) return h + `<p class="small">Bir model tipi seç: parçalar kalıbın yan çizgisine göre çizilir.</p></div>`;
@@ -578,7 +578,7 @@ function tplCard(p) {
   h += `<div class="aprev">${pv.html}</div><div class="row"><button type="button" data-act="auflipx">↔ Burun yönünü çevir</button><button type="button" data-act="auflipy">↕ Tabanı çevir</button></div>
   <p class="small">Önizlemede ön saya burun tarafında, yan saya topuk tarafında olmalı; değilse yönü çevir.</p><div class="grid">`;
   for (const [k, d] of Object.entries(AUTO.PARAMS)) {
-    if (d.lacing && !m.lacing) continue;
+    if (!AUTO.paramShown(a.type, k)) continue;
     if (k === 'capAt' && !P.cap) continue;
     if (d.unit === 'bool') h += `<label class="row" style="font-size:13px"><input type="checkbox" data-aup="${k}"${P[k] ? ' checked' : ''}> ${esc(d.name)}</label>`;
     else h += `<label>${esc(d.name)} (${d.unit === '%' ? '% kalıp boyu' : d.unit})<input data-aup="${k}" value="${nv(P[k])}" inputmode="decimal"></label>`;

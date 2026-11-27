@@ -5,7 +5,7 @@
 // Kontroller: kenar uzunluk farkı, çentik sayısı ve konumları, binme noktası konumları (etiketle ya da sırayla eşlenir).
 import * as G from './geom.js?v=20261119c';
 import { uid } from './geom.js?v=20261119c';
-import { edgeProp } from './model.js?v=20261119c';
+import { edgeProp } from './model.js?v=20261127a';
 
 export const MATCH_KINDS = { dikis: 'Dikiş (yan yana)', binme: 'Binme (üst üste)' };
 export function makeMatch(o = {}) { return { id: o.id || uid('mt'), name: String(o.name || '').slice(0, 60), a: o.a, b: o.b, reverse: o.reverse ?? true, kind: MATCH_KINDS[o.kind] ? o.kind : 'dikis', tol: Number.isFinite(o.tol) ? o.tol : 0.5 }; }

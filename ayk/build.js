@@ -4,7 +4,7 @@
 //   item: { layer, piece, t:'path', path } | { t:'poly', pts, closed } | { t:'circle', c, r } | { t:'text', p, s, h, ang, align }
 import * as G from './geom.js?v=20261119c';
 import { cutPolygon, selfIntersections, removeLoops } from '../tx/woven/pattern.js?v=20261112u';
-import { edgeProp, allowValue, LINE_KINDS, MARK_KINDS, SIDES, ALLOW } from './model.js?v=20261119c';
+import { edgeProp, allowValue, LINE_KINDS, MARK_KINDS, SIDES, ALLOW } from './model.js?v=20261127a';
 
 const { C } = G;
 const TOL = 0.05;

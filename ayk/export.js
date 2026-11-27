@@ -2,7 +2,7 @@
 // Hepsi build.js çizim listesinden üretilir; yalnız görünür katmanlar yazılır.
 import * as G from './geom.js?v=20261119c';
 import { pdfDoc, textWidth } from '../tx/pdf.js?v=20261112u';
-import { LAYER, LAYERS, LINE_TYPES, SIDES } from './model.js?v=20261119c';
+import { LAYER, LAYERS, LINE_TYPES, SIDES } from './model.js?v=20261127a';
 import { pieceItems, sketchItems, itemsBox, measure, fmt } from './build.js?v=20261119c';
 
 const { C } = G;
