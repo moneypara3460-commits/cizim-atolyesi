@@ -3,6 +3,7 @@
 import * as C from './cam.js?v=20261127y';
 import { pdfFromJpegs } from './cutopt.js?v=20261112u';
 import * as GC from './gcheck.js?v=20261127y';
+import * as GK from './gozkontrol.js?v=20261127z';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 1) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));
@@ -36,7 +37,7 @@ function load() { try { const o = JSON.parse(localStorage.getItem(KEY) || 'null'
 
 export function createCamUI(api) {
   let cfg = load();
-  const S = { R: null, err: null, busy: null, view: 'paths', sim: null, simPlay: false, speed: 40, code: null, model: null, res: null, checks: {}, chk: null };
+  const S = { R: null, err: null, busy: null, view: 'paths', sim: null, simPlay: false, speed: 40, code: null, model: null, res: null, checks: {}, chk: null, gk: null };
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) { /* */ } };
   const mk = () => cfg.mk || (S.model ? C.matKeyFor(S.model.matId) : 'celik');
   const fillCut = (t, force) => { if (force || !(t.rpm > 0) || !(t.feed > 0)) { const s = C.suggestCut(mk(), t, cfg.machine.maxRpm); t.rpm = s.rpm; t.feed = s.feed; t.plunge = s.plunge; } };
@@ -163,11 +164,62 @@ export function createCamUI(api) {
     if (info.length) h += note(info.slice(0, 5).map((i) => 'ℹ ' + esc(i.t)).join('<br>'));
     return h;
   }
+  /* ---------- Göz Kontrol ---------- */
+  async function gkRun(file) {
+    const k = S.gk; k.busy = true; k.err = null; k.out = null; api.render();
+    try {
+      let M; try { M = api.model(); } catch (e) { throw new Error('Önce parçanın modelini çiz ya da aç.'); }
+      if (!M || !M.tris || M.tris.length < 9) throw new Error('Önce parçanın modelini çiz ya da aç.');
+      const bmp = await createImageBitmap(file), sc = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+      const w = Math.round(bmp.width * sc), h = Math.round(bmp.height * sc), cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      const g = cv.getContext('2d'); g.drawImage(bmp, 0, 0, w, h);
+      await new Promise((r) => setTimeout(r, 20));
+      const out = GK.checkPhoto(g.getImageData(0, 0, w, h).data, w, h, M.tris);
+      if (out.error) throw new Error(out.error);
+      k.out = out; k.img = gkImage(out);
+    } catch (e) { k.err = e.message || String(e); }
+    k.busy = false; api.render();
+  }
+  // fark resmi: gri = ikisinde de var, kırmızı = çizimde var / parçada yok, turuncu = parçada var / çizimde yok; numaralı işaretler
+  function gkImage(o) {
+    const E = o.grid, sc = Math.max(1, Math.min(4, Math.floor(700 / Math.max(E.nx, E.ny)))), cv = document.createElement('canvas');
+    cv.width = E.nx * sc; cv.height = E.ny * sc;
+    const g = cv.getContext('2d'), im = g.createImageData(E.nx, E.ny);
+    for (let j = 0; j < E.ny; j++) for (let i = 0; i < E.nx; i++) {
+      const a = E.mask[i + E.nx * j], b = o.aligned[i + E.nx * j], k = (i + E.nx * (E.ny - 1 - j)) * 4;
+      const c = a && b ? [148, 163, 184] : a ? [239, 68, 68] : b ? [249, 115, 22] : [11, 18, 32];
+      im.data[k] = c[0]; im.data[k + 1] = c[1]; im.data[k + 2] = c[2]; im.data[k + 3] = 255;
+    }
+    const tmp = document.createElement('canvas'); tmp.width = E.nx; tmp.height = E.ny; tmp.getContext('2d').putImageData(im, 0, 0);
+    g.imageSmoothingEnabled = false; g.drawImage(tmp, 0, 0, cv.width, cv.height);
+    g.font = 'bold ' + Math.max(12, 5 * sc) + 'px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    o.items.forEach((w, n) => { if (!w.at) return; const x = ((w.at[0] - E.ox) / E.res) * sc, y = (E.ny - (w.at[1] - E.oy) / E.res) * sc; g.strokeStyle = g.fillStyle = w.sev === 'crit' ? '#ef4444' : '#eab308'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 6 * sc, 0, 7); g.stroke(); g.fillText(String(n + 1), x, y - 9 * sc); });
+    return cv.toDataURL('image/png');
+  }
+  function gkHtml() {
+    const k = S.gk;
+    let h = '<div class="lbl h">👁 Göz Kontrol — işlenmiş parça ↔ çizim</div>';
+    h += btn('← CNC freze ekranına dön', 'cn-gk-close', false, 'flex:1 0 100%');
+    h += note('İşlenmiş parçayı <b>beyaz bir A4 kâğıdın ortasına</b> koy, kâğıdın dört köşesi görünecek şekilde <b>tepeden</b> çek (koyu bir masa üstünde, gölgesiz, dağınık ışıkta). Kâğıdın ölçüsünden ölçek bulunur, parçanın silueti açık olan çizimin üstten görünüşüyle karşılaştırılır.');
+    h += btn('📷 Fotoğraf çek', 'cn-gk-cam', false, 'flex:1 1 45%;font-weight:700') + btn('🖼 Galeriden seç', 'cn-gk-file', false, 'flex:1 1 45%');
+    h += note('Yakalar: eksik / fazla boydan boya delik ve boşluk, yanlış yerde ya da yanlış çapta delik, dış ölçü farkı, eksik / fazla malzeme, ayna işleme. Doğruluk yaklaşık 0,5–1 mm: ölçü aleti değil, ikinci göz. Kör delik, cep, pah ve yükseklik tepeden siluette görünmez, kontrol edilmez.');
+    if (k.busy) return h + card('⏳ Fotoğraf inceleniyor…');
+    if (k.err) h += card('⛔ ' + esc(k.err), '#7f1d1d');
+    const o = k.out; if (!o) return h;
+    h += '<div class="lbl h">Sonuç</div>';
+    h += card(row('Örtüşme', '%' + nf(o.iou * 100, 1), o.iou > 0.9 ? '#22c55e' : o.iou > 0.8 ? '#eab308' : '#ef4444') + row('Dış ölçü (çizim / fotoğraf)', nf(o.ext.model[0]) + ' × ' + nf(o.ext.model[1]) + ' / ' + nf(o.ext.photo[0]) + ' × ' + nf(o.ext.photo[1]) + ' mm') + row('Delik / boşluk', o.holes.filter((x) => x.found).length + ' / ' + o.holes.length + ' bulundu'));
+    if (o.ok) h += card('✅ Kaba hata görülmedi: delikler, dış ölçü ve siluet çizimle uyumlu (±1 mm). Kör delik, cep ve yükseklikler bu kontrole girmez; kritik ölçüleri kumpas / mikrometreyle ölç.', '#14532d');
+    h += o.items.map((w, n) => `<div style="flex:1 0 100%;background:${w.sev === 'crit' ? '#3b0d0d' : '#2a2108'};border-radius:10px;padding:8px 10px;font-size:13.5px">${w.sev === 'crit' ? '🔴' : '🟠'} ${w.at ? '<b>' + (n + 1) + '.</b> ' : ''}${esc(w.t)}</div>`).join('');
+    if (k.img) h += `<img src="${k.img}" alt="Göz Kontrol fark resmi" style="flex:1 0 100%;max-width:100%;border-radius:10px;border:1px solid #1e293b;image-rendering:pixelated">` + note('Gri: çizimde ve parçada var · kırmızı: çizimde var, parçada yok · turuncu: parçada var, çizimde yok. Kenarlardaki ince renkli çizgiler fotoğraf ve ölçek sınırıdır.');
+    return h;
+  }
   function html() {
+    if (S.gk) return gkHtml();
     if (S.chk) return ckHtml();
     let h = '<div class="lbl h">⚙ CNC freze — takım yolu ve G-kodu</div>';
     if (S.busy) return h + card('⏳ ' + esc(S.busy));
     h += btn('📥 Hazır G-kodunu kontrol et (dışarıdan gelen program)', 'cn-ck-open', false, 'flex:1 0 100%');
+    h += btn('👁 Göz Kontrol: işlenmiş parçayı fotoğrafla çizimle karşılaştır', 'cn-gk-open', false, 'flex:1 0 100%');
     if (S.err) h += `<div style="flex:1 0 100%;background:#3b0d0d;border:1px solid #7f1d1d;border-radius:12px;padding:10px;font-size:14px">⚠ ${esc(S.err)}</div>`;
     h += `<label class="f" style="flex:1 1 55%"><span>Kumanda (post-processor)</span><select data-cs="post">${Object.entries(C.POSTS).map(([k, v]) => `<option value="${k}"${cfg.post === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>`;
     h += `<label class="f" style="flex:1 1 40%"><span>İşlenen malzeme</span><select data-cs="mk"><option value=""${!cfg.mk ? ' selected' : ''}>Modelden (${esc(C.CUT_DATA[mk()].name)})</option>${Object.entries(C.CUT_DATA).map(([k, v]) => `<option value="${k}"${cfg.mk === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>`;
@@ -252,6 +304,13 @@ export function createCamUI(api) {
   function act(a) {
     if (!a.startsWith('cn-')) return false;
     if (S.busy) return true;
+    if (a === 'cn-gk-open') { S.gk = S.gk || {}; api.render(); return true; }
+    if (a === 'cn-gk-close') { S.gk = null; api.render(); return true; }
+    if (a === 'cn-gk-cam' || a === 'cn-gk-file') {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; if (a === 'cn-gk-cam') inp.setAttribute('capture', 'environment');
+      inp.onchange = () => { const f = inp.files && inp.files[0]; if (f) gkRun(f); };
+      inp.click(); return true;
+    }
     if (a === 'cn-ck-open') { S.chk = S.chk || { zero: 'corner', sx: '', sy: '', sz: '', tools: {} }; api.render(); return true; }
     if (a === 'cn-ck-close') { S.chk = null; api.render(); return true; }
     if (a === 'cn-ck-run') { ckRun(); return true; }
