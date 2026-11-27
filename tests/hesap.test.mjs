@@ -120,6 +120,8 @@ t('12. Promosyon: sunucudan gelen promo erişimi bölümleri açar, Play aboneli
   assert.deepEqual(a.sections, ['tekstil']);
   assert.deepEqual(a.subs[0].sections, ['tekstil'], 'bilinmeyen bölüm süzülür');
   assert.equal(productInfo('promo'), null);
+  // derlenmiş (küçültülmüş + karıştırılmış) kodda metin araması anlamsız: yalnız kaynak ağaçta
+  if (!fs.existsSync(path.join(ROOT, 'tools/build.mjs'))) return;
   const js = fs.readFileSync(path.join(ROOT, 'hesap/hesap.js'), 'utf8');
   assert.match(js, /product_id !== 'promo'/, 'Play yönetim düğmesi yalnız Play aboneliğinde');
   const ses = fs.readFileSync(path.join(ROOT, 'hesap/session.js'), 'utf8');
