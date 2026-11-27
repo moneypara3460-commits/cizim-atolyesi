@@ -35,7 +35,7 @@ import { createAssemblyUI } from './assembly-ui.js?v=20261112u';
 import { createSimUI } from './sim-ui.js?v=20261112u';
 import { gearOutline, gearDims, centerDistance, COUPLINGS, couplingK, couplingValid, propagate as mechPropagate, rpmToDegPerSec } from './mech.js?v=20261112u';
 import { Mesh as CMesh, interference as cInterference, holeAxis as cHoleAxis } from './mfgcheck.js?v=20261112u';
-import { createCamUI } from './cam-ui.js?v=20261127v';
+import { createCamUI } from './cam-ui.js?v=20261127w';
 import { createCam5UI } from './cam5-ui.js?v=20261127k';
 import { createLatheUI } from './lathe-ui.js?v=20261127k';
 import { machinePose } from './kin.js?v=20261112u';
@@ -3371,7 +3371,7 @@ document.addEventListener('change', (e) => {
   if (el.dataset && (el.dataset.mk || el.dataset.mkb || el.dataset.mkl || el.dataset.mki || el.dataset.mke || el.dataset.mkp || el.dataset.mky || el.dataset.mks || el.dataset.mkz)) { mekaUI.input(el); return; }
   if (el.dataset && el.dataset.cf) { costUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.as) { asmUI.input(el, 'change'); return; }
-  if (el.dataset && (el.dataset.cs || el.dataset.cn || el.dataset.ct || el.dataset.co)) { camUI.input(el, 'change'); return; }
+  if (el.dataset && (el.dataset.cs || el.dataset.cn || el.dataset.ct || el.dataset.co || el.dataset.ckn || el.dataset.ckt)) { camUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.oc) { occtUI.input(el); return; }
   if (el.dataset && el.dataset.c && el.dataset.c.startsWith('hw') && tab === 'face') { renderPanel(); return; }   // delik sihirbazı özeti güncellensin
   if (el.dataset && el.dataset.c5) { cam5UI.input(el, 'change'); return; }

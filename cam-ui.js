@@ -2,6 +2,7 @@
 // api: { model() → { tris, holes, matId, name }, draw(spec), clear(), enter(), leave(), render(), toast(m), name(), saveBlob(b, n), snapshot(), date() }
 import * as C from './cam.js?v=20261127v';
 import { pdfFromJpegs } from './cutopt.js?v=20261112u';
+import * as GC from './gcheck.js?v=20261127w';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 1) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));
@@ -35,7 +36,7 @@ function load() { try { const o = JSON.parse(localStorage.getItem(KEY) || 'null'
 
 export function createCamUI(api) {
   let cfg = load();
-  const S = { R: null, err: null, busy: null, view: 'paths', sim: null, simPlay: false, speed: 40, code: null, model: null, res: null, checks: {} };
+  const S = { R: null, err: null, busy: null, view: 'paths', sim: null, simPlay: false, speed: 40, code: null, model: null, res: null, checks: {}, chk: null };
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) { /* */ } };
   const mk = () => cfg.mk || (S.model ? C.matKeyFor(S.model.matId) : 'celik');
   const fillCut = (t, force) => { if (force || !(t.rpm > 0) || !(t.feed > 0)) { const s = C.suggestCut(mk(), t, cfg.machine.maxRpm); t.rpm = s.rpm; t.feed = s.feed; t.plunge = s.plunge; } };
@@ -108,9 +109,65 @@ export function createCamUI(api) {
   const card = (inner, bc = '#1e293b') => `<div style="flex:1 0 100%;background:#111a2e;border:1px solid ${bc};border-radius:12px;padding:10px">${inner}</div>`;
   const row = (k, v, col) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid #1e293b;font-size:14px"><span style="color:#94a3b8">${k}</span><b style="text-align:right${col ? ';color:' + col : ''}">${v}</b></div>`;
   const num = (k, l, v, st = 'any', w = '1 1 30%') => `<label class="f" style="flex:${w}"><span>${l}</span><input type="number" inputmode="decimal" step="${st}" data-cn="${k}" value="${v ?? ''}"></label>`;
+  /* ---------- hazır programı kontrol et ---------- */
+  // ck: { text, name, sx, sy, sz, zero, tools: { n: {d, type, flute} }, out }
+  const ckStock = (k) => { const X = k.sx, Y = k.sy, Z = k.sz; return k.zero === 'center' ? { x0: -X / 2, x1: X / 2, y0: -Y / 2, y1: Y / 2, zTop: 0, zBot: -Z } : k.zero === 'bottom' ? { x0: 0, x1: X, y0: 0, y1: Y, zTop: Z, zBot: 0 } : { x0: 0, x1: X, y0: 0, y1: Y, zTop: 0, zBot: -Z }; };
+  function ckLoad(text, name) {
+    const k = S.chk; k.text = text; k.name = name; k.out = null;
+    const P = GC.parseProgram(text);
+    k.tools = {};
+    for (const [n, t] of P.tools) k.tools[n] = { d: t.d || '', type: t.type, flute: '', comment: t.comment };
+    k.ntools = P.tools.size; k.nlines = P.lines;
+  }
+  function ckRun() {
+    const k = S.chk; if (!k.text) return;
+    if (!(k.sx > 0 && k.sy > 0 && k.sz > 0)) { api.toast('Stok ölçülerini gir'); return; }
+    const tt = {}; for (const [n, t] of Object.entries(k.tools)) if (t.d > 0) tt[n] = { d: +t.d, type: t.type, flute: +t.flute || 0 };
+    try { k.out = GC.checkProgram(k.text, ckStock(k), tt); } catch (e) { k.out = { error: e.message }; }
+    if (k.out && k.out.missing && k.out.missing.length) api.toast('Çapı girilmemiş takım: T' + k.out.missing.join(', T'));
+    api.render();
+  }
+  function ckHtml() {
+    const k = S.chk;
+    let h = '<div class="lbl h">📥 Hazır G-kodunu kontrol et</div>';
+    h += btn('← CNC freze ekranına dön', 'cn-ck-close', false, 'flex:1 0 100%');
+    h += note('SolidCAM, Mastercam, Fusion ya da elle yazılmış <b>3 eksen freze</b> programı (ISO / Fanuc lehçesi: Haas, Mitsubishi, Syntec, Mach3, LinuxCNC, GRBL, Siemens ISO modu). Program, uygulamanın kendi programlarına uyguladığı risk haritasından geçer. Heidenhain, Mazatrol, makro ve Siemens döngüleri okunmaz; okunmayan satır varsa sonuç "eksik kontrol" olur.');
+    h += btn('📂 Program dosyası seç (.nc, .tap, .gcode, .mpf, .txt)', 'cn-ck-file', false, 'flex:1 0 100%;font-weight:700');
+    if (!k.text) return h;
+    h += note('<b>' + esc(k.name || 'program') + '</b>: ' + k.nlines.toLocaleString('tr-TR') + ' satır, ' + k.ntools + ' takım');
+    h += '<div class="lbl h">Stok ve program sıfırı</div>';
+    const cn = (f, l) => `<label class="f" style="flex:1 1 30%"><span>${l}</span><input type="number" inputmode="decimal" step="any" data-ckn="${f}" value="${k[f] ?? ''}"></label>`;
+    h += cn('sx', 'Stok X (mm)') + cn('sy', 'Stok Y (mm)') + cn('sz', 'Stok Z (mm)');
+    h += `<div style="flex:1 0 100%;display:flex;gap:6px">${btn('Üst ön-sol köşe', 'cn-ck-z-corner', k.zero === 'corner', 'flex:1;font-size:13px')}${btn('Üst yüz ortası', 'cn-ck-z-center', k.zero === 'center', 'flex:1;font-size:13px')}${btn('Alt ön-sol köşe', 'cn-ck-z-bottom', k.zero === 'bottom', 'flex:1;font-size:13px')}</div>`;
+    h += note('Program sıfırı (G54) stokta bu noktada. Stok bağlama payıyla birlikte tüm ham parçadır; altı tabla / mengene sayılır.');
+    h += '<div class="lbl h">Takımlar</div>';
+    for (const [n, t] of Object.entries(k.tools)) {
+      h += `<div style="flex:1 0 100%;font-size:12.5px;color:#94a3b8">T${n}${t.comment ? ' · ' + esc(t.comment.slice(0, 60)) : ''}</div>`;
+      h += `<label class="f" style="flex:1 1 30%"><span>T${n} çap Ø (mm)</span><input type="number" inputmode="decimal" step="any" data-ckt="${n}.d" value="${t.d}"></label>`;
+      h += `<label class="f" style="flex:1 1 30%"><span>Tür</span><select data-ckt="${n}.type">${Object.entries(C.TOOL_TYPES).map(([tk, tv]) => `<option value="${tk}"${t.type === tk ? ' selected' : ''}>${tv}</option>`).join('')}</select></label>`;
+      h += `<label class="f" style="flex:1 1 30%"><span>Kesme boyu (mm)</span><input type="number" inputmode="decimal" step="any" data-ckt="${n}.flute" value="${t.flute}"></label>`;
+    }
+    h += note('Çap açıklamadan tahmin edildiyse kontrol et. Kesme boyu boş kalırsa derinlik sınırı kontrol edilmez.');
+    h += `<button data-act="cn-ck-run" style="flex:1 0 100%;font-size:17px;font-weight:800;padding:14px;background:#16a34a;color:#fff;border-color:#16a34a">▶ PROGRAMI KONTROL ET</button>`;
+    const o = k.out; if (!o) return h;
+    if (o.error) return h + card('⛔ ' + esc(o.error), '#7f1d1d');
+    if (o.missing && o.missing.length) return h + card('⛔ Çapı girilmemiş takım: T' + o.missing.join(', T') + '. Kontrol için her takımın çapı gerekir.', '#7f1d1d');
+    if (!o.risk) return h + card('⛔ ' + esc((o.issues.find((i) => i.sev === 'crit') || { t: 'Kontrol yapılamadı' }).t), '#7f1d1d');
+    h += '<div class="lbl h">Sonuç</div>';
+    h += card(row('Kırmızı (hata)', o.red + ' satır', o.red ? '#ef4444' : '#22c55e') + row('Sarı (dikkat)', o.yellow + ' satır', o.yellow ? '#eab308' : '#22c55e') + row('Okuma', o.complete ? 'eksiksiz' : 'EKSİK: okunamayan satır var', o.complete ? '#22c55e' : '#ef4444') + row('İncelenen hareket', o.moves.toLocaleString('tr-TR')));
+    if (!o.red && o.complete) h += card('✅ Risk haritasında kırmızı satır yok. Bağlama aparatı, takım tutucu ve makine sınırları bu kontrole girmez: kuru çalıştırma ve ilk çalıştırmada tek blok yine şart.', '#14532d');
+    if (!o.complete) h += card('⚠ Programın bir kısmı okunamadı; o satırlardan sonraki hareketler yanlış konumdan hesaplanmış olabilir. Bu sonuçla "temiz" deme.', '#7f1d1d');
+    const lines = k.text.replace(/\r/g, '').split('\n');
+    h += `<div style="flex:1 0 100%;max-height:300px;overflow:auto;font-size:12.5px;line-height:1.4">${o.lines.slice(0, 80).map((l) => `<div style="border-left:4px solid ${l.lvl === 2 ? '#ef4444' : '#eab308'};padding:3px 8px;margin:3px 0;background:#0b1220;border-radius:6px">${l.line ? `<code>${l.line}: ${esc((lines[l.line - 1] || '').trim().slice(0, 60))}</code><br>` : ''}${esc(l.why)}</div>`).join('')}${o.lines.length > 80 ? `<div style="color:#94a3b8">… ${o.lines.length - 80} satır daha</div>` : ''}</div>`;
+    const info = o.issues.filter((i) => i.sev === 'info');
+    if (info.length) h += note(info.slice(0, 5).map((i) => 'ℹ ' + esc(i.t)).join('<br>'));
+    return h;
+  }
   function html() {
+    if (S.chk) return ckHtml();
     let h = '<div class="lbl h">⚙ CNC freze — takım yolu ve G-kodu</div>';
     if (S.busy) return h + card('⏳ ' + esc(S.busy));
+    h += btn('📥 Hazır G-kodunu kontrol et (dışarıdan gelen program)', 'cn-ck-open', false, 'flex:1 0 100%');
     if (S.err) h += `<div style="flex:1 0 100%;background:#3b0d0d;border:1px solid #7f1d1d;border-radius:12px;padding:10px;font-size:14px">⚠ ${esc(S.err)}</div>`;
     h += `<label class="f" style="flex:1 1 55%"><span>Kumanda (post-processor)</span><select data-cs="post">${Object.entries(C.POSTS).map(([k, v]) => `<option value="${k}"${cfg.post === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>`;
     h += `<label class="f" style="flex:1 1 40%"><span>İşlenen malzeme</span><select data-cs="mk"><option value=""${!cfg.mk ? ' selected' : ''}>Modelden (${esc(C.CUT_DATA[mk()].name)})</option>${Object.entries(C.CUT_DATA).map(([k, v]) => `<option value="${k}"${cfg.mk === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>`;
@@ -179,7 +236,7 @@ export function createCamUI(api) {
     h += `<pre style="flex:1 0 100%;max-height:220px;overflow:auto;background:#0b1220;border:1px solid #1e293b;border-radius:10px;padding:8px;font-size:11.5px;line-height:1.35;margin:0">${lines.slice(0, 60).map((l, i) => (lv[i] ? `<span style="background:${COL[lv[i]]}">${esc(l)}</span>` : esc(l))).join('\n')}${lines.length > 60 ? '\n…' : ''}</pre>`;
     if (cfg.valuable) {
       h += '<div class="lbl h">Kesim öncesi kontrol (değerli parça)</div>';
-      h += CHECKS.map(([k, t]) => btn((S.checks[k] ? '☑ ' : '☐ ') + t, 'cn-ck-' + k, !!S.checks[k], 'flex:1 0 100%;text-align:left;font-size:13.5px')).join('');
+      h += CHECKS.map(([k, t]) => btn((S.checks[k] ? '☑ ' : '☐ ') + t, 'cn-chk-' + k, !!S.checks[k], 'flex:1 0 100%;text-align:left;font-size:13.5px')).join('');
     }
     const blocked = blockReason();
     if (blocked) h += `<div style="flex:1 0 100%;background:#3b0d0d;border:1px solid #7f1d1d;border-radius:10px;padding:8px 10px;font-size:13.5px">⛔ ${esc(blocked)}</div>`;
@@ -195,6 +252,15 @@ export function createCamUI(api) {
   function act(a) {
     if (!a.startsWith('cn-')) return false;
     if (S.busy) return true;
+    if (a === 'cn-ck-open') { S.chk = S.chk || { zero: 'corner', sx: '', sy: '', sz: '', tools: {} }; api.render(); return true; }
+    if (a === 'cn-ck-close') { S.chk = null; api.render(); return true; }
+    if (a === 'cn-ck-run') { ckRun(); return true; }
+    if (a === 'cn-ck-file') {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.nc,.tap,.gcode,.ngc,.mpf,.cnc,.txt,.ptp,.iso,text/plain';
+      inp.onchange = async () => { const f = inp.files && inp.files[0]; if (!f) return; if (f.size > 20 * 1024 * 1024) { api.toast('Dosya çok büyük (en çok 20 MB)'); return; } try { ckLoad(await f.text(), f.name); } catch (e) { api.toast('Okunamadı: ' + e.message); } api.render(); };
+      inp.click(); return true;
+    }
+    { const mz = a.match(/^cn-ck-z-(\w+)$/); if (mz && S.chk) { S.chk.zero = mz[1]; S.chk.out = null; api.render(); return true; } }
     if (a === 'cn-go') { compute(); return true; }
     let m = a.match(/^cn-z-(\w+)$/); if (m) { cfg.zero = m[1]; save(); if (S.R) recode(); api.render(); return true; }
     m = a.match(/^cn-r-(\w+)$/); if (m) { cfg.res = m[1]; save(); invalidate(); api.render(); return true; }
@@ -208,7 +274,7 @@ export function createCamUI(api) {
     if (a === 'cn-ln') { cfg.lineNumbers = !cfg.lineNumbers; save(); recode(); api.render(); return true; }
     if (a === 'cn-slow') { cfg.slowRisk = !cfg.slowRisk; save(); recode(); api.render(); return true; }
     if (a === 'cn-val') { cfg.valuable = !cfg.valuable; save(); invalidate(); api.render(); api.toast(cfg.valuable ? 'Değerli parça modu açık: takım yollarını yeniden hesapla' : 'Değerli parça modu kapalı'); return true; }
-    m = a.match(/^cn-ck-(\w+)$/); if (m) { S.checks[m[1]] = !S.checks[m[1]]; api.render(); return true; }
+    m = a.match(/^cn-chk-(\w+)$/); if (m) { S.checks[m[1]] = !S.checks[m[1]]; api.render(); return true; }
     if (a === 'cn-dl') { download(); return true; }
     if (a === 'cn-dry') { download(true); return true; }
     if (a === 'cn-pdf') { pdf(); return true; }
@@ -218,6 +284,8 @@ export function createCamUI(api) {
   const zeroOf = (s) => (cfg.zero === 'center' ? [(s.x0 + s.x1) / 2, (s.y0 + s.y1) / 2, s.zTop] : cfg.zero === 'bottom' ? [s.x0, s.y0, s.zBot] : [s.x0, s.y0, s.zTop]);
   function input(el, type) {
     const d = el.dataset, v = el.value, nv = parseFloat(String(v).replace(',', '.'));
+    if (d.ckn && S.chk) { S.chk[d.ckn] = isFinite(nv) ? nv : ''; S.chk.out = null; if (type === 'change') api.render(); return; }
+    if (d.ckt && S.chk) { const [n, f] = d.ckt.split('.'), t = S.chk.tools[n]; if (t) { t[f] = f === 'type' ? v : (isFinite(nv) && nv > 0 ? nv : ''); S.chk.out = null; } if (type === 'change') api.render(); return; }
     if (d.cs === 'speed') { S.speed = Math.max(1, +v || 1); if (type === 'change') api.render(); return; }
     if (d.cs) { cfg[d.cs] = v; save(); if (d.cs === 'post') recode(); if (d.cs === 'mk') { for (const t of cfg.tools) fillCut(t, true); invalidate(); } api.render(); return; }
     if (type !== 'change') return;
