@@ -123,9 +123,9 @@ uygulama "henüz açılmadı" der. Sınır: oranlar tahmindir, en iyi sonuç tam
 
 **Aşama 6 — grafik / logo.** Yeni bir katman (`grafik`) ve parça içi `graphics: [{ kind, svgRef, transform }]` alanı; `build.js` çizim listesine eklenir, çıktılar otomatik destekler.
 
-**Aşama 7 — grading.** `future.grading`: numara serisi ve nokta bazlı artış kuralları (düğüm kimliği → Δx/Δy). Düğüm kimlikleri kalıcı olduğu için kurallar parçaya bağlanabilir; kenar işaretleri `edge + at` biçiminde olduğundan numaraya göre yeniden hesaplanır. Tekstildeki `tx/woven/grade.js` yöntemi örnek alınabilir.
+**Aşama 7 — grading (27.11.2026: orantılı seri yapıldı, `ayk/grade.js`).** Boy numara başına Δboy (EU 6,67 / UK-US 8,47 mm), yükseklik Δçevre (5 / 6,35 mm) ile ölçeklenir; paylar mm kalır, düğüm kimlikleri korunur. Nokta bazlı kurallar hâlâ ileride: `future.grading`: numara serisi ve nokta bazlı artış kuralları (düğüm kimliği → Δx/Δy). Düğüm kimlikleri kalıcı olduğu için kurallar parçaya bağlanabilir; kenar işaretleri `edge + at` biçiminde olduğundan numaraya göre yeniden hesaplanır. Tekstildeki `tx/woven/grade.js` yöntemi örnek alınabilir.
 
-**Aşama 8 — kesim yerleşimi.** `future.nesting`: deri (kusurlu bölge, sırt / karın kalite haritası) ve top malzeme için ayrı stratejiler. Kesim çizgisi `build.cutLine()` ile hazır; tekstildeki `tx/woven/marker.js` başlangıç olabilir.
+**Aşama 8 — kesim yerleşimi (27.11.2026: ilk sürüm, `ayk/nest.js`, sayfa "Numara ve Kesim").** Dikdörtgen deri / plaka, daire kusurlar, bıçak payı, yönlü (0° / 180°) ya da serbest dönüş; çift parçanın yarısı ayna, orta çizgili yarım parça kirişe göre açılır (eğri orta çizgide yaklaşık, uyarılır); DXF / SVG. Deri silueti ve kalite haritası hâlâ ileride: `future.nesting`: deri (kusurlu bölge, sırt / karın kalite haritası) ve top malzeme için ayrı stratejiler. Kesim çizgisi `build.cutLine()` ile hazır; tekstildeki `tx/woven/marker.js` başlangıç olabilir.
 
 **Genel kurallar:** her yeni modül `ayk/` altında ayrı dosya; saf hesap modülleri DOM'suz ve Node'da test edilebilir; proje şeması değişirse `SCHEMA` artırılır ve `migrate()` ile eski projeler yükseltilir (testli). Henüz çalışmayan özellik arayüzde çalışıyormuş gibi gösterilmez.
 

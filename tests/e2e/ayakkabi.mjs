@@ -40,7 +40,7 @@ await R.test('Açılış: üç bölüm, Ayakkabı Modelhanesi açılır ve seçi
   expect(await page.locator('.door').count() === 3, 'üç kapı');
   await page.click('.door.ayakkabi'); await page.waitForURL(/ayakkabi\.html/); await page.waitForSelector('#nav button');
   expect(await page.evaluate(() => localStorage.getItem('cizim:workspace')) === 'ayakkabi', 'seçim hatırlandı');
-  expect((await page.locator('#nav button').count()) === 8, '8 bölüm');
+  expect((await page.locator('#nav button').count()) === 9, '9 bölüm');
   expect(await page.locator('.empty').isVisible(), 'boş proje listesi');
 });
 

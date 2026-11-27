@@ -91,6 +91,28 @@ await R.test('Saya Parçaları: önizleme, yön çevirme, ayar değiştirip yeni
   await ctx.close();
 });
 
+await R.test('Numara ve Kesim: numara tablosu, yerleştirme (çakışmasız), DXF indirme; telefonda taşma yok', async () => {
+  const { ctx, p, errs } = await open({ viewport: { width: 360, height: 780 }, isMobile: true, hasTouch: true });
+  await p.click('[data-page="yeni"]'); await p.fill('[data-n="name"]', 'Seri deneme'); await p.dispatchEvent('[data-n="name"]', 'change');
+  await p.setInputFiles('[data-lfile="yan"]', FILE); await p.waitForSelector('.lview[data-lview="yan"] .lprev svg');
+  await p.click('[data-act="create"]'); await p.waitForSelector('.ed canvas');
+  await p.click('[data-page="parcalar"]'); await p.waitForSelector('.autocard [data-au]');
+  await p.selectOption('.autocard [data-au]', 'derby'); await p.waitForSelector('.autocard .aprev svg text');
+  await p.click('[data-act="aurun"]'); await p.waitForFunction(() => window.__ayk.S.p.pieces.length === 3);
+  await p.click('[data-page="numara"]'); await p.waitForSelector('table.tbl tbody tr');
+  const rows = await p.locator('table.tbl tbody tr').count();
+  expect(rows === 5, 'taban ±2 numara: ' + rows);
+  await p.fill('[data-nk="w"]', '1400'); await p.dispatchEvent('[data-nk="w"]', 'change');
+  await p.click('[data-act="nkrun"]'); await p.waitForSelector('.nestprev svg', { timeout: 60000 });
+  const m = await p.locator('.page p.m').first().innerText();
+  expect(/çakışma yok/.test(m) && !/sığmadı/.test(m), 'yerleşim: ' + m);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('[data-act="nkdxf"]')]);
+  expect(/-kesim\.dxf$/.test(dl.suggestedFilename()), 'dxf adı ' + dl.suggestedFilename());
+  const ov = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth); expect(ov <= 1, 'yatay taşma ' + ov);
+  expect(!errs.length, errs.join(' | '));
+  await ctx.close();
+});
+
 await R.test('Model resminden yapay zekâ okuması: tip ve ayarlar uygulanır, parçalar oluşur; hata anlaşılır gösterilir', async () => {
   const { ctx, p, errs } = await open();
   let calls = 0, mode = 'ok';
