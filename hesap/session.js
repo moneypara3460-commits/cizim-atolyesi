@@ -78,6 +78,11 @@ export const allowedOffline = (bolum) => cacheAllows(cachedAccess(), bolum, Date
 export const verifyPurchase = (productId, purchaseToken) =>
   call('/functions/v1/play-verify', { method: 'POST', body: JSON.stringify({ productId, purchaseToken }) });
 
+// Promosyon kodu: kontrol tamamen sunucuda (supabase/migrations/20261127090000_promosyon_kodu.sql).
+// Yanıt: { ok: true, bitis, bolumler, gun } ya da { ok: false, hata }.
+export const redeemPromo = (kod) =>
+  call('/rest/v1/rpc/promosyon_kullan', { method: 'POST', body: JSON.stringify({ p_kod: String(kod || '').slice(0, 64) }) });
+
 // Hesabı ve sunucudaki bütün veriyi siler (geri alınamaz). Google Play aboneliği ayrıca Google Play'den iptal edilir.
 export const deleteAccount = () =>
   call('/functions/v1/hesap-sil', { method: 'POST', body: JSON.stringify({ onay: 'SİL' }) });

@@ -113,6 +113,37 @@ t('11. Bölüm sayfaları kilidi yükler ve Supabase adresine bağlanma izni ver
   }
 });
 
+t('12. Promosyon: sunucudan gelen promo erişimi bölümleri açar, Play aboneliği gibi listelenir ama Play ürünü sayılmaz', () => {
+  const a = computeAccess({ trial_ends_at: iso(NOW - DAY), subscriptions: [
+    { product_id: 'promo', plan: 'tek', sections: ['tekstil', 'uzay'], expires_at: iso(NOW + 30 * DAY), auto_renewing: false },
+  ] }, NOW);
+  assert.deepEqual(a.sections, ['tekstil']);
+  assert.deepEqual(a.subs[0].sections, ['tekstil'], 'bilinmeyen bölüm süzülür');
+  assert.equal(productInfo('promo'), null);
+  const js = fs.readFileSync(path.join(ROOT, 'hesap/hesap.js'), 'utf8');
+  assert.match(js, /product_id !== 'promo'/, 'Play yönetim düğmesi yalnız Play aboneliğinde');
+  const ses = fs.readFileSync(path.join(ROOT, 'hesap/session.js'), 'utf8');
+  assert.match(ses, /rpc\/promosyon_kullan/);
+});
+
+t('13. Promosyon veritabanı kuralları: kod düz saklanmaz, tablolar kapalı, üretim/iptal uygulamaya kapalı, deneme sınırı var', () => {
+  const sql = fs.readFileSync(path.join(ROOT, 'supabase/migrations/20261127090000_promosyon_kodu.sql'), 'utf8');
+  for (const tb of ['promosyon_kodlari', 'promosyon_kullanimlari']) assert.match(sql, new RegExp(`alter table public\\.${tb} enable row level security`));
+  assert.doesNotMatch(sql, /create policy/, 'kimse doğrudan okuyamaz/yazamaz');
+  assert.match(sql, /revoke all on public\.promosyon_kodlari, public\.promosyon_kullanimlari from anon, authenticated/);
+  assert.match(sql, /kod_ozet text not null unique check \(kod_ozet ~ '\^\[0-9a-f\]\{64\}\$'\)/, 'yalnız SHA-256 özeti');
+  assert.doesNotMatch(sql, /^\s*kod text/m, 'düz kod sütunu yok');
+  assert.match(sql, /revoke execute on function public\.promosyon_uret\([^)]*\) from public, anon, authenticated;/);
+  assert.match(sql, /revoke execute on function public\.promosyon_iptal\([^)]*\) from public, anon, authenticated;/);
+  assert.doesNotMatch(sql, /grant execute on function public\.promosyon_(uret|iptal)/);
+  assert.match(sql, /revoke execute on function public\.promosyon_kullan\(text\) from public, anon;/);
+  assert.match(sql, /istek_al\('promo', v_uid, 5,/, 'günde 5 deneme');
+  assert.match(sql, /for update;/, 'kullanım sayısı kilitle sayılır');
+  assert.match(sql, /unique \(kod_id, email_ozet\)/, 'bir e-postada bir kez');
+  assert.match(sql, /extensions\.gen_random_bytes\(16\)/, 'güçlü rastgelelik');
+  assert.equal(256 % 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'.length, 0, 'alfabe eşit dağılır');
+});
+
 let fail = 0;
 for (const [name, fn] of tests) {
   try { await fn(); console.log('ok   ' + name); }

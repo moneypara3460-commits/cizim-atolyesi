@@ -40,6 +40,19 @@ $('delacc').addEventListener('click', async () => {
     setTimeout(() => location.replace(location.pathname + location.search), 1500);
   } catch (e) { b.disabled = false; b.textContent = 'Hesabımı kalıcı olarak sil'; toast('Silinemedi: ' + e.message); }
 });
+$('promobtn').addEventListener('click', async () => {
+  const b = $('promobtn'), kod = $('promokod').value.trim();
+  if (!kod || busy) return;
+  busy = true; b.disabled = true; b.textContent = 'Kontrol ediliyor…';
+  try {
+    const r = await S.redeemPromo(kod);
+    if (!r || !r.ok) { toast((r && r.hata) || 'Kod kullanılamadı.'); return; }
+    $('promokod').value = '';
+    $('promo').open = false;
+    await refresh(); renderPlans();
+    toast(`Kod kabul edildi: ${fmtDate(Date.parse(r.bitis))} tarihine kadar açık.`);
+  } catch (e) { toast('Kod kullanılamadı: ' + e.message); } finally { busy = false; b.disabled = false; b.textContent = 'Kodu kullan'; }
+});
 for (const b of document.querySelectorAll('.period button')) {
   b.addEventListener('click', () => {
     period = b.dataset.period;
@@ -58,12 +71,18 @@ async function refresh() {
 
 function renderState() {
   const box = $('state'); box.textContent = '';
-  $('manage').hidden = !(acc && acc.subs.length);   // abonelik yoksa yönetilecek bir şey de yok
+  // Google Play aboneliği yoksa yönetilecek bir şey de yok (promosyon Play'de görünmez)
+  $('manage').hidden = !(acc && acc.subs.some((s) => s.product_id !== 'promo'));
   if (!acc) { box.append(el('p', 'note warn', 'Durum alınamadı. İnternet bağlantını kontrol edip sayfayı yenile.')); return; }
   if (acc.subs.length) {
     box.append(el('p', null, 'Aboneliklerin:'));
     const ul = el('ul', 'subs');
     for (const s of acc.subs) {
+      if (s.product_id === 'promo') {
+        const kapsam = s.sections.length === 3 ? 'tüm bölümler' : s.sections.map((b) => SECTION_NAME[b] || b).join(', ');
+        ul.append(el('li', null, `Promosyon (${kapsam}) — bitiş: ${fmtDate(s.expires)}`));
+        continue;
+      }
       const info = productInfo(s.product_id);
       const name = info ? `${info.name} · ${info.period === 'yillik' ? 'Yıllık' : 'Aylık'}` : s.product_id;
       ul.append(el('li', null, `${name} — ${s.auto_renewing ? 'yenilenme' : 'bitiş'}: ${fmtDate(s.expires)}`));

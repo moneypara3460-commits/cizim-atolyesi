@@ -75,3 +75,19 @@ TWA yerine Capacitor kullanıldığı için Digital Goods API yok. Ödeme yerel 
   yalnız Türkiye, KDV dahil TRY. Var olan ürüne dokunmaz.
 - Sunucu sırları (Supabase → Edge Functions → Secrets): `GOOGLE_SERVICE_ACCOUNT` (servis hesabı JSON), `PLAY_PACKAGE`
   (`com.cizimatolyesi.app`). Servis hesabı: `play-yukleme@cizim-atolyesi.iam.gserviceaccount.com`.
+
+## Promosyon kodu — 27.11.2026
+
+Testçilere / tanıdıklara ödemesiz süreli erişim. Kontrolün tamamı sunucuda
+(`supabase/migrations/20261127090000_promosyon_kodu.sql`); uygulama yalnız `promosyon_kullan(kod)` çağırır
+(Hesabım → "Promosyon kodun var mı?").
+
+- Kod düz saklanmaz, yalnız SHA-256 özeti. Biçim `CZ-XXXX-XXXX-XXXX-XXXX` (16 rastgele karakter, 80 bit).
+- Kişi başına günde 5 deneme; hatalı kodlar güvenlik nöbetçisine olay olarak yazılır.
+- Bir kod bir e-postada bir kez (hesabı silip açmak işe yaramaz); aktif promosyon varken ikinci kod kullanılamaz.
+- Erişim `subscriptions` tablosuna `source='promo'`, `product_id='promo'` satırı olarak yazılır, kendiliğinden yenilenmez.
+- Kod üretme ve iptal yalnız Supabase panelinden (SQL Editor), uygulamadan çağrılamaz:
+  - Üret: `select * from public.promosyon_uret(adet, gün, array['makine','tekstil','ayakkabi'], kişi_başı_kullanım, son_tarih, 'etiket');`
+    Düz kodlar yalnız bu sorgunun sonucunda bir kez görünür.
+  - İptal: `select public.promosyon_iptal(kod_id, true);` (true: o kodla açılmış erişimler de hemen biter).
+- Kodlar satılmaz: Google Play kuralına göre ücretli dijital erişim yalnız Play ödeme sistemiyle satılabilir.

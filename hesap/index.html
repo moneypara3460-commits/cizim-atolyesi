@@ -7,7 +7,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://anqfdlahimxdjovecsyk.supabase.co; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>Hesabım · Çizim Atölyesi</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="./hesap.css?v=20261124a">
+<link rel="stylesheet" href="./hesap.css?v=20261127a">
 </head>
 <body>
 <header id="top">
@@ -33,6 +33,13 @@
       <a id="manage" class="btn" href="https://play.google.com/store/account/subscriptions" target="_blank" rel="noopener" hidden>Aboneliği Google Play'de yönet</a>
       <button id="logout" class="btn ghost" type="button">Çıkış yap</button>
     </div>
+    <details id="promo">
+      <summary>Promosyon kodun var mı?</summary>
+      <div class="row">
+        <input id="promokod" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="CZ-XXXX-XXXX-XXXX-XXXX" aria-label="Promosyon kodu">
+        <button id="promobtn" class="btn" type="button">Kodu kullan</button>
+      </div>
+    </details>
     <details class="danger">
       <summary>Hesabımı sil</summary>
       <p class="small">Hesabın ve abonelik kaydın sunucudan kalıcı olarak silinir; geri alınamaz. Günlük kullanım sayıların senden ayrılıp kimliksiz bir toplama eklenir.
@@ -56,6 +63,6 @@
   </section>
 </main>
 <div id="toast" hidden></div>
-<script type="module" src="./hesap.js?v=20261126a"></script>
+<script type="module" src="./hesap.js?v=20261127a"></script>
 </body>
 </html>
