@@ -2,7 +2,7 @@
 // api: { model() → { tris, holes, matId, name }, draw(spec), clear(), enter(), leave(), render(), toast(m), name(), saveBlob(b, n), snapshot(), date() }
 import * as C from './cam.js?v=20261127y';
 import { pdfFromJpegs } from './cutopt.js?v=20261112u';
-import * as GC from './gcheck.js?v=20261127y';
+import * as GC from './gcheck.js?v=20261127d';
 import * as GK from './gozkontrol.js?v=20261127z';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
