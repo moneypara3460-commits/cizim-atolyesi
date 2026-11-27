@@ -2,11 +2,14 @@
 // Ayarlar projeyle birlikte kaydedilir (getCfg / setCfg). Hesap işçide (cam5-worker.js) yapılır.
 // api: { model() → { tris }, draw(spec), clear(), render(), toast(m), name(), saveBlob(b, n), changed() }
 import { MACHINES, DEFAULT_LIN, validateMachine } from './kin.js?v=20261112u';
-import { STRATS, STRAT_LIMITS } from './cam5.js?v=20261112u';
-import { POSTS5 } from './post5.js?v=20261127k';
-import { COVERAGE } from './coll5.js?v=20261112u';
+import { STRATS, STRAT_LIMITS } from './cam5.js?v=20261127a';
+import { POSTS5 } from './post5.js?v=20261127m';
+import { COVERAGE } from './coll5.js?v=20261127a';
 
-const V = '20261112u';
+const V = '20261127a';
+// Güvenli Kesim — değerli parça modu: güvenli mesafe en az 15 mm, kuru çalıştırma payı en az 10 mm, ilk geçişler ve riskli satırlar %50
+const VAL = { safe: 15, dry: 10, f: 0.5 };
+const CHECKS = [['zero', 'İş sıfırını (G54) ve döner eksenlerin 0° konumunu makinede kontrol ettim'], ['tool', 'Her takımın boyunu ölçüp boy tablosuna girdim; taşma boyları programdakiyle aynı'], ['clamp', 'Parça sağlam bağlı; bağlama döner eksenler dönerken hiçbir yere değmiyor'], ['dry', 'Kuru çalıştırma programını havada çalıştırdım, sorun görmedim']];
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 1) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -25,7 +28,7 @@ function defOps(mode) {
 }
 export function defaultCfg(mode = '3') {
   const m5 = mode === '5' ? 'tt_AC' : 'vmc4A';
-  return { mode, mk: m5, machine: clone(MACHINES[m5]), setup: {}, tools: defTools(), ops: defOps(mode === '5' ? '5' : '4'), spindle: { d: 60, len: 100 }, post: mode === '5' ? 'fanuc_tcp' : 'fanuc4', safe: 5, clear: 3 };
+  return { mode, mk: m5, machine: clone(MACHINES[m5]), setup: {}, tools: defTools(), ops: defOps(mode === '5' ? '5' : '4'), spindle: { d: 60, len: 100 }, post: mode === '5' ? 'fanuc_tcp' : 'fanuc4', safe: 5, clear: 3, valuable: false, slowRisk: false, dryClear: 10 };
 }
 // eğim/dönüş (derece) → takım yönü: dikeyden "eğim" kadar, X'ten "dönüş" yönünde
 const dirOf = ([tilt, spin]) => { const t = tilt * Math.PI / 180, s = spin * Math.PI / 180; return [Math.sin(t) * Math.cos(s), Math.sin(t) * Math.sin(s), Math.cos(t)]; };
@@ -42,15 +45,14 @@ function createClient() {
     } catch (e) { inline = loadInline(); }
   }
   function loadInline() {
-    return Promise.all([import('./cam5.js?v=' + V), import('./coll5.js?v=' + V), import('./post5.js?v=' + V), import('./cam5-run.js?v=' + V)]).then(([a, b, c, d]) => ({ a, b, c, d, last: null }));
+    return Promise.all([import('./cam5.js?v=' + V), import('./coll5.js?v=' + V), import('./post5.js?v=' + V), import('./cam5-run.js?v=' + V), import('./guvenli5.js?v=' + V)]).then(([a, b, c, d, e]) => ({ a, b, c, d, e, last: null }));
   }
   async function call(op, args, prog) {
     start();
     if (inline) {
       const M = await inline;
-      if (op === 'plan') { const r = M.d.runPlan(args.job, { ...M.a, ...M.b, ...M.c }, prog); M.last = r.keep; return r.out; }
-      if (!M.last) throw new Error('Önce takım yolunu hesapla');
-      return { text: M.c.gcode5(M.last.R, M.last.job, args.post, M.last.safety, args.opt || {}) };
+      if (op === 'plan') { const r = M.d.runPlan(args.job, { ...M.a, ...M.b, ...M.c, ...M.e }, prog); M.last = r.keep; return r.out; }
+      return M.d.runGcode(M.last, args, { ...M.c, ...M.e });
     }
     return new Promise((res, rej) => { const id = ++seq; pend.set(id, { res, rej, prog }); w.postMessage({ id, op, args }); });
   }
@@ -60,14 +62,17 @@ function createClient() {
 export function createCam5UI(api) {
   let cfg = defaultCfg('3');
   const client = createClient();
-  const S = { R: null, busy: null, err: null, view: 'path', i: 0, play: false, raf: 0, code: null, stale: false };
-  const changed = () => { S.R = null; S.code = null; S.stale = true; api.clear(); api.changed && api.changed(); };
+  const S = { R: null, busy: null, err: null, view: 'path', i: 0, play: false, raf: 0, code: null, codeLv: null, stale: false, checks: {} };
+  const dryClear = () => Math.max(cfg.dryClear || 10, cfg.valuable ? VAL.dry : 1);
+  const blockReason = () => { if (!cfg.valuable || !S.R) return ''; const miss = CHECKS.filter(([k]) => !S.checks[k]); return miss.length ? 'Değerli parça modu: indirmeden önce kesim öncesi kontrol listesini işaretle (' + miss.length + ' eksik).' : ''; };
+  const gopt = () => ({ date: new Date().toLocaleDateString('tr-TR'), slowRisk: !!cfg.slowRisk, ...(cfg.valuable ? { valuable: true, firstPass: VAL.f } : {}) });
+  const changed = () => { S.R = null; S.code = null; S.codeLv = null; S.checks = {}; S.stale = true; api.clear(); api.changed && api.changed(); };
   const render = () => api.render();
 
   function job() {
     const m = { ...clone(cfg.machine), lin: cfg.machine.lin || DEFAULT_LIN };
     const ops = cfg.ops.map((o) => (o.type === 'p32' ? { ...o, dirs: (o.tilts || [[0, 0]]).map(dirOf) } : o));
-    return { tris: api.model().tris, machine: m, setup: cfg.setup, tools: cfg.tools, ops, spindle: cfg.spindle, safe: cfg.safe, clear: cfg.clear, name: api.name() };
+    return { tris: api.model().tris, machine: m, setup: cfg.setup, tools: cfg.tools, ops, spindle: cfg.spindle, safe: cfg.valuable ? Math.max(cfg.safe, VAL.safe) : cfg.safe, clear: cfg.clear, name: api.name() };
   }
   async function compute() {
     if (S.busy) return;
@@ -179,8 +184,24 @@ export function createCam5UI(api) {
       const pe = R.posts[cfg.post] || [];
       h += lbl(esc(POSTS5[cfg.post].note), 'font-size:12px;color:#94a3b8');
       if (pe.length) h += pe.map((e) => lbl('⛔ ' + esc(e), 'color:#f87171;font-size:13px')).join('');
-      h += btn('⬇ G-kodu indir', 'c5-gcode', false, pe.length ? 'opacity:.5' : '') + btn('👁 İlk satırlar', 'c5-peek');
-      if (S.code) h += `<pre style="flex:1 0 100%;max-height:220px;overflow:auto;font-size:11px;background:#0b1220;padding:6px;border-radius:8px">${esc(S.code)}</pre>`;
+      // Güvenli Kesim
+      h += '<div class="lbl h">🛡 Güvenli Kesim</div>';
+      h += btn((cfg.valuable ? '☑' : '☐') + ' 💎 Değerli parça modu', 'c5-val', !!cfg.valuable, 'flex:1 0 100%;font-weight:700');
+      if (cfg.valuable) h += lbl('<b>Değerli parça modu açık:</b> güvenli mesafe en az ' + VAL.safe + ' mm, kuru çalıştırma payı en az ' + VAL.dry + ' mm; her işlemin ilk geçişi ve bütün riskli (sarı) satırlar %50 ilerlemeyle; çarpışma varken ve kesim öncesi kontrol listesi işaretlenmeden G-kodu indirilmez. Program daha uzun sürer.', 'font-size:13px');
+      if (R.risk) {
+        const rc = R.risk.count;
+        h += lbl(`Kırmızı (hata): <b style="color:${rc.red ? '#f87171' : '#4ade80'}">${rc.red} nokta</b> · Sarı (dikkat): <b style="color:${rc.yellow ? '#fbbf24' : '#4ade80'}">${rc.yellow} nokta</b> · Yeşil: ${rc.green.toLocaleString('tr-TR')} nokta`, 'font-size:14px');
+        if (R.risk.list.length) h += `<div id="c5-risk" style="flex:1 0 100%;max-height:200px;overflow:auto;font-size:12.5px;line-height:1.4">${R.risk.list.slice(0, 40).map(([i, l, w]) => `<div style="border-left:4px solid ${l === 2 ? '#ef4444' : '#eab308'};padding:3px 8px;margin:3px 0;background:#0b1220;border-radius:6px"><b>Nokta ${i + 1}</b> (konum kaydırıcısında)<br>${esc(w)}</div>`).join('')}${R.risk.list.length > 40 ? `<div style="color:#94a3b8">… ${R.risk.count.red + R.risk.count.yellow - 40} nokta daha</div>` : ''}</div>`;
+        h += cfg.valuable ? lbl('Değerli parça modunda riskli satırlarda ilerleme her zaman %50.', 'font-size:12px;color:#94a3b8') : btn((cfg.slowRisk ? '☑' : '☐') + ' Riskli (sarı) kesme satırlarında ilerlemeyi %50 düşür', 'c5-slow', !!cfg.slowRisk, 'flex:1 0 100%');
+        h += lbl('Kırmızı: çarpışma ve eksen sınırı (G-kodu zaten engellenir). Sarı: takım değişiminden sonraki ilk yaklaşma (boy ofseti), tek harekette döner eksenin 15°\'den fazla dönmesi, eksen sınırına 2 mm / 2°\'den yakınlık. Makine gövdesi, kapak ve beşik gövdesi haritada yoktur; onlar için kuru çalıştırmayı kullan.', 'font-size:12px;color:#94a3b8');
+      }
+      if (cfg.valuable) { h += '<div class="lbl h">Kesim öncesi kontrol (değerli parça)</div>'; h += CHECKS.map(([k, t]) => btn((S.checks[k] ? '☑ ' : '☐ ') + t, 'c5-chk-' + k, !!S.checks[k], 'flex:1 0 100%;text-align:left;font-size:13.5px')).join(''); }
+      const blocked = blockReason();
+      if (blocked) h += lbl('⛔ ' + esc(blocked), 'color:#f87171;font-size:13px');
+      h += btn('⬇ G-kodu indir', 'c5-gcode', false, pe.length || blocked ? 'opacity:.5' : '') + btn('👁 İlk satırlar', 'c5-peek');
+      h += btn('🌬 Kuru çalıştırma programı (havada)', 'c5-dry', false, pe.length ? 'opacity:.5' : '') + num('Kuru çalıştırma payı (mm)', 'dryClear', dryClear());
+      h += lbl('<b>Kuru çalıştırma:</b> aynı program, bütün yol her noktada kendi takım ekseni boyunca geri çekilmiş hâli. Takım ham parçanın en az ' + nf(dryClear(), 0) + ' mm uzağından geçer, hiçbir yere kesmez; soğutma kapalı. Kaydırılmış yol için kinematik ve çarpışma kontrolü yeniden yapılır: eksen sınırı aşılırsa ya da bir yere çarpıyorsa program verilmez.', 'font-size:12px;color:#94a3b8');
+      if (S.code) { const COL = ['transparent', 'rgba(234,179,8,.18)', 'rgba(239,68,68,.28)']; h += `<pre id="c5-code" style="flex:1 0 100%;max-height:220px;overflow:auto;font-size:11px;background:#0b1220;padding:6px;border-radius:8px">${S.code.split('\n').map((l, i) => (S.codeLv && S.codeLv[i] ? `<span style="background:${COL[S.codeLv[i]]}">${esc(l)}</span>` : esc(l))).join('\n')}</pre>`; }
       h += lbl('⚠ Eksen yönleri, dönme merkezleri, takım boyları ve kontrolcü ayarları makinenizle karşılaştırılmalı; ilk çalıştırma kumanda simülasyonu, tek blok ve düşük ilerlemeyle, yetkin operatör kontrolünde yapılmalı.', 'color:#fbbf24;font-size:12px');
     }
     return h;
@@ -209,12 +230,26 @@ export function createCam5UI(api) {
     if (a.startsWith('c5-v-')) { S.view = a.slice(5); draw(); render(); return true; }
     if (a === 'c5-play') { if (S.play) stopPlay(); else { if (S.R && S.i >= S.R.kinds.length - 1) S.i = 0; S.play = true; if (S.view === 'stock') S.view = 'path'; playLoop(); } render(); return true; }
     if (a === 'c5-rew') { stopPlay(); S.i = 0; draw(); render(); return true; }
+    if (a === 'c5-val') { cfg.valuable = !cfg.valuable; changed(); render(); api.toast(cfg.valuable ? 'Değerli parça modu açık: takım yolunu yeniden hesapla' : 'Değerli parça modu kapalı'); return true; }
+    if (a === 'c5-slow') { cfg.slowRisk = !cfg.slowRisk; S.code = null; api.changed && api.changed(); render(); return true; }
+    if ((m = a.match(/^c5-chk-(\w+)$/))) { S.checks[m[1]] = !S.checks[m[1]]; render(); return true; }
+    if (a === 'c5-dry') {
+      const pe = S.R ? S.R.posts[cfg.post] : ['Önce hesapla'];
+      if (pe && pe.length) { api.toast('Kuru çalıştırma engellendi: ' + pe[0]); return true; }
+      S.busy = 'Kuru çalıştırma yolu denetleniyor'; render();
+      client.call('gcode', { post: cfg.post, opt: { date: new Date().toLocaleDateString('tr-TR'), dryRun: { clear: dryClear() }, program: 5002 } }).then((r) => {
+        api.saveBlob(new Blob([r.text], { type: 'text/plain' }), api.name() + '_' + cfg.post + '_KURU.' + POSTS5[cfg.post].ext);
+        api.toast('Kuru çalıştırma programı indirildi: yol takım ekseni boyunca ' + nf(r.dry.d, 1) + ' mm geri çekildi');
+      }).catch((e) => { S.err = e.message; api.toast(e.message); }).finally(() => { S.busy = null; render(); });
+      return true;
+    }
     if (a === 'c5-gcode' || a === 'c5-peek') {
       const pe = S.R ? S.R.posts[cfg.post] : ['Önce hesapla'];
       if (pe && pe.length && a === 'c5-gcode') { api.toast('G-kodu engellendi: ' + pe[0]); return true; }
+      if (a === 'c5-gcode' && blockReason()) { api.toast(blockReason()); render(); return true; }
       S.busy = 'G-kodu yazılıyor'; render();
-      client.call('gcode', { post: cfg.post, opt: { date: new Date().toLocaleDateString('tr-TR'), allowUnsafe: a === 'c5-peek' } }).then((r) => {
-        if (a === 'c5-peek') S.code = (pe.length ? '(ÖNİZLEME — ÜRETİME UYGUN DEĞİL: ' + pe[0] + ')\n' : '') + r.text.split('\n').slice(0, 60).join('\n');
+      client.call('gcode', { post: cfg.post, opt: { ...gopt(), allowUnsafe: a === 'c5-peek' } }).then((r) => {
+        if (a === 'c5-peek') { const pre = pe.length ? ['(ÖNİZLEME — ÜRETİME UYGUN DEĞİL: ' + pe[0] + ')'] : []; S.code = pre.concat(r.text.split('\n').slice(0, 60)).join('\n'); S.codeLv = (pre.length ? [0] : []).concat(r.lv.slice(0, 60)); }
         else { api.saveBlob(new Blob([r.text], { type: 'text/plain' }), api.name() + '_' + cfg.post + '.' + POSTS5[cfg.post].ext); api.toast('G-kodu indirildi (doğrulanmamış program)'); }
       }).catch((e) => { S.err = e.message; }).finally(() => { S.busy = null; render(); });
       return true;
@@ -228,6 +263,7 @@ export function createCam5UI(api) {
     const p = k.split('.');
     if (k === 'mk') { cfg.mk = v; cfg.machine = clone(MACHINES[v]); }
     else if (k === 'post') { cfg.post = v; render(); return; }
+    else if (k === 'dryClear') { if (n >= 1) cfg.dryClear = n; render(); return; }
     else if (k === 'pivot') { if (n > 0) cfg.machine.pivot = n; }
     else if (p[0] === 'rmin' || p[0] === 'rmax') { if (Number.isFinite(n)) cfg.machine.rot[+p[1]][p[0] === 'rmin' ? 'min' : 'max'] = n; }
     else if (p[0] === 'rc') { if (Number.isFinite(n)) cfg.machine.rot[+p[1]].center[+p[2]] = n; }

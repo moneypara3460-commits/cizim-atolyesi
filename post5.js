@@ -39,12 +39,26 @@ export function canPost(R, postKey, safety) {
   return e;
 }
 
-// opt: { program, date, name, rapidFeed, allowUnsafe (yalnız test), maxRotSpeed (der/dk) }
+// opt: { program, date, name, rapidFeed, allowUnsafe (yalnız test), maxRotSpeed (der/dk),
+//        trace: [] — her çıktı satırının CL indisi (risk boyama), slow: { risk: risk5(...), f } — "slow" işaretli ilerlemeli
+//        hareketler f katına iner, firstPass: k — her işlemin ilk geçişindeki ilerlemeli hareketler k katına iner,
+//        valuable: başlık notu, dry: { d, clear } — kuru çalıştırma başlığı (yol çağıran tarafından kaydırılmış olmalı), soğutma kapalı }
 export function gcode5(R, job, postKey, safety, opt = {}) {
   const P = POSTS5[postKey], errs = canPost(R, postKey, safety);
   if (!opt.allowUnsafe && errs.length) throw new Error('G-kodu üretilemez: ' + errs.join('; '));
   if (!P) throw new Error('Bilinmeyen kontrolcü');
   const L = [], sie = postKey === 'siemens', fan = postKey === 'fanuc_tcp' || postKey === 'fanuc4';
+  let cur = null;
+  if (opt.trace) { const push0 = L.push.bind(L); L.push = (...a) => { for (let k = 0; k < a.length; k++) opt.trace.push(cur); return push0(...a); }; }
+  const firstOf = new Map();   // işlem → ilk geçiş indisi
+  (R.passes || []).forEach((ps, k) => { const key = ps.opIndex ?? ps.opType; if (!firstOf.has(key)) firstOf.set(key, k); });
+  const firstSet = new Set(firstOf.values());
+  const fK = (i) => {
+    let k = 1; const rk = opt.slow && opt.slow.risk && opt.slow.risk.points[i];
+    if (rk && rk.slow) k = Math.min(k, opt.slow.f || 0.5);
+    if (opt.firstPass > 0 && firstSet.has(R.cl[i].op)) k = Math.min(k, opt.firstPass);
+    return k;
+  };
   const c = (t) => (P.cm === ';' ? '; ' + ascii(t).slice(0, 76) : '(' + ascii(t).slice(0, 70) + ')');
   const rn = ROT(R), tools = new Map(job.tools.map((t) => [t.id, t]));
   const rapidF = opt.rapidFeed || 5000, rotSp = opt.maxRotSpeed || 3600;
@@ -56,6 +70,8 @@ export function gcode5(R, job, postKey, safety, opt = {}) {
   L.push(c('KONTROLCU: ' + P.name));
   L.push(c('MAKINE: ' + (R.machine.name || R.machine.type) + ' - ' + (R.machine.rot || []).map((r) => r.name + ' EKSEN [' + r.axis.join(' ') + '] ' + r.min + '/' + r.max).join(', ')));
   L.push(c('ILK CALISTIRMA: kumanda simulasyonu, tek blok ve dusuk ilerleme ile kontrol edin'));
+  if (opt.dry) { L.push(c('KURU CALISTIRMA - HAVADA DENEME - KESIM YAPMAZ')); L.push(c('BUTUN YOL TAKIM EKSENI BOYUNCA ' + fmt(opt.dry.d) + ' MM GERI CEKILDI')); L.push(c('TAKIM HAM PARCADAN EN AZ ' + fmt(opt.dry.clear) + ' MM UZAKTA - SOGUTMA KAPALI')); }
+  if (opt.valuable) L.push(c('DEGERLI PARCA MODU: ILK GECISLER %' + Math.round((opt.firstPass || 1) * 100) + ' ILERLEME, RISKLI SATIRLAR YAVAS'));
   L.push(c('IS SIFIRI G54 = parca cercevesi orijini, doner eksenler 0 derecede'));
   if (P.tcp) L.push(c('TCP: X Y Z takim ucu, parca koordinatinda'));
   else L.push(c('X Y Z ' + rn.join(' ') + ' makine eksen degerleri (kinematik uygulamada cozuldu)'));
@@ -86,6 +102,7 @@ export function gcode5(R, job, postKey, safety, opt = {}) {
   };
   for (let i = 0; i < R.cl.length; i++) {
     const cl = R.cl[i], t = tools.get(cl.tool);
+    cur = i;
     if (cl.tool !== toolNow) {
       if (toolNow != null) endTool();
       toolNow = cl.tool; last = null; lastG = null; lastF = null;
@@ -102,7 +119,7 @@ export function gcode5(R, job, postKey, safety, opt = {}) {
       if (P.tcp) { L.push('G0 X' + A(v0[0][1]) + ' Y' + A(v0[1][1])); L.push('G0 Z' + A(v0[2][1])); }
       else { L.push('G0 X' + A(v0[0][1]) + ' Y' + A(v0[1][1])); L.push((sie ? 'G0 Z' : 'G43 H' + t.n + ' Z') + A(v0[2][1])); }
       last = Object.fromEntries(v0.map(([k, v]) => [k, v])); lastG = 0;
-      L.push('M8');
+      if (!opt.dry) L.push('M8');
       continue;
     }
     const prev = R.ax[i - 1], ax = R.ax[i];
@@ -114,7 +131,7 @@ export function gcode5(R, job, postKey, safety, opt = {}) {
       continue;
     }
     // ilerlemeli hareket (hızlı bağlantıda döner eksen değişiyorsa da: hızlı ilerlemeyle doğrusal enterpolasyon)
-    const f = cl.k === 'r' ? rapidF : (cl.f || 100);
+    const f = cl.k === 'r' ? rapidF : (cl.f || 100) * fK(i);
     if (rotCh && !P.tcp) {
       if (feedMode !== 93) { L.push('G93'); feedMode = 93; lastF = null; }
       const tMin = Math.max(lenTip / f, dAng / rotSp, 1e-5);
@@ -129,6 +146,7 @@ export function gcode5(R, job, postKey, safety, opt = {}) {
       if (L.length > before && fw) lastF = Math.round(f);
     }
   }
+  cur = null;
   if (toolNow != null) endTool();
   if (feedMode !== 94) L.push('G94');
   L.push('M30');

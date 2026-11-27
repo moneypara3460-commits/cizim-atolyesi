@@ -612,7 +612,7 @@ export function toolShape(t, len = 4) {
 export function holderZone(t) {
   if (['od', 'face', 'thread'].includes(t.type)) return { kind: 'up', z0: 1.5, z1: 1.5 + (t.hw || 25), r0: Math.max(8, (t.edge || 0) * 0.9) };   // kesici uç yüksekliği üstünde tutucu başı
   if (t.type === 'groove' || t.type === 'part') return { kind: 'up', z0: -0.5, z1: t.w + 0.5, r0: t.reach || 8 };
-  if (t.type === 'id') return { kind: 'bar', minR: (t.bar || 10) / 2, z0: (t.edge || 6) * 0.6 };
+  if (t.type === 'id') return { kind: 'bar', minR: (t.bar || 10) / 2, mb: (t.minBore || t.bar || 10) / 2, z0: (t.edge || 6) * 0.6 };
   return null;
 }
 // çokgen → hücre maskesi (referans hücresine göre (dj, di) listesi)
@@ -629,7 +629,10 @@ export function createSim(R, opt = {}) {
   const job = R.job, res = opt.res || 0.1, SG = simGrid(job, res), M = LATHE_MACHINES[job.mk], ch = job.chuck || {};
   const masks = new Map(), shapes = new Map();
   for (const t of job.tools) { const sh = toolShape(t); shapes.set(t.id, sh); masks.set(t.id, shapeMask(sh, res)); }
-  const events = [], seen = new Set(), ev = (level, kind, msg, i) => { const k = kind + '|' + (R.moves[i]?.op ?? '') + '|' + msg.slice(0, 40); if (seen.has(k)) return; seen.add(k); events.push({ level, kind, msg, move: i, op: R.moves[i]?.op }); };
+  // risk: her hareket için { lvl: 0 yeşil / 1 sarı / 2 kırmızı, why, slow } — risk haritası (Güvenli Kesim) bundan çıkar
+  const risk = new Array(R.moves.length).fill(null);
+  const setRisk = (i, lvl, why, slow = false) => { const r = risk[i] || (risk[i] = { lvl: 0, why: '', slow: false }); if (lvl > r.lvl) { r.lvl = lvl; r.why = why; } if (slow) r.slow = true; };
+  const events = [], seen = new Set(), ev = (level, kind, msg, i) => { setRisk(i, level === 'hata' ? 2 : 1, msg, level !== 'hata'); const k = kind + '|' + (R.moves[i]?.op ?? '') + '|' + msg.slice(0, 40); if (seen.has(k)) return; seen.add(k); events.push({ level, kind, msg, move: i, op: R.moves[i]?.op }); };
   const zChuck = -job.stock.stickout, threadZones = [];
   const st = { i: 0, removed: 0, prev: R.moves.length ? R.moves[0].p.slice() : [0, 0] };
   const cellZ = (j) => SG.z0 + (j + 0.5) * res;
@@ -651,9 +654,11 @@ export function createSim(R, opt = {}) {
       for (let j = j0; j <= j1; j++) for (let i = i0; i < SG.nr; i++) if (SG.g[j * SG.nr + i] === 1) return true;
       return false;
     }
-    if (hz.kind === 'bar') {   // bara: uçtan +z yönünde, eksene göre en az minR yarıçaplı silindir — bu yarıçap içinde malzeme olmamalı
-      const j0 = Math.max(0, Math.floor((p[0] + hz.z0 - SG.z0) / res)), iMax = Math.min(SG.nr, Math.ceil(hz.minR / res));
-      for (let j = j0; j < SG.nz; j++) for (let i = 0; i < iMax; i++) if (SG.g[j * SG.nr + i] === 1) return true;
+    if (hz.kind === 'bar') {   // bara: uçtan +z yönünde, minR yarıçaplı silindir. Uç en küçük delik yarıçapındayken (mb) bara eksende
+      // durur; uç dışarı çıktıkça bara merkezi eksenden aynı kadar uzaklaşır: kesitte [c − minR, c + minR] bandı (c = max(0, r − mb))
+      const c = Math.max(0, p[1] - hz.mb), j0 = Math.max(0, Math.floor((p[0] + hz.z0 - SG.z0) / res));
+      const iMin = Math.max(0, Math.floor(Math.max(0, c - hz.minR) / res)), iMax = Math.min(SG.nr, Math.ceil((c + hz.minR) / res));
+      for (let j = j0; j < SG.nz; j++) for (let i = iMin; i < iMax; i++) if (SG.g[j * SG.nr + i] === 1) return true;
       return false;
     }
     return false;
@@ -694,7 +699,7 @@ export function createSim(R, opt = {}) {
     for (let q = 0; q < m.length; q += 2) for (const [dj, di] of [[k, 0], [-k, 0], [0, k], [0, -k]]) { const j = J + m[q] + dj, ii = I + m[q + 1] + di, ia = ii < 0 ? -ii - 1 : ii; if (j < 0 || j >= SG.nz || ia >= SG.nr) continue; if (SG.g[j * SG.nr + ia] === 1) { best = s; break; } }
     return best;
   }
-  return { SG, st, step, events, threadZones, shapes, get done() { return st.i >= R.moves.length; } };
+  return { SG, st, step, events, risk, threadZones, shapes, get done() { return st.i >= R.moves.length; } };
 }
 function linePts(a, b, step) { const n = Math.max(1, Math.ceil(dist(a, b) / step)), o = []; for (let k = 1; k <= n; k++) o.push(add(a, mul(sub(b, a), k / n))); return o; }
 function arcPts(a, b, c, cw, step) { const e = { t: 'A', a, b, c, R: dist(a, c), cw }; return sampleElem(e, step).slice(1); }
@@ -762,6 +767,34 @@ export function cycleTime(R) {
   return { cut: tCut, rapid: tRap, change: tChange, total: tCut + tRap + tChange };
 }
 
+/* ===================== Güvenli Kesim: risk haritası ve kuru çalıştırma ===================== */
+// Risk haritası: simülasyonun her hareket için bulduğu sorunlar. Kırmızı: hızlı harekette (G00) malzemeye çarpma, tutucu /
+// bara çarpması, ayna çenesi / gövdesine girme. Sarı: hızlı hareket malzemeye güvenli mesafeden yakın bitiyor; takım
+// değişiminden sonraki ilk yaklaşma (takım ofseti yanlışsa ilk çarpma burada olur). "slow" işaretli kesme satırları istenirse yavaşlatılır.
+// Sınır: taret, punta, kapak ve kesme kuvvetleri haritada yoktur (CHECK_SCOPE).
+export function latheRisk(R, sim) {
+  const moves = R.moves.map((m, i) => (sim.risk[i] ? { ...sim.risk[i] } : { lvl: 0, why: '', slow: false }));
+  for (const op of R.ops) {
+    const i = op.i0 + 2, t = R.job.tools.find((q) => q.id === op.tool);
+    if (i < op.i1 && moves[i] && moves[i].lvl < 1) moves[i] = { lvl: 1, why: `Takım değişiminden sonra ilk yaklaşma: T${String(t.n).padStart(2, '0')}${String(t.off).padStart(2, '0')} ofsetini (X / Z boyu, uç yarıçapı, sanal uç no) kontrol et`, slow: false, tc: true };
+  }
+  const count = { green: 0, yellow: 0, red: 0 };
+  for (const r of moves) count[['green', 'yellow', 'red'][r.lvl]]++;
+  return { moves, count };
+}
+// Kuru çalıştırma (havada deneme): bütün Z değerleri, takımın en arkadaki noktası parça ön yüzünün (ham alın) `clear` mm
+// önünde kalacak kadar ileri (+Z, aynadan uzağa) kaydırılır. X aynen kalır: takım parçanın önünde boşlukta aynı X
+// hareketlerini, takım değişimlerini ve sırayı yapar, hiçbir yere değmez. Makine Z stroğu aşılıyorsa `over` > 0.
+export function latheDryShift(R, clear = 10) {
+  const job = R.job, M = LATHE_MACHINES[job.mk], c = Math.max(1, +clear || 10), used = new Set(R.moves.map((m) => m.tool).filter((x) => x != null));
+  let zMin = Infinity, zMax = -Infinity, back = 0;
+  for (const m of R.moves) { if (m.home || !Number.isFinite(m.p[0])) continue; zMin = Math.min(zMin, m.p[0]); zMax = Math.max(zMax, m.p[0]); }
+  for (const t of job.tools) if (used.has(t.id)) for (const q of toolShape(t)) back = Math.min(back, q[0]);   // takımın referanstan aynaya doğru uzanımı
+  if (!Number.isFinite(zMin)) return { dz: 0, over: 0, clear: c };
+  const dz = Math.max(c, job.stock.face + c - (zMin + back));
+  return { dz, over: Math.max(0, zMax + dz - M.zMax), clear: c, zMax: zMax + dz };
+}
+
 /* ===================== postprosesör ===================== */
 export const LATHE_POSTS = {
   fanuc_t: { name: 'Fanuc 0i-T / 0i-TF (sistem A) ve uyumlular', ext: 'nc', g76: true, comp: true, css: true, g50: true },
@@ -771,8 +804,21 @@ export function postLathe(R, opt = {}) {
   const job = R.job, M = LATHE_MACHINES[job.mk], P = LATHE_POSTS[opt.post || M.post] || LATHE_POSTS.fanuc_t, radius = job.xMode === 'radius';
   if (radius && !M.caps.radiusMode) throw new Error('Bu kumandada yarıçap programlama yok');
   const L = [], c = (t) => '(' + ascii(t).slice(0, 72) + ')';
-  const X = (r) => 'X' + fmt(radius ? r : 2 * r), Z = (z) => 'Z' + fmt(z), F = (f) => 'F' + fmt(f);
-  let n = 0; const out = (s) => { if (opt.lineNumbers && s && !/^[%(O]/.test(s)) { n += 10; L.push('N' + n + ' ' + s); } else L.push(s); };
+  // opt.dryRun: { clear } — kuru çalıştırma (bütün Z'ler latheDryShift kadar ileri); opt.trace: her çıktı satırının hareketi (risk boyama)
+  // opt.slow: { risk: latheRisk(...), f: 0,5 } — "slow" işaretli kesme hareketleri; opt.firstPass: her operasyonun ilk kesme geçişi
+  // (ilk kesmeden sonraki ilk hızlı harekete kadar) bu katla yavaş. Diş (G32 / G76) ilerlemesi hatvedir, hiç değiştirilmez.
+  const dry = opt.dryRun ? latheDryShift(R, opt.dryRun.clear) : null, dz = dry ? dry.dz : 0;
+  const X = (r) => 'X' + fmt(radius ? r : 2 * r), Z = (z) => 'Z' + fmt(z + dz), F = (f) => 'F' + fmt(f);
+  let n = 0, cur = null; const out = (s) => { if (opt.trace) opt.trace.push(cur); if (opt.lineNumbers && s && !/^[%(O]/.test(s)) { n += 10; L.push('N' + n + ' ' + s); } else L.push(s); };
+  const firstSeg = new Map();
+  if (opt.firstPass > 0) for (const op of R.ops) { let a = -1, b = -1; for (let k = op.i0 + 3; k < op.i1; k++) { const m = R.moves[k]; if (a < 0) { if (m.g !== 0) a = k; } else if (m.g === 0) { b = k - 1; break; } } if (a >= 0) firstSeg.set(op.idx, [a, b < 0 ? op.i1 - 1 : b]); }
+  const fOf = (gi, f) => {
+    const m = R.moves[gi]; if (!m || m.g === 0 || m.g === 32) return f;
+    let k = 1; const rk = opt.slow && opt.slow.risk && opt.slow.risk.moves[gi];
+    if (rk && rk.slow) k = Math.min(k, opt.slow.f || 0.5);
+    const fs = firstSeg.get(m.op); if (fs && gi >= fs[0] && gi <= fs[1]) k = Math.min(k, opt.firstPass);
+    return k < 1 ? +(f * k).toFixed(4) : f;
+  };
   const used = [...new Set(R.moves.map((m) => m.tool).filter((x) => x != null))].map((id) => job.tools.find((t) => t.id === id));
   out('%'); out('O' + String(opt.program || 2001).padStart(4, '0') + ' ' + c(job.name || 'TORNA'));
   out(c('CIZIM ATOLYESI TORNA CAM ' + (opt.date || '')));
@@ -782,6 +828,13 @@ export function postLathe(R, opt = {}) {
   out(c('SIFIR: PARCA ON YUZU MERKEZI Z0 X0 (G54)'));
   for (const t of used) out(c(`T${String(t.n).padStart(2, '0')}${String(t.off).padStart(2, '0')} ${TOOL_TYPES_L[t.type]} ${t.name || ''} R${fmt(t.rn || 0)} UC NO ${tipNumber(t)}`));
   out(c('ILK CALISTIRMA: KUMANDADA SIMULASYON, TEK BLOK VE DUSUK ILERLEME ILE DENE'));
+  if (dry) {
+    out(c('KURU CALISTIRMA - HAVADA DENEME - KESIM YAPMAZ'));
+    out(c('TUM Z DEGERLERI ' + fmt(dz) + ' MM ILERI (AYNADAN UZAGA) KAYDIRILDI'));
+    out(c('TAKIM HAM ON YUZUNUN EN AZ ' + fmt(dry.clear) + ' MM ONUNDEN GECER - SOGUTMA KAPALI'));
+    out(c('EN BUYUK Z ' + fmt(dry.zMax) + (dry.over > 0 ? ' - MAKINE Z STROGUNU ' + fmt(dry.over) + ' MM ASIYOR' : ' - MAKINE Z STROGU ICINDE')));
+  }
+  if (opt.valuable) out(c('DEGERLI PARCA MODU: ILK GECISLER %' + Math.round((opt.firstPass || 1) * 100) + ' ILERLEME, RISKLI SATIRLAR YAVAS'));
   out((job.units === 'inch' ? 'G20' : 'G21') + ' G18 G40 G54 G99 G97');
   const ftype = job.units === 'inch' ? 1 / 25.4 : 1; if (ftype !== 1) throw new Error('İnç çıktı için koordinat dönüşümü bu sürümde yok: mm (G21) kullan');
   let lastTool = null;
@@ -789,19 +842,19 @@ export function postLathe(R, opt = {}) {
   homeOut(R.moves[0]);
   R.ops.forEach((op) => {
     const o = job.ops[op.idx], t = job.tools.find((q) => q.id === op.tool), mv = R.moves.slice(op.i0, op.i1); if (!mv.length) return;
-    out(c(`OP ${op.idx + 1} ${op.name}`));
+    cur = op.i0; out(c(`OP ${op.idx + 1} ${op.name}`));
     homeOut(mv[0]);
     if (lastTool !== t.id) { out(`T${String(t.n).padStart(2, '0')}${String(t.off).padStart(2, '0')} ${c(t.name || TOOL_TYPES_L[t.type])}`); lastTool = t.id; }
     const useCss = o.css && P.css && M.caps.css && !['drill', 'thread'].includes(o.type);
     if (useCss) { if (P.g50) out(`G50 S${Math.round(M.maxRpm)}`); out(`G96 S${Math.round(o.vc)} ${t.spin}`); }
     else { const rpm = o.rpm > 0 ? o.rpm : Math.round(rpmFor(o, job.stock.d, M)); out(`G97 S${Math.round(clamp(rpm, M.minRpm, M.maxRpm))} ${t.spin}`); }
-    out('M08');
-    out(`G00 ${Z(mv[1].p[0])}`);
-    const first = mv[2]; out(`G00 ${X(first.p[1])} ${Z(first.p[0])}`);
+    if (!dry) out('M08');
+    cur = op.i0 + 1; out(`G00 ${Z(mv[1].p[0])}`);
+    const first = mv[2]; cur = op.i0 + 2; out(`G00 ${X(first.p[1])} ${Z(first.p[0])}`);
     const isThreadCycle = o.type === 'thread' && o.method === 'G76' && P.g76 && M.caps.g76;
     if (isThreadCycle) {
       const T = R.ops.find((q) => q.idx === op.idx).thread, mm = String(Math.max(1, (o.spring | 0) + 1)).padStart(2, '0'), aa = String(Math.round(t.ang)).padStart(2, '0');
-      const st = mv.find((m, k) => k > 2 && m.g === 0) || first;
+      const st = mv.find((m, k) => k > 2 && m.g === 0) || first; cur = op.i0 + 3;
       out(`G00 ${X(st.p[1])} ${Z(o.z1)}`);
       out(`G76 P${mm}00${aa} Q${Math.round((o.min || 0.05) * 1000)} R${fmt(o.fin || 0)}`);
       out(`G76 ${X(T.ext ? T.rRoot : T.rMaj)} ${Z(o.z2)} R0. P${Math.round(T.k * 1000)} Q${Math.round(o.first * 1000)} ${F(o.pitch)}`);
@@ -812,23 +865,25 @@ export function postLathe(R, opt = {}) {
       const passes = comp ? (op.compPasses || []) : [];
       for (let k = 3; k < mv.length; k++) {
         const gi = op.i0 + k, m = mv[k], pass = comp && passes.find((q) => q.ia === gi);
+        cur = gi;
         if (pass) {
           // kumanda telafisi: parça konturu programlanır, uç yarıçapı ve sanal uç no ofset sayfasında
           const c0 = pass.contour[0].a;
-          out(`${o.side === 'id' ? 'G41' : 'G42'} G01 ${X(c0[1])} ${Z(c0[0])} ${F(m.f)}`);
+          out(`${o.side === 'id' ? 'G41' : 'G42'} G01 ${X(c0[1])} ${Z(c0[0])} ${F(fOf(gi, m.f))}`);
           for (const e of pass.contour) out(e.t === 'L' ? `G01 ${X(e.b[1])} ${Z(e.b[0])}` : `G0${e.cw ? 2 : 3} ${X(e.b[1])} ${Z(e.b[0])} R${fmt(e.R)}`);
           const ex = mv[pass.ib - op.i0]; k = pass.ib - op.i0;
           if (ex) out(`G40 G01 ${X(ex.p[1])} ${Z(ex.p[0])}`);
           continue;
         }
         if (m.g === 0) out(`G00 ${X(m.p[1])} ${Z(m.p[0])}`);
-        else if (m.g === 1) out(`G01 ${X(m.p[1])} ${Z(m.p[0])} ${F(m.f)}`);
-        else if (m.g === 2 || m.g === 3) out(`G0${m.g} ${X(m.p[1])} ${Z(m.p[0])} R${fmt(m.R)} ${F(m.f)}`);
+        else if (m.g === 1) out(`G01 ${X(m.p[1])} ${Z(m.p[0])} ${F(fOf(gi, m.f))}`);
+        else if (m.g === 2 || m.g === 3) out(`G0${m.g} ${X(m.p[1])} ${Z(m.p[0])} R${fmt(m.R)} ${F(fOf(gi, m.f))}`);
         else if (m.g === 32) out(`G32 ${Z(m.p[0])} ${F(m.f)}`);
       }
     }
-    out('M09');
+    if (!dry) out('M09');
   });
+  cur = null;
   for (const m of R.moves.slice(-2)) homeOut(m);
   out('M05'); out('M30'); out('%');
   return { text: L.join('\n') + '\n', lines: L.length, post: P };
@@ -892,6 +947,6 @@ export function runLathe(job, opt = {}) {
 }
 // Kontrol kapsamı (arayüzde ve raporda aynen gösterilir)
 export const CHECK_SCOPE = {
-  checked: ['Uç ve kesme kenarı biçimi ile hızlı (G00) harekette malzemeye çarpma', 'Takım tutucu / sap (basitleştirilmiş dikdörtgen) ve bara (silindir) ile malzeme çarpışması', 'Ayna çenesi ve ayna gövdesi / fener mili önü (girilen çap ve boylarla, silindir yaklaşımı)', 'Makine X / Z hareket sınırları, dış takımla eksen merkezini geçme', 'Hızlı hareket sonunda güvenli mesafe', 'Simülasyon sonunda parça profiline girme (fazla kesim) ve kalan malzeme', 'Takım yönü (sol / sağ), takım türü – operasyon uyumu, kanal / kesme / bara erişimi, devir ve ilerleme sınırları'],
+  checked: ['Uç ve kesme kenarı biçimi ile hızlı (G00) harekette malzemeye çarpma', 'Takım tutucu / sap (basitleştirilmiş dikdörtgen) ve bara (silindir; uç dışarı çıktıkça eksenden uzaklaşır) ile malzeme çarpışması', 'Ayna çenesi ve ayna gövdesi / fener mili önü (girilen çap ve boylarla, silindir yaklaşımı)', 'Makine X / Z hareket sınırları, dış takımla eksen merkezini geçme', 'Hızlı hareket sonunda güvenli mesafe', 'Simülasyon sonunda parça profiline girme (fazla kesim) ve kalan malzeme', 'Takım yönü (sol / sağ), takım türü – operasyon uyumu, kanal / kesme / bara erişimi, devir ve ilerleme sınırları'],
   notChecked: ['Taretteki diğer takımlar ve taret gövdesi', 'Punta, karşı iş mili, kapak, talaş konveyörü', 'Gerçek tutucu ve bara 3B biçimi (2B kesit yaklaşımı)', 'Helisel diş geometrisi (eksenel simetrik model: diş bölgesi ayrı işaretlenir)', 'Talaş birikmesi, titreşim, takım aşınması, kesme kuvveti ve eğilme', 'Ayna çene sıkma basıncı ve iş parçası kayması'],
 };
