@@ -246,7 +246,7 @@ t('12) simülasyon ve G-kodu aynı yol: G-kodundan okunan eksenler ileri kinemat
 });
 
 t('13) 3 eksen CAM değişmedi: cam.js aynı arayüzle çalışır (ayrıntılı testler: tests/cam.test.mjs)', () => {
-  assert.equal(typeof C3.plan, 'function'); assert.deepEqual(Object.keys(C3.POSTS), ['fanuc', 'mach3', 'grbl', 'heidenhain']);
+  assert.equal(typeof C3.plan, 'function'); assert.deepEqual(Object.keys(C3.POSTS), ['fanuc', 'mach3', 'grbl', 'heidenhain', 'mazak']);
   const R = C3.plan({ tris: boxTris([0, 5, 0], [30, 10, 20]), tools: [{ id: 1, n: 1, type: 'flat', d: 6, flute: 20, rpm: 8000, feed: 800, plunge: 200 }], ops: [{ type: 'rough', on: true, tool: 1 }], stock: { side: 2, top: 1, bottom: 0 } });
   assert.ok(R.ops.length === 1 && R.ops[0].moves.length > 10);
   assert.match(C3.gcode(R, { name: 'x' }, 'fanuc'), /G43 Z/);
