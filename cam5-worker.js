@@ -1,7 +1,7 @@
 // Çok eksenli CAM işçisi: takım yolu + kinematik + çarpışma + talaş simülasyonu ekranı dondurmasın.
 import { plan5, stats5 } from './cam5.js?v=20261112u';
 import { checkCollisions, simulate5 } from './coll5.js?v=20261112u';
-import { gcode5, canPost, POSTS5 } from './post5.js?v=20261112u';
+import { gcode5, canPost, POSTS5 } from './post5.js?v=20261127k';
 import { runPlan } from './cam5-run.js?v=20261112u';
 
 let last = null;

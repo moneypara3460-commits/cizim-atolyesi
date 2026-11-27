@@ -2,7 +2,7 @@
 // takım yolu (2B X-Z ve 3B), malzeme kaldırma simülasyonu, G-kodu, hata / güvenlik uyarıları, OCCT doğrulaması.
 // Hesap: lathe.js (saf). Simülasyon ve G-kodu aynı hareket listesini kullanır.
 // api: { THREE, group, hideModel(on), fit(box), render(), toast(m), saveBlob(b, n), name(), parts() → parça listesi, occt(op, args) }
-import * as L from './lathe.js?v=20261112u';
+import * as L from './lathe.js?v=20261127k';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nf = (v, d = 2) => (v == null || !isFinite(v) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('tr-TR', { maximumFractionDigits: d }));
@@ -291,7 +291,7 @@ export function createLatheUI(api) {
     }
     h += btn('🧱 OCCT ile geometrik doğrulama', 'lz-occt', false, 'flex:1 0 100%');
     if (S.occt) h += S.occt.err ? issue({ level: 'hata', where: 'OCCT', msg: S.occt.err }) : card(row('Hedef parça hacmi (OCCT)', nf(S.occt.target, 0) + ' mm³') + row('Simülasyon sonucu hacmi', nf(S.occt.result, 0) + ' mm³') + row('Hedefe girme (hedef − sonuç)', nf(S.occt.gouge, 0) + ' mm³ · %' + nf((100 * S.occt.gouge) / S.occt.target, 2), S.occt.gouge / S.occt.target > 0.02 ? '#ef4444' : '#22c55e') + row('Kalan (sonuç − hedef)', nf(S.occt.residual, 0) + ' mm³ · %' + nf((100 * S.occt.residual) / S.occt.target, 2), S.occt.residual / S.occt.target > 0.02 ? '#eab308' : '#22c55e') + `<div class="lbl" id="lz-occt-ok">Katılar geçerli: ${S.occt.valid ? 'evet' : 'HAYIR'} · farklar ızgara çözünürlüğü (${nf(job.res || 0.1)} mm) mertebesindedir.</div>`);
-    h += note('⚠ <b>Bu program hiçbir tezgâhta denenmedi.</b> Kumanda uyumu, takım ofsetleri, sanal uç numarası, ayna ve iş parçası bağlaması, iş mili yönü makinede doğrulanmalı. İlk çalıştırmayı kumanda simülasyonu ve tek blok ile, ilerleme düşük ayarda yap.');
+    h += note('⚠ <b>İlk çalıştırmayı kumanda simülasyonu ve tek blok ile, ilerleme düşük ayarda yap.</b> Kumanda uyumu, takım ofsetleri, sanal uç numarası, ayna ve iş parçası bağlaması, iş mili yönü makinede kontrol edilmeli.');
     return h;
   }
 

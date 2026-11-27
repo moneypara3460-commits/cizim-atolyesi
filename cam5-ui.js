@@ -3,7 +3,7 @@
 // api: { model() → { tris }, draw(spec), clear(), render(), toast(m), name(), saveBlob(b, n), changed() }
 import { MACHINES, DEFAULT_LIN, validateMachine } from './kin.js?v=20261112u';
 import { STRATS, STRAT_LIMITS } from './cam5.js?v=20261112u';
-import { POSTS5 } from './post5.js?v=20261112u';
+import { POSTS5 } from './post5.js?v=20261127k';
 import { COVERAGE } from './coll5.js?v=20261112u';
 
 const V = '20261112u';
@@ -181,7 +181,7 @@ export function createCam5UI(api) {
       if (pe.length) h += pe.map((e) => lbl('⛔ ' + esc(e), 'color:#f87171;font-size:13px')).join('');
       h += btn('⬇ G-kodu indir', 'c5-gcode', false, pe.length ? 'opacity:.5' : '') + btn('👁 İlk satırlar', 'c5-peek');
       if (S.code) h += `<pre style="flex:1 0 100%;max-height:220px;overflow:auto;font-size:11px;background:#0b1220;padding:6px;border-radius:8px">${esc(S.code)}</pre>`;
-      h += lbl('⚠ Program hiçbir makinede doğrulanmadı. Eksen yönleri, dönme merkezleri, takım boyları ve kontrolcü ayarları makinenizle karşılaştırılmalı; ilk çalıştırma kumanda simülasyonu, tek blok ve düşük ilerlemeyle, yetkin operatör kontrolünde yapılmalı.', 'color:#fbbf24;font-size:12px');
+      h += lbl('⚠ Eksen yönleri, dönme merkezleri, takım boyları ve kontrolcü ayarları makinenizle karşılaştırılmalı; ilk çalıştırma kumanda simülasyonu, tek blok ve düşük ilerlemeyle, yetkin operatör kontrolünde yapılmalı.', 'color:#fbbf24;font-size:12px');
     }
     return h;
   }

@@ -107,6 +107,29 @@ t('G-kodu: Fanuc / Mach3 / GRBL farkları, ondalık nokta, sıfır kaydırma, T�
   // GRBL: delme döngüsü G1 ile açılmış
   assert.ok(/G1 Z-[\d.]+ F150/.test(G));
 });
+t('kuru çalıştırma: her Z stok üstünün en az 5 mm yukarısında, X-Y yolu asıl programla aynı, soğutma kapalı', () => {
+  const job = { tris: POCKET, tools: TOOLS, stock: { side: 2, top: 1, bottom: 5 }, res: 0.5, holes: [{ x: 7, z: 20, d: 5, top: 20, bottom: -1 }], ops: [{ type: 'face', on: true, tool: 1 }, { type: 'rough', on: true, tool: 1 }, { type: 'drill', on: true, tool: 3 }], name: 'Kapak', zero: 'corner' };
+  const R = C.plan(job);
+  for (const post of ['fanuc', 'mach3', 'grbl']) {
+    const A = C.gcode(R, job, post), D = C.gcode(R, job, post, { dryRun: { clear: 5 } });
+    const top = R.P.stock.zTop - R.P.zero[2];   // sıfıra göre stok üst yüzü (köşe sıfırında 0)
+    let zs = 0;
+    for (const l of D.split('\n')) {
+      if (/^\(|G28|G53/.test(l)) continue;   // açıklama ve makine sıfırına dönüş
+      for (const m of l.matchAll(/[ZR](-?[\d.]+)/g)) { zs++; assert.ok(+m[1] >= top + 5 - 1e-6, post + ': ' + l); }
+    }
+    assert.ok(zs > 20, post + ' Z sayısı');
+    const xy = (g) => g.split('\n').filter((l) => !/^\(/.test(l)).map((l) => (l.match(/[XY]-?[\d.]+/g) || []).join(' ')).filter(Boolean);
+    assert.deepEqual(xy(D), xy(A), post + ': X-Y yolu değişmemeli');
+    assert.ok(D.includes('KURU CALISTIRMA') && /TUM Z DEGERLERI [\d.]+ MM YUKARI/.test(D));
+    assert.ok(!/\bM8\b/.test(D), post + ': kuru çalıştırmada soğutma yok');
+    assert.ok(!/[^\x00-\x7f]/.test(D));
+  }
+  // kaydırma: en derin nokta (delik ucu Z−22) + 5 mm
+  assert.ok(Math.abs(C.dryRunShift(R, 5) - (R.P.stock.zTop - Math.min(...R.ops.flatMap((o) => o.moves.map((m) => m.z))) + 5)) < 1e-9);
+  // asıl program etkilenmedi
+  assert.equal(C.gcode(R, job, 'fanuc'), C.gcode(R, job, 'fanuc', {}));
+});
 t('alttan girinti (üstten görünmeyen) uyarısı', () => {
   // köprü: iki ayak + üst plaka (altı boş)
   const tr = Float32Array.from([...boxTris([0, 0, 0], [10, 20, 30]), ...boxTris([40, 0, 0], [50, 20, 30]), ...boxTris([0, 20, 0], [50, 30, 30])]);

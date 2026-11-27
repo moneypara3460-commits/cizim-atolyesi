@@ -1,6 +1,6 @@
 // CNC sekmesi: takımlar, işlemler, takım yolu hesabı, malzeme kaldırma simülasyonu, G-kodu ve iş kartı.
 // api: { model() → { tris, holes, matId, name }, draw(spec), clear(), enter(), leave(), render(), toast(m), name(), saveBlob(b, n), snapshot(), date() }
-import * as C from './cam.js?v=20261112u';
+import * as C from './cam.js?v=20261127k';
 import { pdfFromJpegs } from './cutopt.js?v=20261112u';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -149,7 +149,8 @@ export function createCamUI(api) {
     // G-kodu
     h += '<div class="lbl h">G-kodu</div>';
     h += `<pre style="flex:1 0 100%;max-height:220px;overflow:auto;background:#0b1220;border:1px solid #1e293b;border-radius:10px;padding:8px;font-size:11.5px;line-height:1.35;margin:0">${esc(S.code.split('\n').slice(0, 60).join('\n'))}${S.code.split('\n').length > 60 ? '\n…' : ''}</pre>`;
-    h += btn((cfg.lineNumbers ? '☑' : '☐') + ' Satır numarası (N)', 'cn-ln', !!cfg.lineNumbers, 'flex:1 1 45%') + btn('⬇ G-kodunu indir (.' + C.POSTS[cfg.post].ext + ')', 'cn-dl', false, 'flex:1 1 50%;font-weight:700') + btn('📄 İş kartı (PDF)', 'cn-pdf', false, 'flex:1 0 100%');
+    h += btn((cfg.lineNumbers ? '☑' : '☐') + ' Satır numarası (N)', 'cn-ln', !!cfg.lineNumbers, 'flex:1 1 45%') + btn('⬇ G-kodunu indir (.' + C.POSTS[cfg.post].ext + ')', 'cn-dl', false, 'flex:1 1 50%;font-weight:700') + btn('🌬 Kuru çalıştırma programı (havada)', 'cn-dry', false, 'flex:1 0 100%') + btn('📄 İş kartı (PDF)', 'cn-pdf', false, 'flex:1 0 100%');
+    h += note('<b>Kuru çalıştırma:</b> aynı program, bütün Z değerleri yukarı kaydırılmış hâli. Takım stoğun en az ' + nf(cfg.dryClear || 5) + ' mm üstünden geçer, hiçbir yere kesmez. Önce bunu çalıştırıp X-Y hareketlerini, takım değişimlerini ve mengeneye yaklaşmayı havada izle, sonra asıl programı yükle. Kaydırma miktarı programın başında yazar.');
     h += note('<b>USB belleğe aktarma:</b> Android\'de USB belleği OTG adaptörüyle tak, indirilen dosyayı Dosyalar uygulamasından USB\'ye kopyala. iPhone\'da Dosyalar uygulamasında "Paylaş → Dosyalara kaydet" ile USB sürücüyü seç. Makinede programı açmadan önce kumandada simülasyon / grafik kontrolü yap ve ilk çalıştırmada ilerleme hızını düşük tut (feed override).');
     h += note('⚠ Takım yolları modelin geometrisinden hesaplanır; bağlama aparatı (mengene, pabuç), takım tutucu ve makine sınırları bilinmez. İlk çalıştırmayı havada (Z yukarı kaydırılmış) ya da tek blok modunda yap. Yanlış sıfır / takım boyu en sık kaza sebebidir.');
     return h;
@@ -172,6 +173,7 @@ export function createCamUI(api) {
     if (a === 'cn-sim') { if (!S.sim || S.sim.done) simStart(); else { S.simPlay = !S.simPlay; api.render(); } return true; }
     if (a === 'cn-ln') { cfg.lineNumbers = !cfg.lineNumbers; save(); recode(); api.render(); return true; }
     if (a === 'cn-dl') { download(); return true; }
+    if (a === 'cn-dry') { download(true); return true; }
     if (a === 'cn-pdf') { pdf(); return true; }
     return true;
   }
@@ -186,11 +188,12 @@ export function createCamUI(api) {
     if (d.ct) { const [id, k] = d.ct.split('.'), t = cfg.tools.find((x) => x.id === +id); if (!t) return; if (k === 'type') t.type = v; else if (isFinite(nv) && nv > 0) t[k] = k === 'n' || k === 'flutes' ? Math.round(nv) : nv; save(); invalidate(); api.render(); return; }
     if (d.co) { const [i, k] = d.co.split('.'), o = cfg.ops[+i]; if (!o) return; if (k === 'tool') o.tool = +v; else if (isFinite(nv) && nv > 0) o[k] = nv; save(); invalidate(); api.render(); }
   }
-  function download() {
+  function download(dry) {
     if (!S.code) return;
     const name = String(api.name() || 'parca').replace(/[^\w\-]+/g, '_').slice(0, 40) || 'parca';
-    api.saveBlob(new Blob([S.code.replace(/\n/g, cfg.post === 'grbl' ? '\n' : '\r\n')], { type: 'text/plain' }), name + '.' + C.POSTS[cfg.post].ext);
-    api.toast('G-kodu indirildi: USB belleğe kopyalayıp makineye tak');
+    const code = dry ? C.gcode(S.R, { ...S.job, zero: cfg.zero }, cfg.post, { date: api.date(), lineNumbers: cfg.post === 'fanuc' && cfg.lineNumbers, dryRun: { clear: cfg.dryClear || 5 }, program: 1002 }) : S.code;
+    api.saveBlob(new Blob([code.replace(/\n/g, cfg.post === 'grbl' ? '\n' : '\r\n')], { type: 'text/plain' }), name + (dry ? '_KURU' : '') + '.' + C.POSTS[cfg.post].ext);
+    api.toast(dry ? 'Kuru çalıştırma programı indirildi (O1002): takım stoğun ' + (cfg.dryClear || 5) + ' mm üstünden geçer' : 'G-kodu indirildi: USB belleğe kopyalayıp makineye tak');
   }
   async function pdf() {
     if (!S.R) return;

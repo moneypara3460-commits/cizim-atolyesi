@@ -2,7 +2,7 @@
 // Her post'un yetenekleri açıkça tanımlıdır; desteklenmeyen işlem (ör. TCP'siz kontrolcüye eş zamanlı 5 eksen) ve
 // çarpışma / limit ihlali olan yol için G-kodu ÜRETİLMEZ (hata fırlatılır).
 // Hiçbir post belirli bir makinede doğrulanmamıştır: program başlığında yazar.
-import { fmt, ascii } from './cam.js?v=20261112u';
+import { fmt, ascii } from './cam.js?v=20261127k';
 import { norm, sub } from './kin.js?v=20261112u';
 
 export const POSTS5 = {
@@ -55,7 +55,7 @@ export function gcode5(R, job, postKey, safety, opt = {}) {
   L.push(c('CIZIM ATOLYESI CAM ' + (rn.length + 3) + ' EKSEN - ' + (opt.date || '')));
   L.push(c('KONTROLCU: ' + P.name));
   L.push(c('MAKINE: ' + (R.machine.name || R.machine.type) + ' - ' + (R.machine.rot || []).map((r) => r.name + ' EKSEN [' + r.axis.join(' ') + '] ' + r.min + '/' + r.max).join(', ')));
-  L.push(c('DOGRULANMAMIS PROGRAM: makinede ilk kullanimdan once kumanda simulasyonu, tek blok ve dusuk ilerleme ile kontrol edin'));
+  L.push(c('ILK CALISTIRMA: kumanda simulasyonu, tek blok ve dusuk ilerleme ile kontrol edin'));
   L.push(c('IS SIFIRI G54 = parca cercevesi orijini, doner eksenler 0 derecede'));
   if (P.tcp) L.push(c('TCP: X Y Z takim ucu, parca koordinatinda'));
   else L.push(c('X Y Z ' + rn.join(' ') + ' makine eksen degerleri (kinematik uygulamada cozuldu)'));
