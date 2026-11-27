@@ -40,3 +40,6 @@ h2 { margin: 0 0 8px; font-size: 18px; color: var(--acc); }
 a { color: #a5b4fc; }
 input { background: #0b1324; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; }
 details.danger summary { cursor: pointer; color: #fca5a5; }
+details#promo { margin-top: 12px; }
+details#promo summary { cursor: pointer; color: var(--acc); }
+#promokod { flex: 1 1 220px; min-width: 0; text-transform: uppercase; letter-spacing: .5px; }

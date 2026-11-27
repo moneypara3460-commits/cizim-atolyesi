@@ -12,7 +12,7 @@ export function computeAccess(a, now = Date.now()) {
   for (const s of a?.subscriptions || []) {
     const exp = Date.parse(s.expires_at || '') || 0;
     if (exp <= now) continue;
-    subs.push({ product_id: s.product_id, plan: s.plan, expires: exp, auto_renewing: !!s.auto_renewing, state: s.state });
+    subs.push({ product_id: s.product_id, plan: s.plan, sections: (s.sections || []).filter((b) => SECTIONS.includes(b)), expires: exp, auto_renewing: !!s.auto_renewing, state: s.state });
     for (const b of s.sections || []) if (SECTIONS.includes(b)) until[b] = Math.max(until[b] || 0, exp);
   }
   if (onTrial) for (const b of SECTIONS) until[b] = Math.max(until[b] || 0, trialEnd);
