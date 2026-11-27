@@ -29,6 +29,8 @@ Yalnız Android paketinde çalışır, web sitesinde yoktur.
 - **Dosya kaydetme:** WebView `<a download>` ile dosya indiremez. Dosya geçici klasöre yazılır, Android paylaşım ekranı açılır.
 - **Google ile giriş:** Google, uygulama içi WebView'da girişe izin vermez. Giriş sistem tarayıcısında açılır, `com.cizimatolyesi.app://giris` adresine tek kullanımlık bir kod döner (PKCE). Kod, uygulamanın cihazda sakladığı doğrulayıcıyla `/auth/v1/token?grant_type=pkce` üzerinden oturuma çevrilir; aynı adresi sahiplenen başka bir uygulama kodu yakalasa da kullanamaz (`tests/mobil-pkce.test.mjs`).
 
+- **Uygulama içi güncelleme** (`mobil/yerel/Guncelleme.java`, Google Play In-App Updates): uygulama açılınca (oturumda bir kez) Play'e yeni sürüm sorulur. Öncelik 4–5 ise zorunlu güncelleme (Play'in tam ekranı; vazgeçilirse uygulama kullanılamaz), değilse altta "Güncelle / Sonra" şeridi (arka planda iner, bitince "Yeniden başlat"; "Sonra" 24 saat erteler). Öncelik yükleme sırasında verilir: commit mesajında `[zorunlu]` varsa 5, yoksa 2 (`tools/play-yukle.mjs`, `GUNCELLEME_ONCELIK`). Play Console'dan elle kapalı teste/üretime yükseltilen sürümde öncelik 0 olabilir (şerit yine çıkar, zorunlu olmaz). Yalnız Play'den kurulan uygulamada çalışır (`tests/mobil-guncelleme.test.mjs`).
+
 **Supabase ayarı (bir kez):** Authentication → URL Configuration → Redirect URLs listesine `com.cizimatolyesi.app://giris` eklenmeli. Eklenmezse giriş tarayıcıda kalır, uygulamaya dönmez.
 
 ## Henüz yapılmayanlar (abonelik kilidi açılmadan önce)

@@ -115,4 +115,7 @@ jobs:
           if [ -z "$PLAY_SERVICE_JSON" ]; then echo "PLAY_SERVICE_JSON yok: Play yüklemesi atlandı"; exit 0; fi
           SURUM_NOTU="$(printf '%s' "$COMMIT_MESAJI" | head -1 | sed -E 's/ \(#[0-9]+\)$//')"
           export SURUM_NOTU
+          # Commit mesajında [zorunlu] varsa kullanıcılar güncellemeden uygulamayı kullanamaz (öncelik 5); yoksa öneri (2)
+          case "$COMMIT_MESAJI" in *"[zorunlu]"*) GUNCELLEME_ONCELIK=5 ;; *) GUNCELLEME_ONCELIK=2 ;; esac
+          export GUNCELLEME_ONCELIK
           node tools/play-yukle.mjs "cikti/cizim-atolyesi-$SURUM_ADI.aab" internal

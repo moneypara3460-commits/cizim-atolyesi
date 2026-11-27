@@ -22,9 +22,11 @@ async function main() {
   const paket = await istek(anahtar, 'POST', `${YUKLE}/edits/${edit.id}/bundles?uploadType=media`, fs.readFileSync(dosya), 'application/octet-stream');
   console.log('paket yüklendi: sürüm kodu', paket.versionCode);
   const not = (process.env.SURUM_NOTU || 'Yeni sürüm').trim().slice(0, 480);
+  // Uygulama içi güncelleme önceliği (0-5): 4-5 = zorunlu güncelleme (mobil/yerel/Guncelleme.java)
+  const oncelik = Math.max(0, Math.min(5, Number(process.env.GUNCELLEME_ONCELIK) || 0));
   await istek(anahtar, 'PUT', `${API}/edits/${edit.id}/tracks/${kanal}`, {
     track: kanal,
-    releases: [{ name: process.env.SURUM_ADI || String(paket.versionCode), versionCodes: [String(paket.versionCode)], status: 'completed',
+    releases: [{ name: process.env.SURUM_ADI || String(paket.versionCode), versionCodes: [String(paket.versionCode)], status: 'completed', inAppUpdatePriority: oncelik,
       releaseNotes: [{ language: 'tr-TR', text: not }] }],
   });
   await istek(anahtar, 'POST', `${API}/edits/${edit.id}:commit`);

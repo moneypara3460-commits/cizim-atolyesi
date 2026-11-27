@@ -105,7 +105,8 @@ ${kayitlar}
   g = g.replace(/versionCode\s+\d+/, `versionCode ${kod}`).replace(/versionName\s+"[^"]*"/, `versionName "${ad}"`);
   // Google Play abonelikleri (mobil/yerel/Odeme.java): Play Billing Library 8 (Google Play 2026 kuralı: en az 8. sürüm)
   if (!/^dependencies\s*\{/m.test(g)) throw new Error('build.gradle: dependencies bloğu yok');
-  g = g.replace(/^dependencies\s*\{/m, 'dependencies {\n    implementation "com.android.billingclient:billing:8.3.0"');
+  // Uygulama içi güncelleme (mobil/yerel/Guncelleme.java): Google Play In-App Updates
+  g = g.replace(/^dependencies\s*\{/m, 'dependencies {\n    implementation "com.android.billingclient:billing:8.3.0"\n    implementation "com.google.android.play:app-update:2.1.0"');
   fs.writeFileSync(gradle, g);
 
   // Simgeler (mobil/ikon → res) ve açılış ekranı rengi (Capacitor logosu yerine düz uygulama rengi)
