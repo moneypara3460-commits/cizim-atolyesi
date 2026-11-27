@@ -11,6 +11,8 @@ import { createEditor } from './editor.js?v=20261119c';
 import { addSample } from './sample.js?v=20261119c';
 import * as LST from './last.js?v=20261119c';
 import * as AUTO from './auto.js?v=20261127a';
+import * as GR from './grade.js?v=20261127b';
+import * as NE from './nest.js?v=20261127b';
 import * as AI from './ai.js?v=20261127a';
 import * as AIP from './aiparts.js?v=20261119c';
 import * as L3 from './last3d.js?v=20261119c';
@@ -45,9 +47,9 @@ const saveSettings = () => { try { localStorage.setItem(SKEY, JSON.stringify(set
 
 const PAGES = [
   ['projeler', 'Projelerim'], ['yeni', 'Yeni Ayakkabı Projesi'], ['stampa', 'Stampa Atölyesi'], ['parcalar', 'Saya Parçaları'],
-  ['malzeme', 'Malzeme Kütüphanesi'], ['dosyalar', 'Proje Dosyaları'], ['aktar', 'Dışa Aktarma'], ['ayarlar', 'Ayarlar'],
+  ['malzeme', 'Malzeme Kütüphanesi'], ['dosyalar', 'Proje Dosyaları'], ['numara', 'Numara ve Kesim'], ['aktar', 'Dışa Aktarma'], ['ayarlar', 'Ayarlar'],
 ];
-const S = { page: 'projeler', p: null, lib: [], hist: [], fut: [], editor: null, pieceSel: null, matForm: null, exp: { paper: 'A4', w: 210, h: 297, landscape: false, margin: 10, overlap: 10, onePerPage: false, pieces: null, sketch: false }, mt: { kind: 'dikis', reverse: true, tol: 0.5 } };
+const S = { page: 'projeler', p: null, lib: [], hist: [], fut: [], editor: null, pieceSel: null, matForm: null, exp: { paper: 'A4', w: 210, h: 297, landscape: false, margin: 10, overlap: 10, onePerPage: false, pieces: null, sketch: false }, mt: { kind: 'dikis', reverse: true, tol: 0.5 }, nk: { from: null, to: null, step: 1, system: null, dL: null, dG: null, pairs: {}, w: 1200, h: 800, defects: '', gap: 2, free: false, out: null } };
 S.lib = await store.materials();
 
 /* ---------- kayıt ---------- */
@@ -124,6 +126,7 @@ async function render() {
   if (pg === 'parcalar') { main.innerHTML = pagePieces(); return; }
   if (pg === 'dosyalar') { const html = await pageFiles(); if (S.page === pg) { main.innerHTML = html; drawL3(); } return; }
   if (pg === 'aktar') { main.innerHTML = pageExport(); return; }
+  if (pg === 'numara') { main.innerHTML = pageGrade(); return; }
 }
 
 /* ---------- 1. Projelerim ---------- */
@@ -766,6 +769,62 @@ function pageExport() {
   return h;
 }
 
+/* ---------- Numara serisi ve kesim yerleşimi ---------- */
+function nkState() {
+  const p = S.p, o = S.nk, base = pn(p.size);
+  const sys = GR.SYSTEMS[o.system || p.sizeSystem] ? (o.system || p.sizeSystem) : 'EU';
+  if (o.from === null && Number.isFinite(base)) { o.from = base - 2; o.to = base + 2; }
+  return { o, base, sys, S0: GR.SYSTEMS[sys] };
+}
+function nkSizes() { const { o } = nkState(); return Number.isFinite(o.from) && Number.isFinite(o.to) ? GR.sizeList(o.from, o.to, o.step || 1) : []; }
+const nkOpt = () => { const { o, sys } = nkState(); return { system: sys, ...(o.dL > 0 ? { dL: o.dL } : {}), ...(o.dG > 0 ? { dG: o.dG } : {}) }; };
+function parseDefects(txt) { const out = []; for (const ln of String(txt || '').split(/\n|;/)) { const n = ln.trim().split(/[\s,]+/).map((v) => pn(v)); if (n.length >= 3 && n.slice(0, 3).every((v) => Number.isFinite(v) && v >= 0)) out.push({ x: n[0], y: n[1], r: n[2] }); } return out; }
+function pageGrade() {
+  const p = S.p, { o, base, sys, S0 } = nkState(), closed = p.pieces.filter((q) => q.outline.closed);
+  let h = `<div class="page"><h2>Numara ve Kesim</h2>`;
+  if (!closed.length) return h + `<div class="empty"><b>Kapalı parça yok</b>Önce Saya Parçaları ya da Stampa'da parçaları çiz.</div></div>`;
+  if (!Number.isFinite(base)) return h + `<div class="card"><p>Taban numara sayı olmalı (şu an "${esc(p.size)}"). Proje bilgilerinden numarayı düzelt (ör. 40).</p></div></div>`;
+  const sizes = nkSizes();
+  h += `<div class="card"><h3>Numara serisi</h3><div class="grid">
+    <label>Numara sistemi<select data-nk="system">${opts(Object.fromEntries(Object.entries(GR.SYSTEMS).map(([k, v]) => [k, v.name])), sys)}</select></label>
+    <label>Taban numara<input value="${esc(p.size)}" disabled></label>
+    <label>En küçük<input data-nk="from" value="${nv(o.from)}" inputmode="decimal"></label>
+    <label>En büyük<input data-nk="to" value="${nv(o.to)}" inputmode="decimal"></label>
+    <label>Adım<select data-nk="step">${opts({ 1: '1 numara', 0.5: 'Yarım numara' }, String(o.step || 1))}</select></label>
+    <label>Boy artışı / numara (mm)<input data-nk="dL" value="${nv(o.dL || S0.dL)}" inputmode="decimal"></label>
+    <label>Çevre artışı / numara (mm)<input data-nk="dG" value="${nv(o.dG || S0.dG)}" inputmode="decimal"></label>
+  </div>`;
+  try {
+    const tbl = GR.sizeTable(p, sizes, nkOpt()), show = closed.slice(0, 5);
+    h += `<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>No</th><th>Boy ×</th><th>Yükseklik ×</th>${show.map((q) => `<th>#${q.no} ${esc(q.name)}<br><span class="small">boy × en mm</span></th>`).join('')}</tr></thead><tbody>${tbl.map((r) => `<tr${r.size === base ? ' style="font-weight:700"' : ''}><td>${nv(r.size)}</td><td>${(r.f.sx * 100).toFixed(1)}%</td><td>${(r.f.sy * 100).toFixed(1)}%</td>${show.map((q) => { const d = r.dims.find((x) => x.id === q.id); return `<td>${d ? f1(d.w) + ' × ' + f1(d.h) : '–'}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`;
+  } catch (e) { h += `<p class="m">⚠ ${esc(e.message)}</p>`; }
+  h += `<p class="small">Orantılı seri: boy kalıp boyu yönünde numara başına ${nv(o.dL || S0.dL)} mm, yükseklik çevre artışıyla (${nv(o.dG || S0.dG)} mm) büyür. Paylar, dikiş aralığı ve delik çapları mm olarak aynı kalır. Firmanın kalıp serisi farklıysa artışları değiştir; gerçek kalıp serisiyle kontrol et.</p></div>`;
+  // kesim
+  h += `<div class="card"><h3>Kesim yerleşimi (deri / plaka)</h3><div class="grid">
+    ${sizes.map((s) => `<label>No ${nv(s)} · çift<input data-nkp="${s}" value="${nv(o.pairs[s] ?? 1)}" inputmode="numeric"></label>`).join('')}
+    <label>Deri / plaka boyu (mm)<input data-nk="w" value="${nv(o.w)}" inputmode="decimal"></label>
+    <label>Deri / plaka eni (mm)<input data-nk="h" value="${nv(o.h)}" inputmode="decimal"></label>
+    <label>Bıçak / kesim payı (mm)<input data-nk="gap" value="${nv(o.gap)}" inputmode="decimal"></label>
+    <label class="row" style="color:var(--text)"><input type="checkbox" data-nk="free"${o.free ? ' checked' : ''}> 90° döndürmeye izin ver (deri yönü önemsizse)</label>
+  </div>
+  <label class="wide">Kusurlu bölgeler (her satır: x y yarıçap, mm; sol üst köşeden)<textarea data-nk="defects" rows="3" placeholder="300 250 40">${esc(o.defects)}</textarea></label>
+  <div class="row"><button type="button" class="ok" data-act="nkrun">Yerleştir</button></div>
+  <p class="small">Parçalar kesim çizgisiyle (paylar dahil) yerleşir. Varsayılan: parça boyu deri boyuna (sırt çizgisine) paralel, yalnız 0° / 180°. Çift parçaların yarısı sol ayak için ayna kesilir; orta çizgili yarım parçalar açılarak tam kesilir. Yerleşim iyi bir başlangıçtır, en iyi (optimum) değildir.</p>`;
+  const r = o.out;
+  if (r) {
+    if (r.error) h += `<p class="m">⚠ ${esc(r.error)}</p>`;
+    else {
+      h += `<p class="m"><b>${r.L.placed.length}</b> parça yerleşti${r.L.unplaced.length ? `, <b style="color:#f87171">${r.L.unplaced.length} parça sığmadı</b>` : ''} · kullanılan boy ${f1(r.L.used)} mm · kullanım %${(r.L.util * 100).toFixed(1)}${r.bad.length ? ' · <b style="color:#f87171">doğrulama hatası: ' + r.bad.length + '</b>' : ' · çakışma yok'}</p>`;
+      for (const w of r.warn) h += `<p class="small" style="color:#fbbf24">⚠ ${esc(w)}</p>`;
+      if (r.L.unplaced.length) h += `<p class="small">Sığmayanlar: ${esc([...new Set(r.L.unplaced.map((u) => '#' + u.no + ' ' + u.name + ' No ' + u.size))].join(', '))}. Daha büyük deri gir ya da çift sayısını azalt.</p>`;
+      h += `<div class="nestprev" style="background:#fff;border-radius:8px;overflow:auto">${NE.nestSVG(r.L).replace(/width="[\d.]+mm" height="[\d.]+mm"/, 'width="100%"')}</div>
+      <div class="row"><button type="button" data-act="nkdxf">DXF indir (kesim)</button><button type="button" data-act="nksvg">SVG indir</button></div>
+      <p class="small">DXF: KESIM katmanında kesim çizgileri, YAZI'da parça no · numara (S = sol ayak / ayna), PLAKA ve KUSUR katmanları; birim mm.</p>`;
+    }
+  }
+  return h + '</div></div>';
+}
+
 /* ---------- 8. Ayarlar ---------- */
 function pageSettings() {
   let h = `<div class="page"><h2>Ayarlar</h2><div class="card"><h3>Çizim alanı</h3><div class="grid">
@@ -895,6 +954,27 @@ main.addEventListener('click', async (e) => {
   if (a === 'backup') { await flush(); saveBlob(new Blob([store.exportJSON(p)], { type: 'application/json' }), `${p.name}${p.code ? '-' + p.code : ''}.ayakkabi.json`); return; }
   if (a === 'close') return closeProject();
   if (a === 'layerreset') return edit((q) => { q.layers = M.defaultLayers(); });
+  if (a === 'nkrun') {
+    const o = S.nk;
+    try {
+      const sizes = nkSizes().filter((sz) => (o.pairs[sz] ?? 1) > 0);
+      if (!sizes.length) throw new Error('En az bir numarada çift sayısı 1 ya da üstü olmalı');
+      const lists = sizes.map((sz) => NE.instances([GR.gradeProject(p, sz, nkOpt())], o.pairs[sz] ?? 1));
+      const list = lists.flatMap((x) => x.list), warn = [...new Set(lists.flatMap((x) => x.warn))];
+      if (list.length > 400) throw new Error(list.length + ' parça: tek seferde en çok 400 parça yerleştirilir; çift sayısını azalt');
+      toast('Yerleştiriliyor…'); await new Promise((r) => setTimeout(r, 30));
+      const L = NE.nest(list, { w: o.w, h: o.h, defects: parseDefects(o.defects) }, { res: 2, gap: o.gap, free: o.free });
+      o.out = { L, warn, bad: NE.verify(L) };
+    } catch (err) { o.out = { error: err.message }; }
+    return render();
+  }
+  if (a === 'nkdxf' || a === 'nksvg') {
+    const L = S.nk.out?.L; if (!L) return;
+    const base = `${p.name}${p.code ? '-' + p.code : ''}-kesim`;
+    if (a === 'nkdxf') saveBlob(new Blob([NE.nestDXF(L)], { type: 'application/dxf' }), base + '.dxf');
+    else saveBlob(new Blob([NE.nestSVG(L)], { type: 'image/svg+xml' }), base + '.svg');
+    return toast(a === 'nkdxf' ? 'Kesim DXF hazır (mm)' : 'Kesim SVG hazır (mm, 1:1)');
+  }
   if (a === 'pdf' || a === 'svg' || a === 'dxf') {
     const o = S.exp, pieces = o.pieces || p.pieces.filter((q) => q.outline.closed).map((q) => q.id);
     const base = `${p.name}${p.code ? '-' + p.code : ''}-No${p.size}`;
@@ -952,6 +1032,16 @@ main.addEventListener('change', async (e) => {
     else if (k === 'landscape') o.landscape = !!el.value; else if (k === 'onePerPage' || k === 'sketch') o[k] = el.checked; else o[k] = el.value;
     return render();
   }
+  if (d.nk !== undefined) {
+    const o = S.nk, k = d.nk;
+    if (k === 'system') { o.system = el.value; o.dL = null; o.dG = null; }
+    else if (k === 'step') o.step = +el.value || 1;
+    else if (k === 'free') o.free = el.checked;
+    else if (k === 'defects') o.defects = el.value.slice(0, 4000);
+    else { if (!Number.isFinite(v) || v < 0 || (k === 'w' || k === 'h' ? v < 50 || v > 6000 : false) || (k === 'gap' && v > 20) || ((k === 'from' || k === 'to') && (v < 10 || v > 60))) return bad(k === 'w' || k === 'h' ? '50–6000 mm' : k === 'gap' ? '0–20 mm' : k === 'from' || k === 'to' ? 'Numara 10–60 arası' : 'Geçerli bir sayı gir'); o[k] = v; }
+    o.out = null; return render();
+  }
+  if (d.nkp !== undefined) { if (!Number.isInteger(v) || v < 0 || v > 50) return bad('Çift sayısı 0–50'); S.nk.pairs[d.nkp] = v; S.nk.out = null; return render(); }
   if (d.xp) {
     const all = p.pieces.filter((q) => q.outline.closed).map((q) => q.id), cur = new Set(S.exp.pieces || all);
     if (el.checked) cur.add(d.xp); else cur.delete(d.xp);
