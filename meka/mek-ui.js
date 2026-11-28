@@ -1,17 +1,19 @@
-// Mekatronik Mühendisliği — Mekanizmalar sekmesi: Malta haçı, krank–biyel ve dört çubuk. Hesaplar meka/malta.js, meka/krank.js, meka/dortcubuk.js.
+// Mekatronik Mühendisliği — Mekanizmalar sekmesi: Malta haçı, krank–biyel, dört çubuk ve dişli mukavemeti. Hesaplar meka/malta.js, meka/krank.js, meka/dortcubuk.js, meka/disli.js.
 // h: { api, getP() → proje (P.mek), changed(), esc, pdfText }
 import { maltaSanitize, maltaHesap, maltaDXF, maltaCSV, maltaRapor, MALTA_ORNEK, beta } from './malta.js?v=20261128a';
 import { krankSanitize, krankHesap, krankCSV, krankRapor, KRANK_ORNEK, konum, stroktanR } from './krank.js?v=20261128a';
 import { dortSanitize, dortHesap, dortCSV, dortRapor, DORT_ORNEK, salinimdanTasarla } from './dortcubuk.js?v=20261128a';
+import { disliSanitize, disliHesap, disliRapor, DISLI_ORNEK, MALZEME, KALITE, DARBE } from './disli.js?v=20261128a';
+import { gearOutline } from '../mech.js?v=20261112u';
 import { pdfDoc } from '../tx/pdf.js?v=20261112u';
 
 const PI = Math.PI;
-export function mekSanitize(o) { const x = o && typeof o === 'object' ? o : {}; return { tur: ['krank', 'dort'].includes(x.tur) ? x.tur : 'malta', malta: maltaSanitize(x.malta), krank: krankSanitize(x.krank), dort: dortSanitize(x.dort) }; }
+export function mekSanitize(o) { const x = o && typeof o === 'object' ? o : {}; return { tur: ['krank', 'dort', 'disli'].includes(x.tur) ? x.tur : 'malta', malta: maltaSanitize(x.malta), krank: krankSanitize(x.krank), dort: dortSanitize(x.dort), disli: disliSanitize(x.disli) }; }
 
 export function createMekUI(h) {
   const { api, esc } = h;
   let aci = 30, hedefStrok = '', hedefPsi = '';
-  const Q = () => { const P = h.getP(); if (!P.mek || !P.mek.malta || !P.mek.dort) P.mek = mekSanitize(P.mek); return P.mek; };
+  const Q = () => { const P = h.getP(); if (!P.mek || !P.mek.malta || !P.mek.dort || !P.mek.disli) P.mek = mekSanitize(P.mek); return P.mek; };
   const tr = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d).replace('.', ',') : '—');
   const num = (attr, v, step = 'any') => `<input type="number" inputmode="decimal" step="${step}" data-mkm="${attr}" value="${Number.isFinite(v) ? v : ''}">`;
   const fld = (label, inner, birim = '') => `<label class="mk-f"><span>${esc(label)}</span>${inner}${birim ? `<i>${esc(birim)}</i>` : ''}</label>`;
@@ -154,6 +156,39 @@ export function createMekUI(h) {
     L.push('0', 'ENDSEC', '0', 'EOF');
     return L.join('\r\n') + '\r\n';
   }
+
+  /* ---------------- Dişli mukavemeti ---------------- */
+  function disliSvg(r) {
+    const g = r.g, o1 = gearOutline(g.m, g.z1), o2 = gearOutline(g.m, g.z2), a = r.a, R2 = r.d2 / 2 + g.m, R1 = r.d1 / 2 + g.m;
+    // küçük çarkın dişi +x'e bakar; büyük çark yarım adım döndürülür ki ona bakan yerde diş boşluğu olsun
+    const t2 = PI + PI / g.z2, sw = ((a + R1 + R2) / 300).toFixed(2);
+    const p1 = pth(o1), p2 = pth(o2, (p) => { const q = rot(p, t2); return [q[0] + a, q[1]]; });
+    const x0 = -R1 - 4, w = a + R1 + R2 + 8, y = Math.max(R1, R2) + 4;
+    return `<div class="mk-tbl"><svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0.toFixed(1)} ${(-y).toFixed(1)} ${w.toFixed(1)} ${(2 * y).toFixed(1)}" style="width:100%;max-width:380px;display:block;margin:auto"><path d="${p2}" fill="#0ea5e9" fill-opacity="0.25" stroke="#7dd3fc" stroke-width="${sw}"/><path d="${p1}" fill="#a855f7" fill-opacity="0.3" stroke="#c4b5fd" stroke-width="${sw}"/><circle r="${(r.d1 / 2).toFixed(2)}" fill="none" stroke="#f59e0b" stroke-opacity="0.5" stroke-dasharray="2 2" stroke-width="${sw}"/><circle cx="${a.toFixed(2)}" r="${(r.d2 / 2).toFixed(2)}" fill="none" stroke="#f59e0b" stroke-opacity="0.5" stroke-dasharray="2 2" stroke-width="${sw}"/></svg></div><div class="mk-n">Mor: küçük çark (pinyon, z ${g.z1}) · mavi: büyük çark (z ${g.z2}) · kesikli: bölüm daireleri. Eksen mesafesi ${tr(a, 1)} mm.</div>`;
+  }
+  const bar = (ad, sig, lim, S, Smin) => { const oran = Math.min(1, sig / lim), renk = S >= Smin ? '#86efac' : S >= 1 ? '#fde68a' : '#fca5a5';
+    return `<div class="mk-s"><b>${esc(ad)}</b> <i>${tr(sig, 0)} / ${tr(lim, 0)} MPa · emniyet <b style="color:${renk}">${tr(S, 2)}</b></i><div style="height:8px;background:#1e293b;border-radius:4px;overflow:hidden"><div style="width:${(oran * 100).toFixed(1)}%;height:100%;background:${renk}"></div></div></div>`; };
+  function disliHtml(G) {
+    const mats = Object.entries(MALZEME).map(([k, v]) => [k, v.ad]);
+    let s = '<div class="mk-card"><b>⚙ Dişli mukavemeti</b> — Düz dişli çiftinin yüke dayanıp dayanmadığı: diş kırılması ve yüzey ezilmesi (pitting).<div class="mk-n">Modülü, diş sayılarını, genişliği ve yükü gir. Emniyet düşükse uygulama yeten en küçük standart modülü önerir.</div><div class="mk-btns"><button data-act="mk-mgornek">📋 Şablon: Konveyör redüktörü 1. kademe</button></div></div>';
+    s += '<div class="mk-card"><b>Dişliler</b><div class="mk-grid">' + fld('Modül', num('disli.m', G.m, 0.25), 'mm') + fld('Diş genişliği', num('disli.b', G.b, 1), 'mm') + fld('Küçük çark diş sayısı', num('disli.z1', G.z1, 1), 'adet') + fld('Büyük çark diş sayısı', num('disli.z2', G.z2, 1), 'adet')
+      + fld('Küçük çark malzemesi', sel('disli.mat1', G.mat1, mats)) + fld('Büyük çark malzemesi', sel('disli.mat2', G.mat2, mats)) + '</div>';
+    if (G.mat1 === 'ozel' || G.mat2 === 'ozel') s += '<div class="mk-grid">' + (G.mat1 === 'ozel' ? fld('Küçük çark σHlim', num('disli.H1', G.H1, 10), 'MPa') + fld('Küçük çark σFlim', num('disli.F1', G.F1, 10), 'MPa') : '') + (G.mat2 === 'ozel' ? fld('Büyük çark σHlim', num('disli.H2', G.H2, 10), 'MPa') + fld('Büyük çark σFlim', num('disli.F2', G.F2, 10), 'MPa') : '') + '</div>';
+    s += '<div class="mk-n">Malzeme değerleri tipiktir; sertifikadaki değer farklıysa "Elle gir"i seç.</div></div>';
+    s += '<div class="mk-card"><b>Yük</b><div class="mk-grid">' + fld('Küçük çark torku', num('disli.T1', G.T1, 0.1), 'N·m') + fld('Küçük çark devri', num('disli.n1', G.n1, 10), 'd/dk')
+      + fld('ya da güç gir (torku hesaplar)', '<input type="number" inputmode="decimal" step="0.1" data-mkm="gucKW" value="">', 'kW')
+      + fld('Çalışma şekli (darbe)', sel('disli.KA', G.KA, DARBE)) + fld('Dişli kalitesi', sel('disli.Qv', G.Qv, KALITE.map(([q, t]) => [q, `${t} (Qv ${q})`]))) + fld('Yük dağılım katsayısı', num('disli.KB', G.KB, 0.05))
+      + fld('İstenen yüzey emniyeti', num('disli.SHmin', G.SHmin, 0.05)) + fld('İstenen kırılma emniyeti', num('disli.SFmin', G.SFmin, 0.05)) + '</div></div>';
+    const r = disliHesap(G);
+    if (r.hata) return s + `<div class="mk-card"><div class="mk-c hata">✗ ${esc(r.hata)}</div></div>`;
+    s += `<div class="mk-card"><b>Sonuç</b> ${r.uygun ? '<span class="mk-c ok">✓ Uygun</span>' : '<span class="mk-c hata">✗ Düzeltilmeli</span>'}` + disliSvg(r);
+    s += bar('Yüzey ezilmesi (iki çark)', r.sH, r.Hlim, r.SH, G.SHmin) + bar('Diş kırılması — küçük çark', r.sF1, 2 * r.F1lim, r.SF1, G.SFmin) + bar('Diş kırılması — büyük çark', r.sF2, 2 * r.F2lim, r.SF2, G.SFmin);
+    s += `<div class="mk-s">Güç <b>${tr(r.P, 2)} kW</b> · oran <b>1:${tr(r.u, 2)}</b> · çıkış <b>${tr(r.n2, 0)} d/dk, ${tr(r.T2, 1)} N·m</b> · çevre kuvveti <b>${tr(r.Ft, 0)} N</b> · çevre hızı <b>${tr(r.v, 2)} m/s</b> · kavrama oranı <b>${tr(r.ea, 2)}</b> · taşınabilecek tork <b>${tr(r.Tmax, 1)} N·m</b></div>`;
+    s += kont(r.kontroller);
+    s += '<div class="mk-btns">' + (r.mOner != null && r.mOner !== G.m ? `<button data-act="mk-mgmod">Modülü ${tr(r.mOner, 2)} yap</button>` : '') + '<button data-act="mk-mgpdf">📄 Hesap raporu (PDF)</button></div>';
+    s += '<div class="mk-n">Düz dişli, 20° basınç açısı, profil kaydırmasız, çelik–çelik; ISO 6336\'nın sadeleştirilmiş biçimi, uzun ömür için. Ön boyutlandırmadır: üretimden önce tam hesap ya da dişli üreticisinin onayı gerekir.</div></div>';
+    return s;
+  }
   function raporPdf(lines) {
     const doc = pdfDoc(), T = h.pdfText; let p = doc.page(210, 297), y = 283;
     for (const raw of lines) { const s = T(raw), size = /^[A-ZÇĞİÖŞÜ ()—–-]+$/.test(s.trim()) && s.trim() ? 10 : 8.5; for (let k = 0; k < Math.max(1, s.length); k += 120) { if (y < 16) { p = doc.page(210, 297); y = 283; } p.text(14, y, size, (k ? '     ' : '') + s.slice(k, k + 120)); y -= size * 0.5; } }
@@ -162,14 +197,15 @@ export function createMekUI(h) {
 
   function html() {
     const M = Q();
-    let s = `<div class="mk-tabs"><button data-act="mk-mtur-malta" class="${M.tur === 'malta' ? 'on' : ''}">✚ Malta haçı</button><button data-act="mk-mtur-krank" class="${M.tur === 'krank' ? 'on' : ''}">⟳ Krank–biyel</button><button data-act="mk-mtur-dort" class="${M.tur === 'dort' ? 'on' : ''}">⧖ Dört çubuk</button></div>`;
-    return s + (M.tur === 'krank' ? krankHtml(M.krank) : M.tur === 'dort' ? dortHtml(M.dort) : maltaHtml(M.malta));
+    let s = `<div class="mk-tabs"><button data-act="mk-mtur-malta" class="${M.tur === 'malta' ? 'on' : ''}">✚ Malta haçı</button><button data-act="mk-mtur-krank" class="${M.tur === 'krank' ? 'on' : ''}">⟳ Krank–biyel</button><button data-act="mk-mtur-dort" class="${M.tur === 'dort' ? 'on' : ''}">⧖ Dört çubuk</button><button data-act="mk-mtur-disli" class="${M.tur === 'disli' ? 'on' : ''}">⚙ Dişli</button></div>`;
+    return s + (M.tur === 'krank' ? krankHtml(M.krank) : M.tur === 'dort' ? dortHtml(M.dort) : M.tur === 'disli' ? disliHtml(M.disli) : maltaHtml(M.malta));
   }
   function input(el) {
     const M = Q(), k = el.dataset.mkm, v = Number(String(el.value).replace(',', '.'));
     if (k === 'aci') { aci = Number.isFinite(v) ? v : 0; api.render(); return; }
     if (k === 'hedef') { hedefStrok = el.value; return; }
     if (k === 'hedefPsi') { hedefPsi = el.value; return; }
+    if (k === 'gucKW') { if (v > 0 && M.disli.n1 > 0) { M.disli.T1 = Math.round(v * 60000 / (2 * PI * M.disli.n1) * 100) / 100; h.changed(); } return; }
     const [grp, f] = k.split('.');
     if (!M[grp] || !(f in M[grp])) return;
     if (typeof M[grp][f] === 'string') M[grp][f] = el.value; else if (Number.isFinite(v)) M[grp][f] = v;
@@ -179,7 +215,7 @@ export function createMekUI(h) {
   function act(a) {
     let m;
     const M = Q(), ad = (x) => (api.name() || 'proje') + x;
-    if ((m = /^mk-mtur-(malta|krank|dort)$/.exec(a))) { M.tur = m[1]; aci = 30; h.changed(); return true; }
+    if ((m = /^mk-mtur-(malta|krank|dort|disli)$/.exec(a))) { M.tur = m[1]; aci = 30; h.changed(); return true; }
     if (a === 'mk-mornek') { M.malta = MALTA_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
     if (a === 'mk-mkornek') { M.krank = KRANK_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
     if (a === 'mk-mstrok') {
@@ -187,6 +223,9 @@ export function createMekUI(h) {
       if (R == null) { api.toast('Bu biyel boyu ve kaçıklıkla bu strok olmaz: biyeli uzat'); return true; }
       M.krank.r = Math.round(R * 1000) / 1000; h.changed(); api.toast('Krank yarıçapı ' + tr(M.krank.r, 3) + ' mm'); return true;
     }
+    if (a === 'mk-mgornek') { M.disli = DISLI_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
+    if (a === 'mk-mgmod') { const r = disliHesap(M.disli); if (r.mOner != null) { M.disli.m = r.mOner; h.changed(); api.toast('Modül ' + tr(r.mOner, 2)); } else api.toast('Standart modüllerle yetmiyor: genişliği ya da malzemeyi değiştir'); return true; }
+    if (a === 'mk-mgpdf') { const r = disliHesap(M.disli); if (r.hata) { api.toast(r.hata); return true; } api.saveBlob(raporPdf(disliRapor(r, api.name() || '')), ad('_disli.pdf')); api.toast('İndirildi'); return true; }
     if (a === 'mk-mdornek') { M.dort = DORT_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
     if (a === 'mk-mdtasar') {
       const t = salinimdanTasarla(Number(String(hedefPsi).replace(',', '.')), M.dort.c, M.dort.d);
