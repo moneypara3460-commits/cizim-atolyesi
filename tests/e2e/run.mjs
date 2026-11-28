@@ -960,6 +960,33 @@ await T('Mekatronik eksantrik 3: çift disk (iki disk, iki G-kodu, kama kanalı)
   expect(/^%PDF/.test(pdf2.text), 'tambur PDF');
 });
 
+await T('Mekatronik çevrim diyagramı: VFFS şablonu uygun; faz kaydırınca sıra hatası ve öneri; öneriyi uygula düzelir; eksantrikle iki yönlü bağlantı; PDF ve CSV', 'M-Cevrim', async ({ page }) => {
+  await tab(page, 'meka');
+  await act(page, 'mk-v-cevrim');
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mkt="${k}"]`); const tg = await i.evaluate((e) => e.tagName); if (tg === 'SELECT') await i.selectOption(String(v)); else await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(150); };
+  let b = await body(page);
+  expect(/Makine çevrim diyagramı/.test(b) && /İstasyon yok/.test(b), 'boş başlangıç');
+  await act(page, 'mk-tornek');
+  b = await body(page);
+  expect(/✓ Kurallar sağlanıyor/.test(b) && (await page.locator('#tabbody svg polyline').count()) === 4, 'şablon: ' + b.slice(0, 200));
+  await act(page, 'mk-tac-2'); await set('i.2.faz', 120);
+  b = await body(page);
+  expect(/✗ Çakışma var/.test(b) && /SIRA HATASI/.test(b) && (await page.locator('#tabbody svg rect').count()) >= 1, 'sıra hatası');
+  const btn = page.locator('#tabbody [data-act^="mk-tap-1-"]').first(); await btn.click(); await page.waitForTimeout(200);
+  expect(/✓ Kurallar sağlanıyor/.test(await body(page)), 'öneri uygulandı');
+  const pdf = await download(page, () => act(page, 'mk-tpdf')); expect(/^%PDF/.test(pdf.text) && /_cevrim\.pdf$/.test(pdf.name), 'PDF');
+  const csv = await download(page, () => act(page, 'mk-tcsv')); expect(/aci_derece;zaman_ms;Kaynak/.test(csv.text), 'CSV');
+  // eksantriğe aktar: Eksantrik sekmesi açılır, plan aktarılır
+  await act(page, 'mk-tac-1'); await act(page, 'mk-ttokam-1');
+  expect((await page.locator('#tabbody [data-mkq="p.2.1"]').inputValue()) === '15', 'bıçak planı eksantrikte');
+  // eksantrikten istasyon ekle
+  await act(page, 'mk-v-cevrim'); await act(page, 'mk-tkam');
+  expect(/5\. Eksantrik 5/.test(await body(page)), 'eksantrikten istasyon');
+  await page.waitForTimeout(1500); await page.reload(); await waitReady(page);
+  await tab(page, 'meka'); await act(page, 'mk-v-cevrim');
+  expect(/Eksantrik 5/.test(await body(page)) && /✓ Kurallar sağlanıyor/.test(await body(page)), 'yenileme sonrası korunur');
+});
+
 await T('Mekatronik 8. aşama izlenebilirlik: gereksinimler benzetim ve kart sonucundan değerlendirilir; revizyon dört göz ile onaylanır; yenileme sonrası parmak izi aynı, değişiklik algılanır; matris CSV, PDF; STEP AP242 (gerçek OCCT, geri okuma)', 'M-Izlenebilirlik', async ({ page }) => {
   await act(page, 'add-box'); await page.waitForTimeout(400);
   await tab(page, 'meka');

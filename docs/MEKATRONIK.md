@@ -103,3 +103,18 @@ Hesap `meka/kam.js`, görünüm `meka/kam-ui.js`, test `tests/meka-kam.test.mjs`
 - **Bilinen sınırlar:** sallanan kollu tambur kam, kanal yanağı konik makara ve çok turlu (sarmal) kam yok. Sürtünme, makara ataleti, kol
   esnekliği ve titreşim yok sayılır; sallanan kolda kütle makara noktasına indirgenmiş girilir. G-kodunda mil deliği, kama kanalı ve kanallı
   diskin dış çapı yok (ayrı işlenir). Tambur G-kodunda A ile birlikte harekette ilerlemenin (F) kumandaya göre yorumu kontrol edilmeli.
+
+## Makine çevrim (zamanlama) diyagramı
+
+Mekatronik bölümünde **⏲ Çevrim diyagramı** sekmesi. Hesap `meka/cevrim.js`, görünüm `meka/cevrim-ui.js`, test `tests/meka-cevrim.test.mjs`
+ve tarayıcı senaryosu `M-Cevrim`.
+
+- **İstasyonlar:** aynı ana milin sürdüğü her hareket (çene, bıçak, dozaj kapağı…) eksantrikteki gibi açı – konum satırlarıyla
+  ve aynı hareket eğrileriyle; birim mm ya da °; faz = istasyonun kaydırılması (eksantrikte kama kanalını döndürmek).
+- **Kurallar:** "ayrı" (A ile B aynı anda ileride olmasın, aralarında en az pay derece) ve "içinde" (B yalnız A ilerideyken
+  ileri gitsin, iki uçta en az pay derece). "İleride" = konum strokun eşik yüzdesinden büyük. 0,5° adımla denetlenir.
+- **Öneri:** kural bozuksa B için en küçük geciktirme ve öne alma açısı hesaplanır; tek dokunuşla uygulanır.
+- **Eksantrikle bağlantı:** Eksantrik sekmesindeki hareketi istasyon olarak ekle; bir istasyonun hareketini Eksantrik sekmesine aktar.
+- **Çıktılar:** çizelge (kırmızı bant: çakışan açılar), PDF (yatay sayfa çizelge + rapor), açı – zaman – konum CSV.
+- **Şablon:** "Dikey poşet makinesi (VFFS)" — kaynak çenesi, bıçak, dozaj kapağı, film çekme kolu (temsilî).
+- **Sınırlar:** parça boyu, esneme, boşluk ve hız / ivme etkileşimi hesapta yok (pay bunlar için); servo / elektronik kam yok.
