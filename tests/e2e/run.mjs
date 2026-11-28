@@ -1053,6 +1053,24 @@ await T('Mekatronik dişli mukavemeti: şablon uygun, emniyetler; güçten tork;
   expect((await page.locator('#tabbody [data-mkm="disli.m"]').inputValue()) === '4', 'yenileme sonrası dişli açık, modül korunur');
 });
 
+await T('Mekatronik basma yayı: şablon uygun, yay sabiti ve kuvvetler; yay sabitinden sarım; blok boyunun altında hata; statikte yorulma alanları gizli; PDF; yenilemede korunur', 'M-Yay', async ({ page }) => {
+  await tab(page, 'meka');
+  await act(page, 'mk-v-mek'); await act(page, 'mk-mtur-yay'); await act(page, 'mk-myornek');
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mkm="${k}"]`); const tg = await i.evaluate((e) => e.tagName); if (tg === 'SELECT') await i.selectOption(String(v)); else await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(150); };
+  let b = await body(page);
+  expect(/Basma yayı/.test(b) && /✓ Uygun/.test(b) && /Yay sabiti 6,22 N\/mm/.test(b) && /en kısa boyda 136,8 N/.test(b) && /Yorulma emniyeti 1,40/.test(b), 'şablon: ' + b.slice(0, 200));
+  await set('hedefR', 5); await act(page, 'mk-mydn');
+  expect((await page.locator('#tabbody [data-mkm="yay.n"]').inputValue()) === '10' && (await page.locator('#tabbody [data-mkm="yay.nt"]').inputValue()) === '12', 'yay sabitinden sarım');
+  await set('yay.L2', 28);
+  expect(/blok boyundan/.test(await body(page)) && /Düzeltilmeli/.test(await body(page)), 'blok boyu hatası');
+  await set('yay.L2', 40); await set('yay.dinamik', 'hayir');
+  expect(await page.locator('#tabbody [data-mkm="yay.f"]').count() === 0 && !/Yorulma emniyeti/.test(await body(page)), 'statikte yorulma yok');
+  const pdf = await download(page, () => act(page, 'mk-mypdf')); expect(/^%PDF/.test(pdf.text) && /_yay\.pdf$/.test(pdf.name), 'PDF');
+  await page.waitForTimeout(1500); await page.reload(); await waitReady(page);
+  await tab(page, 'meka'); await act(page, 'mk-v-mek');
+  expect((await page.locator('#tabbody [data-mkm="yay.n"]').inputValue()) === '10', 'yenileme sonrası yay açık, değerler korunur');
+});
+
 await T('Mekatronik 8. aşama izlenebilirlik: gereksinimler benzetim ve kart sonucundan değerlendirilir; revizyon dört göz ile onaylanır; yenileme sonrası parmak izi aynı, değişiklik algılanır; matris CSV, PDF; STEP AP242 (gerçek OCCT, geri okuma)', 'M-Izlenebilirlik', async ({ page }) => {
   await act(page, 'add-box'); await page.waitForTimeout(400);
   await tab(page, 'meka');
