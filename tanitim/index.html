@@ -142,6 +142,14 @@ td.n{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
 .limits{border:1.5px solid var(--brass);background:var(--sheet);padding:28px}
 .limits ul{margin:0;padding-left:20px;columns:2;column-gap:40px}
 .limits li{margin-bottom:10px;break-inside:avoid}
+.limits ul.short{columns:1;font-size:17px}
+.limits ul.short li{margin-bottom:12px}
+.limits details.more{margin-top:18px;border-top:1px solid var(--rule);padding-top:14px}
+.limits details.more summary{cursor:pointer;font-family:var(--mono);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--blue);list-style:none}
+.limits details.more summary::-webkit-details-marker{display:none}
+.limits details.more summary::before{content:"+ ";}
+.limits details.more[open] summary::before{content:"− ";}
+.limits details.more ul{margin-top:14px;font-size:14.5px;color:var(--muted,inherit)}
 
 /* hikâye */
 .story{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:48px}
@@ -490,22 +498,32 @@ kiriş gerilmesi       fark %1,4
 <section id="durum">
   <div class="wrap">
     <div class="kicker">Açık konuşalım</div>
-    <h2>Bugün neredeyiz, ne eksik.</h2>
+    <h2>Sınırlarımızı biliyoruz.</h2>
     <div class="limits">
-      <ul>
-        <li><strong>Gerçek tezgâhta henüz denenmedi.</strong> Freze, 5 eksen ve torna programları yalnız simülasyonla doğrulandı. Heidenhain ve Mazak çıktısı da bu ilk denemeyi bekliyor.</li>
-        <li><strong>İlk çalıştırma dikkat ister.</strong> Kod, yetkin bir operatör gözetiminde, tek blok ve düşük ilerlemeyle denenmelidir.</li>
-        <li><strong>Analiz doğrusaldır.</strong> Kalıcı şekil değişimi, temas ve cıvata ön yükü hesaplanmaz. Sonuçlar mühendis onayının yerini tutmaz.</li>
-        <li><strong>Gerilme yığılması yaklaşık %10 doğrulukla bulunur.</strong> Delik ve çentik çevresi gibi en çok zorlanan bölgeler 16 kat ince ağla yeniden çözülür; sonuç genelde biraz yüksek, yani güvenli tarafta çıkar. Yarıçapsız keskin iç köşede gerilme kuramsal olarak sonsuzdur, uygulama bunu uyarıyla belirtir. Mesnet ya da yük noktasına çok yakın bölgede inceltme yapılamaz. Kritik parçayı yine mühendise kontrol ettir.</li>
-        <li><strong>Tekstilde 3B görünüm bir önizlemedir.</strong> Kumaş dökümü gerçek ölçümle karşılaştırılmadan doğrulanmış sayılmaz.</li>
-        <li><strong>Ayakkabıda yapay zekâ parçaları bir başlangıçtır.</strong> Parça çizgileri fotoğraflardan tahmin edilir; usta kontrol edip gerekirse düzeltmelidir. Gerçek modelhanede deneme sürüyor. Fotoğraftan ölçek, telefon tam tepeden tutulmazsa sapabilir; bilinen kalıp boyu girilmelidir.</li>
-        <li><strong>Ayakkabıda henüz olmayanlar.</strong> Kampre ve form verme bilgisi yalnız saklanır, hesaplanmaz. 3B kalıp dosyası yüklenip görünüşleri çıkar, ama kalıbın üstüne sanal bantla çizim ve yüzeyi düzleme açma (forme) henüz yok. Numara serisi orantılıdır (firma serisiyle kontrol edilmeli); kesim yerleşimi dikdörtgen deri / plakaya yapılır, orta çizgisi eğri yarım parçanın açılımı yaklaşıktır. DXF çıktısı ölçüsüyle doğrulandı ama henüz bir kesim programında açılarak denenmedi.</li>
-        <li><strong>Parmakla kontrol gerçek kamerada denenmedi.</strong> Tarayıcı testlerinde sahte kamera ve yapay elle çalışıyor; telefon kamerasıyla deneme sırada.</li>
-        <li><strong>Mekatronik bölümü bir ön tasarım aracıdır.</strong> Hesaplar formülü ve kaynağıyla gösterilir, ama motor, vida ve rulman değerleri üreticinin kataloğundan girilmeli; seçim yetkili mühendis onayıyla kesinleşir. Sertifikalı bir araç değildir; elektrik tesisatı yetkili elektrik mühendisi onayıyla kesinleşir. Üretilen PLC kodu bir iskelettir; devreye almadan önce yetkili otomasyon mühendisince denetlenip sınanmalıdır. Güvenlik bölümü risk değerlendirmesini düzenler ve üretici verisiyle PL doğrular; yetkin kişilerce yapılan risk değerlendirmesinin, doğrulamanın ve CE uygunluk sürecinin yerine geçmez.</li>
-        <li><strong>Taramadan CAD'in sınırları.</strong> Düz ve eğik yüzler, eksene paralel silindir ve koniler, delikler, bütün kenarlarda eşit pah / yuvarlama ve sabit kesitli parçalar tanınır. Yalnız bazı kenarlardaki pah / yuvarlama, eksene eğik delikler, farklı yüksekliklerde cepler ve serbest yüzeyler henüz CAD'e çevrilmez; böyle parçalar ağ olarak eklenir. Çok açılı fotoğraflardan ölçülü 3B model (fotogrametri) henüz yok: şimdilik ücretsiz bir telefon tarama uygulamasıyla taranıp dosya içe alınır. Tek fotoğraftan model yalnız tahmindir. Ölçü doğruluğu taramaya bağlıdır; kumpasla doğrulanmalıdır.</li>
-        <li><strong>Bazı biçimler yok.</strong> DWG (AutoCAD'in kendi biçimi) açılmaz ve kaydedilmez; DXF kullanılır. IGES dışa aktarma ve Stoll / Shima örgü makinesi dosyaları üretilmez.</li>
-        <li><strong>Sıradaki adım pilot kullanım.</strong> Gerçek bir CNC atölyesinde, bir okulda ve bir ayakkabı modelhanesinde deneme, ardından iyileştirme.</li>
+      <ul class="short">
+        <li><strong>CNC programları simülasyonla doğrulanır.</strong> Gerçek tezgâhta ilk çalıştırma tek blok ve düşük ilerlemeyle, yetkin bir operatör gözetiminde yapılmalı.</li>
+        <li><strong>Analiz ve mekatronik hesapları ön tasarım içindir.</strong> Son onay yetkin mühendisindir.</li>
+        <li><strong>Yapay zekânın okuduğu ayakkabı parçalarını usta kontrol etmeli.</strong></li>
+        <li><strong>DWG henüz açılmıyor;</strong> DXF kullanılıyor.</li>
+        <li><strong>Sırada gerçek atölyelerde deneme var:</strong> bir CNC atölyesi, bir okul ve bir ayakkabı modelhanesi.</li>
       </ul>
+      <details class="more">
+        <summary>Teknik ayrıntılar</summary>
+        <ul>
+          <li><strong>Gerçek tezgâhta henüz denenmedi.</strong> Freze, 5 eksen ve torna programları yalnız simülasyonla doğrulandı. Heidenhain ve Mazak çıktısı da bu ilk denemeyi bekliyor.</li>
+          <li><strong>İlk çalıştırma dikkat ister.</strong> Kod, yetkin bir operatör gözetiminde, tek blok ve düşük ilerlemeyle denenmelidir.</li>
+          <li><strong>Analiz doğrusaldır.</strong> Kalıcı şekil değişimi, temas ve cıvata ön yükü hesaplanmaz. Sonuçlar mühendis onayının yerini tutmaz.</li>
+          <li><strong>Gerilme yığılması yaklaşık %10 doğrulukla bulunur.</strong> Delik ve çentik çevresi gibi en çok zorlanan bölgeler 16 kat ince ağla yeniden çözülür; sonuç genelde biraz yüksek, yani güvenli tarafta çıkar. Yarıçapsız keskin iç köşede gerilme kuramsal olarak sonsuzdur, uygulama bunu uyarıyla belirtir. Mesnet ya da yük noktasına çok yakın bölgede inceltme yapılamaz. Kritik parçayı yine mühendise kontrol ettir.</li>
+          <li><strong>Tekstilde 3B görünüm bir önizlemedir.</strong> Kumaş dökümü gerçek ölçümle karşılaştırılmadan doğrulanmış sayılmaz.</li>
+          <li><strong>Ayakkabıda yapay zekâ parçaları bir başlangıçtır.</strong> Parça çizgileri fotoğraflardan tahmin edilir; usta kontrol edip gerekirse düzeltmelidir. Gerçek modelhanede deneme sürüyor. Fotoğraftan ölçek, telefon tam tepeden tutulmazsa sapabilir; bilinen kalıp boyu girilmelidir.</li>
+          <li><strong>Ayakkabıda henüz olmayanlar.</strong> Kampre ve form verme bilgisi yalnız saklanır, hesaplanmaz. 3B kalıp dosyası yüklenip görünüşleri çıkar, ama kalıbın üstüne sanal bantla çizim ve yüzeyi düzleme açma (forme) henüz yok. Numara serisi orantılıdır (firma serisiyle kontrol edilmeli); kesim yerleşimi dikdörtgen deri / plakaya yapılır, orta çizgisi eğri yarım parçanın açılımı yaklaşıktır. DXF çıktısı ölçüsüyle doğrulandı ama henüz bir kesim programında açılarak denenmedi.</li>
+          <li><strong>Parmakla kontrol gerçek kamerada denenmedi.</strong> Tarayıcı testlerinde sahte kamera ve yapay elle çalışıyor; telefon kamerasıyla deneme sırada.</li>
+          <li><strong>Mekatronik bölümü bir ön tasarım aracıdır.</strong> Hesaplar formülü ve kaynağıyla gösterilir, ama motor, vida ve rulman değerleri üreticinin kataloğundan girilmeli; seçim yetkili mühendis onayıyla kesinleşir. Sertifikalı bir araç değildir; elektrik tesisatı yetkili elektrik mühendisi onayıyla kesinleşir. Üretilen PLC kodu bir iskelettir; devreye almadan önce yetkili otomasyon mühendisince denetlenip sınanmalıdır. Güvenlik bölümü risk değerlendirmesini düzenler ve üretici verisiyle PL doğrular; yetkin kişilerce yapılan risk değerlendirmesinin, doğrulamanın ve CE uygunluk sürecinin yerine geçmez.</li>
+          <li><strong>Taramadan CAD'in sınırları.</strong> Düz ve eğik yüzler, eksene paralel silindir ve koniler, delikler, bütün kenarlarda eşit pah / yuvarlama ve sabit kesitli parçalar tanınır. Yalnız bazı kenarlardaki pah / yuvarlama, eksene eğik delikler, farklı yüksekliklerde cepler ve serbest yüzeyler henüz CAD'e çevrilmez; böyle parçalar ağ olarak eklenir. Çok açılı fotoğraflardan ölçülü 3B model (fotogrametri) henüz yok: şimdilik ücretsiz bir telefon tarama uygulamasıyla taranıp dosya içe alınır. Tek fotoğraftan model yalnız tahmindir. Ölçü doğruluğu taramaya bağlıdır; kumpasla doğrulanmalıdır.</li>
+          <li><strong>Bazı biçimler yok.</strong> DWG (AutoCAD'in kendi biçimi) açılmaz ve kaydedilmez; DXF kullanılır. IGES dışa aktarma ve Stoll / Shima örgü makinesi dosyaları üretilmez.</li>
+          <li><strong>Sıradaki adım pilot kullanım.</strong> Gerçek bir CNC atölyesinde, bir okulda ve bir ayakkabı modelhanesinde deneme, ardından iyileştirme.</li>
+      </ul>
+      </details>
     </div>
   </div>
 </section>
