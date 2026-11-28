@@ -1034,6 +1034,25 @@ await T('Mekatronik dört çubuk: şablon krank–sarkaç ve uygun, salınım 60
   expect(/Salınım 60,0°/.test(await body(page)), 'yenileme sonrası dört çubuk açık');
 });
 
+await T('Mekatronik dişli mukavemeti: şablon uygun, emniyetler; güçten tork; aşırı yükte hata ve modül önerisi uygulanır; elle malzeme alanları; PDF; yenilemede korunur', 'M-Disli', async ({ page }) => {
+  await tab(page, 'meka');
+  await act(page, 'mk-v-mek'); await act(page, 'mk-mtur-disli'); await act(page, 'mk-mgornek');
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mkm="${k}"]`); const tg = await i.evaluate((e) => e.tagName); if (tg === 'SELECT') await i.selectOption(String(v)); else await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(150); };
+  let b = await body(page);
+  expect(/Dişli mukavemeti/.test(b) && /✓ Uygun/.test(b) && /emniyet 1,29/.test(b) && /Güç 1,50 kW/.test(b), 'şablon: ' + b.slice(0, 200));
+  await set('gucKW', 7.5);
+  b = await body(page);
+  expect((await page.locator('#tabbody [data-mkm="disli.T1"]').inputValue()) === '51.16' && /Düzeltilmeli/.test(b) && /Yüzey ezilmesine karşı emniyet/.test(b), 'güçten tork ve aşırı yük');
+  await act(page, 'mk-mgmod');
+  expect((await page.locator('#tabbody [data-mkm="disli.m"]').inputValue()) === '4' && /✓ Uygun/.test(await body(page)), 'önerilen modül uygulandı');
+  await set('disli.mat1', 'ozel');
+  expect(await page.locator('#tabbody [data-mkm="disli.H1"]').count() === 1, 'elle malzeme alanları');
+  const pdf = await download(page, () => act(page, 'mk-mgpdf')); expect(/^%PDF/.test(pdf.text) && /_disli\.pdf$/.test(pdf.name), 'PDF');
+  await page.waitForTimeout(1500); await page.reload(); await waitReady(page);
+  await tab(page, 'meka'); await act(page, 'mk-v-mek');
+  expect((await page.locator('#tabbody [data-mkm="disli.m"]').inputValue()) === '4', 'yenileme sonrası dişli açık, modül korunur');
+});
+
 await T('Mekatronik 8. aşama izlenebilirlik: gereksinimler benzetim ve kart sonucundan değerlendirilir; revizyon dört göz ile onaylanır; yenileme sonrası parmak izi aynı, değişiklik algılanır; matris CSV, PDF; STEP AP242 (gerçek OCCT, geri okuma)', 'M-Izlenebilirlik', async ({ page }) => {
   await act(page, 'add-box'); await page.waitForTimeout(400);
   await tab(page, 'meka');
