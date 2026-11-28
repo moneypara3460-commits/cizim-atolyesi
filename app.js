@@ -7,13 +7,13 @@ import { Brush, Evaluator, ADDITION, SUBTRACTION } from 'three-bvh-csg';
 import { MeshBVH } from 'three-mesh-bvh';
 import {
   TYPE_LABEL, DEFAULTS, heightOf, signedVolume, newPart, History, toSTLBinary, parseVoice,
-  UNITS, toUnit, fromUnit, fmtNum, snap, dist3,
+  UNITS, toUnit, fromUnit, fmtNum, fmtIn, snap, dist3,
   sketchFromDraw, sketchToDraw, revolveProfile, chamferBoxPoints, cylinderProfile, circlePts,
   duplicatePart, mirrorPart, linearArray, circularArray, quatToEulerXYZ,
   VIEW_DIRS, sectionPlane, fovDistance, sheetLayout, scaleLabel, jpegToPdf,
   cornerCut, coneProfile, ringProfile, cornersAbove, classifyLoops, descendantsOf, wouldCycle, cleanLinks,
   sweepTris, loftTris, frameCalc, frameMembers, miterOK, PROFILES, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sheetCalc, sheetFlatLines, SHEET_PRESETS, MATERIALS, meshProps, massGrams, bomRows, partDims, csvFromRows, dxfFromLayers, packMesh, unpackMesh, VIEW_TO_VIEWER, sheetProject, holeList, viewEdges, chainPolylines, sectionFit, profileArea,
-} from './logic.js?v=20261120f';
+} from './logic.js?v=20261128a';
 import { openSketch } from './sketch.js?v=20261120f';
 import { KENARLAR, KENAR_ADI } from './sac.js?v=20261120c';
 import { to3MF, toSTEP } from './export3d.js?v=20261112u';
@@ -1093,15 +1093,15 @@ function fieldsFor(p) {
   }
 }
 
-const lenVal = (mm) => (isFinite(mm) ? fmtNum(toUnit(mm, settings.unit), 3) : '');
+const lenVal = (mm) => fmtIn(toUnit(mm, settings.unit), 3);
 const btn = (label, act, on) => `<button data-act="${act}"${on ? ' class="on"' : ''}>${label}</button>`;
 const field = (label, key, p, kind = 'len') => {
-  const v = typeof p[key] === 'number' && isFinite(p[key]) ? (kind === 'deg' ? fmtNum(p[key], 2) : lenVal(p[key])) : '';
+  const v = typeof p[key] === 'number' && isFinite(p[key]) ? (kind === 'deg' ? fmtIn(p[key], 2) : lenVal(p[key])) : '';
   const eq = p.eq && p.eq[key];   // değişkene bağlı alan: elle değişmez, ƒx sekmesinden
   return `<label class="f"><span>${label}${kind === 'len' ? ' (' + settings.unit + ')' : ''}${eq ? ' <b title="' + esc(eq) + '">ƒ = ' + esc(eq.length > 18 ? eq.slice(0, 17) + '…' : eq) + '</b>' : ''}</span><input type="number" step="any" data-k="${key}" data-u="${kind}" value="${v}"${eq ? ' readonly class="bagli"' : ''}></label>`;
 };
 const cfield = (label, key, kind = 'len') => {
-  const v = kind === 'len' ? lenVal(cp[key]) : fmtNum(cp[key], 2);
+  const v = kind === 'len' ? lenVal(cp[key]) : fmtIn(cp[key], 2);
   return `<label class="f"><span>${label}${kind === 'len' ? ' (' + settings.unit + ')' : ''}</span><input type="number" step="any" data-c="${key}" data-u="${kind}" value="${v}"></label>`;
 };
 
@@ -1231,7 +1231,7 @@ function renderPanel() {
     for (const [A, m, i] of all) {
       const B = parts.find((x) => x.id === m.b);
       const val = m.t === 'dist' ? `<input type="number" step="any" data-mv="${A.id},${i}" data-u="len" value="${lenVal(m.v)}" style="width:80px;flex:0 0 80px">`
-        : m.t === 'ang' ? `<input type="number" step="any" data-mv="${A.id},${i}" data-u="deg" value="${fmtNum(m.v, 2)}" style="width:70px;flex:0 0 70px">` : '';
+        : m.t === 'ang' ? `<input type="number" step="any" data-mv="${A.id},${i}" data-u="deg" value="${fmtIn(m.v, 2)}" style="width:70px;flex:0 0 70px">` : '';
       body += `<div style="flex:1 0 100%;display:flex;gap:5px;align-items:center;font-size:13px;padding:2px 0"><span style="flex:1">${esc(partName(A, parts.indexOf(A)))} → ${B ? esc(partName(B, parts.indexOf(B))) : '?'}: <b>${TN[m.t]}</b>${m.flip ? ' (aynı yön)' : ''}</span>${val}<button data-act="mdel-${A.id}-${i}" class="danger" style="flex:0 0 auto;padding:8px 10px">Sil</button></div>`;
     }
     if (mateErr > 1e-2) body += '<div class="lbl" style="flex:1 0 100%;color:#f87171">⚠ Eşleşmeler birlikte sağlanamıyor (çelişki var). Son eklenen eşleşmeyi sil.</div>';
@@ -1282,8 +1282,8 @@ function renderPanel() {
         const st = anim.cfg[d.key] || (anim.cfg[d.key] = { on: true, from: d.cur, to: d.def });
         body += `<div style="flex:1 0 100%;display:flex;gap:5px;align-items:flex-end">` +
           `<button data-act="an-tog-${d.key}"${st.on ? ' class="on"' : ''} style="flex:2;text-align:left;padding-left:8px">${st.on ? '✓ ' : ''}${esc(d.label)}</button>` +
-          `<label class="f"><span>Baş (${d.unit})</span><input type="number" step="any" data-an="${d.key},from" value="${fmtNum(d.unit === '°' ? st.from : toUnit(st.from, settings.unit), 2)}"></label>` +
-          `<label class="f"><span>Son (${d.unit})</span><input type="number" step="any" data-an="${d.key},to" value="${fmtNum(d.unit === '°' ? st.to : toUnit(st.to, settings.unit), 2)}"></label></div>`;
+          `<label class="f"><span>Baş (${d.unit})</span><input type="number" step="any" data-an="${d.key},from" value="${fmtIn(d.unit === '°' ? st.from : toUnit(st.from, settings.unit), 2)}"></label>` +
+          `<label class="f"><span>Son (${d.unit})</span><input type="number" step="any" data-an="${d.key},to" value="${fmtIn(d.unit === '°' ? st.to : toUnit(st.to, settings.unit), 2)}"></label></div>`;
       }
       body += '<div class="lbl h">Oynatma</div>' + cfield('Süre (sn)', 'adur', 'deg') +
         btn('Git-gel', 'an-m-pp', anim.mode === 'pp') + btn('Tek yön', 'an-m-once', anim.mode === 'once') + btn('Sürekli döngü', 'an-m-loop', anim.mode === 'loop') +
@@ -1397,7 +1397,7 @@ function renderPanel() {
     else if (p.type === 'sheet') {
       const c = sheetCalc(p);
       body += (p.seg || []).map((sg, i) => '<div class="lbl h">' + (i + 1) + '. kenar</div>' +
-        (i > 0 ? `<label class="f"><span>Büküm açısı ° (+ yukarı, − aşağı)</span><input type="number" step="any" data-seg="${i},a" value="${fmtNum(sg.a, 2)}"></label>` : '') +
+        (i > 0 ? `<label class="f"><span>Büküm açısı ° (+ yukarı, − aşağı)</span><input type="number" step="any" data-seg="${i},a" value="${fmtIn(sg.a, 2)}"></label>` : '') +
         `<label class="f"><span>Dış ölçü (${settings.unit})</span><input type="number" step="any" data-seg="${i},L" value="${lenVal(sg.L)}"></label>`).join('') +
         btn('+ Kenar ekle', 'seg-add') + btn('− Son kenarı sil', 'seg-del') +
         `<div class="lbl" style="flex:1 0 100%;font-size:13px;color:${c.ok ? '#cbd5e1' : '#f87171'}">${c.ok ? 'Açınım boyu: <b>' + lenText(c.flatL) + '</b> × ' + lenText(c.W) + ' · ' + c.bends.length + ' büküm' : '⚠ ' + c.err}</div>` +
@@ -1424,7 +1424,7 @@ function syncInputs() {
   document.querySelectorAll('#tabbody input[data-k]').forEach((el) => {
     if (document.activeElement === el || el.dataset.t === 'text') return;
     const v = p[el.dataset.k];
-    el.value = el.dataset.u === 'deg' ? fmtNum(v, 2) : lenVal(v);
+    el.value = el.dataset.u === 'deg' ? fmtIn(v, 2) : lenVal(v);
   });
 }
 

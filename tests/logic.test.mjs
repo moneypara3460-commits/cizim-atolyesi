@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {
   parseVoice, normalize, History, toSTLBinary, newPart, heightOf,
-  UNITS, toUnit, fromUnit, fmtNum, snap, dist3,
+  UNITS, toUnit, fromUnit, fmtNum, fmtIn, snap, dist3,
   circlePts, rectPts, bboxPts, polyArea, sketchFromDraw, sketchToDraw, sketchHeight, revolveProfile,
   chamferBoxPoints, cylinderProfile, miterOK, matById, minBendRadius, minTubeCLR, beamCheck, eulerBuckling, judge, sectionProps,
   eulerToQuat, quatMul, quatToEulerXYZ,
@@ -134,6 +134,9 @@ t('sesli: kopyala / ayna / görünüm / pah', () => {
 t('birimler ve yapışma', () => {
   near(toUnit(25.4, 'in'), 1); near(fromUnit(2, 'cm'), 20); assert.equal(UNITS.mm, 1);
   assert.equal(fmtNum(12.3456), '12.35'); assert.equal(fmtNum(-0), '0');
+  // hesap bozulursa ekranda yanlış bir sıfır değil "—"; giriş kutusunda boş
+  for (const v of [NaN, Infinity, -Infinity, undefined, null, '']) { assert.equal(fmtNum(v), '—', String(v)); assert.equal(fmtIn(v), '', String(v)); }
+  assert.equal(fmtNum(0), '0'); assert.equal(fmtIn(0), '0'); assert.equal(fmtIn(1.23456, 3), '1.235');
   assert.equal(snap(13, 5), 15); assert.equal(snap(12, 5), 10); assert.equal(snap(7.3, 0), 7.3);
   assert.equal(snap(-0.4, 5), 0); assert.ok(Object.is(snap(-0.4, 5), 0));
   near(dist3([0, 0, 0], [3, 4, 12]), 13);

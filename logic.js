@@ -273,11 +273,15 @@ export function parseVoice(text) {
 export const UNITS = { mm: 1, cm: 10, in: 25.4 };
 export const toUnit = (mm, u) => mm / (UNITS[u] || 1);
 export const fromUnit = (v, u) => v * (UNITS[u] || 1);
+// Ekranda okunan sayı. Hesap bozulup sayı çıkmazsa (NaN, sonsuz, tanımsız) "0" değil "—" yazar: kullanıcı yanlış
+// bir sıfıra güvenmesin. Sayı giriş kutusunun değeri için fmtIn kullan (orada boş kalır).
 export function fmtNum(v, dec = 2) {
-  if (!isFinite(v)) return '0';
+  if (v == null || v === '' || !isFinite(v)) return '—';
   const f = 10 ** dec;
   return String(Math.round(v * f) / f + 0);
 }
+// Sayı giriş kutusunun (input type=number) değeri: sayı değilse boş
+export const fmtIn = (v, dec = 2) => (v == null || v === '' || !isFinite(v) ? '' : fmtNum(v, dec));
 // v değerini step ızgarasına yapıştırır (step<=0 ise dokunmaz)
 export function snap(v, step) {
   if (!(step > 0)) return v;

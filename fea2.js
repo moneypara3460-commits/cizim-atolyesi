@@ -4,7 +4,7 @@
 // yoğunluk g/cm³ (fea.js ile aynı), ısı iletkenliği W/(mm·K), ısı akısı W/mm², taşınım katsayısı W/(mm²·K), özgül ısı J/(kg·K).
 // Saf JS, DOM yok: Worker'da ve Node testlerinde (tests/fea2.test.mjs) aynen çalışır.
 import * as F from './fea.js?v=20261127f';
-import { MATERIALS } from './logic.js?v=20261120f';
+import { MATERIALS } from './logic.js?v=20261128a';
 
 const { matGroups, matvec, pcg, buildMG, floating, invert, jacobiEig, dNat, stresses } = F._internal;
 
