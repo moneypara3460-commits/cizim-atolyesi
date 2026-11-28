@@ -1,6 +1,6 @@
 // Model fotoğrafını yapay zekâyla okuma (sunucu: supabase/functions/ayk-model-oku). İnternet gerekir.
 // Sonuç otomatik parça ayarlarına çevrilir; usta isterse değiştirir.
-import { MODELS } from './auto.js?v=20261127a';
+import { MODELS, paramShown } from './auto.js?v=20261127a';
 
 export const AI_URL = 'https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/ayk-model-oku';
 const KEY = 'sb_publishable_urzQtn-1lE1-obSXF_ivQg_wZbQMRDr';   // yayınlanabilir (herkese açık) anahtar
@@ -30,22 +30,26 @@ const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 export function toAuto(res, L = 260) {
   const type = MODELS[res?.type] ? res.type : '';
   const params = {};
-  const put = (k, v, round = 0) => { const n = num(v); if (n !== null) params[k] = round ? Math.round(n) : +n.toFixed(1); };
+  // yalnız bu tipin şablonunda görünen ayarlar alınır (ör. sandalette dil başı / burun kapağı, topukluda yan saya önü yok)
+  const put = (k, v, round = 0) => { if (!paramShown(type, k)) return; const n = num(v); if (n !== null) params[k] = round ? Math.round(n) : +n.toFixed(1); };
   if (type) {
-    params.cap = res.cap === true;
-    if (MODELS[type].lacing) { put('eyelets', res.eyelets, 1); put('throat', res.throat); put('facing', res.facing); }
-    else put('throat', res.throat);
+    if (paramShown(type, 'cap')) params.cap = res.cap === true;
+    put('eyelets', res.eyelets, 1); put('facing', res.facing);
+    // ağız önü (dil başı): bağcıksız tiplerde ekranda gizli ama şablon kullanır (ağzın bittiği yer); sandalette yok
+    if (type !== 'sandalet') { const n = num(res.throat); if (n !== null) params.throat = +n.toFixed(1); }
     put('qfront', res.qfront);
     if (params.cap) put('capAt', res.capAt);
+    put('strapAt', res.strapAt);
+    const sw = num(res.strapWRatio); if (sw !== null) put('strapW', Math.round(sw * L));
     const ratio = num(res.backHeightRatio);
     if (ratio !== null) params.backH = Math.round(ratio * L);
   }
   const warnings = [];
-  if (!type) warnings.push('Yapay zekâ bu modeli tanıyamadı: listeden tipi kendin seç (bot, makosen, sandalet ve topuklu şablonları da var) ya da parçaları elle çiz.');
+  if (!type) warnings.push('Yapay zekâ bu modeli şablonlardan birine benzetemedi: listeden en yakın tipi kendin seç ya da parçaları elle çiz.');
   if (res?.view !== 'side') warnings.push('Fotoğraf yandan çekilmemiş görünüyor: çizgi konumları kaba tahmindir. Ayakkabıyı tam yandan çekmek daha iyi sonuç verir.');
   if (res?.confidence === 'low') warnings.push('Yapay zekâ emin değil: sonucu kontrol et.');
   const bits = [type ? MODELS[type].name : 'Tanınmayan model'];
-  if (type) { bits.push(params.cap ? 'burun kapaklı' : 'burun kapaksız'); if (MODELS[type].lacing && params.eyelets != null) bits.push(params.eyelets + ' delik'); }
+  if (type) { if (paramShown(type, 'cap')) bits.push(params.cap ? 'burun kapaklı' : 'burun kapaksız'); if (MODELS[type].lacing && params.eyelets != null) bits.push(params.eyelets + ' delik'); }
   const summary = `${bits.join(', ')} · güven: ${CONF[res?.confidence] || 'düşük'}${res?.notes ? ' — ' + String(res.notes).slice(0, 160) : ''}`;
   return { type, params, summary, warnings };
 }

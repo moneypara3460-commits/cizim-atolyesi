@@ -1,5 +1,6 @@
 // Ayakkabı Modelhanesi: model fotoğrafından model tipi ve saya çizgisi konumlarını tahmin eder (Claude görsel okuma).
-// İstek: POST { image: "data:image/jpeg;base64,…" }  →  { ok, result: { type, cap, eyelets, throat, facing, qfront, capAt, backHeightRatio, view, confidence, notes } }
+// İstek: POST { image: "data:image/jpeg;base64,…" }  →  { ok, result: { type, cap, eyelets, throat, facing, qfront, capAt, backHeightRatio, strapAt, strapWRatio, view, confidence, notes } }
+// Tipler uygulamadaki şablonlarla aynı (ayk/auto.js MODELS): derby, oxford, loafer, spor, bot, makosen, sandalet, topuklu; diğerleri "diger".
 // Gizli ayarlar: ANTHROPIC_API_KEY (zorunlu), AI_MODEL (isteğe bağlı, varsayılan claude-sonnet-5-5)
 // Yalnız giriş yapmış kullanıcı (Authorization: Bearer <oturum>). Kötüye kullanım sınırı (public.ai_take_user): abone günde 20; abone olmayan günde 10 (hesap 24 saatten yeniyse 3); abone olmayanların ortak toplamı 300 — aboneler ortak sınırdan etkilenmez.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -19,31 +20,39 @@ const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE
 
 const PROMPT = `You are an expert shoe pattern maker (modelist). Look at the photo of a shoe model that a pattern maker wants to produce.
 Return ONLY a JSON object, no other text, with these keys:
-{"type": "derby" | "oxford" | "loafer" | "spor" | "diger",
+{"type": "derby" | "oxford" | "loafer" | "spor" | "bot" | "makosen" | "sandalet" | "topuklu" | "diger",
  "cap": boolean (true if there is a separate toe cap piece),
  "eyelets": integer (number of lace eyelets on ONE side, 0 if no laces),
  "throat": number (where the lacing opening ends and the vamp begins, as % of shoe length measured from the heel back, typically 55-70),
  "facing": number (where the lacing opening starts near the ankle, % from heel back, typically 38-50),
  "qfront": number (where the front edge of the quarter meets the sole, % from heel back, typically 40-65),
  "capAt": number (where the toe cap line crosses the top of the shoe, % from heel back, typically 75-90),
- "backHeightRatio": number (height of the shoe at the heel back divided by shoe length, typically 0.18-0.30),
+ "backHeightRatio": number (height of the upper at the heel back divided by shoe length; typically 0.18-0.30, boots 0.35-0.45),
+ "strapAt": number (sandal only: center of the front strap across the foot, % from heel back, typically 60-80; null for other types),
+ "strapWRatio": number (sandal only: width of that front strap divided by shoe length, typically 0.05-0.14; null for other types),
  "view": "side" | "other",
  "confidence": "high" | "medium" | "low",
  "notes": short description of the model in Turkish, at most 140 characters}
 Definitions: derby = quarters (eyelet tabs) sewn on top of the vamp, open lacing; oxford = closed lacing, quarters under the vamp;
-loafer = no laces, slip-on; spor = sneaker / athletic shoe; diger = anything else (boot, sandal, heel...).
+loafer = no laces, slip-on with a separate vamp/mask; spor = sneaker / athletic shoe;
+bot = ankle boot that covers the ankle, usually laced (shaft above the ankle bone);
+makosen = moccasin / driving shoe with a U-shaped apron (önlük) stitched on top of the vamp, no laces;
+sandalet = open sandal: a front strap across the foot, a heel counter and an ankle strap, toes visible;
+topuklu = women's high-heel pump / stiletto with a one-piece upper and a high heel (heel clearly higher than 4 cm);
+diger = anything else (knee-high boot, slipper, clog, mule...). Laced boot → bot, not derby. Low pump with a high heel → topuklu, not loafer.
 If the photo is not a side view, still estimate and set "view" to "other". If you cannot see a shoe, use type "diger" and confidence "low".`;
 
 const NUM = (v: unknown, lo: number, hi: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : null);
 // Model yanıtını güvenli biçime getir (yalnız beklenen alanlar, sınırlar içinde)
 function clean(o: Record<string, unknown>) {
-  const types = ['derby', 'oxford', 'loafer', 'spor', 'diger'];
+  const types = ['derby', 'oxford', 'loafer', 'spor', 'bot', 'makosen', 'sandalet', 'topuklu', 'diger'];
   return {
     type: types.includes(o.type as string) ? o.type : 'diger',
     cap: o.cap === true,
     eyelets: Math.round(NUM(o.eyelets, 0, 12) ?? 0),
     throat: NUM(o.throat, 40, 85), facing: NUM(o.facing, 25, 65), qfront: NUM(o.qfront, 30, 80), capAt: NUM(o.capAt, 65, 95),
-    backHeightRatio: NUM(o.backHeightRatio, 0.12, 0.45),
+    backHeightRatio: NUM(o.backHeightRatio, 0.12, 0.6),
+    strapAt: o.type === 'sandalet' ? NUM(o.strapAt, 50, 90) : null, strapWRatio: o.type === 'sandalet' ? NUM(o.strapWRatio, 0.03, 0.2) : null,
     view: o.view === 'side' ? 'side' : 'other',
     confidence: ['high', 'medium', 'low'].includes(o.confidence as string) ? o.confidence : 'low',
     notes: typeof o.notes === 'string' ? o.notes.replace(/[<>]/g, '').slice(0, 160) : '',
