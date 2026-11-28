@@ -47,7 +47,7 @@ import * as DIS from './dis.js?v=20261120b';
 import * as PRM from './degisken.js?v=20261120h';
 import { createFemUI } from './fem-ui.js?v=20261127f';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
-import { createMekaUI } from './meka/ui.js?v=20261128b';
+import { createMekaUI } from './meka/ui.js?v=20261128c';
 import { CommandRegistry, CommandDispatcher, ShortcutResolver, parseCommandLine } from './command-system/core.mjs?v=20261122b';
 
 const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)

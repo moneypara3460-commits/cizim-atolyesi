@@ -1,16 +1,17 @@
-// Mekatronik Mühendisliği — Mekanizmalar sekmesi: Malta haçı ve krank–biyel. Hesaplar meka/malta.js, meka/krank.js.
+// Mekatronik Mühendisliği — Mekanizmalar sekmesi: Malta haçı, krank–biyel ve dört çubuk. Hesaplar meka/malta.js, meka/krank.js, meka/dortcubuk.js.
 // h: { api, getP() → proje (P.mek), changed(), esc, pdfText }
 import { maltaSanitize, maltaHesap, maltaDXF, maltaCSV, maltaRapor, MALTA_ORNEK, beta } from './malta.js?v=20261128a';
 import { krankSanitize, krankHesap, krankCSV, krankRapor, KRANK_ORNEK, konum, stroktanR } from './krank.js?v=20261128a';
+import { dortSanitize, dortHesap, dortCSV, dortRapor, DORT_ORNEK, salinimdanTasarla } from './dortcubuk.js?v=20261128a';
 import { pdfDoc } from '../tx/pdf.js?v=20261112u';
 
 const PI = Math.PI;
-export function mekSanitize(o) { const x = o && typeof o === 'object' ? o : {}; return { tur: x.tur === 'krank' ? 'krank' : 'malta', malta: maltaSanitize(x.malta), krank: krankSanitize(x.krank) }; }
+export function mekSanitize(o) { const x = o && typeof o === 'object' ? o : {}; return { tur: ['krank', 'dort'].includes(x.tur) ? x.tur : 'malta', malta: maltaSanitize(x.malta), krank: krankSanitize(x.krank), dort: dortSanitize(x.dort) }; }
 
 export function createMekUI(h) {
   const { api, esc } = h;
-  let aci = 30, hedefStrok = '';
-  const Q = () => { const P = h.getP(); if (!P.mek || !P.mek.malta) P.mek = mekSanitize(P.mek); return P.mek; };
+  let aci = 30, hedefStrok = '', hedefPsi = '';
+  const Q = () => { const P = h.getP(); if (!P.mek || !P.mek.malta || !P.mek.dort) P.mek = mekSanitize(P.mek); return P.mek; };
   const tr = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d).replace('.', ',') : '—');
   const num = (attr, v, step = 'any') => `<input type="number" inputmode="decimal" step="${step}" data-mkm="${attr}" value="${Number.isFinite(v) ? v : ''}">`;
   const fld = (label, inner, birim = '') => `<label class="mk-f"><span>${esc(label)}</span>${inner}${birim ? `<i>${esc(birim)}</i>` : ''}</label>`;
@@ -18,10 +19,10 @@ export function createMekUI(h) {
   const kont = (ks) => ks.map((c) => `<div class="mk-c ${c.ok ? (c.duzey === 'bilgi' ? 'i' : 'ok') : c.duzey}">${c.ok ? (c.duzey === 'bilgi' ? 'ℹ' : '✓') : c.duzey === 'hata' ? '✗' : '⚠'} ${esc(c.metin)}</div>`).join('');
   const rot = (p, t) => [p[0] * Math.cos(t) - p[1] * Math.sin(t), p[0] * Math.sin(t) + p[1] * Math.cos(t)];
   const pth = (pts, f = (p) => p, k0 = 1) => pts.filter((_, k) => k % k0 === 0).map((p, k) => { const q = f(p); return (k ? 'L' : 'M') + q[0].toFixed(2) + ' ' + (-q[1]).toFixed(2); }).join('') + 'Z';
-  function grafik(rows, key, ad, birim, renk, xkey = 'deg') {
-    const ys = rows.map((q) => q[key]), mx = Math.max(...ys), mn = Math.min(...ys, 0), span = mx - mn || 1, W = 330, H = 62;
+  function grafik(rows, key, ad, birim, renk, xkey = 'deg', sifir = true) {
+    const ys = rows.map((q) => q[key]), mx = Math.max(...ys), mn = sifir ? Math.min(...ys, 0) : Math.min(...ys), span = mx - mn || 1, W = 330, H = 62;
     const pts = rows.filter((_, k) => k % 3 === 0).map((q) => `${(q[xkey] / 360 * W).toFixed(1)},${(H - (q[key] - mn) / span * H).toFixed(1)}`).join(' ');
-    const y0 = H - (0 - mn) / span * H, xa = aci / 360 * W;
+    const y0 = sifir ? H - (0 - mn) / span * H : H, xa = aci / 360 * W;
     return `<div class="mk-s"><b>${esc(ad)}</b> <i>en büyük ${tr(mx, 2)} · en küçük ${tr(Math.min(...ys), 2)} ${esc(birim)}</i><svg viewBox="-2 -4 ${W + 4} ${H + 8}" style="width:100%;display:block"><line x1="0" y1="${y0}" x2="${W}" y2="${y0}" stroke="#334155"/><polyline points="${pts}" fill="none" stroke="${renk}" stroke-width="1.5"/><line x1="${xa}" y1="0" x2="${xa}" y2="${H}" stroke="#f59e0b"/></svg></div>`;
   }
 
@@ -107,6 +108,52 @@ export function createMekUI(h) {
     s += '<div class="mk-btns"><button data-act="mk-mkpdf">📄 Rapor (PDF)</button><button data-act="mk-mkcsv">⬇ Açı tablosu (CSV)</button></div></div>';
     return s;
   }
+
+  /* ---------------- Dört çubuk ---------------- */
+  function dortSvg(r) {
+    const g = r.g, q = r.rows[Math.round(aci * 2) % r.rows.length];
+    let x0 = Math.min(0, g.d), x1 = Math.max(0, g.d), y0 = 0, y1 = 0;
+    for (const z of r.rows) for (const p of [z.A, z.B, z.P]) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+    const m = Math.max(x1 - x0, y1 - y0) * 0.06 + 4, sw = ((x1 - x0) / 300).toFixed(2), bw = Math.max(4, Math.min(g.a, g.c) * 0.18);
+    const P = (p) => `${p[0].toFixed(2)} ${(-p[1]).toFixed(2)}`;
+    let s = `<path d="${r.rows.filter((_, k) => k % 3 === 0).map((z, k) => (k ? 'L' : 'M') + P(z.P)).join('')}Z" fill="none" stroke="#f59e0b" stroke-opacity="0.6" stroke-dasharray="3 2" stroke-width="${sw}"/>`;
+    if (!r.sinif.ciftKrank) { const R = g.c, t0 = r.th4Min * PI / 180, t1 = r.th4Max * PI / 180; s += `<path d="M${P([g.d + R * Math.cos(t0), R * Math.sin(t0)])}A${R} ${R} 0 0 0 ${P([g.d + R * Math.cos(t1), R * Math.sin(t1)])}" fill="none" stroke="#7dd3fc" stroke-opacity="0.5" stroke-dasharray="2 2" stroke-width="${sw}"/>`; }
+    s += `<circle r="${g.a}" fill="none" stroke="#a855f7" stroke-opacity="0.45" stroke-dasharray="3 3" stroke-width="${sw}"/>`;
+    s += `<line x1="0" y1="0" x2="${g.d}" y2="0" stroke="#334155" stroke-width="${(bw * 0.4).toFixed(2)}" stroke-dasharray="4 3"/>`;
+    s += `<path d="M${P(q.A)}L${P(q.B)}L${P(q.P)}Z" fill="#64748b" fill-opacity="0.35" stroke="#94a3b8" stroke-width="${(bw * 0.5).toFixed(2)}" stroke-linejoin="round"/>`;
+    s += `<line x1="0" y1="0" x2="${q.A[0].toFixed(2)}" y2="${(-q.A[1]).toFixed(2)}" stroke="#a855f7" stroke-width="${bw.toFixed(2)}" stroke-linecap="round"/>`;
+    s += `<line x1="${g.d}" y1="0" x2="${q.B[0].toFixed(2)}" y2="${(-q.B[1]).toFixed(2)}" stroke="#0ea5e9" stroke-width="${bw.toFixed(2)}" stroke-linecap="round"/>`;
+    for (const p of [[0, 0], [g.d, 0], q.A, q.B]) s += `<circle cx="${p[0].toFixed(2)}" cy="${(-p[1]).toFixed(2)}" r="${(bw * 0.35).toFixed(2)}" fill="#e2e8f0"/>`;
+    s += `<circle cx="${q.P[0].toFixed(2)}" cy="${(-q.P[1]).toFixed(2)}" r="${(bw * 0.5).toFixed(2)}" fill="#f59e0b"/>`;
+    return `<div class="mk-tbl"><svg xmlns="http://www.w3.org/2000/svg" viewBox="${(x0 - m).toFixed(1)} ${(-y1 - m).toFixed(1)} ${(x1 - x0 + 2 * m).toFixed(1)} ${(y1 - y0 + 2 * m).toFixed(1)}" style="width:100%;max-width:380px;display:block;margin:auto">${s}</svg></div><div class="mk-n">Mor: krank · gri: biyel · mavi: sarkaç · turuncu: biyel üstündeki nokta ve izlediği yol. Geçiş açısı şu an ${tr(q.mu, 1)}°.</div>`;
+  }
+  function dortHtml(D) {
+    let s = '<div class="mk-card"><b>⧖ Dört çubuk</b> — Dönen milden salınım ya da özel bir yol: poşet açma kolu, tutucu, besleme parmağı, silecek.<div class="mk-n">Krank döner, biyel sarkacı ileri–geri sallar. Biyelin üstündeki bir nokta da kapalı bir yol çizer; makinede parça taşımak için o yol kullanılır.</div><div class="mk-btns"><button data-act="mk-mdornek">📋 Şablon: Poşet açma kolu</button></div></div>';
+    s += '<div class="mk-card"><b>Çubuklar</b><div class="mk-grid">' + fld('Krank (döner kol)', num('dort.a', D.a, 0.5), 'mm') + fld('Biyel (ara kol)', num('dort.b', D.b, 0.5), 'mm') + fld('Sarkaç (sallanan kol)', num('dort.c', D.c, 0.5), 'mm') + fld('Sabit (iki mil arası)', num('dort.d', D.d, 0.5), 'mm')
+      + fld('Biyel noktası: krank piminden uzaklık', num('dort.p', D.p, 1), 'mm') + fld('Biyel noktası: biyele göre açı', num('dort.q', D.q, 1), '°')
+      + fld('Devir', num('dort.n', D.n, 1), 'd/dk') + fld('Dönüş yönü', sel('dort.yon', D.yon, [['ccw', 'Saat yönünün tersi'], ['cw', 'Saat yönü']])) + fld('Montaj', sel('dort.montaj', D.montaj, [['acik', 'Açık'], ['capraz', 'Çapraz']])) + '</div>';
+    s += '<div class="mk-grid">' + fld('İstenen sarkaç salınımı (krank ve biyeli bul)', `<input type="number" inputmode="decimal" step="1" data-mkm="hedefPsi" value="${esc(String(hedefPsi))}">`, '°') + '<div class="mk-f"><span>&nbsp;</span><button data-act="mk-mdtasar">Krank ve biyeli hesapla</button></div></div><div class="mk-n">Sarkaç ve sabit ölçüsü kalır; gidiş ve dönüş eşit sürer.</div></div>';
+    s += '<div class="mk-card"><b>Yük (isteğe bağlı)</b><div class="mk-n">Girersen gereken krank torku hesaplanır.</div><div class="mk-grid">' + fld('Sarkaç + yük ataleti (sarkaç miline göre)', num('dort.J', D.J, 0.001), 'kg·m²') + fld('Sarkaca ters yük torku', num('dort.M', D.M, 0.1), 'N·m') + '</div></div>';
+    const r = dortHesap(D);
+    if (r.hata) return s + `<div class="mk-card"><div class="mk-c hata">✗ ${esc(r.hata)}</div></div>`;
+    const q = r.rows[Math.round(aci * 2) % r.rows.length];
+    s += `<div class="mk-card"><b>Sonuç</b> ${r.uygun ? '<span class="mk-c ok">✓ Uygun</span>' : '<span class="mk-c hata">✗ Düzeltilmeli</span>'}` + dortSvg(r);
+    s += `<label class="mk-f"><span>Krank açısı: ${Math.round(aci)}° · sarkaç ${tr(q.th4, 1)}°</span><input type="range" min="0" max="359" step="1" data-mkm="aci" value="${Math.round(aci)}"></label>`;
+    s += `<div class="mk-s">${r.sinif.ciftKrank ? 'Sarkaç tam döner' : `Salınım <b>${tr(r.salinim, 1)}°</b> · zaman oranı <b>${tr(r.oran, 3)}</b>`} · geçiş açısı <b>${tr(r.muMin, 1)}°–${tr(r.muMax, 1)}°</b> · sarkaç hızı en çok <b>${tr(r.w4Max, 2)} rad/s</b> · nokta hızı en çok <b>${tr(r.vPMax, 3)} m/s</b>${r.g.J > 0 || r.g.M > 0 ? ` · krank torku en çok <b>${tr(r.Tmax, 2)} N·m</b> · ortalama güç <b>${tr(r.Port, 1)} W</b>` : ''}</div>`;
+    s += kont(r.kontroller);
+    s += grafik(r.rows, 'th4', 'Sarkaç açısı', '°', '#7dd3fc', 'deg', false) + grafik(r.rows, 'w4', 'Sarkaç hızı', 'rad/s', '#86efac') + grafik(r.rows, 'a4', 'Sarkaç ivmesi', 'rad/s²', '#fca5a5') + grafik(r.rows, 'mu', 'Geçiş açısı', '°', '#c4b5fd', 'deg', false);
+    if (r.g.J > 0 || r.g.M > 0) s += grafik(r.rows, 'T', 'Krank torku', 'N·m', '#fde68a');
+    s += '<div class="mk-btns"><button data-act="mk-mdpdf">📄 Rapor (PDF)</button><button data-act="mk-mdcsv">⬇ Açı tablosu (CSV)</button><button data-act="mk-mddxf">⬇ Nokta yolu (DXF)</button></div><div class="mk-n">DXF\'te mil merkezleri ve biyel noktasının yolu gerçek ölçüde çizilir; kılavuz, kam ya da çarpışma kontrolü için çizimine alabilirsin.</div></div>';
+    return s;
+  }
+  function dortDXF(r) {
+    const g = r.g, f = (v) => (Math.round(v * 1e4) / 1e4).toString(), L = ['0', 'SECTION', '2', 'ENTITIES'];
+    for (const [x, y] of [[0, 0], [g.d, 0]]) L.push('0', 'CIRCLE', '8', 'MIL', '10', f(x), '20', f(y), '30', '0', '40', f(Math.max(2, g.a * 0.1)));
+    L.push('0', 'LWPOLYLINE', '8', 'NOKTA_YOLU', '90', String(r.rows.length), '70', '1');
+    for (const q of r.rows) L.push('10', f(q.Px), '20', f(q.Py));
+    L.push('0', 'ENDSEC', '0', 'EOF');
+    return L.join('\r\n') + '\r\n';
+  }
   function raporPdf(lines) {
     const doc = pdfDoc(), T = h.pdfText; let p = doc.page(210, 297), y = 283;
     for (const raw of lines) { const s = T(raw), size = /^[A-ZÇĞİÖŞÜ ()—–-]+$/.test(s.trim()) && s.trim() ? 10 : 8.5; for (let k = 0; k < Math.max(1, s.length); k += 120) { if (y < 16) { p = doc.page(210, 297); y = 283; } p.text(14, y, size, (k ? '     ' : '') + s.slice(k, k + 120)); y -= size * 0.5; } }
@@ -115,13 +162,14 @@ export function createMekUI(h) {
 
   function html() {
     const M = Q();
-    let s = `<div class="mk-tabs"><button data-act="mk-mtur-malta" class="${M.tur === 'malta' ? 'on' : ''}">✚ Malta haçı</button><button data-act="mk-mtur-krank" class="${M.tur === 'krank' ? 'on' : ''}">⟳ Krank–biyel</button></div>`;
-    return s + (M.tur === 'krank' ? krankHtml(M.krank) : maltaHtml(M.malta));
+    let s = `<div class="mk-tabs"><button data-act="mk-mtur-malta" class="${M.tur === 'malta' ? 'on' : ''}">✚ Malta haçı</button><button data-act="mk-mtur-krank" class="${M.tur === 'krank' ? 'on' : ''}">⟳ Krank–biyel</button><button data-act="mk-mtur-dort" class="${M.tur === 'dort' ? 'on' : ''}">⧖ Dört çubuk</button></div>`;
+    return s + (M.tur === 'krank' ? krankHtml(M.krank) : M.tur === 'dort' ? dortHtml(M.dort) : maltaHtml(M.malta));
   }
   function input(el) {
     const M = Q(), k = el.dataset.mkm, v = Number(String(el.value).replace(',', '.'));
     if (k === 'aci') { aci = Number.isFinite(v) ? v : 0; api.render(); return; }
     if (k === 'hedef') { hedefStrok = el.value; return; }
+    if (k === 'hedefPsi') { hedefPsi = el.value; return; }
     const [grp, f] = k.split('.');
     if (!M[grp] || !(f in M[grp])) return;
     if (typeof M[grp][f] === 'string') M[grp][f] = el.value; else if (Number.isFinite(v)) M[grp][f] = v;
@@ -131,13 +179,26 @@ export function createMekUI(h) {
   function act(a) {
     let m;
     const M = Q(), ad = (x) => (api.name() || 'proje') + x;
-    if ((m = /^mk-mtur-(malta|krank)$/.exec(a))) { M.tur = m[1]; aci = 30; h.changed(); return true; }
+    if ((m = /^mk-mtur-(malta|krank|dort)$/.exec(a))) { M.tur = m[1]; aci = 30; h.changed(); return true; }
     if (a === 'mk-mornek') { M.malta = MALTA_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
     if (a === 'mk-mkornek') { M.krank = KRANK_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
     if (a === 'mk-mstrok') {
       const H = Number(String(hedefStrok).replace(',', '.')), R = stroktanR(H, M.krank.l, M.krank.e);
       if (R == null) { api.toast('Bu biyel boyu ve kaçıklıkla bu strok olmaz: biyeli uzat'); return true; }
       M.krank.r = Math.round(R * 1000) / 1000; h.changed(); api.toast('Krank yarıçapı ' + tr(M.krank.r, 3) + ' mm'); return true;
+    }
+    if (a === 'mk-mdornek') { M.dort = DORT_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
+    if (a === 'mk-mdtasar') {
+      const t = salinimdanTasarla(Number(String(hedefPsi).replace(',', '.')), M.dort.c, M.dort.d);
+      if (!t) { api.toast('Salınım 0° ile 180° arasında, sabit ölçü de sarkaçtan uzun olmalı'); return true; }
+      M.dort.a = Math.round(t.a * 1000) / 1000; M.dort.b = Math.round(t.b * 1000) / 1000; h.changed(); api.toast('Krank ' + tr(M.dort.a, 2) + ' mm · biyel ' + tr(M.dort.b, 2) + ' mm'); return true;
+    }
+    if (/^mk-md(pdf|csv|dxf)$/.test(a)) {
+      const r = dortHesap(M.dort); if (r.hata) { api.toast(r.hata); return true; }
+      if (a === 'mk-mdpdf') api.saveBlob(raporPdf(dortRapor(r, api.name() || '')), ad('_dort_cubuk.pdf'));
+      else if (a === 'mk-mdcsv') api.saveBlob(new Blob([dortCSV(r)], { type: 'text/csv;charset=utf-8' }), ad('_dort_cubuk.csv'));
+      else api.saveBlob(new Blob([dortDXF(r)], { type: 'application/dxf' }), ad('_dort_cubuk.dxf'));
+      api.toast('İndirildi'); return true;
     }
     if (/^mk-m(dxf|pdf|csv)$/.test(a)) {
       const r = maltaHesap(M.malta); if (r.hata) { api.toast(r.hata); return true; }

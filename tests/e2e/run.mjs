@@ -1015,6 +1015,25 @@ await T('Mekatronik mekanizmalar: Malta haçı şablonu uygun, açı kaydırıc�
   expect(/Strok 100,00 mm/.test(await body(page)), 'yenileme sonrası krank açık ve değerler korunur');
 });
 
+await T('Mekatronik dört çubuk: şablon krank–sarkaç ve uygun, salınım 60°; salınımdan krank ve biyel; tam dönmeyen krank hatası; PDF / CSV / DXF; yenilemede korunur', 'M-DortCubuk', async ({ page }) => {
+  await tab(page, 'meka');
+  await act(page, 'mk-v-mek'); await act(page, 'mk-mtur-dort'); await act(page, 'mk-mdornek');
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mkm="${k}"]`); await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(150); };
+  let b = await body(page);
+  expect(/Dört çubuk/.test(b) && /✓ Uygun/.test(b) && /Salınım 60,0°/.test(b) && /Tür: Krank–sarkaç/.test(b), 'şablon: ' + b.slice(0, 200));
+  await set('hedefPsi', 45); await act(page, 'mk-mdtasar');
+  expect(/Salınım 45,0°/.test(await body(page)) && /zaman oranı 1,000/.test(await body(page)), 'salınımdan tasarım');
+  await set('dort.a', 100);
+  expect(/tam dönebilmesi/.test(await body(page)), 'tam dönmeyen krank');
+  await act(page, 'mk-mdornek');
+  const pdf = await download(page, () => act(page, 'mk-mdpdf')); expect(/^%PDF/.test(pdf.text) && /_dort_cubuk\.pdf$/.test(pdf.name), 'PDF');
+  const csv = await download(page, () => act(page, 'mk-mdcsv')); expect(/krank_derece;sarkac_derece/.test(csv.text), 'CSV');
+  const dxf = await download(page, () => act(page, 'mk-mddxf')); expect(/NOKTA_YOLU/.test(dxf.text) && /EOF/.test(dxf.text), 'DXF');
+  await page.waitForTimeout(1500); await page.reload(); await waitReady(page);
+  await tab(page, 'meka'); await act(page, 'mk-v-mek');
+  expect(/Salınım 60,0°/.test(await body(page)), 'yenileme sonrası dört çubuk açık');
+});
+
 await T('Mekatronik 8. aşama izlenebilirlik: gereksinimler benzetim ve kart sonucundan değerlendirilir; revizyon dört göz ile onaylanır; yenileme sonrası parmak izi aynı, değişiklik algılanır; matris CSV, PDF; STEP AP242 (gerçek OCCT, geri okuma)', 'M-Izlenebilirlik', async ({ page }) => {
   await act(page, 'add-box'); await page.waitForTimeout(400);
   await tab(page, 'meka');
