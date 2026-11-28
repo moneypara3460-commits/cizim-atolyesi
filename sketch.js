@@ -5,7 +5,7 @@
 //   top  : u = X, v = Z (ekranda aşağı = +Z)     front: u = X, v = Y (ekranda yukarı = +Y)
 //   revolve: her zaman 'front'; dönme ekseni u = 0 çizgisidir, çizim eksenin sağına yapılır.
 import { egriNoktalari, egriKenar, egriTemizle } from './egri.js?v=20261120f';
-import { fmtNum, snap, circlePts, rectPts, bboxPts, polyArea, arcPoints, roundedRectPts, pointInPoly, solveCons, freedom, CONS_LABEL, consValid } from './logic.js?v=20261120f';
+import { fmtNum, fmtIn, snap, circlePts, rectPts, bboxPts, polyArea, arcPoints, roundedRectPts, pointInPoly, solveCons, freedom, CONS_LABEL, consValid } from './logic.js?v=20261128a';
 
 let cssDone = false;
 const CSS = `
@@ -399,7 +399,7 @@ export function openSketch(opts = {}) {
       h += L('Seçili kenarlar ' + (e + 1) + ' ve ' + (f + 1));
       h += B('∥ Paralel', 'c-par', has('par', e, f)) + B('⊥ Dik', 'c-perp', has('perp', e, f)) + B('= Eşit uzunluk', 'c-eq', has('eq', e, f));
       const ac = shape.cons.find((c) => c.t === 'ang' && ((c.e === e && c.f === f) || (c.e === f && c.f === e)));
-      h += `<label class="f" style="flex:1 1 40%"><span>Açı (°)</span><input type="number" step="any" data-f="cang" value="${ac ? fmtNum(ac.A, 2) : 90}"></label>` + B('∠ Açıyı kilitle', 'c-ang', !!ac);
+      h += `<label class="f" style="flex:1 1 40%"><span>Açı (°)</span><input type="number" step="any" data-f="cang" value="${ac ? fmtIn(ac.A, 2) : 90}"></label>` + B('∠ Açıyı kilitle', 'c-ang', !!ac);
       h += B('⎯ Doğrusal', 'c-col', has('col', e, f));
     } else {
       h += L('Kenara ya da köşeye dokun (en çok 2 kenar, 2 köşe). Köşe + kenar: çizgi üzerinde / orta nokta; 2 köşe + kenar: simetri.');
