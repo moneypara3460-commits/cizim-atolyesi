@@ -1,19 +1,20 @@
-// Mekatronik Mühendisliği — Mekanizmalar sekmesi: Malta haçı, krank–biyel, dört çubuk ve dişli mukavemeti. Hesaplar meka/malta.js, meka/krank.js, meka/dortcubuk.js, meka/disli.js.
+// Mekatronik Mühendisliği — Mekanizmalar sekmesi: Malta haçı, krank–biyel, dört çubuk, dişli mukavemeti ve basma yayı. Hesaplar meka/malta.js, meka/krank.js, meka/dortcubuk.js, meka/disli.js, meka/yay.js.
 // h: { api, getP() → proje (P.mek), changed(), esc, pdfText }
 import { maltaSanitize, maltaHesap, maltaDXF, maltaCSV, maltaRapor, MALTA_ORNEK, beta } from './malta.js?v=20261128a';
 import { krankSanitize, krankHesap, krankCSV, krankRapor, KRANK_ORNEK, konum, stroktanR } from './krank.js?v=20261128a';
 import { dortSanitize, dortHesap, dortCSV, dortRapor, DORT_ORNEK, salinimdanTasarla } from './dortcubuk.js?v=20261128a';
 import { disliSanitize, disliHesap, disliRapor, DISLI_ORNEK, MALZEME, KALITE, DARBE } from './disli.js?v=20261128a';
+import { yaySanitize, yayHesap, yayRapor, YAY_ORNEK, MALZEME as YAY_MAT, UCLAR, sarimdanR } from './yay.js?v=20261128a';
 import { gearOutline } from '../mech.js?v=20261112u';
 import { pdfDoc } from '../tx/pdf.js?v=20261112u';
 
 const PI = Math.PI;
-export function mekSanitize(o) { const x = o && typeof o === 'object' ? o : {}; return { tur: ['krank', 'dort', 'disli'].includes(x.tur) ? x.tur : 'malta', malta: maltaSanitize(x.malta), krank: krankSanitize(x.krank), dort: dortSanitize(x.dort), disli: disliSanitize(x.disli) }; }
+export function mekSanitize(o) { const x = o && typeof o === 'object' ? o : {}; return { tur: ['krank', 'dort', 'disli', 'yay'].includes(x.tur) ? x.tur : 'malta', malta: maltaSanitize(x.malta), krank: krankSanitize(x.krank), dort: dortSanitize(x.dort), disli: disliSanitize(x.disli), yay: yaySanitize(x.yay) }; }
 
 export function createMekUI(h) {
   const { api, esc } = h;
-  let aci = 30, hedefStrok = '', hedefPsi = '';
-  const Q = () => { const P = h.getP(); if (!P.mek || !P.mek.malta || !P.mek.dort || !P.mek.disli) P.mek = mekSanitize(P.mek); return P.mek; };
+  let aci = 30, hedefStrok = '', hedefPsi = '', hedefR = '';
+  const Q = () => { const P = h.getP(); if (!P.mek || !P.mek.malta || !P.mek.dort || !P.mek.disli || !P.mek.yay) P.mek = mekSanitize(P.mek); return P.mek; };
   const tr = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d).replace('.', ',') : '—');
   const num = (attr, v, step = 'any') => `<input type="number" inputmode="decimal" step="${step}" data-mkm="${attr}" value="${Number.isFinite(v) ? v : ''}">`;
   const fld = (label, inner, birim = '') => `<label class="mk-f"><span>${esc(label)}</span>${inner}${birim ? `<i>${esc(birim)}</i>` : ''}</label>`;
@@ -189,6 +190,41 @@ export function createMekUI(h) {
     s += '<div class="mk-n">Düz dişli, 20° basınç açısı, profil kaydırmasız, çelik–çelik; ISO 6336\'nın sadeleştirilmiş biçimi, uzun ömür için. Ön boyutlandırmadır: üretimden önce tam hesap ya da dişli üreticisinin onayı gerekir.</div></div>';
     return s;
   }
+
+  /* ---------------- Basma yayı ---------------- */
+  function yaySvg(r) {
+    const g = r.g, H = 150, sk = (H - 26) / g.L0, W = g.D * sk + g.d * sk, cw = Math.max(W, 40) + 34;
+    const bir = (L, x, ad, F) => {
+      const h = L * sk, y0 = H - 6, xs = x + (cw - W) / 2, tw = Math.max(1, g.d * sk), N = Math.max(2, Math.round(g.nt * 2));
+      let p = `M${xs.toFixed(1)} ${y0.toFixed(1)}`;
+      for (let i = 1; i <= N; i++) { const yy = y0 - (h - tw) * i / N - tw / 2 * (i === N ? 1 : 0); p += `L${(i % 2 ? xs + W : xs).toFixed(1)} ${yy.toFixed(1)}`; }
+      return `<line x1="${x + 6}" y1="${y0 + 3}" x2="${x + cw - 6}" y2="${y0 + 3}" stroke="#475569" stroke-width="3"/><line x1="${x + 6}" y1="${(y0 - h - 3).toFixed(1)}" x2="${x + cw - 6}" y2="${(y0 - h - 3).toFixed(1)}" stroke="#475569" stroke-width="3"/><path d="${p}" fill="none" stroke="#7dd3fc" stroke-width="${tw.toFixed(1)}" stroke-linejoin="round"/><text x="${x + cw / 2}" y="12" fill="#e2e8f0" font-size="10" text-anchor="middle">${ad}</text><text x="${x + cw / 2}" y="${H + 8}" fill="#94a3b8" font-size="9" text-anchor="middle">${tr(L, 1)} mm${F != null ? ' · ' + tr(F, 0) + ' N' : ''}</text>`;
+    };
+    const sv = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${3 * cw} ${H + 12}" style="width:100%;max-width:380px;display:block;margin:auto">${bir(g.L0, 0, 'Serbest', null)}${bir(g.L1, cw, 'Montaj', r.F1)}${bir(g.L2, 2 * cw, 'En kısa', r.F2)}</svg>`;
+    // kuvvet–boy doğrusu
+    const X = (L) => 30 + (g.L0 - L) / (g.L0 - r.Lc) * 310, Y = (F) => 110 - F / r.Fc * 95, pt = (L, F, c, ad) => `<circle cx="${X(L).toFixed(1)}" cy="${Y(F).toFixed(1)}" r="3.5" fill="${c}"/><text x="${X(L).toFixed(1)}" y="${(Y(F) - 7).toFixed(1)}" fill="${c}" font-size="9" text-anchor="middle">${ad}</text>`;
+    const gr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 128" style="width:100%;max-width:380px;display:block;margin:auto"><line x1="30" y1="110" x2="345" y2="110" stroke="#475569"/><line x1="30" y1="10" x2="30" y2="110" stroke="#475569"/><rect x="${X(r.Ln).toFixed(1)}" y="10" width="${(X(r.Lc) - X(r.Ln)).toFixed(1)}" height="100" fill="#fca5a5" fill-opacity="0.15"/><line x1="${X(g.L0)}" y1="${Y(0)}" x2="${X(r.Lc).toFixed(1)}" y2="${Y(r.Fc).toFixed(1)}" stroke="#86efac" stroke-width="2"/>${pt(g.L1, r.F1, '#fde68a', 'F₁')}${pt(g.L2, r.F2, '#fdba74', 'F₂')}${pt(r.Lc, r.Fc, '#fca5a5', 'blok')}<text x="32" y="124" fill="#94a3b8" font-size="9">boy ${tr(g.L0, 0)} mm → ${tr(r.Lc, 1)} mm</text><text x="34" y="18" fill="#94a3b8" font-size="9">${tr(r.Fc, 0)} N</text></svg>`;
+    return `<div class="mk-tbl">${sv}</div><div class="mk-tbl">${gr}</div><div class="mk-n">Grafik: kuvvet–boy doğrusu. Kırmızı bant sarımların birbirine çok yaklaştığı bölge; yay oraya kadar sıkıştırılmamalı.</div>`;
+  }
+  function yayHtml(Y) {
+    const mats = Object.entries(YAY_MAT).map(([k, v]) => [k, v.ad]);
+    let s = '<div class="mk-card"><b>🌀 Basma yayı</b> — Helisel basma yayı seçimi: yay sabiti, kuvvetler, gerilme, yorulma, burkulma.<div class="mk-n">Tel çapını, sarım çapını, sarım sayısını ve üç boyu gir: serbest boy, takılınca kaldığı boy (montaj) ve en çok sıkıştığı boy.</div><div class="mk-btns"><button data-act="mk-myornek">📋 Şablon: Ambalaj makinesi kapak yayı</button></div></div>';
+    s += '<div class="mk-card"><b>Yay</b><div class="mk-grid">' + fld('Tel çapı', num('yay.d', Y.d, 0.1), 'mm') + fld('Ortalama sarım çapı', num('yay.D', Y.D, 0.5), 'mm') + fld('Aktif sarım', num('yay.n', Y.n, 0.5), 'adet') + fld('Toplam sarım', num('yay.nt', Y.nt, 0.5), 'adet')
+      + fld('Serbest boy', num('yay.L0', Y.L0, 0.5), 'mm') + fld('Montaj boyu', num('yay.L1', Y.L1, 0.5), 'mm') + fld('En kısa çalışma boyu', num('yay.L2', Y.L2, 0.5), 'mm') + fld('Malzeme', sel('yay.mat', Y.mat, mats)) + '</div>';
+    if (Y.mat === 'ozel') s += '<div class="mk-grid">' + fld('Çekme dayanımı R_m', num('yay.Rm', Y.Rm, 10), 'MPa') + fld('Kayma modülü G', num('yay.G', Y.G, 500), 'MPa') + '</div>';
+    s += '<div class="mk-n">Uçları kapalı ve taşlanmış yay varsayılır (toplam sarım ≈ aktif + 2). Ortalama çap = dış çap − tel çapı.</div>';
+    s += '<div class="mk-grid">' + fld('İstenen yay sabiti (aktif sarımı bul)', `<input type="number" inputmode="decimal" step="0.1" data-mkm="hedefR" value="${esc(String(hedefR))}">`, 'N/mm') + '<div class="mk-f"><span>&nbsp;</span><button data-act="mk-mydn">Sarım sayısını hesapla</button></div></div></div>';
+    s += '<div class="mk-card"><b>Çalışma</b><div class="mk-grid">' + fld('Uçların oturuşu', sel('yay.uc', Y.uc, UCLAR)) + fld('Yük şekli', sel('yay.dinamik', Y.dinamik, [['evet', 'Sürekli ileri–geri (yorulma)'], ['hayir', 'Statik / az tekrarlı']]))
+      + (Y.dinamik === 'evet' ? fld('Çalışma hızı', num('yay.f', Y.f, 1), 'çevrim/dk') + fld('Tel yüzeyi', sel('yay.bilye', Y.bilye, [['hayir', 'Bilyesiz'], ['evet', 'Bilyeli dövülmüş (shot peened)']])) : '') + '</div></div>';
+    const r = yayHesap(Y);
+    if (r.hata) return s + `<div class="mk-card"><div class="mk-c hata">✗ ${esc(r.hata)}</div></div>`;
+    s += `<div class="mk-card"><b>Sonuç</b> ${r.uygun ? '<span class="mk-c ok">✓ Uygun</span>' : '<span class="mk-c hata">✗ Düzeltilmeli</span>'}` + yaySvg(r);
+    s += `<div class="mk-s">Yay sabiti <b>${tr(r.R, 2)} N/mm</b> · montajda <b>${tr(r.F1, 1)} N</b> · en kısa boyda <b>${tr(r.F2, 1)} N</b> · dış çap <b>${tr(r.Da, 1)} mm</b>, iç çap <b>${tr(r.Di, 1)} mm</b> · blok boyu <b>${tr(r.Lc, 1)} mm</b> · R_m <b>${tr(r.Rm, 0)} MPa</b> · kütle <b>${tr(r.kutle, 1)} g</b></div>`;
+    s += bar('Statik gerilme (en kısa boy)', r.t2, r.tzul, r.ns, 1) + (Y.dinamik === 'evet' && Number.isFinite(r.nf) ? bar('Yorulma (gerilme genliği)', r.ta, r.ta * r.nf, r.nf, 1.3) : '');
+    s += kont(r.kontroller);
+    s += '<div class="mk-btns"><button data-act="mk-mypdf">📄 Hesap raporu (PDF)</button></div><div class="mk-n">EN 13906-1 ve Shigley yöntemleri. R_m tel çapına göre yaklaşık en düşük değerdir, tel sertifikasından doğrula. Ön boyutlandırmadır; seri üretimden önce yay üreticisinin onayı gerekir.</div></div>';
+    return s;
+  }
   function raporPdf(lines) {
     const doc = pdfDoc(), T = h.pdfText; let p = doc.page(210, 297), y = 283;
     for (const raw of lines) { const s = T(raw), size = /^[A-ZÇĞİÖŞÜ ()—–-]+$/.test(s.trim()) && s.trim() ? 10 : 8.5; for (let k = 0; k < Math.max(1, s.length); k += 120) { if (y < 16) { p = doc.page(210, 297); y = 283; } p.text(14, y, size, (k ? '     ' : '') + s.slice(k, k + 120)); y -= size * 0.5; } }
@@ -197,14 +233,15 @@ export function createMekUI(h) {
 
   function html() {
     const M = Q();
-    let s = `<div class="mk-tabs"><button data-act="mk-mtur-malta" class="${M.tur === 'malta' ? 'on' : ''}">✚ Malta haçı</button><button data-act="mk-mtur-krank" class="${M.tur === 'krank' ? 'on' : ''}">⟳ Krank–biyel</button><button data-act="mk-mtur-dort" class="${M.tur === 'dort' ? 'on' : ''}">⧖ Dört çubuk</button><button data-act="mk-mtur-disli" class="${M.tur === 'disli' ? 'on' : ''}">⚙ Dişli</button></div>`;
-    return s + (M.tur === 'krank' ? krankHtml(M.krank) : M.tur === 'dort' ? dortHtml(M.dort) : M.tur === 'disli' ? disliHtml(M.disli) : maltaHtml(M.malta));
+    let s = `<div class="mk-tabs"><button data-act="mk-mtur-malta" class="${M.tur === 'malta' ? 'on' : ''}">✚ Malta haçı</button><button data-act="mk-mtur-krank" class="${M.tur === 'krank' ? 'on' : ''}">⟳ Krank–biyel</button><button data-act="mk-mtur-dort" class="${M.tur === 'dort' ? 'on' : ''}">⧖ Dört çubuk</button><button data-act="mk-mtur-disli" class="${M.tur === 'disli' ? 'on' : ''}">⚙ Dişli</button><button data-act="mk-mtur-yay" class="${M.tur === 'yay' ? 'on' : ''}">🌀 Yay</button></div>`;
+    return s + (M.tur === 'krank' ? krankHtml(M.krank) : M.tur === 'dort' ? dortHtml(M.dort) : M.tur === 'disli' ? disliHtml(M.disli) : M.tur === 'yay' ? yayHtml(M.yay) : maltaHtml(M.malta));
   }
   function input(el) {
     const M = Q(), k = el.dataset.mkm, v = Number(String(el.value).replace(',', '.'));
     if (k === 'aci') { aci = Number.isFinite(v) ? v : 0; api.render(); return; }
     if (k === 'hedef') { hedefStrok = el.value; return; }
     if (k === 'hedefPsi') { hedefPsi = el.value; return; }
+    if (k === 'hedefR') { hedefR = el.value; return; }
     if (k === 'gucKW') { if (v > 0 && M.disli.n1 > 0) { M.disli.T1 = Math.round(v * 60000 / (2 * PI * M.disli.n1) * 100) / 100; h.changed(); } return; }
     const [grp, f] = k.split('.');
     if (!M[grp] || !(f in M[grp])) return;
@@ -215,7 +252,7 @@ export function createMekUI(h) {
   function act(a) {
     let m;
     const M = Q(), ad = (x) => (api.name() || 'proje') + x;
-    if ((m = /^mk-mtur-(malta|krank|dort|disli)$/.exec(a))) { M.tur = m[1]; aci = 30; h.changed(); return true; }
+    if ((m = /^mk-mtur-(malta|krank|dort|disli|yay)$/.exec(a))) { M.tur = m[1]; aci = 30; h.changed(); return true; }
     if (a === 'mk-mornek') { M.malta = MALTA_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
     if (a === 'mk-mkornek') { M.krank = KRANK_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
     if (a === 'mk-mstrok') {
@@ -223,6 +260,14 @@ export function createMekUI(h) {
       if (R == null) { api.toast('Bu biyel boyu ve kaçıklıkla bu strok olmaz: biyeli uzat'); return true; }
       M.krank.r = Math.round(R * 1000) / 1000; h.changed(); api.toast('Krank yarıçapı ' + tr(M.krank.r, 3) + ' mm'); return true;
     }
+    if (a === 'mk-myornek') { M.yay = YAY_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
+    if (a === 'mk-mydn') {
+      const Rh = Number(String(hedefR).replace(',', '.')), Y = M.yay, G = Y.mat === 'ozel' ? Y.G : YAY_MAT[Y.mat].G;
+      if (!(Rh > 0 && Y.d > 0 && Y.D > Y.d)) { api.toast('Yay sabitini, tel ve sarım çapını gir'); return true; }
+      const n = Math.max(2, Math.round(sarimdanR(G, Y.d, Y.D, Rh) * 2) / 2); Y.n = n; Y.nt = n + 2; h.changed();
+      api.toast(tr(n, 1) + ' aktif sarım · yay sabiti ' + tr(G * Y.d ** 4 / (8 * Y.D ** 3 * n), 2) + ' N/mm'); return true;
+    }
+    if (a === 'mk-mypdf') { const r = yayHesap(M.yay); if (r.hata) { api.toast(r.hata); return true; } api.saveBlob(raporPdf(yayRapor(r, api.name() || '')), ad('_yay.pdf')); api.toast('İndirildi'); return true; }
     if (a === 'mk-mgornek') { M.disli = DISLI_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
     if (a === 'mk-mgmod') { const r = disliHesap(M.disli); if (r.mOner != null) { M.disli.m = r.mOner; h.changed(); api.toast('Modül ' + tr(r.mOner, 2)); } else api.toast('Standart modüllerle yetmiyor: genişliği ya da malzemeyi değiştir'); return true; }
     if (a === 'mk-mgpdf') { const r = disliHesap(M.disli); if (r.hata) { api.toast(r.hata); return true; } api.saveBlob(raporPdf(disliRapor(r, api.name() || '')), ad('_disli.pdf')); api.toast('İndirildi'); return true; }
