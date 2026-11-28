@@ -118,3 +118,10 @@ ve tarayıcı senaryosu `M-Cevrim`.
 - **Çıktılar:** çizelge (kırmızı bant: çakışan açılar), PDF (yatay sayfa çizelge + rapor), açı – zaman – konum CSV.
 - **Şablon:** "Dikey poşet makinesi (VFFS)" — kaynak çenesi, bıçak, dozaj kapağı, film çekme kolu (temsilî).
 - **Sınırlar:** parça boyu, esneme, boşluk ve hız / ivme etkileşimi hesapta yok (pay bunlar için); servo / elektronik kam yok.
+
+## Mekanizmalar: Malta haçı ve krank–biyel
+
+Mekatronik bölümünde **🔩 Mekanizmalar** sekmesi. Hesap `meka/malta.js` ve `meka/krank.js`, görünüm `meka/mek-ui.js`, testler `tests/meka-malta.test.mjs` ve `tests/meka-krank.test.mjs`, tarayıcı senaryosu `M-Mekanizma`.
+
+- **Malta haçı:** yuva sayısı z ve eksen mesafesi a'dan krank yarıçapı r = a·sin(π/z), teker yarıçapı, kilit diski ve boşluk yayı. Teker açısı, hızı, ivmesi ve krank torku tam tur boyunca hesaplanır. Boynuz kalınlığı ve mil deliği çevresindeki et denetlenir. Teker ve kilit diski DXF olarak (TEKER, KILIT_DISKI, DELIK, YARDIMCI katmanları), ayrıca PDF teknik resim ve CSV çıkar. Test, tam turda pimin yuvadan çıkmadığını ve diskin tekere girmediğini üç ayarda denetler.
+- **Krank–biyel:** krank yarıçapı, biyel boyu ve kaçıklık (eksantriklik) ile sürgü konumu, hızı, ivmesi kapalı formülle; strok, çabuk dönüş oranı, en büyük biyel açısı, kütle ve yük kuvvetinden krank torku ve güç. Hedef stroktan krank yarıçapı bulunur. l/r < 3,5 ve biyel açısı > 17° uyarı verir. PDF ve CSV çıkar.
