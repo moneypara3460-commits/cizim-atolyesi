@@ -220,6 +220,36 @@ t('Mazak EIA / ISO: Fanuc programıyla aynı, yalnız başlıkta EIA/ISO notu; s
   assert.ok(C.gcode(R, job, 'mazak', { dryRun: { clear: 5 } }).includes('KURU CALISTIRMA'));
   assert.equal(C.POSTS.mazak.ext, 'eia');
 });
+t('Heidenhain geri çekme seçenekleri: MB MAX / MB sayı (DCM) / eski TNC (M140 ve CYCL DEF 200 yok, delik gagalı L hareketleriyle aynı derinlikte)', () => {
+  const job = { tris: POCKET, tools: TOOLS, stock: { side: 2, top: 1, bottom: 5 }, res: 0.5, holes: [{ x: 7, z: 20, d: 5, top: 20, bottom: -1 }, { x: 53, z: 20, d: 5, top: 20, bottom: 12 }], ops: [{ type: 'face', on: true, tool: 1 }, { type: 'drill', on: true, tool: 3 }], name: 'Kapak', zero: 'corner' };
+  const R = C.plan(job), A = C.gcode(R, job, 'heidenhain').split('\n'), F = C.gcode(R, job, 'fanuc');
+  const B = C.gcode(R, job, 'heidenhain', { hhRetract: { mode: 'deger', mm: 40 } }).split('\n');
+  assert.equal(B.length, A.length + 1);
+  assert.equal(B.filter((l) => / M140 MB 40$/.test(l)).length, A.filter((l) => / M140 MB MAX$/.test(l)).length);
+  assert.ok(!B.some((l) => /MB MAX/.test(l)));
+  const E = C.gcode(R, job, 'heidenhain', { hhRetract: { mode: 'eski', mm: 50 } }).trimEnd().split('\n');
+  E.forEach((l, i) => assert.ok(l.startsWith(i + ' '), 'blok no: ' + l));
+  assert.ok(!E.some((l) => !/^\d+ ;/.test(l) && /M140|CYCL DEF|M99/.test(l)), 'eski TNC: M140 / çevrim yok');
+  const safeZ = +E.find((l) => /ESKI TNC|GERI CEKME PARCA/.test(l) && /Z\+/.test(l)).match(/Z\+([\d.]+)/)[1];
+  assert.ok(E.filter((l) => new RegExp(' L Z\\+' + safeZ + ' R0 FMAX$').test(l)).length >= 3, 'geri çekme L Z+' + safeZ);
+  // delik dipleri Fanuc G83 Z değerleriyle aynı; derin delikte kademe sayısı = tavan(derinlik / Q)
+  const f83 = [...F.matchAll(/G83 X([\d.]+) Y([\d.]+) Z(-[\d.]+)(?: R([\d.]+))? Q([\d.]+)/g)].map((m) => +m[3]);
+  const feeds = E.filter((l) => /^\d+ L Z[+-][\d.]+ R0 F\d+$/.test(l)).map((l) => +l.match(/ Z([+-][\d.]+)/)[1]);
+  for (const z of f83) assert.ok(feeds.some((v) => Math.abs(v - z) < 1e-9), 'delik dibi ' + z);
+  const q = +F.match(/G83 [^\n]* Q([\d.]+)/)[1], deep = Math.min(...f83);
+  assert.ok(feeds.filter((v) => v < 0).length >= Math.ceil(-deep / q), 'kademe sayısı');
+  for (const l of E) if (/^\d+ L /.test(l)) assert.ok(/ R0( FMAX| F\d+)?( M\d+)?$/.test(l), l);
+  // eski modda kuru çalıştırma da stok üstünde
+  const D = C.gcode(R, job, 'heidenhain', { hhRetract: { mode: 'eski' }, dryRun: { clear: 5 } }).split('\n');
+  for (const l of D) { if (/BLK FORM/.test(l)) continue; const z = l.match(/ L .*Z([+-][\d.]+)/); if (z) assert.ok(+z[1] >= 5 - 1e-9, l); }
+});
+t('Mazak: % işaretsiz seçenek yalnız iki % satırını kaldırır; program numarası O satırına yazılır', () => {
+  const job = { tris: POCKET, tools: TOOLS, stock: { side: 2, top: 1, bottom: 5 }, res: 0.5, ops: [{ type: 'face', on: true, tool: 1 }], name: 'Kapak', zero: 'corner' };
+  const R = C.plan(job), M = C.gcode(R, job, 'mazak', { program: 425 }).split('\n'), N = C.gcode(R, job, 'mazak', { program: 425, noPct: true }).split('\n');
+  assert.equal(M[0], '%'); assert.ok(/^O0425 /.test(M[1]));
+  assert.deepEqual(N, M.filter((l) => l !== '%'));
+  assert.ok(C.gcode(R, job, 'fanuc', { noPct: true }).startsWith('%\n'), 'Fanuc etkilenmez');
+});
 t('alttan girinti (üstten görünmeyen) uyarısı', () => {
   // köprü: iki ayak + üst plaka (altı boş)
   const tr = Float32Array.from([...boxTris([0, 0, 0], [10, 20, 30]), ...boxTris([40, 0, 0], [50, 20, 30]), ...boxTris([0, 20, 0], [50, 30, 30])]);

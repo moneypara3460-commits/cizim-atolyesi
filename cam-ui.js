@@ -1,6 +1,6 @@
 // CNC sekmesi: takımlar, işlemler, takım yolu hesabı, malzeme kaldırma simülasyonu, G-kodu ve iş kartı.
 // api: { model() → { tris, holes, matId, name }, draw(spec), clear(), enter(), leave(), render(), toast(m), name(), saveBlob(b, n), snapshot(), date() }
-import * as C from './cam.js?v=20261127y';
+import * as C from './cam.js?v=20261128a';
 import { pdfFromJpegs } from './cutopt.js?v=20261112u';
 import * as GC from './gcheck.js?v=20261127d';
 import * as GK from './gozkontrol.js?v=20261127z';
@@ -18,6 +18,8 @@ const CHECKS = [['zero', 'G54 sıfırını kenar bulucu / probla aldım, ekranda
 function defaults() {
   return {
     post: 'fanuc', mk: '', res: 'normal', zero: 'corner', stock: { side: 2, top: 1, bottom: 5 }, safe: 5,
+    // kumanda ayrıntıları: Heidenhain geri çekme (max / deger / eski) ve mesafesi; Fanuc / Mazak program numarası; Mazak dosya adı ve % işaretleri
+    hhRet: 'max', hhMB: 50, progNo: 1001, mzName: 'ad', mzPct: '1',
     machine: { maxRpm: 24000, rapid: 5000, toolChange: 10 },
     tools: [
       { id: 1, n: 1, type: 'flat', d: 10, flutes: 3, flute: 30, rpm: 0, feed: 0, plunge: 0 },
@@ -43,7 +45,8 @@ export function createCamUI(api) {
   const fillCut = (t, force) => { if (force || !(t.rpm > 0) || !(t.feed > 0)) { const s = C.suggestCut(mk(), t, cfg.machine.maxRpm); t.rpm = s.rpm; t.feed = s.feed; t.plunge = s.plunge; } };
   const invalidate = () => { S.R = null; S.code = null; S.sim = null; S.simPlay = false; S.res = null; S.risk = null; S.trace = null; S.checks = {}; api.clear(); };
   // G-kodu: risk haritası izi her zaman alınır; "riskli satırlarda yavaşla" açıksa ilerleme yarıya iner
-  const genCode = (extra = {}) => { const trace = []; const code = C.gcode(S.R, { ...S.job, zero: cfg.zero }, cfg.post, { date: api.date(), lineNumbers: (cfg.post === 'fanuc' || cfg.post === 'mazak') && cfg.lineNumbers, trace, slow: (cfg.slowRisk || cfg.valuable) && S.risk ? { map: S.risk, f: 0.5 } : null, ...(cfg.valuable ? { valuable: true, firstPass: VAL.f } : {}), ...extra }); return { code, trace }; };
+  const progNo = () => Math.min(9999, Math.max(1, Math.round(+cfg.progNo || 1001)));
+  const genCode = (extra = {}) => { const trace = []; const code = C.gcode(S.R, { ...S.job, zero: cfg.zero }, cfg.post, { date: api.date(), program: progNo(), hhRetract: { mode: cfg.hhRet, mm: +cfg.hhMB || 50 }, noPct: cfg.mzPct === '0', lineNumbers: (cfg.post === 'fanuc' || cfg.post === 'mazak') && cfg.lineNumbers, trace, slow: (cfg.slowRisk || cfg.valuable) && S.risk ? { map: S.risk, f: 0.5 } : null, ...(cfg.valuable ? { valuable: true, firstPass: VAL.f } : {}), ...extra }); return { code, trace }; };
   const dryClear = () => (cfg.valuable ? Math.max(cfg.dryClear || 5, VAL.dry) : cfg.dryClear || 5);
   // indirmeye engel: değerli parça modunda kırmızı satır ya da işaretlenmemiş kontrol
   const blockReason = () => {
@@ -222,6 +225,17 @@ export function createCamUI(api) {
     h += btn('👁 Göz Kontrol: işlenmiş parçayı fotoğrafla çizimle karşılaştır', 'cn-gk-open', false, 'flex:1 0 100%');
     if (S.err) h += `<div style="flex:1 0 100%;background:#3b0d0d;border:1px solid #7f1d1d;border-radius:12px;padding:10px;font-size:14px">⚠ ${esc(S.err)}</div>`;
     h += `<label class="f" style="flex:1 1 55%"><span>Kumanda (post-processor)</span><select data-cs="post">${Object.entries(C.POSTS).map(([k, v]) => `<option value="${k}"${cfg.post === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>`;
+    if (cfg.post === 'heidenhain') {
+      h += `<label class="f" style="flex:1 1 55%"><span>Geri çekme (Heidenhain)</span><select data-cs="hhRet">${[['max', 'M140 MB MAX (iTNC 530, TNC 620 / 640)'], ['deger', 'M140 MB sayı (çarpışma izleme DCM açıksa)'], ['eski', 'Eski TNC (M140 ve delme çevrimi yok)']].map(([k, t]) => `<option value="${k}"${cfg.hhRet === k ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
+      if (cfg.hhRet !== 'max') h += `<label class="f" style="flex:1 1 40%"><span>${cfg.hhRet === 'deger' ? 'Takım ekseninde geri çekme (mm)' : 'Güvenli yüksekliğin üstüne ek (mm)'}</span><input type="number" inputmode="decimal" step="1" data-cq="hhMB" value="${+cfg.hhMB || 50}"></label>`;
+      h += note(cfg.hhRet === 'max' ? 'M140 MB MAX: takım, takım ekseninde gidebildiği en üst noktaya çekilir. Makinende çarpışma izleme (DCM) açıksa Heidenhain kılavuzu sayısal değer ister: "M140 MB sayı" seç.' : cfg.hhRet === 'deger' ? 'Takım her takım değişiminden önce ve programın sonunda takım ekseninde bu kadar geri çekilir (M140 MB ' + (+cfg.hhMB || 50) + ').' : 'Eski TNC: M140 ve CYCL DEF 200 kullanılmaz. Takım parça sıfırına göre güvenli yükseklik + bu kadar yukarı düz hareketle çıkar; delikler tek tek gagalı hareketlere açılır (her kademede yukarı çıkış). Kumandanın kılavuzunda M140 varsa diğer seçenekleri kullan.');
+    }
+    if (cfg.post === 'fanuc' || cfg.post === 'mazak') h += `<label class="f" style="flex:1 1 40%"><span>Program numarası (O)</span><input type="number" inputmode="numeric" step="1" min="1" max="9999" data-cq="progNo" value="${progNo()}"></label>`;
+    if (cfg.post === 'mazak') {
+      h += `<label class="f" style="flex:1 1 55%"><span>Dosya adı (Mazak)</span><select data-cs="mzName"><option value="ad"${cfg.mzName !== 'no' ? ' selected' : ''}>Proje adı (.eia)</option><option value="no"${cfg.mzName === 'no' ? ' selected' : ''}>Program numarası (${progNo()}.eia, Fusion 640 için)</option></select></label>`;
+      h += `<label class="f" style="flex:1 1 40%"><span>% işaretleri</span><select data-cs="mzPct"><option value="1"${cfg.mzPct !== '0' ? ' selected' : ''}>Var (başta ve sonda)</option><option value="0"${cfg.mzPct === '0' ? ' selected' : ''}>Yok</option></select></label>`;
+      h += note('Mazak EIA/ISO: Mazatrol Fusion 640 dosyayı yalnız küçük harfli .eia uzantısı ve program numarası adıyla (ör. ' + progNo() + '.eia, başta sıfır yok, en çok 4 hane) kabul eder; Matrix / Smooth kumandalarda proje adı da olur. Kumandan % işaretinde hata verirse "Yok" seç.');
+    }
     h += `<label class="f" style="flex:1 1 40%"><span>İşlenen malzeme</span><select data-cs="mk"><option value=""${!cfg.mk ? ' selected' : ''}>Modelden (${esc(C.CUT_DATA[mk()].name)})</option>${Object.entries(C.CUT_DATA).map(([k, v]) => `<option value="${k}"${cfg.mk === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>`;
     h += btn((cfg.valuable ? '☑' : '☐') + ' 💎 Değerli parça modu', 'cn-val', !!cfg.valuable, 'flex:1 0 100%;font-weight:700');
     if (cfg.valuable) h += note('<b>Değerli parça modu açık:</b> güvenli yükseklik en az ' + VAL.safe + ' mm, kuru çalıştırma payı ' + VAL.dry + ' mm; her işlemin ilk kesme geçişi ve bütün riskli (sarı) satırlar %50 ilerlemeyle; kırmızı satır varken ve kesim öncesi kontrol listesi işaretlenmeden G-kodu indirilmez. Program daha uzun sürer.');
@@ -346,7 +360,8 @@ export function createCamUI(api) {
     if (d.ckn && S.chk) { S.chk[d.ckn] = isFinite(nv) ? nv : ''; S.chk.out = null; if (type === 'change') api.render(); return; }
     if (d.ckt && S.chk) { const [n, f] = d.ckt.split('.'), t = S.chk.tools[n]; if (t) { t[f] = f === 'type' ? v : (isFinite(nv) && nv > 0 ? nv : ''); S.chk.out = null; } if (type === 'change') api.render(); return; }
     if (d.cs === 'speed') { S.speed = Math.max(1, +v || 1); if (type === 'change') api.render(); return; }
-    if (d.cs) { cfg[d.cs] = v; save(); if (d.cs === 'post') recode(); if (d.cs === 'mk') { for (const t of cfg.tools) fillCut(t, true); invalidate(); } api.render(); return; }
+    if (d.cq) { if (type !== 'change') return; if (isFinite(nv) && nv >= 1) { cfg[d.cq] = d.cq === 'progNo' ? Math.min(9999, Math.round(nv)) : nv; save(); recode(); } api.render(); return; }
+    if (d.cs) { cfg[d.cs] = v; save(); if (['post', 'hhRet', 'mzPct', 'mzName'].includes(d.cs)) recode(); if (d.cs === 'mk') { for (const t of cfg.tools) fillCut(t, true); invalidate(); } api.render(); return; }
     if (type !== 'change') return;
     if (d.cn) { const [a, b] = d.cn.split('.'); if (isFinite(nv) && nv >= 0) { cfg[a][b] = nv; save(); invalidate(); api.render(); } return; }
     if (d.ct) { const [id, k] = d.ct.split('.'), t = cfg.tools.find((x) => x.id === +id); if (!t) return; if (k === 'type') t.type = v; else if (isFinite(nv) && nv > 0) t[k] = k === 'n' || k === 'flutes' ? Math.round(nv) : nv; save(); invalidate(); api.render(); return; }
@@ -357,10 +372,12 @@ export function createCamUI(api) {
     if (!dry && blockReason()) { api.toast(blockReason()); api.render(); return; }
     const hh = cfg.post === 'heidenhain';
     // Heidenhain: dosya adı program adıyla (BEGIN PGM) birebir aynı olmalı
-    const name = hh ? C.pgmName(api.name() || 'parca').slice(0, 19) + (dry ? '_KURU' : '') : (String(api.name() || 'parca').replace(/[^\w\-]+/g, '_').slice(0, 40) || 'parca') + (dry ? '_KURU' : '');
-    const code = dry ? genCode({ dryRun: { clear: dryClear() }, program: 1002, slow: null, firstPass: 0, pgm: name }).code : hh ? genCode({ pgm: name }).code : S.code;
+    // Mazak (Fusion 640): dosya adı program numarası; kuru çalıştırma bir sonraki numara
+    const dryNo = progNo() < 9999 ? progNo() + 1 : progNo() - 1, mzNo = cfg.post === 'mazak' && cfg.mzName === 'no';
+    const name = mzNo ? String(dry ? dryNo : progNo()) : hh ? C.pgmName(api.name() || 'parca').slice(0, 19) + (dry ? '_KURU' : '') : (String(api.name() || 'parca').replace(/[^\w\-]+/g, '_').slice(0, 40) || 'parca') + (dry ? '_KURU' : '');
+    const code = dry ? genCode({ dryRun: { clear: dryClear() }, program: dryNo, slow: null, firstPass: 0, pgm: name }).code : hh ? genCode({ pgm: name }).code : S.code;
     api.saveBlob(new Blob([code.replace(/\n/g, cfg.post === 'grbl' ? '\n' : '\r\n')], { type: 'text/plain' }), name + '.' + C.POSTS[cfg.post].ext);
-    api.toast(dry ? 'Kuru çalıştırma programı indirildi (' + (hh ? name : 'O1002') + '): takım stoğun ' + dryClear() + ' mm üstünden geçer' : 'G-kodu indirildi: USB belleğe kopyalayıp makineye tak');
+    api.toast(dry ? 'Kuru çalıştırma programı indirildi (' + (hh ? name : 'O' + String(dryNo).padStart(4, '0')) + '): takım stoğun ' + dryClear() + ' mm üstünden geçer' : 'G-kodu indirildi: USB belleğe kopyalayıp makineye tak');
   }
   async function pdf() {
     if (!S.R) return;

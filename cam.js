@@ -648,7 +648,8 @@ export function gcode(R, job, postKey, opt = {}) {
   const firstSeg = R.ops.map((op) => { const a = op.moves.findIndex((m) => m.k === 'f' || m.k === 'p' || m.k === 'd'); if (a < 0) return [0, -1]; let b = op.moves.findIndex((m, i) => i > a && m.k === 'r'); if (b < 0) b = op.moves.length; return [a, b - 1]; });
   const passF = (oi, mi, f) => (opt.firstPass > 0 && mi >= firstSeg[oi][0] && mi <= firstSeg[oi][1] ? Math.max(1, f * opt.firstPass) : f);
   const st = R.P.stock;
-  if (!grbl) out('%');
+  const pct = !grbl && !(mazak && opt.noPct);
+  if (pct) out('%');
   if (fanuc) out('O' + String(opt.program || 1001).padStart(4, '0') + ' ' + c(job.name || 'CIZIM ATOLYESI'));
   else out(c(job.name || 'CIZIM ATOLYESI'));
   out(c('CIZIM ATOLYESI CAM - ' + (opt.date || '')));
@@ -714,7 +715,7 @@ export function gcode(R, job, postKey, opt = {}) {
     if (inCycle) { out('G80'); inCycle = false; }
     out('G0 Z' + Zf(safe)); lz = safe; lg = 0;
   }
-  if (!grbl) { out('M9'); out('M5'); out(fanuc ? 'G91 G28 Z0.0' : 'G53 G0 Z0.0'); out('G90'); out('M30'); out('%'); }
+  if (!grbl) { out('M9'); out('M5'); out(fanuc ? 'G91 G28 Z0.0' : 'G53 G0 Z0.0'); out('G90'); out('M30'); if (pct) out('%'); }
   else { out('M5'); out('G0 X0.0 Y0.0'); out('M2'); }
   return L.join('\n') + '\n';
 }
@@ -722,7 +723,12 @@ export function gcode(R, job, postKey, opt = {}) {
 // BLK FORM ham parça, TOOL CALL n Z S (takım boyu telafisi TOOL CALL ile kendiliğinden), L doğrular (R0 = yarıçap telafisi yok,
 // FMAX hızlı), delme CYCL DEF 200 (Q200 güvenlik mesafesi, Q201 derinlik yüzeyden artımsal, Q202 kademe, Q203 yüzey, Q204
 // ikinci güvenlik mesafesi) + L ... M99 çağrı. Geri çekme M140 MB MAX (takım ekseninde son sınıra). Açıklama ";".
-// Program adı BEGIN / END PGM'de aynı ve dosya adıyla aynı olmalı (kumanda böyle ister). Seçenekler gcode() ile aynı.
+// Program adı BEGIN / END PGM'de aynı ve dosya adıyla aynı olmalı (kumanda böyle ister). Seçenekler gcode() ile aynı, ek olarak
+// opt.hhRetract: { mode, mm } — geri çekme biçimi:
+//   'max'   M140 MB MAX (iTNC 530 / TNC 640 kılavuzlarında var). Varsayılan.
+//   'deger' M140 MB <mm>: TNC 640 kılavuzu, çarpışma izleme (DCM, seçenek 40) açıkken MB MAX yerine sayısal değer ister.
+//   'eski'  M140'ı ve CYCL DEF 200'ü tanımayan eski TNC'ler: geri çekme L Z+(güvenli + mm) R0 FMAX (parça sıfırına göre),
+//           delikler çevrimsiz, tek tek gagalı L hareketleri (her kademede R düzlemine çıkış, G83 gibi).
 // Heidenhain program adı: dosya adıyla aynı olmalı (büyük harf, rakam, alt çizgi)
 export const pgmName = (s) => (ascii(s || 'CIZIM').replace(/[^A-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'CIZIM').slice(0, 24);
 export function klartext(R, job, opt = {}) {
@@ -731,6 +737,7 @@ export function klartext(R, job, opt = {}) {
   const hn = (v) => { const s = fmt(v); return (s.startsWith('-') ? s : '+' + s).replace(/\.0$/, ''); };
   const X = (x) => hn(x - Z0[0]), Y = (y) => hn(y - Z0[1]), Zf = (z) => hn(z + dry - Z0[2]);
   const name = pgmName(opt.pgm || job.name);
+  const hr = opt.hhRetract || {}, hmode = ['max', 'deger', 'eski'].includes(hr.mode) ? hr.mode : 'max', hmm = Math.max(1, +hr.mm || 50);
   let n = 0, cur = null;
   const out = (s) => { if (opt.trace) opt.trace.push(cur); L.push(n++ + ' ' + s); };
   const c = (t) => out('; ' + ascii(t).slice(0, 70));
@@ -742,16 +749,19 @@ export function klartext(R, job, opt = {}) {
   c('SIFIR: ' + (job.zero === 'center' ? 'STOK UST YUZ ORTASI' : job.zero === 'bottom' ? 'STOK ALT ON SOL KOSE' : 'STOK UST YUZ ON SOL KOSE'));
   if (opt.valuable) c('DEGERLI PARCA MODU: ILK GECISLER %' + Math.round((opt.firstPass || 1) * 100) + ' ILERLEME, RISKLI SATIRLAR YAVAS');
   if (dry) { c('KURU CALISTIRMA - HAVADA DENEME - KESIM YAPMAZ'); c('TUM Z DEGERLERI ' + fmt(dry) + ' MM YUKARI KAYDIRILDI'); c('EN YUKSEK Z: ' + fmt(R.safe + dry - Z0[2]) + ' - Z STROGUNU KONTROL ET'); c('SOGUTMA KAPALI'); }
+  if (hmode === 'deger') c('GERI CEKME: M140 MB ' + fmt(hmm) + ' (CARPISMA IZLEME DCM ACIK MAKINE ICIN)');
+  if (hmode === 'eski') { c('ESKI TNC MODU: M140 VE CYCL DEF 200 YOK'); c('GERI CEKME PARCA SIFIRINA GORE Z' + hn(R.safe + hmm - Z0[2]) + ' - DELIKLER CEVRIMSIZ'); }
   for (const op of R.ops) c('T' + op.tool.n + ' ' + TOOLN(op.tool) + ' - ' + op.name);
   out('BLK FORM 0.1 Z X' + X(st.x0) + ' Y' + Y(st.y0) + ' Z' + Zf(st.zBot - dry));
   out('BLK FORM 0.2 X' + X(st.x1) + ' Y' + Y(st.y1) + ' Z' + Zf(st.zTop - dry));
   const safe = R.safe;
+  const retract = () => out(hmode === 'max' ? 'M140 MB MAX' : hmode === 'deger' ? 'M140 MB ' + fmt(hmm).replace(/\.0$/, '') : 'L Z' + Zf(safe + hmm) + ' R0 FMAX');
   for (const [oi, op] of R.ops.entries()) {
     const t = op.tool;
     cur = null;
     c(op.name + ' - T' + t.n + ' ' + TOOLN(t));
     if (oi > 0) { out('M9'); out('M5'); }
-    out('M140 MB MAX');
+    retract();
     out('TOOL CALL ' + t.n + ' Z S' + Math.round(t.rpm));
     const m0 = op.moves.find((m) => m.k !== 'd') || op.moves[0];
     out('L X' + X(m0.x) + ' Y' + Y(m0.y) + ' R0 FMAX M3');
@@ -762,6 +772,22 @@ export function klartext(R, job, opt = {}) {
     for (const [mi, mm] of op.moves.entries()) {
       cur = [oi, mi];
       const m = mm.k === 'r' ? mm : { ...mm, f: Math.min(slowF(oi, mi, mm.f), passF(oi, mi, mm.f)) };
+      if (m.k === 'd' && hmode === 'eski') {
+        // çevrimsiz gagalı delme: R düzleminde konumlan, her kademe ilerlemeyle in, R düzlemine hızlı çık, önceki dibin 1 mm üstüne hızlı dön
+        const surf = m.r - 2, pk = m.q > 0 ? m.q : surf - m.z, f = Math.round(m.f);
+        if (Math.abs(lz - m.r) > 5e-4) out('L Z' + Zf(m.r) + ' R0 FMAX');
+        out('L X' + X(m.x) + ' Y' + Y(m.y) + ' R0 FMAX');
+        let dz = surf, first = true;
+        while (dz > m.z + 1e-9) {
+          const nx = Math.max(m.z, dz - pk);
+          if (!first) out('L Z' + Zf(dz + 1) + ' R0 FMAX');
+          out('L Z' + Zf(nx) + ' R0 F' + f);
+          out('L Z' + Zf(m.r) + ' R0 FMAX');
+          dz = nx; first = false;
+        }
+        lx = m.x; ly = m.y; lz = m.r; lf = null;
+        continue;
+      }
       if (m.k === 'd') {
         // CYCL DEF 200: yüzey = R düzlemi − 2 mm, derinlik yüzeyden (negatif); Q204 = Q200 → çevrim R düzleminde biter (G99 gibi)
         const surf = m.r - 2, depth = m.z - surf, pk = m.q > 0 ? m.q : -depth, key = [surf, depth, pk, Math.round(m.f)].map((v) => v.toFixed(4)).join();
@@ -789,7 +815,7 @@ export function klartext(R, job, opt = {}) {
     if (Math.abs(lz - safe) > 5e-4) out('L Z' + Zf(safe) + ' R0 FMAX');
   }
   out('M9'); out('M5');
-  out('M140 MB MAX');
+  retract();
   out('M30');
   out('END PGM ' + name + ' MM');
   return L.join('\n') + '\n';

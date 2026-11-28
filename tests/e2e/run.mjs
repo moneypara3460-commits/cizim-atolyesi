@@ -1370,6 +1370,32 @@ await T('3 eksen CAM: takım yolu, simülasyon, Fanuc G-kodu', 'G-CAM3', async (
   await act(page, 'cn-sim'); await page.waitForTimeout(1500);
 });
 
+await T('3 eksen kumanda ayarları: Heidenhain eski TNC (M140 yok) ve MB sayı; Mazak dosya adı program numarası (425.eia), % işaretsiz', 'G-CAM3', async ({ page }) => {
+  await tab(page, 'dims'); await setK(page, 'w', 60); await setK(page, 'h', 20); await setK(page, 'l', 40);
+  await tab(page, 'cam'); await act(page, 'c5-mode-3').catch(() => {});
+  const sel = async (k, v) => { await page.locator(`#tabbody [data-cs="${k}"]`).selectOption(v); await page.waitForTimeout(200); };
+  const fill = async (k, v) => { const i = page.locator(`#tabbody [data-cq="${k}"]`); await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(200); };
+  await sel('post', 'heidenhain');
+  await act(page, 'cn-go'); await waitText(page, '#tabbody', /G-kodunu indir|⛔/i, 120000);
+  let g = await download(page, () => act(page, 'cn-dl'));
+  expect(/M140 MB MAX/.test(g.text) && /\.h$/.test(g.name), 'varsayılan MB MAX');
+  await sel('hhRet', 'deger'); await fill('hhMB', 40);
+  g = await download(page, () => act(page, 'cn-dl'));
+  expect(/ M140 MB 40\r\n/.test(g.text) && !/MB MAX/.test(g.text), 'MB sayı');
+  await sel('hhRet', 'eski');
+  expect(/Eski TNC: M140 ve CYCL DEF 200 kullanılmaz/.test(await body(page)), 'eski TNC açıklaması');
+  g = await download(page, () => act(page, 'cn-dl'));
+  expect(!g.text.split('\r\n').some((l) => !/^\d+ ;/.test(l) && /M140|CYCL DEF/.test(l)) && /ESKI TNC MODU/.test(g.text), 'eski TNC programı');
+  await sel('hhRet', 'max');
+  await sel('post', 'mazak'); await fill('progNo', 425); await sel('mzName', 'no'); await sel('mzPct', '0');
+  expect(/Fusion 640/.test(await body(page)), 'Mazak açıklaması');
+  g = await download(page, () => act(page, 'cn-dl'));
+  expect(g.name === '425.eia' && /^O0425 /.test(g.text) && !/^%/m.test(g.text), 'Mazak: ' + g.name + ' ' + g.text.slice(0, 30));
+  const dry = await download(page, () => act(page, 'cn-dry'));
+  expect(dry.name === '426.eia' && /O0426/.test(dry.text) && /KURU CALISTIRMA/.test(dry.text), 'Mazak kuru çalıştırma: ' + dry.name);
+  await sel('mzName', 'ad'); await sel('mzPct', '1'); await sel('post', 'fanuc');
+});
+
 /* ---------- H. CNC torna ---------- */
 await T('CNC torna: örnek kademeli mil (9 operasyon), hatasız denetim, 3B simülasyon oynat / durdur / operasyon geçişi, G-kodu ekranda + .nc indir, simülasyon ↔ G-kodu tutarlılığı, OCCT doğrulaması; hatalı parametre uyarısı; freze modu korunur', 'H-Torna', async ({ page }) => {
   await tab(page, 'cam'); await act(page, 'lz-on');
