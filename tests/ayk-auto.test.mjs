@@ -137,8 +137,20 @@ t('8. Yapay zekâ okuması → otomatik ayarlar: tip, delik, oranlar, arka yüks
   assert.equal(l.warnings.length, 2);
   // tanınmayan / bozuk yanıt
   const d = toAuto({ type: 'diger', view: 'side', confidence: 'medium' });
-  assert.equal(d.type, ''); assert.deepEqual(d.params, {}); assert.match(d.warnings[0], /tanıyamadı/);
+  assert.equal(d.type, ''); assert.deepEqual(d.params, {}); assert.match(d.warnings[0], /benzetemedi/);
   assert.equal(toAuto(null).type, '');
+  // yeni şablonlar: bot (bağcıklı, yüksek arka), makosen (kapak yok), sandalet (ön bant konumu ve genişliği), topuklu (tek parça)
+  const b = toAuto({ type: 'bot', cap: false, eyelets: 7, throat: 58, facing: 33, qfront: 50, backHeightRatio: 0.41, view: 'side', confidence: 'high' }, 260);
+  assert.equal(b.type, 'bot'); assert.equal(b.params.eyelets, 7); assert.equal(b.params.backH, 107); assert.match(b.summary, /Bot.*7 delik/);
+  const mk = toAuto({ type: 'makosen', cap: true, capAt: 85, eyelets: 3, throat: 61, qfront: 47, backHeightRatio: 0.2, view: 'side', confidence: 'medium' }, 260);
+  assert.equal(mk.params.cap, undefined); assert.equal(mk.params.capAt, undefined); assert.equal(mk.params.eyelets, undefined);
+  assert.equal(mk.params.throat, 61); assert.equal(mk.params.qfront, 47); assert.ok(!/burun/.test(mk.summary));
+  const sd = toAuto({ type: 'sandalet', cap: true, throat: 60, qfront: 50, strapAt: 72, strapWRatio: 0.1, backHeightRatio: 0.19, view: 'side', confidence: 'high' }, 250);
+  assert.deepEqual(sd.params, { strapAt: 72, strapW: 25, backH: 48 });
+  const tp = toAuto({ type: 'topuklu', cap: true, throat: 52, qfront: 50, eyelets: 0, backHeightRatio: 0.21, view: 'side', confidence: 'high' }, 240);
+  assert.deepEqual(tp.params, { throat: 52, backH: 50 });
+  // okunan ayarlar şablona doğrudan uygulanabilir (parça üretimi hatasız)
+  for (const x of [b, mk, sd, tp]) { const g = A.generate(proj(), { type: x.type, params: x.params }); assert.ok(g.pieces.length >= (x.type === 'topuklu' ? 1 : 2) && !g.error, x.type + ' ' + (g.error || '')); }
   // sonuç doğrudan parça üretiminde kullanılabilir
   const p = proj(); const g = A.generate(p, { type: r.type, params: r.params });
   assert.ok(g.pieces.some((pc) => pc.name === 'Burun kapağı'));

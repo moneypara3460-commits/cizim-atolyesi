@@ -146,6 +146,31 @@ await R.test('Model resminden yapay zekâ okuması: tip ve ayarlar uygulanır, p
   await ctx.close();
 });
 
+await R.test('Yapay zekâ yeni şablonları tanır: sandalet okuması (ön bant konumu ve genişliği) ve topuklu okuması uygulanır', async () => {
+  const { ctx, p, errs } = await open();
+  let res = { type: 'sandalet', cap: false, eyelets: 0, throat: null, facing: null, qfront: null, capAt: null, backHeightRatio: 0.19, strapAt: 72, strapWRatio: 0.1, view: 'side', confidence: 'high', notes: 'Bantlı yazlık sandalet' };
+  await ctx.route('https://anqfdlahimxdjovecsyk.supabase.co/functions/v1/ayk-model-oku', (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ ok: true, result: res }) }));
+  await p.click('[data-page="yeni"]'); await p.fill('[data-n="name"]', 'YZ sandalet'); await p.dispatchEvent('[data-n="name"]', 'change');
+  await p.setInputFiles('[data-lfile="yan"]', FILE); await p.waitForSelector('.lview[data-lview="yan"] .lprev svg');
+  await p.setInputFiles('[data-mfile]', FILE); await p.waitForSelector('.mthumb');
+  await p.click('[data-act="airead"]');
+  await p.waitForFunction(() => /Sandalet.*güven: yüksek/.test(document.querySelector('.ainote')?.textContent || ''));
+  expect(await p.inputValue('[data-lst="type"]') === 'sandalet', 'sandalet seçildi');
+  expect(!/burun kapak/.test(await p.textContent('.ainote')), 'sandalette burun kapağı yazılmaz');
+  await p.click('[data-act="create"]'); await p.waitForSelector('.ed canvas');
+  await p.waitForFunction(() => (window.__ayk.S.p.pieces || []).some((x) => x.name === 'Ön bant'));
+  let s = await state(p);
+  expect(s.auto.type === 'sandalet' && s.auto.params.strapAt === 72 && s.auto.params.strapW > 0, JSON.stringify(s.auto));
+  // aynı projede topuklu okuması: tek parça saya
+  res = { type: 'topuklu', cap: false, eyelets: 0, throat: 52, facing: null, qfront: null, capAt: null, backHeightRatio: 0.21, view: 'side', confidence: 'medium', notes: 'Stiletto' };
+  await p.click('[data-page="parcalar"]'); await p.waitForSelector('.autocard [data-act="airead"]');
+  await p.click('.autocard [data-act="airead"]');
+  await p.waitForFunction(() => (window.__ayk.S.p.pieces || []).some((x) => x.name === 'Saya (tek parça)'));
+  s = await state(p); expect(s.auto.type === 'topuklu', JSON.stringify(s.auto));
+  expect(!errs.length, errs.join(' | '));
+  await ctx.close();
+});
+
 await R.test('Kesim matı fotoğrafı + modelden bütün parçalar (yapay zekâ): parçalar, astar, sertlikler oluşur; yeniden oluşturma ve seçenekler', async () => {
   const { ctx, p, errs } = await open();
   const MAT = path.join(ROOT, 'tests/fixtures/kalip-mat-yan.jpg');   // gerçek kalıp, yeşil kareli kesim matı üstünde

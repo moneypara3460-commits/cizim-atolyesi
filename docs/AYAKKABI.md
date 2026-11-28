@@ -114,6 +114,9 @@ bağcık ağzı / yan saya önü / burun çizgisi konumları (% kalıp boyu) ve 
 sınırlar içine kırpılır ve otomatik parça ayarlarına çevrilir. Kötüye kullanım sınırı: IP başına günde 20, toplam 300
 (`public.ai_take`). **Açmak için** Supabase → Edge Functions → Secrets'a `ANTHROPIC_API_KEY` girilmeli; girilmezse
 uygulama "henüz açılmadı" der. Sınır: oranlar tahmindir, en iyi sonuç tam yandan çekilmiş fotoğrafla alınır.
+Tanınan tipler bütün şablonlarla aynı (28.11.2026): derby, oxford, loafer, spor, bot, makosen, sandalet, topuklu.
+Sandalette ön bant ortası (% kalıp boyu) ve bant genişliği (oran → mm) de okunur; her tipte yalnız o şablonun kullandığı
+ayarlar alınır (ör. makosen / sandalet / topukluda burun kapağı, sandalette dil başı yok).
 
 **Aşama 3 — kamerayla tarama.** `future.scan`: ham nokta bulutu / ağ referansı + kalibrasyon (bilinen ölçülü işaret). Depodaki `hand/` kamera altyapısı (izin, önizleme) örnek alınabilir.
 
