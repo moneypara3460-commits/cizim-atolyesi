@@ -2,7 +2,7 @@
 // api: { render(), toast(m), name(), saveBlob(blob, name) }
 // Girdiler bu cihazda saklanır (cizim:meka). Hesaplar meka/calc.js'te; bu dosya yalnız gösterir.
 import { screwAxis, bearingLife, pneumatic, pickCylinder, reportLines, SCREW_DEFAULTS, BEARING_DEFAULTS, PNEU_DEFAULTS, SCREW_MOUNT, ISO281_A1, CYL_ROD, BASLIK, GIRDI_ADI, beltAxis, rackAxis, rotaryTable, gearbox, shaft, BELT_DEFAULTS, RACK_DEFAULTS, TABLE_DEFAULTS, GEARBOX_DEFAULTS, SHAFT_DEFAULTS } from './calc.js?v=20261118f';
-import { KINDS, SLOTS, sanitize, addItem, removeItem, itemById, missing, applyLinks, linkChecks, bomRows, bomCSV, libAdd, libSanitize, HESAP_ADI } from './tree.js?v=20261127a';
+import { KINDS, SLOTS, sanitize, addItem, removeItem, itemById, missing, applyLinks, linkChecks, bomRows, bomCSV, libAdd, libSanitize, HESAP_ADI } from './tree.js?v=20261128a';
 import { pdfDoc } from '../tx/pdf.js?v=20261112u';
 import { createElekUI } from './elec-ui.js?v=20261118f';
 import { createPlcUI } from './plc-ui.js?v=20261118g';
@@ -11,6 +11,8 @@ import { createGuvUI } from './guv-ui.js?v=20261119a';
 import { guvSanitize } from './guv.js?v=20261119a';
 import { createSimUI } from './sim-ui.js?v=20261119b';
 import { createKamUI } from './kam-ui.js?v=20261127c';
+import { createCevrimUI } from './cevrim-ui.js?v=20261128a';
+import { cevrimSanitize } from './cevrim.js?v=20261128a';
 import { kamSanitize } from './kam.js?v=20261127c';
 import { simSanitize, simule } from './sim.js?v=20261119b';
 import { createIzUI } from './iz-ui.js?v=20261119c';
@@ -102,6 +104,7 @@ export function createMekaUI(api) {
     Q.sim = simSanitize(Q.sim);
     Q.iz = izSanitize(Q.iz);
     Q.kam = kamSanitize(Q.kam);
+    Q.cevrim = cevrimSanitize(Q.cevrim);
     return Q;
   }
   const C = () => P.calc;
@@ -126,6 +129,7 @@ export function createMekaUI(api) {
   });
   const iz = createIzUI({ api, getP: () => P, changed: () => changed(), esc, pdfText, kaynak, kartlar: CARDS.map(([k, t]) => [k, t.replace(/^\S+\s/, '')]) });
   const kam = createKamUI({ api, getP: () => P, changed: () => changed(), esc, pdfText });
+  const cevrim = createCevrimUI({ api, getP: () => P, changed: () => changed(), esc, pdfText, toKam: () => { view = 'kam'; } });
   const sim = createSimUI({ api, getP: () => P, changed: () => changed(), esc, pdfText, kart: (k) => run(k) });
   const guv = createGuvUI({ api, getP: () => P, changed: () => changed(), esc, pdfText });
   const plc = createPlcUI({ api, getP: () => P, changed: () => changed(), esc, pdfText });
@@ -229,8 +233,8 @@ export function createMekaUI(api) {
   }
   function html() {
     let h = '<style>' + CSS + '</style><div class="mk"><div class="lbl h">Mekatronik Mühendisliği</div>';
-    h += '<div class="mk-tabs mk-top">' + [['hesap', '🧮 Hesaplar'], ['agac', '🌳 Ürün ağacı (' + P.items.length + ')'], ['liste', '📋 Parça listesi'], ['elek', '⚡ Elektrik (' + P.elek.yukler.length + ')'], ['plc', '🖥 PLC (' + P.plc.sinyaller.length + ')'], ['guv', '🛡 Güvenlik (' + P.guv.tehlikeler.length + ')'], ['sim', '⏱ Benzetim (' + P.sim.hareketler.length + ')'], ['kam', '⚙ Eksantrik (kam)'], ['iz', '🔏 İzlenebilirlik (' + P.iz.gereksinimler.length + ')'], ['kut', '📚 Kütüphane (' + lib.length + ')']].map(([a, t]) => `<button data-act="mk-v-${a}" class="${a === view ? 'on' : ''}">${t}</button>`).join('') + '</div>';
-    h += view === 'kam' ? kam.html() : view === 'iz' ? iz.html() : view === 'sim' ? sim.html() : view === 'guv' ? guv.html() : view === 'plc' ? plc.html() : view === 'elek' ? elek.html() : view === 'agac' ? agacHtml() : view === 'liste' ? listeHtml() : view === 'kut' ? kutHtml() : hesapHtml();
+    h += '<div class="mk-tabs mk-top">' + [['hesap', '🧮 Hesaplar'], ['agac', '🌳 Ürün ağacı (' + P.items.length + ')'], ['liste', '📋 Parça listesi'], ['elek', '⚡ Elektrik (' + P.elek.yukler.length + ')'], ['plc', '🖥 PLC (' + P.plc.sinyaller.length + ')'], ['guv', '🛡 Güvenlik (' + P.guv.tehlikeler.length + ')'], ['sim', '⏱ Benzetim (' + P.sim.hareketler.length + ')'], ['kam', '⚙ Eksantrik (kam)'], ['cevrim', '⏲ Çevrim diyagramı'], ['iz', '🔏 İzlenebilirlik (' + P.iz.gereksinimler.length + ')'], ['kut', '📚 Kütüphane (' + lib.length + ')']].map(([a, t]) => `<button data-act="mk-v-${a}" class="${a === view ? 'on' : ''}">${t}</button>`).join('') + '</div>';
+    h += view === 'cevrim' ? cevrim.html() : view === 'kam' ? kam.html() : view === 'iz' ? iz.html() : view === 'sim' ? sim.html() : view === 'guv' ? guv.html() : view === 'plc' ? plc.html() : view === 'elek' ? elek.html() : view === 'agac' ? agacHtml() : view === 'liste' ? listeHtml() : view === 'kut' ? kutHtml() : hesapHtml();
     h += '<div class="mk-card mk-n">Ön tasarım hesabıdır. Motor, vida ve rulman değerlerini üreticinin güncel kataloğundan gir; seçim yetkili mühendis onayıyla kesinleşir. Örnek değerler temsilîdir, gerçek ürün değeri değildir.</div></div>';
     return h;
   }
@@ -242,6 +246,7 @@ export function createMekaUI(api) {
     if (d.mks) { sim.input(el); return; }
     if (d.mkz) { iz.input(el); return; }
     if (d.mkq) { kam.input(el); return; }
+    if (d.mkt) { cevrim.input(el); return; }
     if (d.mk) {
       const [k, key] = d.mk.split('.');
       if (!C()[k] || !(key in C()[k] || SEL[key])) return;
@@ -270,6 +275,7 @@ export function createMekaUI(api) {
     if (/^mk-s/.test(a) && sim.act(a)) return true;
     if (/^mk-z/.test(a) && iz.act(a)) return true;
     if (/^mk-q/.test(a) && kam.act(a)) return true;
+    if (/^mk-t/.test(a) && cevrim.act(a)) return true;
     if ((m = /^mk-k-(\w+)$/.exec(a))) { C().kart = m[1]; changed(); return true; }
     if (a === 'mk-ornek') { const k = C().kart; C()[k] = { ...SAMPLE[k] }; changed(); api.toast('Örnek değerler yüklendi (temsilî)'); return true; }
     if ((m = /^mk-add-(\w+)$/.exec(a))) { const it = addItem(P, m[1]); editId = it.id; changed(); return true; }
