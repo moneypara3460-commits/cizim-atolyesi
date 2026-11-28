@@ -1071,6 +1071,37 @@ await T('Mekatronik basma yayı: şablon uygun, yay sabiti ve kuvvetler; yay sab
   expect((await page.locator('#tabbody [data-mkm="yay.n"]').inputValue()) === '10', 'yenileme sonrası yay açık, değerler korunur');
 });
 
+await T('Makine elemanları: kayış–kasnak (V şablonu, standart boydan eksen, triger diş yuvarlama), kama (DIN 6885 ölçüsü, aşırı torkta gereken boy uygulanır), cıvata (sıkma torku, M8 yetmez → M10 önerisi); PDF; yenilemede korunur', 'M-Elemanlar', async ({ page }) => {
+  await tab(page, 'meka');
+  await act(page, 'mk-v-mek');
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mkm="${k}"]`); const tg = await i.evaluate((e) => e.tagName); if (tg === 'SELECT') await i.selectOption(String(v)); else await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(150); };
+  await act(page, 'mk-mtur-kasnak'); await act(page, 'mk-mnkornek');
+  let b = await body(page);
+  expect(/Kayış–kasnak/.test(b) && /✓ Uygun/.test(b) && /eksen 320,5 mm/.test(b) && /mile gelen yük 307 N/.test(b), 'kasnak şablonu: ' + b.slice(0, 200));
+  await set('kasnak.tip', 'triger'); await set('kasnak.L', 603);
+  expect(/121 diş/.test(await body(page)) && /hatvenin katına/.test(await body(page)), 'triger boyu');
+  const kp = await download(page, () => act(page, 'mk-mnkpdf')); expect(/^%PDF/.test(kp.text) && /_kayis_kasnak\.pdf$/.test(kp.name), 'kasnak PDF');
+  await act(page, 'mk-mtur-kama'); await act(page, 'mk-mnaornek');
+  b = await body(page);
+  expect(/Bu mil için kama: 8 × 7/.test(b) && /✓ Uygun/.test(b) && /DIN 6885 A 8 × 7 × 40/.test(b), 'kama şablonu');
+  await set('kama.T', 150);
+  expect(/Düzeltilmeli/.test(await body(page)), 'aşırı tork');
+  await act(page, 'mk-mnaboy');
+  expect((await page.locator('#tabbody [data-mkm="kama.L"]').inputValue()) === '43' && /✓ Uygun/.test(await body(page)), 'gereken kama boyu uygulandı');
+  const ap = await download(page, () => act(page, 'mk-mnapdf')); expect(/^%PDF/.test(ap.text), 'kama PDF');
+  await act(page, 'mk-mtur-civata'); await act(page, 'mk-mncornek');
+  b = await body(page);
+  expect(/Sıkma torku 53,9 N·m/.test(b) && /✓ Uygun/.test(b), 'cıvata şablonu: ' + b.slice(0, 200));
+  await set('civata.boyut', 'M8');
+  expect(/parçalar kayar/.test(await body(page)) && /Sıkma torku 27,3 N·m/.test(await body(page)), 'M8 yetmez');
+  await act(page, 'mk-mncboy');
+  expect((await page.locator('#tabbody [data-mkm="civata.boyut"]').inputValue()) === 'M10', 'M10 önerisi uygulandı');
+  const cp = await download(page, () => act(page, 'mk-mncpdf')); expect(/^%PDF/.test(cp.text) && /_civata\.pdf$/.test(cp.name), 'cıvata PDF');
+  await page.waitForTimeout(1500); await page.reload(); await waitReady(page);
+  await tab(page, 'meka'); await act(page, 'mk-v-mek');
+  expect(/Sıkma torku 53,9 N·m/.test(await body(page)), 'yenileme sonrası cıvata açık');
+});
+
 await T('Mekatronik 8. aşama izlenebilirlik: gereksinimler benzetim ve kart sonucundan değerlendirilir; revizyon dört göz ile onaylanır; yenileme sonrası parmak izi aynı, değişiklik algılanır; matris CSV, PDF; STEP AP242 (gerçek OCCT, geri okuma)', 'M-Izlenebilirlik', async ({ page }) => {
   await act(page, 'add-box'); await page.waitForTimeout(400);
   await tab(page, 'meka');

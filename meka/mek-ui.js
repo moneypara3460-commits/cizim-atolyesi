@@ -1,20 +1,23 @@
-// Mekatronik Mühendisliği — Mekanizmalar sekmesi: Malta haçı, krank–biyel, dört çubuk, dişli mukavemeti ve basma yayı. Hesaplar meka/malta.js, meka/krank.js, meka/dortcubuk.js, meka/disli.js, meka/yay.js.
+// Mekatronik Mühendisliği — Mekanizmalar sekmesi: Malta haçı, krank–biyel, dört çubuk, dişli mukavemeti, basma yayı; makine elemanları: kayış–kasnak, kama, cıvata. Hesaplar meka/*.js.
 // h: { api, getP() → proje (P.mek), changed(), esc, pdfText }
 import { maltaSanitize, maltaHesap, maltaDXF, maltaCSV, maltaRapor, MALTA_ORNEK, beta } from './malta.js?v=20261128a';
 import { krankSanitize, krankHesap, krankCSV, krankRapor, KRANK_ORNEK, konum, stroktanR } from './krank.js?v=20261128a';
 import { dortSanitize, dortHesap, dortCSV, dortRapor, DORT_ORNEK, salinimdanTasarla } from './dortcubuk.js?v=20261128a';
 import { disliSanitize, disliHesap, disliRapor, DISLI_ORNEK, MALZEME, KALITE, DARBE } from './disli.js?v=20261128a';
 import { yaySanitize, yayHesap, yayRapor, YAY_ORNEK, MALZEME as YAY_MAT, UCLAR, sarimdanR } from './yay.js?v=20261128a';
+import { kasnakSanitize, kasnakHesap, kasnakRapor, KASNAK_ORNEK, SERVIS } from './kasnak.js?v=20261128a';
+import { kamaSanitize, kamaHesap, kamaRapor, KAMA_ORNEK, GOBEK, kamaOlcu } from './kama.js?v=20261128a';
+import { civataSanitize, civataHesap, civataRapor, CIVATA_ORNEK, DISLER, SINIF, YONTEM, SURTUNME } from './civata.js?v=20261128a';
 import { gearOutline } from '../mech.js?v=20261112u';
 import { pdfDoc } from '../tx/pdf.js?v=20261112u';
 
 const PI = Math.PI;
-export function mekSanitize(o) { const x = o && typeof o === 'object' ? o : {}; return { tur: ['krank', 'dort', 'disli', 'yay'].includes(x.tur) ? x.tur : 'malta', malta: maltaSanitize(x.malta), krank: krankSanitize(x.krank), dort: dortSanitize(x.dort), disli: disliSanitize(x.disli), yay: yaySanitize(x.yay) }; }
+export function mekSanitize(o) { const x = o && typeof o === 'object' ? o : {}; return { tur: ['krank', 'dort', 'disli', 'yay', 'kasnak', 'kama', 'civata'].includes(x.tur) ? x.tur : 'malta', malta: maltaSanitize(x.malta), krank: krankSanitize(x.krank), dort: dortSanitize(x.dort), disli: disliSanitize(x.disli), yay: yaySanitize(x.yay), kasnak: kasnakSanitize(x.kasnak), kama: kamaSanitize(x.kama), civata: civataSanitize(x.civata) }; }
 
 export function createMekUI(h) {
   const { api, esc } = h;
   let aci = 30, hedefStrok = '', hedefPsi = '', hedefR = '';
-  const Q = () => { const P = h.getP(); if (!P.mek || !P.mek.malta || !P.mek.dort || !P.mek.disli || !P.mek.yay) P.mek = mekSanitize(P.mek); return P.mek; };
+  const Q = () => { const P = h.getP(); if (!P.mek || !P.mek.malta || !P.mek.dort || !P.mek.disli || !P.mek.yay || !P.mek.kasnak || !P.mek.kama || !P.mek.civata) P.mek = mekSanitize(P.mek); return P.mek; };
   const tr = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d).replace('.', ',') : '—');
   const num = (attr, v, step = 'any') => `<input type="number" inputmode="decimal" step="${step}" data-mkm="${attr}" value="${Number.isFinite(v) ? v : ''}">`;
   const fld = (label, inner, birim = '') => `<label class="mk-f"><span>${esc(label)}</span>${inner}${birim ? `<i>${esc(birim)}</i>` : ''}</label>`;
@@ -167,8 +170,8 @@ export function createMekUI(h) {
     const x0 = -R1 - 4, w = a + R1 + R2 + 8, y = Math.max(R1, R2) + 4;
     return `<div class="mk-tbl"><svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0.toFixed(1)} ${(-y).toFixed(1)} ${w.toFixed(1)} ${(2 * y).toFixed(1)}" style="width:100%;max-width:380px;display:block;margin:auto"><path d="${p2}" fill="#0ea5e9" fill-opacity="0.25" stroke="#7dd3fc" stroke-width="${sw}"/><path d="${p1}" fill="#a855f7" fill-opacity="0.3" stroke="#c4b5fd" stroke-width="${sw}"/><circle r="${(r.d1 / 2).toFixed(2)}" fill="none" stroke="#f59e0b" stroke-opacity="0.5" stroke-dasharray="2 2" stroke-width="${sw}"/><circle cx="${a.toFixed(2)}" r="${(r.d2 / 2).toFixed(2)}" fill="none" stroke="#f59e0b" stroke-opacity="0.5" stroke-dasharray="2 2" stroke-width="${sw}"/></svg></div><div class="mk-n">Mor: küçük çark (pinyon, z ${g.z1}) · mavi: büyük çark (z ${g.z2}) · kesikli: bölüm daireleri. Eksen mesafesi ${tr(a, 1)} mm.</div>`;
   }
-  const bar = (ad, sig, lim, S, Smin) => { const oran = Math.min(1, sig / lim), renk = S >= Smin ? '#86efac' : S >= 1 ? '#fde68a' : '#fca5a5';
-    return `<div class="mk-s"><b>${esc(ad)}</b> <i>${tr(sig, 0)} / ${tr(lim, 0)} MPa · emniyet <b style="color:${renk}">${tr(S, 2)}</b></i><div style="height:8px;background:#1e293b;border-radius:4px;overflow:hidden"><div style="width:${(oran * 100).toFixed(1)}%;height:100%;background:${renk}"></div></div></div>`; };
+  const bar = (ad, sig, lim, S, Smin, birim = 'MPa', bas = 0) => { const oran = Math.min(1, sig / lim), renk = S >= Smin ? '#86efac' : S >= 1 ? '#fde68a' : '#fca5a5';
+    return `<div class="mk-s"><b>${esc(ad)}</b> <i>${tr(sig, bas)} / ${tr(lim, bas)} ${birim} · emniyet <b style="color:${renk}">${tr(S, 2)}</b></i><div style="height:8px;background:#1e293b;border-radius:4px;overflow:hidden"><div style="width:${(oran * 100).toFixed(1)}%;height:100%;background:${renk}"></div></div></div>`; };
   function disliHtml(G) {
     const mats = Object.entries(MALZEME).map(([k, v]) => [k, v.ad]);
     let s = '<div class="mk-card"><b>⚙ Dişli mukavemeti</b> — Düz dişli çiftinin yüke dayanıp dayanmadığı: diş kırılması ve yüzey ezilmesi (pitting).<div class="mk-n">Modülü, diş sayılarını, genişliği ve yükü gir. Emniyet düşükse uygulama yeten en küçük standart modülü önerir.</div><div class="mk-btns"><button data-act="mk-mgornek">📋 Şablon: Konveyör redüktörü 1. kademe</button></div></div>';
@@ -225,6 +228,68 @@ export function createMekUI(h) {
     s += '<div class="mk-btns"><button data-act="mk-mypdf">📄 Hesap raporu (PDF)</button></div><div class="mk-n">EN 13906-1 ve Shigley yöntemleri. R_m tel çapına göre yaklaşık en düşük değerdir, tel sertifikasından doğrula. Ön boyutlandırmadır; seri üretimden önce yay üreticisinin onayı gerekir.</div></div>';
     return s;
   }
+
+  /* ---------------- Makine elemanları: kayış–kasnak ---------------- */
+  function kasnakSvg(r) {
+    const R1 = r.d1 / 2, R2 = r.d2 / 2, a = r.a, ters = R2 < R1, rk = Math.min(R1, R2), rb = Math.max(R1, R2);
+    const g = Math.asin((rb - rk) / a), x0 = -rk - 6, w = a + rk + rb + 12, y = rb + 6, sw = (w / 300).toFixed(2);
+    // küçük kasnak solda (0,0), büyük sağda (a,0); teğet noktaları
+    const t1 = [-rk * Math.sin(g), rk * Math.cos(g)], t2 = [a - rb * Math.sin(g), rb * Math.cos(g)];
+    const P = (p) => `${p[0].toFixed(2)} ${(-p[1]).toFixed(2)}`;
+    return `<div class="mk-tbl"><svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0.toFixed(1)} ${(-y).toFixed(1)} ${w.toFixed(1)} ${(2 * y).toFixed(1)}" style="width:100%;max-width:380px;display:block;margin:auto"><circle r="${rk}" fill="#a855f7" fill-opacity="0.25" stroke="#c4b5fd" stroke-width="${sw}"/><circle cx="${a}" r="${rb}" fill="#0ea5e9" fill-opacity="0.2" stroke="#7dd3fc" stroke-width="${sw}"/><path d="M${P(t1)}L${P(t2)}M${P([t1[0], -t1[1]])}L${P([t2[0], -t2[1]])}" stroke="#fbbf24" stroke-width="${(sw * 3).toFixed(2)}"/><circle r="${(rk * 0.12).toFixed(2)}" fill="#e2e8f0"/><circle cx="${a}" r="${(rb * 0.12).toFixed(2)}" fill="#e2e8f0"/></svg></div><div class="mk-n">${ters ? 'Mavi: tahrik eden (büyük) kasnak · mor: küçük kasnak' : 'Mor: motor kasnağı · mavi: tahrik edilen kasnak'} · sarı: kayış. Eksen mesafesi ${tr(a, 1)} mm.</div>`;
+  }
+  function kasnakHtml(G) {
+    const trg = G.tip === 'triger';
+    let s = '<div class="mk-card"><b>➰ Kayış–kasnak</b> — Motordan mile güç aktarımı: kayış boyu, eksen mesafesi, kuvvetler ve mile gelen yük.<div class="mk-btns"><button data-act="mk-mnkornek">📋 Şablon: Konveyör tahriki (V kayışı)</button></div></div>';
+    s += '<div class="mk-card"><b>Kasnaklar</b><div class="mk-grid">' + fld('Kayış tipi', sel('kasnak.tip', G.tip, [['v', 'V kayışı'], ['triger', 'Triger (dişli) kayış']]));
+    s += trg ? fld('Hatve', num('kasnak.p', G.p, 0.5), 'mm') + fld('Motor kasnağı diş sayısı', num('kasnak.z1', G.z1, 1), 'adet') + fld('Tahrik edilen kasnak diş sayısı', num('kasnak.z2', G.z2, 1), 'adet')
+      : fld('Motor kasnağı çapı', num('kasnak.d1', G.d1, 1), 'mm') + fld('Tahrik edilen kasnak çapı', num('kasnak.d2', G.d2, 1), 'mm') + fld('Sürtünme katsayısı', num('kasnak.mu', G.mu, 0.05)) + fld('Bir kayışın gücü (katalog)', num('kasnak.Pk', G.Pk, 0.1), 'kW');
+    s += fld('Eksen mesafesi', num('kasnak.a', G.a, 5), 'mm') + fld('Kayış boyu (girersen eksen bundan bulunur)', num('kasnak.L', G.L, 5), 'mm') + '</div><div class="mk-n">Kayış boyunu boş (0) bırakırsan girilen eksen mesafesinden boy hesaplanır; kataloğdaki en yakın standart boyu yazınca gerçek eksen mesafesi bulunur.</div></div>';
+    s += '<div class="mk-card"><b>Yük</b><div class="mk-grid">' + fld('Güç', num('kasnak.P', G.P, 0.1), 'kW') + fld('Motor devri', num('kasnak.n1', G.n1, 10), 'd/dk') + fld('Çalışma şekli', sel('kasnak.KA', G.KA, SERVIS)) + '</div></div>';
+    const r = kasnakHesap(G);
+    if (r.hata) return s + `<div class="mk-card"><div class="mk-c hata">✗ ${esc(r.hata)}</div></div>`;
+    s += `<div class="mk-card"><b>Sonuç</b> ${r.uygun ? '<span class="mk-c ok">✓ Uygun</span>' : '<span class="mk-c hata">✗ Düzeltilmeli</span>'}` + kasnakSvg(r);
+    s += `<div class="mk-s">Oran <b>1:${tr(r.i, 2)}</b> · çıkış <b>${tr(r.n2, 0)} d/dk, ${tr(r.T2, 1)} N·m</b> · kayış boyu <b>${tr(r.L, 1)} mm</b>${r.dis != null ? ` (${tr(r.dis, 1)} diş)` : ''} · eksen <b>${tr(r.a, 1)} mm</b> · sarım <b>${tr(r.beta, 1)}°</b> · kayış hızı <b>${tr(r.v, 2)} m/s</b> · çevre kuvveti <b>${tr(r.Ft, 0)} N</b> · mile gelen yük <b>${tr(r.Fw, 0)} N</b></div>`;
+    s += kont(r.kontroller) + '<div class="mk-btns"><button data-act="mk-mnkpdf">📄 Hesap raporu (PDF)</button></div><div class="mk-n">Kayışın taşıdığı güç, boy katsayısı ve ön gerilme kayış üreticisinin kataloğundan alınmalı.</div></div>';
+    return s;
+  }
+  /* ---------------- Makine elemanları: kama ---------------- */
+  function kamaSvg(r) {
+    const d = r.g.d, R = d / 2, b = r.b, h = r.h, t1 = r.t1, Rg = R * 1.7, sw = (Rg / 60).toFixed(2), m = Rg + 4;
+    // kesit: mil dairesi, üstte kanal; kama mil kanalında t₁, göbekte h − t₁
+    const kx = -b / 2, ky = R - t1;
+    return `<div class="mk-tbl"><svg xmlns="http://www.w3.org/2000/svg" viewBox="${-m} ${-m} ${2 * m} ${2 * m}" style="width:100%;max-width:220px;display:block;margin:auto"><circle r="${Rg}" fill="#0ea5e9" fill-opacity="0.18" stroke="#7dd3fc" stroke-width="${sw}"/><circle r="${R}" fill="#64748b" fill-opacity="0.5" stroke="#cbd5e1" stroke-width="${sw}"/><rect x="${kx}" y="${(-(ky + h)).toFixed(2)}" width="${b}" height="${h}" fill="#f59e0b" stroke="#fde68a" stroke-width="${sw}"/></svg></div><div class="mk-n">Kesit: gri mil Ø${tr(d, 0)}, mavi göbek, turuncu kama ${b} × ${h} (milde ${tr(t1, 1)} mm, göbekte ${tr(h - t1, 1)} mm).</div>`;
+  }
+  function kamaHtml(G) {
+    const o = kamaOlcu(G.d);
+    let s = '<div class="mk-card"><b>🔑 Kama</b> — Mil–göbek bağlantısı (dişli, kasnak, kaplin): DIN 6885 paralel kama ölçüsü ve göbek ezilmesi.<div class="mk-btns"><button data-act="mk-mnaornek">📋 Şablon: Redüktör çıkışı – zincir dişlisi</button></div></div>';
+    s += '<div class="mk-card"><b>Bağlantı</b><div class="mk-grid">' + fld('Mil çapı', num('kama.d', G.d, 1), 'mm') + fld('İletilen tork', num('kama.T', G.T, 1), 'N·m') + fld('Kama boyu', num('kama.L', G.L, 1), 'mm') + fld('Kama sayısı', sel('kama.adet', G.adet, [[1, '1 kama'], [2, '2 kama (karşılıklı)']]))
+      + fld('Göbek malzemesi', sel('kama.gobek', G.gobek, Object.entries(GOBEK).map(([k, v]) => [k, v.ad + (v.p ? ` (${v.p} MPa)` : '')]))) + (G.gobek === 'ozel' ? fld('İzin verilen yüzey basıncı', num('kama.pizin', G.pizin, 5), 'MPa') : '') + fld('Çalışma şekli', sel('kama.KA', G.KA, SERVIS)) + '</div>';
+    s += `<div class="mk-n">${o ? `Bu mil için kama: <b>${o.b} × ${o.h}</b>, mil kanalı derinliği <b>${tr(o.t1, 1)} mm</b> (DIN 6885-1).` : 'Mil çapı 6–150 mm arasında olmalı.'}</div></div>`;
+    const r = kamaHesap(G);
+    if (r.hata) return s + `<div class="mk-card"><div class="mk-c hata">✗ ${esc(r.hata)}</div></div>`;
+    s += `<div class="mk-card"><b>Sonuç</b> ${r.uygun ? '<span class="mk-c ok">✓ Uygun</span>' : '<span class="mk-c hata">✗ Düzeltilmeli</span>'}` + kamaSvg(r);
+    s += bar('Göbekte yüzey basıncı', r.p, r.pizin, r.Sp, 1);
+    s += `<div class="mk-s">Kama <b>DIN 6885 A ${r.b} × ${r.h} × ${tr(G.L, 0)}</b> · taşıyan boy <b>${tr(r.lt, 1)} mm</b> · gereken en kısa kama <b>${tr(Math.ceil(r.Lmin), 0)} mm</b></div>`;
+    s += kont(r.kontroller) + '<div class="mk-btns">' + (r.Sp < 1 && r.Lmin <= 1.6 * G.d ? `<button data-act="mk-mnaboy">Kamayı ${tr(Math.ceil(r.Lmin), 0)} mm yap</button>` : '') + '<button data-act="mk-mnapdf">📄 Hesap raporu (PDF)</button></div><div class="mk-n">İzin verilen basınçlar darbesiz yük için yaklaşıktır. Kama kanalının mildeki çentik etkisini mil hesabında dikkate al.</div></div>';
+    return s;
+  }
+  /* ---------------- Makine elemanları: cıvata ---------------- */
+  function civataHtml(G) {
+    let s = '<div class="mk-card"><b>🔩 Cıvata</b> — Sıkma torku, ön gerilme ve bağlantının kayıp kaymadığı / açılıp açılmadığı.<div class="mk-btns"><button data-act="mk-mncornek">📋 Şablon: Motor konsolu (4 cıvata)</button></div></div>';
+    s += '<div class="mk-card"><b>Cıvata</b><div class="mk-grid">' + fld('Boyut', sel('civata.boyut', G.boyut, DISLER.map((x) => [x[0], x[0]]))) + fld('Sınıf', sel('civata.sinif', G.sinif, Object.keys(SINIF).map((k) => [k, k]))) + fld('Cıvata sayısı', num('civata.adet', G.adet, 1), 'adet')
+      + fld('Diş ve baş sürtünmesi', sel('civata.mu', G.mu, SURTUNME)) + fld('Sıkma yöntemi', sel('civata.aA', G.aA, YONTEM)) + '</div></div>';
+    s += '<div class="mk-card"><b>Yük (bütün cıvatalara toplam)</b><div class="mk-grid">' + fld('Çekme yükü (ekseni boyunca)', num('civata.FA', G.FA, 100), 'N') + fld('Yan yük (kaydırmaya çalışan)', num('civata.FQ', G.FQ, 100), 'N')
+      + fld('Parçalar arası sürtünme', num('civata.muT', G.muT, 0.05)) + fld('Kayma yüzeyi sayısı', num('civata.q', G.q, 1), 'adet') + '</div><div class="mk-n">Yük cıvatalara eşit bölünür. Kuru, temiz çelik yüzeyler için sürtünme 0,15 civarıdır; boyalı yüzeyde daha düşüktür.</div></div>';
+    const r = civataHesap(G);
+    if (r.hata) return s + `<div class="mk-card"><div class="mk-c hata">✗ ${esc(r.hata)}</div></div>`;
+    s += `<div class="mk-card"><b>Sonuç</b> ${r.uygun ? '<span class="mk-c ok">✓ Uygun</span>' : '<span class="mk-c hata">✗ Düzeltilmeli</span>'}`;
+    s += `<div class="mk-s" style="font-size:1.15em">Sıkma torku <b>${tr(r.MA, 1)} N·m</b></div>`;
+    s += bar('Cıvata gerilmesi (çalışmada)', r.sred, r.Rp, r.Sak, 1) + (r.FKQ > 0 ? bar('Kaymaya karşı: gereken / kalan sıkma', r.FKQ / 1000, r.FKR / 1000, r.Skay, 1, 'kN', 2) : '');
+    s += `<div class="mk-s">Ön gerilme <b>${tr(r.FMmin / 1000, 2)}–${tr(r.FMzul / 1000, 2)} kN</b> · kalan sıkma <b>${tr(r.FKR / 1000, 2)} kN</b> · cıvata başına çekme <b>${tr(r.FA, 0)} N</b>, yan yük <b>${tr(r.FQ, 0)} N</b></div>`;
+    s += kont(r.kontroller) + '<div class="mk-btns">' + (r.oner && r.oner !== G.boyut ? `<button data-act="mk-mncboy">Boyutu ${r.oner} yap</button>` : '') + '<button data-act="mk-mncpdf">📄 Hesap raporu (PDF)</button></div><div class="mk-n">VDI 2230\'un sade biçimi (yük oranı ve oturma kaybı yaklaşık). Yorulma ve diş sıyrılması hesaplanmaz; kritik bağlantıda tam VDI 2230 hesabı gerekir.</div></div>';
+    return s;
+  }
   function raporPdf(lines) {
     const doc = pdfDoc(), T = h.pdfText; let p = doc.page(210, 297), y = 283;
     for (const raw of lines) { const s = T(raw), size = /^[A-ZÇĞİÖŞÜ ()—–-]+$/.test(s.trim()) && s.trim() ? 10 : 8.5; for (let k = 0; k < Math.max(1, s.length); k += 120) { if (y < 16) { p = doc.page(210, 297); y = 283; } p.text(14, y, size, (k ? '     ' : '') + s.slice(k, k + 120)); y -= size * 0.5; } }
@@ -233,8 +298,10 @@ export function createMekUI(h) {
 
   function html() {
     const M = Q();
-    let s = `<div class="mk-tabs"><button data-act="mk-mtur-malta" class="${M.tur === 'malta' ? 'on' : ''}">✚ Malta haçı</button><button data-act="mk-mtur-krank" class="${M.tur === 'krank' ? 'on' : ''}">⟳ Krank–biyel</button><button data-act="mk-mtur-dort" class="${M.tur === 'dort' ? 'on' : ''}">⧖ Dört çubuk</button><button data-act="mk-mtur-disli" class="${M.tur === 'disli' ? 'on' : ''}">⚙ Dişli</button><button data-act="mk-mtur-yay" class="${M.tur === 'yay' ? 'on' : ''}">🌀 Yay</button></div>`;
-    return s + (M.tur === 'krank' ? krankHtml(M.krank) : M.tur === 'dort' ? dortHtml(M.dort) : M.tur === 'disli' ? disliHtml(M.disli) : M.tur === 'yay' ? yayHtml(M.yay) : maltaHtml(M.malta));
+    const tb = (k, t) => `<button data-act="mk-mtur-${k}" class="${M.tur === k ? 'on' : ''}">${t}</button>`;
+    let s = `<div class="mk-tabs">${tb('malta', '✚ Malta haçı')}${tb('krank', '⟳ Krank–biyel')}${tb('dort', '⧖ Dört çubuk')}${tb('disli', '⚙ Dişli')}${tb('yay', '🌀 Yay')}</div><div class="mk-n">Makine elemanları:</div><div class="mk-tabs">${tb('kasnak', '➰ Kayış–kasnak')}${tb('kama', '🔑 Kama')}${tb('civata', '🔩 Cıvata')}</div>`;
+    const H = { krank: () => krankHtml(M.krank), dort: () => dortHtml(M.dort), disli: () => disliHtml(M.disli), yay: () => yayHtml(M.yay), kasnak: () => kasnakHtml(M.kasnak), kama: () => kamaHtml(M.kama), civata: () => civataHtml(M.civata) };
+    return s + (H[M.tur] ? H[M.tur]() : maltaHtml(M.malta));
   }
   function input(el) {
     const M = Q(), k = el.dataset.mkm, v = Number(String(el.value).replace(',', '.'));
@@ -252,13 +319,23 @@ export function createMekUI(h) {
   function act(a) {
     let m;
     const M = Q(), ad = (x) => (api.name() || 'proje') + x;
-    if ((m = /^mk-mtur-(malta|krank|dort|disli|yay)$/.exec(a))) { M.tur = m[1]; aci = 30; h.changed(); return true; }
+    if ((m = /^mk-mtur-(malta|krank|dort|disli|yay|kasnak|kama|civata)$/.exec(a))) { M.tur = m[1]; aci = 30; h.changed(); return true; }
     if (a === 'mk-mornek') { M.malta = MALTA_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
     if (a === 'mk-mkornek') { M.krank = KRANK_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
     if (a === 'mk-mstrok') {
       const H = Number(String(hedefStrok).replace(',', '.')), R = stroktanR(H, M.krank.l, M.krank.e);
       if (R == null) { api.toast('Bu biyel boyu ve kaçıklıkla bu strok olmaz: biyeli uzat'); return true; }
       M.krank.r = Math.round(R * 1000) / 1000; h.changed(); api.toast('Krank yarıçapı ' + tr(M.krank.r, 3) + ' mm'); return true;
+    }
+    if (a === 'mk-mnkornek') { M.kasnak = KASNAK_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
+    if (a === 'mk-mnaornek') { M.kama = KAMA_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
+    if (a === 'mk-mncornek') { M.civata = CIVATA_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
+    if (a === 'mk-mnaboy') { const r = kamaHesap(M.kama); if (!r.hata) { M.kama.L = Math.ceil(r.Lmin); h.changed(); api.toast('Kama ' + M.kama.L + ' mm'); } return true; }
+    if (a === 'mk-mncboy') { const r = civataHesap(M.civata); if (r.oner) { M.civata.boyut = r.oner; h.changed(); api.toast(r.oner + ' · sıkma torku ' + tr(civataHesap(M.civata).MA, 1) + ' N·m'); } return true; }
+    if (/^mk-mn[kac]pdf$/.test(a)) {
+      const [hs, rp, son] = a === 'mk-mnkpdf' ? [kasnakHesap(M.kasnak), kasnakRapor, '_kayis_kasnak.pdf'] : a === 'mk-mnapdf' ? [kamaHesap(M.kama), kamaRapor, '_kama.pdf'] : [civataHesap(M.civata), civataRapor, '_civata.pdf'];
+      if (hs.hata) { api.toast(hs.hata); return true; }
+      api.saveBlob(raporPdf(rp(hs, api.name() || '')), ad(son)); api.toast('İndirildi'); return true;
     }
     if (a === 'mk-myornek') { M.yay = YAY_ORNEK(); h.changed(); api.toast('Şablon yüklendi (temsilî değerler)'); return true; }
     if (a === 'mk-mydn') {
