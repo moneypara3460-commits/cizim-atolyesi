@@ -7,7 +7,7 @@
 //          ardından ince arama) → fark: delik eşleştirme, dış ölçü, fazla / eksik malzeme öbekleri.
 // Saf fonksiyonlar; DOM yok (tests/gozkontrol.test.mjs).
 import { toGray, findPaperQuad, warpGray } from './photo2d.js?v=20261112u';
-import * as C from './cam.js?v=20261127y';
+import * as C from './cam.js?v=20261128a';
 
 export const A4 = [210, 297];
 const otsuTh = (g) => {
