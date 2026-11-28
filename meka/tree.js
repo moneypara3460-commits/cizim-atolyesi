@@ -49,7 +49,7 @@ export function sanitize(o) {
   P.nextId = Math.max(fin(o.nextId) ? o.nextId : 1, ...P.items.map((i) => i.id + 1), 1);
   // Hesap girdileri, elektrik, PLC, güvenlik ve benzetim verisi burada yalnız taşınır; ui.js her birini kendi
   // temizleme işleviyle (elekSanitize, plcSanitize, guvSanitize, simSanitize, izSanitize, kamSanitize) doğrular.
-  for (const k of ['calc', 'elek', 'plc', 'guv', 'sim', 'iz', 'kam', 'cevrim']) if (o[k] && typeof o[k] === 'object') P[k] = o[k];
+  for (const k of ['calc', 'elek', 'plc', 'guv', 'sim', 'iz', 'kam', 'cevrim', 'mek']) if (o[k] && typeof o[k] === 'object') P[k] = o[k];
   return P;
 }
 

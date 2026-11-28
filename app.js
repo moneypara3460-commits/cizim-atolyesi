@@ -47,7 +47,7 @@ import * as DIS from './dis.js?v=20261120b';
 import * as PRM from './degisken.js?v=20261120h';
 import { createFemUI } from './fem-ui.js?v=20261127f';
 import { openScanImport, openPhotoModel } from './scan/scan-ui.js?v=20261118b';
-import { createMekaUI } from './meka/ui.js?v=20261128a';
+import { createMekaUI } from './meka/ui.js?v=20261128b';
 import { CommandRegistry, CommandDispatcher, ShortcutResolver, parseCommandLine } from './command-system/core.mjs?v=20261122b';
 
 const APP_VER = '20261112u'; // index.html, app.js ve içe aktarmalardaki ?v= ile aynı olmalı (önbelleği aşmak için)
@@ -3368,7 +3368,7 @@ document.addEventListener('change', (e) => {
   const el = e.target;
   if (el.dataset && el.dataset.wf) { weldUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.wg) { weightUI.input(el, 'change'); return; }
-  if (el.dataset && (el.dataset.mk || el.dataset.mkb || el.dataset.mkl || el.dataset.mki || el.dataset.mke || el.dataset.mkp || el.dataset.mky || el.dataset.mks || el.dataset.mkz || el.dataset.mkq || el.dataset.mkt)) { mekaUI.input(el); return; }
+  if (el.dataset && (el.dataset.mk || el.dataset.mkb || el.dataset.mkl || el.dataset.mki || el.dataset.mke || el.dataset.mkp || el.dataset.mky || el.dataset.mks || el.dataset.mkz || el.dataset.mkq || el.dataset.mkt || el.dataset.mkm)) { mekaUI.input(el); return; }
   if (el.dataset && el.dataset.cf) { costUI.input(el, 'change'); return; }
   if (el.dataset && el.dataset.as) { asmUI.input(el, 'change'); return; }
   if (el.dataset && (el.dataset.cs || el.dataset.cn || el.dataset.cq || el.dataset.ct || el.dataset.co || el.dataset.ckn || el.dataset.ckt)) { camUI.input(el, 'change'); return; }

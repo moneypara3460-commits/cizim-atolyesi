@@ -987,6 +987,34 @@ await T('Mekatronik çevrim diyagramı: VFFS şablonu uygun; faz kaydırınca s�
   expect(/Eksantrik 5/.test(await body(page)) && /✓ Kurallar sağlanıyor/.test(await body(page)), 'yenileme sonrası korunur');
 });
 
+await T('Mekatronik mekanizmalar: Malta haçı şablonu uygun, açı kaydırıcısı, ince boynuz hatası, DXF / PDF / CSV; krank–biyel şablonu, stroktan krank yarıçapı, kısa biyel uyarısı, PDF / CSV; yenilemede korunur', 'M-Mekanizma', async ({ page }) => {
+  await tab(page, 'meka');
+  await act(page, 'mk-v-mek');
+  const set = async (k, v) => { const i = page.locator(`#tabbody [data-mkm="${k}"]`); const tg = await i.evaluate((e) => e.tagName); if (tg === 'SELECT') await i.selectOption(String(v)); else await i.fill(String(v)); await i.dispatchEvent('change'); await page.waitForTimeout(150); };
+  await act(page, 'mk-mornek');
+  let b = await body(page);
+  expect(/Malta haçı \(Geneva\)/.test(b) && /✓ Uygun/.test(b) && /Adım 60,0°/.test(b), 'Malta şablonu: ' + b.slice(0, 200));
+  await set('aci', 120);
+  expect(/teker <b>kilitli bekliyor<\/b>|kilitli bekliyor/.test(await body(page)), 'beklemede kilitli');
+  await set('malta.kilit', 0.3); await set('malta.dp', 30);
+  expect(/boynuz çok ince/.test(await body(page)) && /Düzeltilmeli/.test(await body(page)), 'ince boynuz');
+  await act(page, 'mk-mornek');
+  const dxf = await download(page, () => act(page, 'mk-mdxf')); expect(/TEKER/.test(dxf.text) && /KILIT_DISKI/.test(dxf.text) && /_malta\.dxf$/.test(dxf.name), 'DXF');
+  const pdf = await download(page, () => act(page, 'mk-mpdf')); expect(/^%PDF/.test(pdf.text), 'Malta PDF');
+  const csv = await download(page, () => act(page, 'mk-mcsv')); expect(/krank_derece;teker_derece/.test(csv.text), 'Malta CSV');
+  // krank–biyel
+  await act(page, 'mk-mtur-krank'); await act(page, 'mk-mkornek');
+  b = await body(page);
+  expect(/Krank–biyel/.test(b) && /Strok 80,00 mm/.test(b) && /✓ Uygun/.test(b), 'krank şablonu: ' + b.slice(0, 200));
+  await set('hedef', 100); await act(page, 'mk-mstrok');
+  expect((await page.locator('#tabbody [data-mkm="krank.r"]').inputValue()) === '50' && /Strok 100,00 mm/.test(await body(page)) && /Biyel \/ krank oranı 3,40/.test(await body(page)), 'stroktan r');
+  const kp = await download(page, () => act(page, 'mk-mkpdf')); expect(/^%PDF/.test(kp.text) && /_krank_biyel\.pdf$/.test(kp.name), 'krank PDF');
+  const kc = await download(page, () => act(page, 'mk-mkcsv')); expect(/krank_derece;surgu_konumu_mm/.test(kc.text), 'krank CSV');
+  await page.waitForTimeout(1500); await page.reload(); await waitReady(page);
+  await tab(page, 'meka'); await act(page, 'mk-v-mek');
+  expect(/Strok 100,00 mm/.test(await body(page)), 'yenileme sonrası krank açık ve değerler korunur');
+});
+
 await T('Mekatronik 8. aşama izlenebilirlik: gereksinimler benzetim ve kart sonucundan değerlendirilir; revizyon dört göz ile onaylanır; yenileme sonrası parmak izi aynı, değişiklik algılanır; matris CSV, PDF; STEP AP242 (gerçek OCCT, geri okuma)', 'M-Izlenebilirlik', async ({ page }) => {
   await act(page, 'add-box'); await page.waitForTimeout(400);
   await tab(page, 'meka');
